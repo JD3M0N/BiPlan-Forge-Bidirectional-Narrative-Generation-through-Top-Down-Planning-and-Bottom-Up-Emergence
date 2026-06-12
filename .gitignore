@@ -430,3 +430,5 @@ backend/story_writers.db-wal
 backend/tests/.runtime/
 coverage/
 .pytest_cache/
+
+/Docs
