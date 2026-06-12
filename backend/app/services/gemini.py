@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 
 import httpx
 
@@ -23,6 +24,16 @@ def clean_json_payload(raw_text: str) -> str:
         if lines and lines[-1].startswith("```"):
             lines = lines[:-1]
         text = "\n".join(lines).strip()
+
+    decoder = json.JSONDecoder()
+    for start, character in enumerate(text):
+        if character not in "{[":
+            continue
+        try:
+            _, end = decoder.raw_decode(text[start:])
+        except json.JSONDecodeError:
+            continue
+        return text[start : start + end].strip()
     return text
 
 
@@ -34,14 +45,18 @@ class GeminiClient:
         api_key: str,
         model: str,
         max_retries: int = 3,
+        rate_limit_max_retries: int | None = None,
         retry_base_seconds: float = 2.0,
         transport=None,
+        sleep=None,
     ) -> None:
         self.api_key = api_key
         self.model = model
         self.max_retries = max_retries
+        self.rate_limit_max_retries = rate_limit_max_retries or max_retries
         self.retry_base_seconds = retry_base_seconds
         self.transport = transport
+        self.sleep = sleep or asyncio.sleep
         self.logger = get_logger("gemini")
 
     def _build_url(self) -> str:
@@ -61,7 +76,8 @@ class GeminiClient:
         if response_mime_type:
             payload["generationConfig"] = {"responseMimeType": response_mime_type}
 
-        for attempt in range(1, self.max_retries + 1):
+        attempt = 1
+        while True:
             try:
                 async with httpx.AsyncClient(timeout=120, transport=self.transport) as client:
                     response = await client.post(self._build_url(), json=payload)
@@ -70,7 +86,8 @@ class GeminiClient:
                 self.logger.warning("gemini_transport_error model=%s attempt=%s error=%s", self.model, attempt, message)
                 if attempt >= self.max_retries:
                     raise RuntimeError(message) from exc
-                await asyncio.sleep(self._retry_delay(attempt))
+                await self.sleep(self._retry_delay(attempt))
+                attempt += 1
                 continue
 
             if response.status_code == 429:
@@ -81,12 +98,20 @@ class GeminiClient:
                     attempt,
                     detail,
                 )
-                if attempt >= self.max_retries:
+                if attempt >= self.rate_limit_max_retries:
                     raise GeminiRateLimitError(
                         "Gemini rate limit or quota reached. Wait a few minutes and try again, "
                         "or use another Gemini API key/model."
                     )
-                await asyncio.sleep(self._retry_delay(attempt))
+                delay = self._rate_limit_retry_delay(response, detail, attempt)
+                self.logger.info(
+                    "gemini_rate_limit_wait model=%s attempt=%s wait_seconds=%.2f",
+                    self.model,
+                    attempt,
+                    delay,
+                )
+                await self.sleep(delay)
+                attempt += 1
                 continue
 
             if response.status_code >= 500:
@@ -100,7 +125,8 @@ class GeminiClient:
                 )
                 if attempt >= self.max_retries:
                     raise RuntimeError(f"Gemini server error ({response.status_code}): {detail}")
-                await asyncio.sleep(self._retry_delay(attempt))
+                await self.sleep(self._retry_delay(attempt))
+                attempt += 1
                 continue
 
             if response.status_code >= 400:
@@ -129,6 +155,33 @@ class GeminiClient:
 
     def _retry_delay(self, attempt: int) -> float:
         return min(self.retry_base_seconds * (2 ** (attempt - 1)), 20.0)
+
+    def _rate_limit_retry_delay(self, response: httpx.Response, detail: str, attempt: int) -> float:
+        retry_after = response.headers.get("Retry-After")
+        if retry_after:
+            try:
+                return max(float(retry_after), self._retry_delay(attempt))
+            except ValueError:
+                pass
+
+        retry_match = re.search(r"retry in\s+([0-9.]+)s", detail, re.IGNORECASE)
+        if retry_match:
+            return max(float(retry_match.group(1)) + 1.0, self._retry_delay(attempt))
+
+        try:
+            payload = response.json()
+        except ValueError:
+            return self._retry_delay(attempt)
+
+        for item in payload.get("error", {}).get("details", []):
+            retry_delay = item.get("retryDelay")
+            if not retry_delay or not retry_delay.endswith("s"):
+                continue
+            try:
+                return max(float(retry_delay[:-1]) + 1.0, self._retry_delay(attempt))
+            except ValueError:
+                continue
+        return self._retry_delay(attempt)
 
     def _extract_error_message(self, response: httpx.Response) -> str:
         try:

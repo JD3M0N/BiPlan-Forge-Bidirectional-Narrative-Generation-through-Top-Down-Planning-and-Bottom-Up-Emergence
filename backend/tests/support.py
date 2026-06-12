@@ -51,11 +51,15 @@ def create_test_client(
     fail_on: str | None = None,
     inconsistent_dependency: bool = False,
     invalid_payload_for: str | None = None,
+    blocking_quality_once: bool = False,
+    blocking_quality_always: bool = False,
 ) -> TestClient:
     client = llm_client or FakeGeminiClient(
         fail_on=fail_on,
         inconsistent_dependency=inconsistent_dependency,
         invalid_payload_for=invalid_payload_for,
+        blocking_quality_once=blocking_quality_once,
+        blocking_quality_always=blocking_quality_always,
     )
     return TestClient(create_app(settings=create_test_settings(db_path), llm_client=client))
 

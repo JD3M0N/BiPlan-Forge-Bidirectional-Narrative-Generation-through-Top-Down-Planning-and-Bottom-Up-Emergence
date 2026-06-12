@@ -21,9 +21,14 @@ def create_app(settings: Settings | None = None, llm_client=None) -> FastAPI:
         api_key=app_settings.gemini_api_key,
         model=app_settings.gemini_model,
         max_retries=app_settings.gemini_max_retries,
+        rate_limit_max_retries=app_settings.gemini_rate_limit_max_retries,
         retry_base_seconds=app_settings.gemini_retry_base_seconds,
     )
-    orchestrator = StoryOrchestrator(engine=engine, llm_client=client)
+    orchestrator = StoryOrchestrator(
+        engine=engine,
+        llm_client=client,
+        pipeline_mode=app_settings.gemini_pipeline_mode,
+    )
     worker = StoryWorker(orchestrator=orchestrator)
 
     @asynccontextmanager

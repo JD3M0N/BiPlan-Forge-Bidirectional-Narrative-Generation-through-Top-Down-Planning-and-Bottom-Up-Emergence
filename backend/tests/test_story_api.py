@@ -11,13 +11,23 @@ def test_generate_story_and_read_it(client: TestClient) -> None:
     assert response.status_code == 202
     story_id = response.json()["id"]
 
+    initial_detail = client.get(f"/stories/{story_id}")
+    assert initial_detail.status_code == 200
+    assert initial_detail.json()["progress_percent"] <= 100
+    assert "agent_progress" in initial_detail.json()
+
     final_story = wait_for_story_completion(client, story_id)
     assert final_story["status"] == "completed"
+    assert final_story["progress_percent"] == 100
+    assert final_story["current_stage"] is None
+    assert final_story["evaluation"]["overall"] == 4.2
+    assert final_story["agent_progress"][-1]["agent_name"] == "quality_evaluator"
     assert "Ayla" in final_story["story_text"]
 
     list_response = client.get("/stories")
     assert list_response.status_code == 200
     assert len(list_response.json()) == 1
+    assert list_response.json()[0]["evaluation"]["overall"] == 4.2
 
     detail_response = client.get(f"/stories/{story_id}")
     assert detail_response.status_code == 200
