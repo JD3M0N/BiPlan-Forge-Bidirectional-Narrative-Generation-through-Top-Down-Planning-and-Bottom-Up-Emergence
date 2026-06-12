@@ -432,3 +432,6 @@ coverage/
 .pytest_cache/
 
 /Docs
+!/docs/
+docs/*
+!docs/modelo-multiagente-hibrido.md
