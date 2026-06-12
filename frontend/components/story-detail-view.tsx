@@ -11,6 +11,36 @@ type StoryDetailViewProps = {
   storyId: string;
 };
 
+function score(value: number) {
+  return value.toFixed(1);
+}
+
+function renderStoryText(storyText: string) {
+  const chapters = storyText
+    .split(/\n(?=##\s+)/)
+    .map((chapter) => chapter.trim())
+    .filter(Boolean);
+
+  if (chapters.length <= 1) {
+    return <article className="reader-copy">{storyText}</article>;
+  }
+
+  return (
+    <div className="chapter-stack">
+      {chapters.map((chapter, index) => {
+        const [heading, ...body] = chapter.split("\n");
+        const title = heading.replace(/^##\s*/, "").trim() || `Capitulo ${index + 1}`;
+        return (
+          <article className="chapter-block" key={`${title}-${index}`}>
+            <h2>{title}</h2>
+            <div className="reader-copy">{body.join("\n").trim()}</div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
 export function StoryDetailView({ storyId }: StoryDetailViewProps) {
   const [story, setStory] = useState<StoryDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -84,8 +114,66 @@ export function StoryDetailView({ storyId }: StoryDetailViewProps) {
           <p>{story.language.toUpperCase()}</p>
         </div>
 
+        <div className="progress-panel">
+          <div className="section-title">
+            <div>
+              <h2>Pipeline</h2>
+              <p className="muted">
+                {story.current_stage ?? "Sin etapa activa"} - {story.progress_percent}%
+              </p>
+            </div>
+          </div>
+          <div className="progress-row" aria-label={`Progreso ${story.progress_percent}%`}>
+            <span style={{ width: `${story.progress_percent}%` }} />
+          </div>
+          <div className="agent-timeline">
+            {story.agent_progress.length === 0 ? (
+              <p className="muted tiny">Aun no hay ejecuciones registradas.</p>
+            ) : null}
+            {story.agent_progress.map((agent) => (
+              <div className="agent-step" key={`${agent.agent_name}-${agent.started_at}`}>
+                <span className={`status-dot ${agent.status}`} />
+                <div>
+                  <strong>{agent.label}</strong>
+                  <p className="muted tiny">
+                    {agent.status}
+                    {agent.error_message ? ` - ${agent.error_message}` : ""}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {story.evaluation ? (
+          <div className="evaluation-panel">
+            <div className="section-title">
+              <div>
+                <h2>Evaluacion</h2>
+                <p className="muted">HANNA + orquestacion narrativa</p>
+              </div>
+              <span className="status-pill completed">{score(story.evaluation.overall)}/5</span>
+            </div>
+            <div className="score-grid">
+              <p>Relevancia {score(story.evaluation.relevance)}</p>
+              <p>Coherencia {score(story.evaluation.coherence)}</p>
+              <p>Empatia {score(story.evaluation.empathy)}</p>
+              <p>Sorpresa {score(story.evaluation.surprise)}</p>
+              <p>Enganche {score(story.evaluation.engagement)}</p>
+              <p>Complejidad {score(story.evaluation.complexity)}</p>
+              <p>Orquestacion {score(story.evaluation.orchestration)}</p>
+            </div>
+            {story.evaluation.blocking_issues.length > 0 ? (
+              <p className="error-text">{story.evaluation.blocking_issues.join(" ")}</p>
+            ) : null}
+            {story.evaluation.notes.length > 0 ? (
+              <p className="muted tiny">{story.evaluation.notes.join(" ")}</p>
+            ) : null}
+          </div>
+        ) : null}
+
         {story.status === "completed" && story.story_text ? (
-          <article className="reader-copy">{story.story_text}</article>
+          renderStoryText(story.story_text)
         ) : null}
 
         {story.status === "failed" ? (

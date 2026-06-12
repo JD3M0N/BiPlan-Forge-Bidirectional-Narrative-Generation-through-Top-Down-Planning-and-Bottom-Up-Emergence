@@ -28,6 +28,9 @@ describe("StoryHighlights", () => {
             length: "medium",
             language: "es",
             status: "running",
+            current_stage: "Plot Weaver",
+            progress_percent: 42,
+            evaluation: null,
             created_at: "2026-03-15T10:00:00Z",
             updated_at: "2026-03-15T10:05:00Z",
           },
@@ -39,6 +42,7 @@ describe("StoryHighlights", () => {
       "href",
       "/stories/story-1",
     );
+    expect(screen.getByText(/plot weaver - 42%/i)).toBeInTheDocument();
     expect(screen.getByText("15 mar 2026")).toBeInTheDocument();
   });
 });

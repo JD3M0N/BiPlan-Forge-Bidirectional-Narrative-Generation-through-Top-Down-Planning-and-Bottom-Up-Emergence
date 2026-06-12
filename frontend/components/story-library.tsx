@@ -24,6 +24,15 @@ export function StoryLibrary({ stories }: StoryLibraryProps) {
             <span className={`status-pill ${story.status}`}>{story.status}</span>
           </div>
           <p className="muted tiny">{story.summary ?? story.plot}</p>
+          <div className="progress-row" aria-label={`Progreso ${story.progress_percent}%`}>
+            <span style={{ width: `${story.progress_percent}%` }} />
+          </div>
+          <p className="muted tiny">
+            {story.current_stage ?? "Sin etapa activa"} - {story.progress_percent}%
+          </p>
+          {story.evaluation ? (
+            <p className="muted tiny">Evaluacion {story.evaluation.overall.toFixed(1)}/5</p>
+          ) : null}
           <p className="muted tiny">{formatDate(story.updated_at)}</p>
         </Link>
       ))}

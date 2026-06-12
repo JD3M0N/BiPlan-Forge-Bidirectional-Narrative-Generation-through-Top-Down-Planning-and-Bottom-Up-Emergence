@@ -46,6 +46,9 @@ const activeStory: StoryListItem = {
   length: "medium",
   language: "es",
   status: "running",
+  current_stage: "Plot Weaver",
+  progress_percent: 42,
+  evaluation: null,
   created_at: "2026-03-15T10:00:00Z",
   updated_at: "2026-03-15T10:00:00Z",
 };
@@ -53,6 +56,14 @@ const activeStory: StoryListItem = {
 const completedStory: StoryListItem = {
   ...activeStory,
   status: "completed",
+  current_stage: null,
+  progress_percent: 100,
+  evaluation: {
+    coherence: 4.4,
+    orchestration: 4.3,
+    overall: 4.2,
+    blocking_issues: [],
+  },
   updated_at: "2026-03-15T10:05:00Z",
 };
 

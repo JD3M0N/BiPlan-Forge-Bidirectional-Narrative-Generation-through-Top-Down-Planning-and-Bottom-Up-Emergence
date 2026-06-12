@@ -74,8 +74,8 @@ export function StoryComposer({ onCreated }: StoryComposerProps) {
         <div>
           <h2>Nuevo encargo</h2>
           <p className="muted">
-            El Architect, World Builder, Drama Coach, Dependency Manager y Narrator trabajaran en
-            secuencia sobre tu historia.
+            Architect, World Builder, Director, Character Simulator, Plot Weaver, Drama Coach,
+            Dependency Manager, Coordinator, Chapter Writer y Quality Evaluator trabajaran sobre tu historia.
           </p>
         </div>
         <span className="status-pill running">multi-agent</span>

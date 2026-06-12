@@ -25,8 +25,35 @@ function buildStory(status: StoryDetail["status"]): StoryDetail {
     length: "medium",
     language: "es",
     status,
+    current_stage: status === "running" || status === "pending" ? "Architect" : null,
+    progress_percent: status === "completed" ? 100 : 20,
     story_text: status === "completed" ? "Texto final" : null,
     error_message: status === "failed" ? "Fallo controlado" : null,
+    agent_progress: [
+      {
+        agent_name: "architect",
+        label: "Architect",
+        status: status === "failed" ? "failed" : "completed",
+        started_at: "2026-03-15T10:00:00Z",
+        finished_at: "2026-03-15T10:01:00Z",
+        error_message: status === "failed" ? "Fallo controlado" : null,
+      },
+    ],
+    evaluation:
+      status === "completed"
+        ? {
+            relevance: 4,
+            coherence: 4,
+            empathy: 4,
+            surprise: 3,
+            engagement: 4,
+            complexity: 4,
+            orchestration: 4,
+            overall: 4,
+            blocking_issues: [],
+            notes: ["Correcta"],
+          }
+        : null,
     created_at: "2026-03-15T10:00:00Z",
     updated_at: "2026-03-15T10:05:00Z",
   };
@@ -51,7 +78,9 @@ describe("StoryDetailView", () => {
     render(<StoryDetailView storyId="story-1" />);
 
     expect(await screen.findByText("Texto final")).toBeInTheDocument();
-    expect(screen.getByText("completed")).toBeInTheDocument();
+    expect(screen.getAllByText("completed").length).toBeGreaterThan(0);
+    expect(screen.getByText("Architect")).toBeInTheDocument();
+    expect(screen.getByText(/evaluacion/i)).toBeInTheDocument();
   });
 
   it("renders failed stories", async () => {

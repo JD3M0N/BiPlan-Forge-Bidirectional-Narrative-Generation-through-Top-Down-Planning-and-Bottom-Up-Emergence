@@ -39,6 +39,46 @@ describe("apiRequest", () => {
     await expect(apiRequest("/auth/login")).rejects.toEqual(new ApiError("Invalid credentials", 401));
   });
 
+  it("formats FastAPI validation detail arrays", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      json: vi.fn().mockResolvedValue({
+        detail: [
+          {
+            loc: ["body", "characters", 0, "name"],
+            msg: "Field required",
+            type: "missing",
+          },
+          {
+            loc: ["body", "plot"],
+            msg: "String should have at least 12 characters",
+            type: "string_too_short",
+          },
+        ],
+      }),
+    });
+
+    await expect(apiRequest("/stories/generate")).rejects.toEqual(
+      new ApiError(
+        "characters.0.name: Field required; plot: String should have at least 12 characters",
+        422,
+      ),
+    );
+  });
+
+  it("formats object details instead of rendering object Object", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: vi.fn().mockResolvedValue({ detail: { message: "Gemini rejected the request" } }),
+    });
+
+    await expect(apiRequest("/stories/generate")).rejects.toEqual(
+      new ApiError("Gemini rejected the request", 500),
+    );
+  });
+
   it("falls back to a generic message when error JSON cannot be parsed", async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,

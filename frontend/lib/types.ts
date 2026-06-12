@@ -24,13 +24,18 @@ export type StoryListItem = {
   length: "short" | "medium" | "long";
   language: string;
   status: StoryStatus;
+  current_stage: string | null;
+  progress_percent: number;
+  evaluation: StoryEvaluationSummary | null;
   created_at: string;
   updated_at: string;
 };
 
-export type StoryDetail = StoryListItem & {
+export type StoryDetail = Omit<StoryListItem, "evaluation"> & {
   story_text: string | null;
   error_message: string | null;
+  agent_progress: AgentProgress[];
+  evaluation: StoryEvaluation | null;
 };
 
 export type StoryGenerateRequest = {
@@ -45,3 +50,30 @@ export type StoryJobCreated = {
   id: string;
   status: StoryStatus;
 };
+
+export type AgentProgress = {
+  agent_name: string;
+  label: string;
+  status: StoryStatus;
+  started_at: string;
+  finished_at: string | null;
+  error_message: string | null;
+};
+
+export type StoryEvaluation = {
+  relevance: number;
+  coherence: number;
+  empathy: number;
+  surprise: number;
+  engagement: number;
+  complexity: number;
+  orchestration: number;
+  overall: number;
+  blocking_issues: string[];
+  notes: string[];
+};
+
+export type StoryEvaluationSummary = Pick<
+  StoryEvaluation,
+  "coherence" | "orchestration" | "overall" | "blocking_issues"
+>;
