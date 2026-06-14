@@ -27,6 +27,7 @@ describe("StoryHighlights", () => {
             plot: "Trama",
             length: "medium",
             language: "es",
+            pipeline_mode: "efficient",
             status: "running",
             current_stage: "Plot Weaver",
             progress_percent: 42,
@@ -43,6 +44,7 @@ describe("StoryHighlights", () => {
       "/stories/story-1",
     );
     expect(screen.getByText(/plot weaver - 42%/i)).toBeInTheDocument();
+    expect(screen.getByText(/pipeline efficient/i)).toBeInTheDocument();
     expect(screen.getByText("15 mar 2026")).toBeInTheDocument();
   });
 });

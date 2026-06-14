@@ -45,6 +45,7 @@ const activeStory: StoryListItem = {
   plot: "Trama activa",
   length: "medium",
   language: "es",
+  pipeline_mode: "efficient",
   status: "running",
   current_stage: "Plot Weaver",
   progress_percent: 42,

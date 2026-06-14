@@ -38,6 +38,7 @@ GEMINI_API_KEY=
 GEMINI_MODEL=gemini-2.0-flash
 GEMINI_MAX_RETRIES=3
 GEMINI_RETRY_BASE_SECONDS=2.0
+GEMINI_MIN_REQUEST_INTERVAL_SECONDS=3.2
 ```
 
 Si `GEMINI_API_KEY` no esta configurada, las solicitudes de generacion fallaran de forma controlada y la historia quedara marcada como `failed`.

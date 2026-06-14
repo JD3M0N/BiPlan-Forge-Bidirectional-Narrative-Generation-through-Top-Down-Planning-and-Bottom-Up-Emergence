@@ -5,6 +5,7 @@ from pydantic import BaseModel, EmailStr, Field, conlist
 
 StoryLength = Literal["short", "medium", "long"]
 StoryStatus = Literal["pending", "running", "completed", "failed"]
+PipelineMode = Literal["efficient", "full"]
 RunStatus = StoryStatus
 
 
@@ -42,6 +43,7 @@ class StoryGenerateRequest(BaseModel):
     plot: str = Field(min_length=12, max_length=1500)
     length: StoryLength
     language: str = Field(default="es", min_length=2, max_length=16)
+    pipeline_mode: PipelineMode = "efficient"
 
     def to_input_brief(self) -> dict[str, Any]:
         return {
@@ -50,6 +52,7 @@ class StoryGenerateRequest(BaseModel):
             "plot": self.plot,
             "length": self.length,
             "language": self.language,
+            "pipeline_mode": self.pipeline_mode,
         }
 
 
@@ -269,6 +272,7 @@ class StoryListItem(BaseModel):
     plot: str
     length: StoryLength
     language: str
+    pipeline_mode: PipelineMode
     status: StoryStatus
     current_stage: str | None
     progress_percent: int = Field(ge=0, le=100)

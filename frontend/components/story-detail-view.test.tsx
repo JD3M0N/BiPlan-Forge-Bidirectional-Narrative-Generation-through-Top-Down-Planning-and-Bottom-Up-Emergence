@@ -24,6 +24,7 @@ function buildStory(status: StoryDetail["status"]): StoryDetail {
     plot: "Trama",
     length: "medium",
     language: "es",
+    pipeline_mode: "efficient",
     status,
     current_stage: status === "running" || status === "pending" ? "Architect" : null,
     progress_percent: status === "completed" ? 100 : 20,
@@ -80,6 +81,7 @@ describe("StoryDetailView", () => {
     expect(await screen.findByText("Texto final")).toBeInTheDocument();
     expect(screen.getAllByText("completed").length).toBeGreaterThan(0);
     expect(screen.getByText("Architect")).toBeInTheDocument();
+    expect(screen.getByText(/pipeline efficient/i)).toBeInTheDocument();
     expect(screen.getByText(/evaluacion/i)).toBeInTheDocument();
   });
 

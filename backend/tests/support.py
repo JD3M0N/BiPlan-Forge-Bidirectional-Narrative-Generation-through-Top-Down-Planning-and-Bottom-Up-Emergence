@@ -113,6 +113,7 @@ def create_story_record(engine, user_id: str, payload: dict | None = None) -> St
         plot=request.plot,
         length=request.length,
         language=request.language,
+        pipeline_mode=request.pipeline_mode,
         characters_json=[character.dict() for character in request.characters],
         input_brief=input_brief,
         story_packet={"input_brief": input_brief},

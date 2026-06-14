@@ -15,6 +15,7 @@ def test_generate_story_and_read_it(client: TestClient) -> None:
     assert initial_detail.status_code == 200
     assert initial_detail.json()["progress_percent"] <= 100
     assert "agent_progress" in initial_detail.json()
+    assert initial_detail.json()["pipeline_mode"] == "efficient"
 
     final_story = wait_for_story_completion(client, story_id)
     assert final_story["status"] == "completed"
@@ -28,11 +29,38 @@ def test_generate_story_and_read_it(client: TestClient) -> None:
     assert list_response.status_code == 200
     assert len(list_response.json()) == 1
     assert list_response.json()[0]["evaluation"]["overall"] == 4.2
+    assert list_response.json()[0]["pipeline_mode"] == "efficient"
 
     detail_response = client.get(f"/stories/{story_id}")
     assert detail_response.status_code == 200
     assert detail_response.json()["id"] == story_id
     assert detail_response.json()["status"] == "completed"
+    assert detail_response.json()["pipeline_mode"] == "efficient"
+
+
+def test_generate_story_accepts_full_pipeline_mode(client: TestClient) -> None:
+    register_user(client, "full@example.com")
+
+    response = client.post("/stories/generate", json=build_story_request(pipeline_mode="full"))
+    assert response.status_code == 202
+    story_id = response.json()["id"]
+
+    final_story = wait_for_story_completion(client, story_id)
+    assert final_story["status"] == "completed"
+    assert final_story["pipeline_mode"] == "full"
+    assert final_story["agent_progress"][0]["agent_name"] == "architect"
+
+    list_response = client.get("/stories")
+    assert list_response.status_code == 200
+    assert list_response.json()[0]["pipeline_mode"] == "full"
+
+
+def test_generate_story_rejects_invalid_pipeline_mode(client: TestClient) -> None:
+    register_user(client, "invalid-mode@example.com")
+
+    response = client.post("/stories/generate", json=build_story_request(pipeline_mode="turbo"))
+
+    assert response.status_code == 422
 
 
 def test_story_routes_are_isolated_per_user(client: TestClient) -> None:

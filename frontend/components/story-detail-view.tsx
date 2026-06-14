@@ -112,6 +112,7 @@ export function StoryDetailView({ storyId }: StoryDetailViewProps) {
           <p>{story.style}</p>
           <p>{story.length}</p>
           <p>{story.language.toUpperCase()}</p>
+          <p>Pipeline {story.pipeline_mode}</p>
         </div>
 
         <div className="progress-panel">

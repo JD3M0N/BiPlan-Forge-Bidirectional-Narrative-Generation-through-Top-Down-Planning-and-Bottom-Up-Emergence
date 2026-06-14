@@ -23,6 +23,7 @@ def create_app(settings: Settings | None = None, llm_client=None) -> FastAPI:
         max_retries=app_settings.gemini_max_retries,
         rate_limit_max_retries=app_settings.gemini_rate_limit_max_retries,
         retry_base_seconds=app_settings.gemini_retry_base_seconds,
+        min_request_interval_seconds=app_settings.gemini_min_request_interval_seconds,
     )
     orchestrator = StoryOrchestrator(
         engine=engine,

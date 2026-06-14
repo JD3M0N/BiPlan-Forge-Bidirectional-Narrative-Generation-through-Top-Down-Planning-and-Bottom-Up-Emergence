@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     gemini_max_retries: int = 3
     gemini_rate_limit_max_retries: int = 8
     gemini_retry_base_seconds: float = 2.0
+    gemini_min_request_interval_seconds: float = 3.2
 
     class Config:
         env_file = ".env"

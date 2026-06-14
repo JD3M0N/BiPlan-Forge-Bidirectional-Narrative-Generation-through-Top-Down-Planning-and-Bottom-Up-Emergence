@@ -57,11 +57,25 @@ def test_orchestrator_uses_efficient_pipeline_by_default(db_path) -> None:
     assert len(stored_story.story_packet["chapter_drafts"]) == 3
 
 
+def test_orchestrator_story_mode_overrides_global_default(db_path) -> None:
+    engine = create_test_engine(db_path)
+    user = create_user_record(engine, "mode-override@example.com")
+    story = create_story_record(engine, user.id)
+    llm_client = FakeGeminiClient()
+    orchestrator = StoryOrchestrator(engine=engine, llm_client=llm_client, pipeline_mode="full")
+
+    asyncio.run(orchestrator.process_story(story.id))
+
+    runs = list_agent_runs(engine, story.id)
+    assert [run.agent_name for run in runs] == EFFICIENT_MEDIUM_PIPELINE
+    assert llm_client.call_count == 3
+
+
 def test_orchestrator_full_pipeline_records_all_runs(db_path) -> None:
     engine = create_test_engine(db_path)
     user = create_user_record(engine, "orchestrator@example.com")
-    story = create_story_record(engine, user.id)
-    orchestrator = StoryOrchestrator(engine=engine, llm_client=FakeGeminiClient(), pipeline_mode="full")
+    story = create_story_record(engine, user.id, build_story_request(pipeline_mode="full"))
+    orchestrator = StoryOrchestrator(engine=engine, llm_client=FakeGeminiClient())
 
     asyncio.run(orchestrator.process_story(story.id))
 
@@ -82,8 +96,8 @@ def test_orchestrator_writes_pipeline_log_file(db_path) -> None:
     configure_logging(settings)
     engine = create_test_engine(db_path)
     user = create_user_record(engine, "pipeline-log@example.com")
-    story = create_story_record(engine, user.id)
-    orchestrator = StoryOrchestrator(engine=engine, llm_client=FakeGeminiClient(), pipeline_mode="full")
+    story = create_story_record(engine, user.id, build_story_request(pipeline_mode="full"))
+    orchestrator = StoryOrchestrator(engine=engine, llm_client=FakeGeminiClient())
 
     asyncio.run(orchestrator.process_story(story.id))
 
@@ -116,11 +130,10 @@ def test_pipeline_log_file_keeps_last_100_entries(db_path) -> None:
 def test_orchestrator_marks_story_failed_when_agent_raises(db_path) -> None:
     engine = create_test_engine(db_path)
     user = create_user_record(engine, "failure@example.com")
-    story = create_story_record(engine, user.id)
+    story = create_story_record(engine, user.id, build_story_request(pipeline_mode="full"))
     orchestrator = StoryOrchestrator(
         engine=engine,
         llm_client=FakeGeminiClient(fail_on=DRAMA_COACH_PROMPT),
-        pipeline_mode="full",
     )
 
     asyncio.run(orchestrator.process_story(story.id))
@@ -146,11 +159,10 @@ def test_orchestrator_writes_pipeline_log_when_agent_fails(db_path) -> None:
     configure_logging(settings)
     engine = create_test_engine(db_path)
     user = create_user_record(engine, "pipeline-failure@example.com")
-    story = create_story_record(engine, user.id)
+    story = create_story_record(engine, user.id, build_story_request(pipeline_mode="full"))
     orchestrator = StoryOrchestrator(
         engine=engine,
         llm_client=FakeGeminiClient(fail_on=DRAMA_COACH_PROMPT),
-        pipeline_mode="full",
     )
 
     asyncio.run(orchestrator.process_story(story.id))
@@ -165,11 +177,10 @@ def test_orchestrator_writes_pipeline_log_when_agent_fails(db_path) -> None:
 def test_orchestrator_blocks_story_when_dependency_review_is_inconsistent(db_path) -> None:
     engine = create_test_engine(db_path)
     user = create_user_record(engine, "continuity@example.com")
-    story = create_story_record(engine, user.id)
+    story = create_story_record(engine, user.id, build_story_request(pipeline_mode="full"))
     orchestrator = StoryOrchestrator(
         engine=engine,
         llm_client=FakeGeminiClient(inconsistent_dependency=True),
-        pipeline_mode="full",
     )
 
     asyncio.run(orchestrator.process_story(story.id))
@@ -194,8 +205,8 @@ def test_orchestrator_blocks_story_when_dependency_review_is_inconsistent(db_pat
 def test_orchestrator_uses_adaptive_chapter_count(db_path) -> None:
     engine = create_test_engine(db_path)
     user = create_user_record(engine, "short@example.com")
-    story = create_story_record(engine, user.id, build_story_request(length="short"))
-    orchestrator = StoryOrchestrator(engine=engine, llm_client=FakeGeminiClient(), pipeline_mode="full")
+    story = create_story_record(engine, user.id, build_story_request(length="short", pipeline_mode="full"))
+    orchestrator = StoryOrchestrator(engine=engine, llm_client=FakeGeminiClient())
 
     asyncio.run(orchestrator.process_story(story.id))
 

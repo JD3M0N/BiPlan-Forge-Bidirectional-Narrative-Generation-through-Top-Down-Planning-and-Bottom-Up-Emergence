@@ -30,6 +30,7 @@ export function StoryLibrary({ stories }: StoryLibraryProps) {
           <p className="muted tiny">
             {story.current_stage ?? "Sin etapa activa"} - {story.progress_percent}%
           </p>
+          <p className="muted tiny">Pipeline {story.pipeline_mode}</p>
           {story.evaluation ? (
             <p className="muted tiny">Evaluacion {story.evaluation.overall.toFixed(1)}/5</p>
           ) : null}

@@ -26,6 +26,7 @@ class Story(SQLModel, table=True):
     plot: str
     length: str
     language: str = "es"
+    pipeline_mode: str = "efficient"
     characters_json: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
     input_brief: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     story_packet: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))

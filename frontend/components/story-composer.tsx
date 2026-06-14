@@ -21,6 +21,7 @@ export function StoryComposer({ onCreated }: StoryComposerProps) {
   const [plot, setPlot] = useState("");
   const [length, setLength] = useState<"short" | "medium" | "long">("medium");
   const [language, setLanguage] = useState("es");
+  const [pipelineMode, setPipelineMode] = useState<StoryGenerateRequest["pipeline_mode"]>("efficient");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +52,7 @@ export function StoryComposer({ onCreated }: StoryComposerProps) {
       plot,
       length,
       language,
+      pipeline_mode: pipelineMode,
     };
 
     try {
@@ -74,8 +76,7 @@ export function StoryComposer({ onCreated }: StoryComposerProps) {
         <div>
           <h2>Nuevo encargo</h2>
           <p className="muted">
-            Architect, World Builder, Director, Character Simulator, Plot Weaver, Drama Coach,
-            Dependency Manager, Coordinator, Chapter Writer y Quality Evaluator trabajaran sobre tu historia.
+            Elige un recorrido rapido o una sala completa de agentes segun el detalle narrativo que necesites.
           </p>
         </div>
         <span className="status-pill running">multi-agent</span>
@@ -181,6 +182,18 @@ export function StoryComposer({ onCreated }: StoryComposerProps) {
           >
             <option value="es">Espanol</option>
             <option value="en">Ingles</option>
+          </select>
+        </div>
+
+        <div className="field">
+          <label htmlFor="pipeline-mode">Modo de pipeline</label>
+          <select
+            id="pipeline-mode"
+            onChange={(event) => setPipelineMode(event.target.value as typeof pipelineMode)}
+            value={pipelineMode}
+          >
+            <option value="efficient">Efficient - recomendado para cuota gratis</option>
+            <option value="full">Full - mas agentes y mas llamadas</option>
           </select>
         </div>
 

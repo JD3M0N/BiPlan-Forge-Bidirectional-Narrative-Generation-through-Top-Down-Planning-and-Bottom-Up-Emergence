@@ -1,4 +1,5 @@
 export type StoryStatus = "pending" | "running" | "completed" | "failed";
+export type PipelineMode = "efficient" | "full";
 
 export type CharacterInput = {
   name: string;
@@ -23,6 +24,7 @@ export type StoryListItem = {
   plot: string;
   length: "short" | "medium" | "long";
   language: string;
+  pipeline_mode: PipelineMode;
   status: StoryStatus;
   current_stage: string | null;
   progress_percent: number;
@@ -44,6 +46,7 @@ export type StoryGenerateRequest = {
   plot: string;
   length: "short" | "medium" | "long";
   language: string;
+  pipeline_mode: PipelineMode;
 };
 
 export type StoryJobCreated = {

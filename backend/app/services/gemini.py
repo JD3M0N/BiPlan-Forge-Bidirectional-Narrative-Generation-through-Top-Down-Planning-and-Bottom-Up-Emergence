@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+import time
 
 import httpx
 
@@ -47,16 +48,22 @@ class GeminiClient:
         max_retries: int = 3,
         rate_limit_max_retries: int | None = None,
         retry_base_seconds: float = 2.0,
+        min_request_interval_seconds: float = 3.2,
         transport=None,
         sleep=None,
+        clock=None,
     ) -> None:
         self.api_key = api_key
         self.model = model
         self.max_retries = max_retries
         self.rate_limit_max_retries = rate_limit_max_retries or max_retries
         self.retry_base_seconds = retry_base_seconds
+        self.min_request_interval_seconds = max(min_request_interval_seconds, 0.0)
         self.transport = transport
         self.sleep = sleep or asyncio.sleep
+        self.clock = clock or time.monotonic
+        self._throttle_lock = asyncio.Lock()
+        self._last_request_at: float | None = None
         self.logger = get_logger("gemini")
 
     def _build_url(self) -> str:
@@ -79,6 +86,7 @@ class GeminiClient:
         attempt = 1
         while True:
             try:
+                await self._throttle()
                 async with httpx.AsyncClient(timeout=120, transport=self.transport) as client:
                     response = await client.post(self._build_url(), json=payload)
             except httpx.RequestError as exc:
@@ -155,6 +163,25 @@ class GeminiClient:
 
     def _retry_delay(self, attempt: int) -> float:
         return min(self.retry_base_seconds * (2 ** (attempt - 1)), 20.0)
+
+    async def _throttle(self) -> None:
+        if self.min_request_interval_seconds <= 0:
+            return
+
+        async with self._throttle_lock:
+            now = self.clock()
+            if self._last_request_at is not None:
+                elapsed = now - self._last_request_at
+                wait_seconds = self.min_request_interval_seconds - elapsed
+                if wait_seconds > 0:
+                    self.logger.info(
+                        "gemini_throttle_wait model=%s wait_seconds=%.2f",
+                        self.model,
+                        wait_seconds,
+                    )
+                    await self.sleep(wait_seconds)
+                    now = self.clock()
+            self._last_request_at = now
 
     def _rate_limit_retry_delay(self, response: httpx.Response, detail: str, attempt: int) -> float:
         retry_after = response.headers.get("Retry-After")

@@ -63,6 +63,22 @@ def _agent_label(agent_name: str) -> str:
 def _expected_agent_sequence(story: Story, runs: list[StoryAgentRun] | None = None) -> list[str]:
     if runs and any(run.agent_name in EFFICIENT_AGENT_NAMES for run in runs):
         return EFFICIENT_AGENT_SEQUENCE
+    if runs and any(_is_full_pipeline_run(run.agent_name) for run in runs):
+        return _full_agent_sequence(story)
+    if story.pipeline_mode == "efficient":
+        return EFFICIENT_AGENT_SEQUENCE
+    return _full_agent_sequence(story)
+
+
+def _is_full_pipeline_run(agent_name: str) -> bool:
+    return (
+        agent_name in BASE_AGENT_SEQUENCE
+        or agent_name.startswith("coordinator_chapter_")
+        or (agent_name.startswith("chapter_writer_") and agent_name != "chapter_writer_batch")
+    )
+
+
+def _full_agent_sequence(story: Story) -> list[str]:
     chapter_count = CHAPTERS_BY_LENGTH.get(story.length, 3)
     chapter_agents = [
         agent_name
@@ -141,6 +157,7 @@ def _to_list_item(story: Story, runs: list[StoryAgentRun]) -> StoryListItem:
         plot=story.plot,
         length=story.length,
         language=story.language,
+        pipeline_mode=story.pipeline_mode if story.pipeline_mode in {"efficient", "full"} else "efficient",
         status=story.status,
         current_stage=_current_stage(story, runs),
         progress_percent=_progress_percent(story, runs),
@@ -160,6 +177,7 @@ def _to_detail(story: Story, runs: list[StoryAgentRun]) -> StoryDetail:
         plot=story.plot,
         length=story.length,
         language=story.language,
+        pipeline_mode=story.pipeline_mode if story.pipeline_mode in {"efficient", "full"} else "efficient",
         status=story.status,
         current_stage=_current_stage(story, runs),
         progress_percent=_progress_percent(story, runs),
@@ -216,6 +234,7 @@ async def generate_story(
         plot=payload.plot,
         length=payload.length,
         language=payload.language,
+        pipeline_mode=payload.pipeline_mode,
         characters_json=[character.dict() for character in payload.characters],
         input_brief=input_brief,
         story_packet={"input_brief": input_brief},

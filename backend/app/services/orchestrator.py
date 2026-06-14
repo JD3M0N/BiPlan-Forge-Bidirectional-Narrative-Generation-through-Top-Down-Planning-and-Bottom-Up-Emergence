@@ -47,7 +47,7 @@ class StoryOrchestrator:
     def __init__(self, engine, llm_client, pipeline_mode: str = "efficient") -> None:
         self.engine = engine
         self.agents = StoryAgents(llm_client)
-        self.pipeline_mode = pipeline_mode if pipeline_mode in {"efficient", "full"} else "efficient"
+        self.default_pipeline_mode = pipeline_mode if pipeline_mode in {"efficient", "full"} else "efficient"
         self.logger = get_logger("orchestrator")
         self.pipeline_logger = get_pipeline_logger()
 
@@ -82,10 +82,19 @@ class StoryOrchestrator:
                 self.pipeline_logger.info("Fallo la generacion story_id=%s error=%s", story_id, error_message)
 
     async def _run_pipeline(self, story_id: str) -> None:
-        if self.pipeline_mode == "full":
+        with Session(self.engine) as session:
+            story = session.get(Story, story_id)
+            if not story:
+                return
+            pipeline_mode = self._resolve_pipeline_mode(story.pipeline_mode)
+
+        if pipeline_mode == "full":
             await self._run_full_pipeline(story_id)
             return
         await self._run_efficient_pipeline(story_id)
+
+    def _resolve_pipeline_mode(self, pipeline_mode: str | None) -> str:
+        return pipeline_mode if pipeline_mode in {"efficient", "full"} else self.default_pipeline_mode
 
     async def _run_efficient_pipeline(self, story_id: str) -> None:
         with Session(self.engine) as session:

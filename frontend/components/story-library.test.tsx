@@ -27,6 +27,7 @@ describe("StoryLibrary", () => {
             plot: "Trama",
             length: "medium",
             language: "es",
+            pipeline_mode: "efficient",
             status: "completed",
             current_stage: null,
             progress_percent: 100,
@@ -45,6 +46,7 @@ describe("StoryLibrary", () => {
 
     expect(screen.getByRole("link", { name: /historia/i })).toHaveAttribute("href", "/stories/story-1");
     expect(screen.getByText("15 mar 2026")).toBeInTheDocument();
+    expect(screen.getByText(/pipeline efficient/i)).toBeInTheDocument();
     expect(screen.getByText(/evaluacion 4.2\/5/i)).toBeInTheDocument();
   });
 });
