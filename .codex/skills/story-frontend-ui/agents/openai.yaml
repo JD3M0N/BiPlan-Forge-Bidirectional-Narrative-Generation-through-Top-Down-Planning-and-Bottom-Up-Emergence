@@ -1,4 +1,0 @@
-interface:
-  display_name: "Story Frontend UI"
-  short_description: "Next.js UI, auth, forms and polling"
-  default_prompt: "Use $story-frontend-ui to modify the Next.js UI, story composer, dashboard, or related tests."

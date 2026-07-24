@@ -1,4 +1,0 @@
-interface:
-  display_name: "Story Contract Sync"
-  short_description: "Cross-stack API and type synchronization"
-  default_prompt: "Use $story-contract-sync to update shared API contracts, statuses, and backend/frontend payload shapes together."

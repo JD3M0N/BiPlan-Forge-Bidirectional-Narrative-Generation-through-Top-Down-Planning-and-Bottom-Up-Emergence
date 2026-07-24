@@ -1,4 +1,0 @@
-interface:
-  display_name: "Story Backend Pipeline"
-  short_description: "FastAPI, Gemini and orchestration flow"
-  default_prompt: "Use $story-backend-pipeline to modify the FastAPI pipeline, Gemini integration, or story orchestration."
