@@ -1,0 +1,33 @@
+{
+  "characters": [
+    {
+      "name": "Alden de Valoria",
+      "role": "Joven caballero",
+      "goal": "Rescatar a la princesa y matar al dragón para obtener gloria",
+      "motivation": "Demostrar su valía y cumplir con su deber sagrado hacia el reino",
+      "conflict": "Sus convicciones chocan con la verdad revelada sobre el pacto y el dragón",
+      "arc": "Pasa de buscar la gloria ciega a aceptar la responsabilidad de proteger la verdad"
+    },
+    {
+      "name": "Ignis",
+      "role": "Antiguo dragón",
+      "goal": "Proteger el secreto y mantener el sello contra la oscuridad",
+      "motivation": "Evitar la destrucción del reino inferior mediante el sacrificio de la princesa",
+      "conflict": "Debe enfrentarse al caballero sin destruirlo para hacerle entender el pacto",
+      "arc": "Evoluciona de ser visto como un monstruo sediento de sangre a un guardián trágico"
+    },
+    {
+      "name": "Princesa Eliana",
+      "role": "Princesa cautiva",
+      "goal": "Mantener el sello mágico que su sangre sostiene voluntariamente",
+      "motivation": "Salvar a su pueblo de la catástrofe a costa de su propia libertad",
+      "conflict": "Desea ver el mundo exterior pero sabe que su salida significaría la perdición",
+      "arc": "Encuentra aliados en su soledad y acepta su destino con esperanza renovada"
+    }
+  ],
+  "relationships": [
+    "Alden e Ignis pasan de enemigos mortales a portadores conjuntos de una verdad trascendental",
+    "Eliana e Ignis comparten un vínculo de protectores del mismo secreto sagrado",
+    "Alden y Eliana descubren que el rescate tradicional ya no es posible, debiendo forjar un nuevo futuro juntos"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "setting": "Un castillo ancestral construido sobre la cima de una montaña volcánica en constante erupción",
+  "time_period": "Era de los mitos y el acero",
+  "rules": [
+    "El fuego del dragón no quema a aquellos que buscan la verdad en lugar de la gloria",
+    "El cautiverio es un pacto sagrado para evitar que la oscuridad reine en el reino inferior",
+    "El acero bendecido solo puede dañar al dragón si el portador duda de su causa"
+  ],
+  "locations": [
+    "La Senda de las Cenizas",
+    "El Salón del Fuego Eterno",
+    "La Torre del Cautiverio"
+  ],
+  "atmosphere": "Opresiva, heroica, cargada de azufre y revelaciones trascendentales"
+}
