@@ -32,7 +32,8 @@ class Agent(ABC, Generic[T]):
     def run(self, *args: object, **kwargs: object) -> T:
         """Produce el artefacto propio del agente."""
 
-
+# limite de 1500 palabras momentaneo
+# lo de espannol debe ser cambiable por prompts en ingles
 class AnalystAgent(Agent[StoryRequest]):
     name = "analyst"
 

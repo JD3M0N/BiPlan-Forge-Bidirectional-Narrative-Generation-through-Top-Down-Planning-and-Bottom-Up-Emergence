@@ -1,0 +1,42 @@
+# Tareas del pipeline Top-Down
+
+> Formato compatible con extensiones de tareas: busca `TODO:` y marca una
+> tarea terminada cambiando `[ ]` por `[x]`.
+
+- [ ] TODO: Hacer configurable la extensión predeterminada de 1500 palabras.
+  - Archivo: `schemas.py` (`StoryRequest.target_words`) y `agents.py`
+    (`AnalystAgent`).
+  - Terminado cuando: el valor predeterminado se define en la configuración,
+    pero una extensión indicada por el usuario siempre tiene prioridad.
+
+- [ ] TODO: Permitir que el idioma de salida se elija desde el prompt.
+  - Archivo: `agents.py` (`AnalystAgent`, `WriterAgent` y `EditorAgent`).
+  - Terminado cuando: los agentes razonan con instrucciones en inglés y la
+    historia se escribe en el idioma solicitado; si no se indica, usa español.
+
+- [ ] TODO: Traducir al inglés todas las instrucciones internas de los agentes.
+  - Archivo: `agents.py`.
+  - Terminado cuando: todos los `system_instruction` y los rótulos de contexto
+    están en inglés sin cambiar el idioma solicitado para la historia final.
+
+- [ ] TODO: Mejorar la instrucción de `WorldBuilderAgent`.
+  - Debe definir reglas, lugares y atmósfera útiles para el conflicto, evitando
+    detalles decorativos que no afecten la historia.
+
+- [ ] TODO: Añadir principios básicos de narratología a `PlotArchitectAgent`.
+  - Debe exigir causalidad, aumento de tensión, puntos de giro, clímax,
+    resolución y relación entre el arco del personaje y el tema.
+
+- [ ] TODO: Ampliar el repertorio narrativo de `WriterAgent`.
+  - No debe centrarse solo en la ficcion convenciones al género solicitado,
+    incluyendo subgéneros y combinaciones de géneros.
+
+- [ ] TODO: Documentar las funciones y clases públicas.
+  - Archivos: `agents.py`, `config.py`, `provider.py`, `schemas.py`,
+    `storage.py` y `orchestrator.py`.
+  - Terminado cuando: cada elemento público explica brevemente qué recibe, qué
+    devuelve y qué error relevante puede producir.
+
+- [ ] TODO: Añadir pruebas para configuración, esquemas y almacenamiento.
+  - Casos mínimos: ausencia de API key, límites de palabras, creación de
+    nombres seguros, guardado incremental y estado de ejecución fallida.

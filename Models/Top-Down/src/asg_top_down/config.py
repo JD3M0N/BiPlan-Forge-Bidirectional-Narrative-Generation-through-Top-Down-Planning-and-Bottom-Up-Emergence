@@ -1,4 +1,5 @@
-"""Carga de configuración y resolución de rutas del proyecto."""
+"""Carga de configuración y resolución de rutas del proyecto.
+La idea es cambiar el modelo o la API key sin modificar los agentes."""
 
 import os
 from dataclasses import dataclass
