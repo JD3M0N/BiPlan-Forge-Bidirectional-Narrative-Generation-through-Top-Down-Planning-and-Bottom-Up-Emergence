@@ -1,0 +1,15 @@
+{
+  "original_prompt": "Escribe un relato de fantasía épica de unas 1500 palabras. Un joven caballero debe enfrentarse a un antiguo dragón para rescatar a una princesa cautiva en un castillo situado sobre una montaña en llamas. El dragón es inteligente y protege un secreto que cambiará la percepción del caballero sobre el supuesto secuestro. Incluye una batalla intensa, diálogos memorables y un giro inesperado. Usa un tono heroico y emotivo, y termina con un final esperanzador.",
+  "title": "Las cenizas del engaño",
+  "language": "es",
+  "genre": "Fantasía épica",
+  "tone": "Heroico y emotivo",
+  "target_words": 1500,
+  "premise": "Un joven caballero asciende a una montaña en llamas para rescatar a una princesa de un dragón inteligente, descubriendo un secreto que cambia toda su perspectiva sobre la misión.",
+  "constraints": [
+    "Incluir una batalla intensa",
+    "Incluir diálogos memorables",
+    "Incluir un giro inesperado",
+    "Terminar con un final esperanzador"
+  ]
+}
