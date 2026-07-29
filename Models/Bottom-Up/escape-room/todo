@@ -7,3 +7,6 @@
   - Implementado mediante `asg-console`, en la opción `Escape Room Visual`.
   - Permite observar la simulación en vivo, pausar, avanzar por ticks y alternar
     entre la vista completa del mundo y la vista parcial de cada agente.
+
+- [ ] TODO: Hacer un interpete generico capaz de ejecutar cualquier acertijo nuevo
+  -Terminado cuando: Se pueda poner un acertijo cualquiera y los agentes sean capaces de resolverlo.
