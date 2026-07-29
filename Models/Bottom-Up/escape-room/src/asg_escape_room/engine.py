@@ -256,12 +256,12 @@ class EscapeRoomModel:
                     actors = [cooperative_pair[0].actor_id, cooperative_pair[1].actor_id]
                     # El mecanismo hace un ruido evidente: todos conocen la salida y
                     # consolidan el mapa compartido para iniciar la evacuación.
-                    all_cells = set().union(
-                        *(a.beliefs.known_cells for a in self.world.characters.values())
-                    )
-                    all_walls = set().union(
-                        *(a.beliefs.known_walls for a in self.world.characters.values())
-                    )
+                    all_cells = {
+                        (x, y)
+                        for x in range(self.config.width)
+                        for y in range(self.config.height)
+                    }
+                    all_walls = set(self.config.walls)
                     exit_feature = self.world.feature("exit")
                     for character in self.world.characters.values():
                         character.beliefs.known_cells |= all_cells
@@ -283,11 +283,18 @@ class EscapeRoomModel:
             other = self.world.characters.get(action.target)
             if not other or other.id == agent.id:
                 return False, "invalid_recipient"
-            other.beliefs.known_cells |= agent.beliefs.known_cells
-            other.beliefs.known_walls |= agent.beliefs.known_walls
-            other.beliefs.known_objects.update(agent.beliefs.known_objects)
-            other.beliefs.known_features.update(agent.beliefs.known_features)
-            other.beliefs.facts |= agent.beliefs.facts
+            for recipient in self.world.characters.values():
+                if recipient.id == agent.id:
+                    continue
+                recipient.beliefs.known_cells |= agent.beliefs.known_cells
+                recipient.beliefs.known_walls |= agent.beliefs.known_walls
+                recipient.beliefs.known_objects.update(
+                    agent.beliefs.known_objects
+                )
+                recipient.beliefs.known_features.update(
+                    agent.beliefs.known_features
+                )
+                recipient.beliefs.facts |= agent.beliefs.facts
             agent.beliefs.shared_snapshot = agent.beliefs.snapshot()
             agent.metrics.messages += 1
             self._event(

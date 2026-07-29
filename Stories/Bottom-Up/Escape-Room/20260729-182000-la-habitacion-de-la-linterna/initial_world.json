@@ -1,0 +1,321 @@
+{
+  "name": "La habitación de la linterna",
+  "width": 12,
+  "height": 8,
+  "walls": [
+    [
+      4,
+      0
+    ],
+    [
+      4,
+      3
+    ],
+    [
+      3,
+      7
+    ],
+    [
+      4,
+      6
+    ],
+    [
+      8,
+      0
+    ],
+    [
+      5,
+      7
+    ],
+    [
+      0,
+      2
+    ],
+    [
+      10,
+      0
+    ],
+    [
+      11,
+      2
+    ],
+    [
+      0,
+      5
+    ],
+    [
+      11,
+      5
+    ],
+    [
+      1,
+      0
+    ],
+    [
+      7,
+      4
+    ],
+    [
+      7,
+      1
+    ],
+    [
+      7,
+      7
+    ],
+    [
+      4,
+      2
+    ],
+    [
+      3,
+      0
+    ],
+    [
+      4,
+      5
+    ],
+    [
+      5,
+      0
+    ],
+    [
+      9,
+      7
+    ],
+    [
+      0,
+      1
+    ],
+    [
+      0,
+      7
+    ],
+    [
+      11,
+      7
+    ],
+    [
+      11,
+      1
+    ],
+    [
+      0,
+      4
+    ],
+    [
+      2,
+      7
+    ],
+    [
+      7,
+      0
+    ],
+    [
+      6,
+      7
+    ],
+    [
+      4,
+      7
+    ],
+    [
+      9,
+      0
+    ],
+    [
+      0,
+      0
+    ],
+    [
+      11,
+      0
+    ],
+    [
+      8,
+      7
+    ],
+    [
+      0,
+      3
+    ],
+    [
+      2,
+      0
+    ],
+    [
+      10,
+      7
+    ],
+    [
+      11,
+      3
+    ],
+    [
+      0,
+      6
+    ],
+    [
+      11,
+      6
+    ],
+    [
+      1,
+      7
+    ],
+    [
+      7,
+      2
+    ],
+    [
+      6,
+      0
+    ],
+    [
+      7,
+      5
+    ]
+  ],
+  "agents": [
+    {
+      "id": "A",
+      "position": [
+        1,
+        1
+      ],
+      "role": "explorer"
+    },
+    {
+      "id": "B",
+      "position": [
+        1,
+        6
+      ],
+      "role": "coordinator"
+    }
+  ],
+  "objects": [
+    {
+      "id": "battery",
+      "position": [
+        8,
+        2
+      ],
+      "portable": true
+    },
+    {
+      "id": "flashlight",
+      "position": [
+        3,
+        5
+      ],
+      "portable": true
+    },
+    {
+      "id": "lever",
+      "position": [
+        9,
+        5
+      ],
+      "portable": true
+    }
+  ],
+  "features": [
+    {
+      "id": "painting",
+      "kind": "painting",
+      "position": [
+        6,
+        3
+      ],
+      "locked": false
+    },
+    {
+      "id": "cabinet",
+      "kind": "cabinet",
+      "position": [
+        9,
+        5
+      ],
+      "locked": true
+    },
+    {
+      "id": "pressure_plate",
+      "kind": "plate",
+      "position": [
+        9,
+        3
+      ],
+      "locked": false
+    },
+    {
+      "id": "lever_station",
+      "kind": "lever",
+      "position": [
+        10,
+        5
+      ],
+      "locked": false
+    },
+    {
+      "id": "exit",
+      "kind": "exit",
+      "position": [
+        11,
+        4
+      ],
+      "locked": true
+    }
+  ],
+  "puzzles": [
+    {
+      "id": "assemble_flashlight",
+      "requires": [
+        "battery",
+        "flashlight"
+      ],
+      "effects": [
+        "working_flashlight"
+      ],
+      "required_agents": 1
+    },
+    {
+      "id": "inspect_painting",
+      "requires": [
+        "assemble_flashlight",
+        "working_flashlight",
+        "painting"
+      ],
+      "effects": [
+        "cabinet_code"
+      ],
+      "required_agents": 1
+    },
+    {
+      "id": "open_cabinet",
+      "requires": [
+        "inspect_painting",
+        "cabinet_code",
+        "cabinet"
+      ],
+      "effects": [
+        "lever"
+      ],
+      "required_agents": 1
+    },
+    {
+      "id": "pressure_plate_and_lever",
+      "requires": [
+        "open_cabinet",
+        "lever",
+        "pressure_plate",
+        "lever_station"
+      ],
+      "effects": [
+        "exit_unlocked"
+      ],
+      "required_agents": 2
+    }
+  ],
+  "perception_radius": 1
+}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import secrets
 import sys
 from pathlib import Path
 
@@ -18,7 +19,12 @@ def parser() -> argparse.ArgumentParser:
     default_map = root / "Models" / "Bottom-Up" / "escape-room" / "maps" / "escape_room.json"
     result = argparse.ArgumentParser(description="Escape Room Multiagente Bottom-Up")
     result.add_argument("--map", type=Path, default=default_map)
-    result.add_argument("--seed", type=int, default=0)
+    result.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Semilla reproducible; si se omite se genera una aleatoria",
+    )
     result.add_argument("--agents", type=int, choices=(2, 3), default=2)
     result.add_argument("--tick-limit", type=int, default=300)
     result.add_argument("--batch", action="store_true", help="Ejecuta semillas 0–29 con 2 y 3 agentes")
@@ -37,12 +43,13 @@ def run_one(args: argparse.Namespace) -> Path:
     settings = load_settings()
     room = room_with_agents(args.map, args.agents)
     repository = RunRepository(settings.output_root, room.name, settings.model)
+    seed = args.seed if args.seed is not None else secrets.randbits(64)
     try:
         repository.save_json(
             "request.json",
             {
                 "map": str(args.map.resolve()),
-                "seed": args.seed,
+                "seed": seed,
                 "agents": args.agents,
                 "tick_limit": args.tick_limit,
             },
@@ -53,7 +60,7 @@ def run_one(args: argparse.Namespace) -> Path:
         )
         repository.complete_stage("configuration")
         result, model = run_simulation(
-            room, seed=args.seed, tick_limit=args.tick_limit
+            room, seed=seed, tick_limit=args.tick_limit
         )
         repository.save_ticks(model.tick_records)
         repository.save_json("events.json", model.event_log)
@@ -100,4 +107,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

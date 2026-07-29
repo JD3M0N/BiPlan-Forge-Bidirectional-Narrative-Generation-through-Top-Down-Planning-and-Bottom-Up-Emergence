@@ -68,7 +68,7 @@ run-escape-room
 
 Runs the default escape-room map with:
 
-- seed `0`;
+- a newly generated random seed;
 - `2` agents;
 - a limit of `300` ticks;
 - Gemini narration when an API key is available.
@@ -134,7 +134,7 @@ Displays all supported command-line options:
 | Option | Description |
 | --- | --- |
 | `--map PATH` | Selects a room JSON file. |
-| `--seed NUMBER` | Sets the deterministic random seed. Default: `0`. |
+| `--seed NUMBER` | Sets a reproducible seed. When omitted, a random seed is generated and saved. |
 | `--agents {2,3}` | Selects the number of characters. Default: `2`. |
 | `--tick-limit NUMBER` | Sets the maximum simulation length. Default: `300`. |
 | `--batch` | Runs seeds 0–29 with two and three agents. |

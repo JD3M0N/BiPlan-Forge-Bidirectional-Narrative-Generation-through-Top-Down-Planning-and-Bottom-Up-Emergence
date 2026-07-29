@@ -72,3 +72,19 @@ def test_simulation_terminates_at_limit(room) -> None:
     assert result.reason == "tick_limit"
     assert result.ticks == 1
 
+
+def test_communication_broadcasts_discovery_to_all(maps_dir) -> None:
+    from asg_escape_room import load_room
+
+    room = load_room(maps_dir / "escape_room.json")
+    model = EscapeRoomModel(room)
+    model.world.characters["A"].beliefs.facts.add("new_fact")
+    model.resolve_actions(
+        {
+            "A": Action(
+                actor_id="A", kind=ActionType.COMMUNICATE, target="B"
+            )
+        }
+    )
+    assert "new_fact" in model.world.characters["B"].beliefs.facts
+    assert "new_fact" in model.world.characters["C"].beliefs.facts

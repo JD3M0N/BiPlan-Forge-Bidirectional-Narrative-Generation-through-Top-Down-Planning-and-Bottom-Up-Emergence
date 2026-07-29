@@ -86,6 +86,28 @@ class PriorityPolicy:
                 )
 
         if lever_obj and lever_obj.owner and lever_obj.owner != agent.id:
+            helpers = sorted(i for i in world.characters if i != lever_obj.owner)
+            if agent.id != helpers[0]:
+                agent.current_goal = "stand_by"
+                plate = world.feature("plate").position
+                lever = world.feature("lever").position
+                if agent.position in {plate, lever}:
+                    free = [
+                        p
+                        for p in neighbors(agent.position)
+                        if 0 <= p[0] < world.config.width
+                        and 0 <= p[1] < world.config.height
+                        and not world.blocked(p)
+                        and p not in world.occupied()
+                        and p not in {plate, lever}
+                    ]
+                    if free:
+                        return self._action(
+                            agent, ActionType.MOVE, sorted(free)[0]
+                        )
+                return self._action(
+                    agent, ActionType.WAIT, "cooperation_assigned"
+                )
             plate = world.feature("plate").position
             agent.current_goal = "hold_plate"
             if agent.position == plate:
@@ -165,11 +187,17 @@ class PriorityPolicy:
                 if p in agent.beliefs.known_cells
                 and p not in agent.beliefs.known_walls
             }
+        possible_cells = {
+            (x, y)
+            for x in range(world.config.width)
+            for y in range(world.config.height)
+        }
         plan = bfs(
             agent.position,
             goals,
-            agent.beliefs.known_cells | {target},
-            agent.beliefs.known_walls,
+            possible_cells,
+            agent.beliefs.known_walls
+            | (world.occupied() - {agent.position} - goals),
         )
         if plan:
             if plan != agent.current_plan:

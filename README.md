@@ -65,7 +65,7 @@ Instala ambos paquetes y ejecuta una simulación desde la raíz:
 
 ```powershell
 python -m pip install -r requirements.txt
-run-escape-room --seed 0 --agents 2 --tick-limit 300
+run-escape-room --agents 2 --tick-limit 300
 ```
 
 El mapa predeterminado está en
@@ -74,6 +74,9 @@ El mapa predeterminado está en
 ```powershell
 run-escape-room --map ruta/al/mapa.json --agents 3
 ```
+
+Si se omite `--seed`, cada ejecución genera y registra una semilla aleatoria.
+Indicar `--seed N` reproduce exactamente una simulación anterior.
 
 Si `GEMINI_API_KEY` está configurada, el comando usa `GEMINI_MODEL` para
 redactar el relato. Ante un fallo remoto —o con `--no-llm`— conserva la
