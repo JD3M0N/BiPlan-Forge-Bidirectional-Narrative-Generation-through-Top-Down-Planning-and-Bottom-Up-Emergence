@@ -1,1 +1,9 @@
-crear una vision en consola de lo que esta pasando
+# Tareas de Escape Room Bottom-Up
+
+> Formato compatible con extensiones de tareas: busca `TODO:` y marca una
+> tarea terminada cambiando `[ ]` por `[x]`.
+
+- [x] TODO: Crear una vista en consola de lo que está pasando.
+  - Implementado mediante `asg-console`, en la opción `Escape Room Visual`.
+  - Permite observar la simulación en vivo, pausar, avanzar por ticks y alternar
+    entre la vista completa del mundo y la vista parcial de cada agente.

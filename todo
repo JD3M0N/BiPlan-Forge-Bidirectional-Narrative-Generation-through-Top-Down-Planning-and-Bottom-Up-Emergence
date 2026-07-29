@@ -1,4 +1,20 @@
-generar audio de las historias con algun modelo gratuito
-generar las historias por voz 
-crear un modulo sea un agente que modifique prompts 
-crear bot de telegram
+# Tareas generales del proyecto
+
+> Formato compatible con extensiones de tareas: busca `TODO:` y marca una
+> tarea terminada cambiando `[ ]` por `[x]`.
+
+- [ ] TODO: Generar audio de las historias con un modelo gratuito.
+  - Terminado cuando: una historia generada puede convertirse en un archivo de
+    audio sin depender de un servicio de pago.
+
+- [ ] TODO: Permitir generar historias mediante la voz.
+  - Terminado cuando: el usuario puede proporcionar por voz la solicitud de una
+    historia y el sistema la utiliza como entrada del pipeline.
+
+- [ ] TODO: Crear un módulo agente que modifique prompts.
+  - Terminado cuando: el agente puede revisar y mejorar un prompt antes de
+    enviarlo al modelo encargado de generar la historia.
+
+- [ ] TODO: Crear un bot de Telegram.
+  - Terminado cuando: el bot recibe solicitudes, ejecuta la generación de
+    historias y devuelve el resultado al usuario.

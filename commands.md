@@ -33,6 +33,14 @@ Installs both the Top-Down and Bottom-Up packages in editable mode, including
 their development dependencies. Editable mode means source changes are
 available immediately without reinstalling the packages.
 
+The installation exposes these commands:
+
+| Command | Purpose |
+| --- | --- |
+| `asg-console` | Open the unified interactive console. |
+| `generate-story` | Run the Top-Down story generator directly. |
+| `run-escape-room` | Run the Bottom-Up escape-room simulation directly. |
+
 
 ## Top-Down
 
