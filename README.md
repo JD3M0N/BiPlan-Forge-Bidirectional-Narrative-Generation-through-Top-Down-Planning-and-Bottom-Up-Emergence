@@ -113,3 +113,36 @@ motor importe el pipeline Top-Down.
 ```powershell
 python -m pytest Models/Bottom-Up/escape-room/tests
 ```
+
+## Consola unificada
+
+La interfaz en `UI_Console` permite navegar por ambos enfoques sin reemplazar
+sus comandos directos:
+
+```powershell
+asg-console
+```
+
+El menú ofrece:
+
+- Top-Down → `Generate story`.
+- Bottom-Up → ejecución normal, experimento batch y Escape Room Visual.
+
+El modo visual dibuja el mundo completo o la perspectiva parcial de cada
+agente y avanza cada 1.5 segundos de forma predeterminada.
+
+| Tecla | Acción |
+| --- | --- |
+| `Espacio` | Pausar o reanudar. |
+| `N` | Avanzar un tick mientras está pausado. |
+| `+` / `-` | Acelerar o ralentizar. |
+| `V` | Cambiar entre mundo completo y agentes. |
+| `Q` | Descartar la ejecución visual y volver al menú. |
+
+Una simulación visual completada guarda trazas, eventos, métricas y relato en
+la misma estructura que `run-escape-room`. Una ejecución descartada no crea
+archivos.
+
+```powershell
+python -m pytest UI_Console/tests
+```

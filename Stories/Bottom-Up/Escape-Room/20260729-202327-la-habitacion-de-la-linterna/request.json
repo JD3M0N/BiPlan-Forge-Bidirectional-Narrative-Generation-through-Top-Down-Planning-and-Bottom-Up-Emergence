@@ -1,0 +1,7 @@
+{
+  "map": "E:\\University\\thesis\\Models\\Bottom-Up\\escape-room\\maps\\escape_room.json",
+  "seed": 1091496342710441783,
+  "agents": 2,
+  "tick_limit": 300,
+  "mode": "visual"
+}

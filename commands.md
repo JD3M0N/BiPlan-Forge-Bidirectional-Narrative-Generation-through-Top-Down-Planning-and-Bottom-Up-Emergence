@@ -58,6 +58,58 @@ python -m pytest Models/Top-Down/tests
 Runs only the Top-Down unit and integration tests. These tests use a fake
 provider and do not call Gemini.
 
+## Unified Console
+
+### Open the interactive model navigator
+
+```powershell
+asg-console
+```
+
+Opens the main menu:
+
+```text
+1. Top-Down
+2. Bottom-Up
+0. Exit
+```
+
+The Top-Down menu runs `Generate story`. The Bottom-Up menu provides a normal
+escape-room run, the 60-run batch experiment, and the live visual mode. The
+existing `generate-story` and `run-escape-room` commands remain available for
+scripts and direct execution.
+
+### Use Escape Room Visual
+
+Choose `Bottom-Up`, then `Escape Room Visual`. The console asks for the map,
+agent count, optional seed, tick limit, Gemini preference, and display
+interval. Press Enter at a prompt to accept its displayed default.
+
+The live controls are:
+
+| Key | Action |
+| --- | --- |
+| `Space` | Pause or resume automatic playback. |
+| `N` | Execute one tick while paused. |
+| `+` | Reduce the delay and speed up playback. |
+| `-` | Increase the delay and slow down playback. |
+| `V` | Cycle through the complete world and each agent's partial view. |
+| `Q` | Stop and discard the visual run without creating artifacts. |
+
+The default interval is 1.5 seconds and can be adjusted between 0.1 and 5
+seconds. A completed visual run saves the same artifacts as
+`run-escape-room`, including the final story.
+
+### Run unified-console tests
+
+```powershell
+python -m pytest UI_Console/tests
+```
+
+Tests menu navigation, input validation, rendering, fog of war, keyboard
+controls, cancellation, and completed-run persistence without real-time waits
+or Gemini calls.
+
 ## Bottom-Up Escape Room
 
 ### Run a standard simulation
@@ -153,7 +205,7 @@ reproducibility, narration, storage, and Top-Down adapter tests.
 ## Run All Tests
 
 ```powershell
-python -m pytest Models/Top-Down/tests Models/Bottom-Up/escape-room/tests
+python -m pytest Models/Top-Down/tests Models/Bottom-Up/escape-room/tests UI_Console/tests
 ```
 
 Runs the complete automated test suite for both approaches.

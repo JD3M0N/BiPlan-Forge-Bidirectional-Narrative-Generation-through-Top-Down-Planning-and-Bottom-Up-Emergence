@@ -1,0 +1,42 @@
+{
+  "seed": 4060686938752341210,
+  "success": true,
+  "reason": "escaped",
+  "ticks": 90,
+  "solved_puzzles": [
+    "assemble_flashlight",
+    "inspect_painting",
+    "open_cabinet",
+    "pressure_plate_and_lever"
+  ],
+  "escaped_agents": [
+    "A",
+    "B"
+  ],
+  "metrics": {
+    "escaped": true,
+    "ticks": 90,
+    "puzzles_solved": 4,
+    "messages_sent": 43,
+    "blocked_time": 3,
+    "invalid_actions": 6,
+    "agents": {
+      "A": {
+        "distance": 59,
+        "messages": 23,
+        "waits": 0,
+        "invalid_actions": 2,
+        "contributions": 1,
+        "replans": 60
+      },
+      "B": {
+        "distance": 50,
+        "messages": 20,
+        "waits": 3,
+        "invalid_actions": 4,
+        "contributions": 7,
+        "replans": 53
+      }
+    }
+  }
+}

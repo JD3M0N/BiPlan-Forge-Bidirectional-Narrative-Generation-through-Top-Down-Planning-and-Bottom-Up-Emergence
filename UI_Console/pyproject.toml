@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "asg-console"
+version = "0.1.0"
+description = "Interfaz de consola unificada para ASG Top-Down y Bottom-Up"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["asg-top-down>=0.1.0", "asg-escape-room>=0.1.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+asg-console = "asg_console.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/asg_console"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
