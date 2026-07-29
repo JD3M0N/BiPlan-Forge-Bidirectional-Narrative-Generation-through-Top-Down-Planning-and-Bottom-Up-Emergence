@@ -1,0 +1,26 @@
+{
+  "escaped": true,
+  "ticks": 78,
+  "puzzles_solved": 4,
+  "messages_sent": 38,
+  "blocked_time": 2,
+  "invalid_actions": 7,
+  "agents": {
+    "A": {
+      "distance": 45,
+      "messages": 20,
+      "waits": 2,
+      "invalid_actions": 0,
+      "contributions": 4,
+      "replans": 45
+    },
+    "B": {
+      "distance": 44,
+      "messages": 18,
+      "waits": 0,
+      "invalid_actions": 7,
+      "contributions": 4,
+      "replans": 45
+    }
+  }
+}
