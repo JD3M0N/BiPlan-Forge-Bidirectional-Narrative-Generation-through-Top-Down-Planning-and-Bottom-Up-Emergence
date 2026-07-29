@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "asg-escape-room"
+version = "0.1.0"
+description = "Simulación narrativa multiagente Bottom-Up"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["google-genai>=1.0", "pydantic>=2.7", "python-dotenv>=1.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+run-escape-room = "asg_escape_room.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/asg_escape_room"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
