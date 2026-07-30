@@ -27,8 +27,8 @@ def load_settings(start: Path | None = None) -> Settings:
     load_dotenv(root / ".env")
     return Settings(
         api_key=os.getenv("GEMINI_API_KEY", "").strip() or None,
-        model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
-        or "gemini-2.5-flash",
+        model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
+        or "gemini-3.5-flash-lite",
         output_root=root / "Stories" / "Bottom-Up" / "Escape-Room",
     )
 
