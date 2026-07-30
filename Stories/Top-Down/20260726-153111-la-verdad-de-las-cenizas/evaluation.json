@@ -2,13 +2,22 @@
   "schema_version": 1,
   "evaluations": [
     {
-      "user": null,
-      "coherence": null,
-      "pacing": null,
-      "creativity": null,
-      "engagement": null,
-      "relevance": null,
-      "satisfaction": null
+      "user": "josue",
+      "coherence": 9,
+      "pacing": 8,
+      "creativity": 10,
+      "engagement": 10,
+      "relevance": 8,
+      "satisfaction": 10
+    },
+    {
+      "user": "terina",
+      "coherence": 8,
+      "pacing": 10,
+      "creativity": 10,
+      "engagement": 9,
+      "relevance": 7,
+      "satisfaction": 9
     }
   ]
 }
