@@ -19,5 +19,5 @@
   - Terminado cuando: el bot recibe solicitudes, ejecuta la generación de
     historias y devuelve el resultado al usuario.
 
-- [ ] TODO: Agregarle rating a las historias
+- [x] TODO: Agregarle rating a las historias
   - Terminado cuando: `Stories` guarda un json con mettricas de evaluacion.

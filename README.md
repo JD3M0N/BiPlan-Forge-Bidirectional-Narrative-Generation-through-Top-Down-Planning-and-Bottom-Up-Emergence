@@ -152,3 +152,36 @@ archivos.
 ```powershell
 python -m pytest UI_Console/tests
 ```
+
+## Bot de Telegram
+
+La interfaz `UI_telegram` permite generar historias Top-Down desde Telegram,
+recibirlas como mensajes y como archivo Markdown, y evaluarlas paso a paso.
+
+Después de crear un bot con `@BotFather`, añade al `.env` de la raíz:
+
+```dotenv
+TELEGRAM_BOT_TOKEN=tu_token
+STORY_GENERATOR=top-down
+```
+
+`STORY_GENERATOR` permite seleccionar el enfoque ASG sin modificar la interfaz;
+actualmente está disponible `top-down`. `GEMINI_MODEL` continúa seleccionando
+el modelo de lenguaje. Inicia el bot mediante polling:
+
+```powershell
+python -m pip install -r requirements.txt
+asg-telegram
+```
+
+En Windows se abrirá una consola independiente que muestra en tiempo real las
+acciones de los usuarios y el progreso de cada generación. La consola original
+queda libre para ejecutar `generate-story`, `asg-console` u otros comandos.
+Usa `asg-telegram-run` si prefieres mantener el bot en la consola actual.
+
+Consulta [UI_telegram/README.md](UI_telegram/README.md) para registrar nuevos
+generadores y ver todos los detalles.
+
+```powershell
+python -m pytest UI_telegram/tests
+```

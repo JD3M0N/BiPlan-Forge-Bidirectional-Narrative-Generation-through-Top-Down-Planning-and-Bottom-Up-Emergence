@@ -1,0 +1,60 @@
+{
+  "logline": "Una cartógrafa estelar aislada en una estación remota descubre un mensaje artificial oculto en los cúmulos galácticos, transformando su melancolía en una profunda esperanza.",
+  "central_conflict": "Elena Vance debe decidir si arriesga su reputación informando sobre un patrón estelar anómalo que desafía la soledad conocida del universo, enfrentándose al miedo a la desilusión.",
+  "theme": "La conexión humana a través del cosmos y la superación del aislamiento mediante la esperanza.",
+  "beats": [
+    {
+      "order": 1,
+      "name": "Planteamiento",
+      "purpose": "Establecer la profunda soledad de Elena y su rutina de mapeo en la estación Aris-4.",
+      "events": [
+        "Elena analiza datos espectrográficos en la Sala de Proyección Principal.",
+        "Reflexiona sobre su aislamiento prolongado y la inmensidad del vacío.",
+        "Revisa los archivos de datos muertos buscando patrones conocidos."
+      ],
+      "characters": [
+        "Elena Vance"
+      ]
+    },
+    {
+      "order": 2,
+      "name": "Escalada",
+      "purpose": "El descubrimiento de la anomalía y el conflicto interno de Elena ante la posibilidad de un mensaje.",
+      "events": [
+        "Elena detecta una regularidad matemática imposible en un cúmulo estelar lejano.",
+        "Verifica los datos múltiples veces en el Módulo de Observación y Silencio para descartar errores mecánicos.",
+        "Lucha contra el miedo a albergar falsas esperanzas y la rigidez de los protocolos del Consejo."
+      ],
+      "characters": [
+        "Elena Vance"
+      ]
+    },
+    {
+      "order": 3,
+      "name": "Clímax",
+      "purpose": "La decodificación definitiva del mensaje estelar y la aceptación del descubrimiento.",
+      "events": [
+        "El patrón se revela claramente como un saludo y un mapa de coordenadas convergentes.",
+        "Elena comprende que la señal ha viajado durante milenios para ser escuchada.",
+        "Toma la decisión irrevocable de transmitir el descubrimiento al Consejo."
+      ],
+      "characters": [
+        "Elena Vance"
+      ]
+    },
+    {
+      "order": 4,
+      "name": "Resolución",
+      "purpose": "El cambio de perspectiva de Elena y el nuevo amanecer emocional.",
+      "events": [
+        "La estación deja de sentirse como una tumba de cristal y se convierte en un puente.",
+        "Elena observa las estrellas con una renovada sensación de compañía.",
+        "Se prepara para el final de su contrato sabiendo que el universo ya no está vacío."
+      ],
+      "characters": [
+        "Elena Vance"
+      ]
+    }
+  ],
+  "ending": "Elena contempla el firmamento desde el domo de cristal, comprendiendo que el silencio estelar ha terminado y que la humanidad forma parte de un diálogo eterno."
+}
