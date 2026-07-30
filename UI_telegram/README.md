@@ -36,6 +36,14 @@ asg-telegram-run
 
 El proceso utiliza polling y no requiere dominio ni webhook.
 
+### Entrega de historias
+
+Las historias se generan en paralelo, pero se entregan de una en una para no
+saturar la conexión con Telegram. El archivo `story.md` se envía primero y se
+reintenta automáticamente ante fallos temporales. Los mensajes formateados se
+envían después; si uno falla, el usuario conserva el archivo completo y puede
+continuar con la evaluación sin regenerar la historia.
+
 ## Cambiar el generador
 
 `STORY_GENERATOR` selecciona el enfoque ASG y `GEMINI_MODEL` selecciona el

@@ -15,7 +15,7 @@
   - Terminado cuando: el agente puede revisar y mejorar un prompt antes de
     enviarlo al modelo encargado de generar la historia.
 
-- [ ] TODO: Crear un bot de Telegram.
+- [x] TODO: Crear un bot de Telegram.
   - Terminado cuando: el bot recibe solicitudes, ejecuta la generación de
     historias y devuelve el resultado al usuario.
 

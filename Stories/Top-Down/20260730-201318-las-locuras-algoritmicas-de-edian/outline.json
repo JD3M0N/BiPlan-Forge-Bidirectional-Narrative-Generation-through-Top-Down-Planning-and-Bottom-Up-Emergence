@@ -1,0 +1,63 @@
+{
+  "logline": "Edian, un empleado alto con un imponente afro, utiliza un bot de inteligencia artificial en su moderna oficina para generar historias tan absurdas y sin sentido que desquician al director de sistemas y amenazan con colapsar los servidores.",
+  "central_conflict": "Edian alimenta al bot corporativo con narrativas imposibles que desafían toda lógica, poniendo al borde del colapso los sistemas de la empresa mientras Gerardo intenta detenerlo.",
+  "theme": "El poder del absurdo y la imaginación frente a la rígida monotonía del mundo tecnológico moderno.",
+  "beats": [
+    {
+      "order": 1,
+      "name": "Planteamiento",
+      "purpose": "Presentar a Edian, su llamativo afro, su entorno de oficina y su peculiar pasatiempo de interactuar con el bot corporativo generando historias sin sentido.",
+      "events": [
+        "Edian se acomoda en su cubículo lleno de servidores con su imponente afro intacto.",
+        "Comienza a escribir su primer prompt absurdo en el bot de inteligencia artificial de la empresa.",
+        "El bot procesa una historia donde un pingüino espacial gobierna una galaxia hecha de flan."
+      ],
+      "characters": [
+        "Edian"
+      ]
+    },
+    {
+      "order": 2,
+      "name": "Escalada",
+      "purpose": "Intensificar el conflicto a medida que las historias de Edian se vuelven más locas, provocando errores en el sistema y llamando la atención de Gerardo.",
+      "events": [
+        "Edian introduce una narrativa donde las tazas de café cobran vida y demandan derechos laborales.",
+        "Los servidores de la empresa empiezan a sobrecalentarse debido a la paradoja lógica de las historias.",
+        "Gerardo descubre el origen del caos y confronta a Edian en su cubículo exigiendo explicaciones."
+      ],
+      "characters": [
+        "Edian",
+        "Gerardo"
+      ]
+    },
+    {
+      "order": 3,
+      "name": "Clímax",
+      "purpose": "El enfrentamiento definitivo entre la lógica corporativa de Gerardo y la imaginación caótica de Edian, culminando en la historia más absurda de todas.",
+      "events": [
+        "Gerardo intenta apagar el bot manualmente en la sala de juntas.",
+        "Edian teclea la última y más compleja historia: un bucle temporal donde el propio bot intenta entenderse a sí mismo usando solo poesía sobre calcetines perdidos.",
+        "El sistema emite una alerta roja y muestra destellos de luz mientras Gerardo grita de desesperación."
+      ],
+      "characters": [
+        "Edian",
+        "Gerardo"
+      ]
+    },
+    {
+      "order": 4,
+      "name": "Resolución",
+      "purpose": "Establecer la nueva normalidad en la oficina tras el colapso, consolidando a Edian como una leyenda viviente del absurdo digital.",
+      "events": [
+        "El bot se reinicia pero adopta un tono poético y sinsentido de forma permanente.",
+        "Gerardo acepta la derrota y se sienta a tomar café con Edian en la cafetería.",
+        "Edian ajusta su impecable afro y sonríe, listo para su siguiente creación literaria digital."
+      ],
+      "characters": [
+        "Edian",
+        "Gerardo"
+      ]
+    }
+  ],
+  "ending": "Edian se convierte en la leyenda de la oficina, demostrando que un buen afro y una mente llena de disparates pueden doblegar hasta a la inteligencia artificial más avanzada."
+}

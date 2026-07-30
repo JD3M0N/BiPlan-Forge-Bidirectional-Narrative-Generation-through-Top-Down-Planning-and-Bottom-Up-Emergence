@@ -8,7 +8,8 @@ from pathlib import Path
 
 from asg_evaluation import METRICS, add_evaluation
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.error import TelegramError
+from telegram.constants import ParseMode
+from telegram.error import BadRequest, NetworkError, TelegramError
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -19,16 +20,18 @@ from telegram.ext import (
 )
 
 from .config import TelegramConfigurationError, load_settings
+from .console import configure_console_logging, log_user_action
 from .generators import StoryGenerator, create_generator
 from .prompts import (
     GUIDED_FIELDS,
     METRIC_EXPLANATIONS,
     build_guided_prompt,
-    split_story,
+    telegram_story_chunks,
     validate_guided_value,
 )
 
 LOGGER = logging.getLogger(__name__)
+DOCUMENT_RETRY_DELAYS = (1, 2, 4)
 EXAMPLE_PROMPT = (
     "Escribe un relato de ciencia ficción de unas 1800 palabras sobre una "
     "cartógrafa que descubre un mensaje en las estrellas. Tono melancólico "
@@ -36,13 +39,27 @@ EXAMPLE_PROMPT = (
 )
 
 
-def _user_log(update: Update, action: str) -> None:
+def _user_log(
+    update: Update, action: str, category: str = "acción"
+) -> None:
     user = update.effective_user
     if user is None:
-        LOGGER.info("Acción sin usuario: %s", action)
+        log_user_action(
+            LOGGER,
+            user_id=None,
+            username=None,
+            action=action,
+            category=category,
+        )
         return
     readable = user.username or user.full_name or "sin nombre"
-    LOGGER.info("Usuario %s (%s) — %s", user.id, readable, action)
+    log_user_action(
+        LOGGER,
+        user_id=user.id,
+        username=readable,
+        action=action,
+        category=category,
+    )
 
 
 def _mode_keyboard() -> InlineKeyboardMarkup:
@@ -69,6 +86,7 @@ class TelegramStoryBot:
     def __init__(self, generator: StoryGenerator) -> None:
         self.generator = generator
         self.active_users: set[int] = set()
+        self.delivery_semaphore = asyncio.Semaphore(1)
 
     async def start(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -115,7 +133,7 @@ class TelegramStoryBot:
         _user_log(update, "ejecutó /cancel")
         if user_id in self.active_users:
             await update.effective_message.reply_text(
-                "La generación ya está en curso y no puede cancelarse. "
+                "La generación o entrega ya está en curso y no puede cancelarse. "
                 "Te avisaré cuando termine."
             )
             return
@@ -205,7 +223,11 @@ class TelegramStoryBot:
             )
             return
         self.active_users.add(user_id)
-        _user_log(update, f"inició una generación {self.generator.display_name}")
+        _user_log(
+            update,
+            f"Inició una generación {self.generator.display_name}",
+            category="generación",
+        )
         context.user_data.clear()
         context.user_data["state"] = "generating"
         await update.effective_message.reply_text(
@@ -225,64 +247,241 @@ class TelegramStoryBot:
         self, *, context, chat_id: int, user, prompt: str
     ) -> None:
         try:
-            story_directory = await asyncio.to_thread(
-                self.generator.generate, prompt
-            )
-            LOGGER.info(
-                "Usuario %s — generación terminada en %s",
-                user.id,
-                story_directory,
+            try:
+                story_directory = await asyncio.to_thread(
+                    self.generator.generate, prompt
+                )
+            except Exception:
+                log_user_action(
+                    LOGGER,
+                    user_id=user.id,
+                    username=user.username or user.full_name,
+                    action="Falló la generación de la historia",
+                    category="error",
+                    level=logging.ERROR,
+                    exc_info=True,
+                )
+                context.user_data.clear()
+                await self._safe_notice(
+                    context,
+                    chat_id,
+                    "No pude generar la historia. Comprueba la configuración "
+                    "de Gemini y vuelve a intentarlo más tarde.",
+                    user,
+                )
+                return
+            log_user_action(
+                LOGGER,
+                user_id=user.id,
+                username=user.username or user.full_name,
+                action=f"Generación terminada y guardada en {story_directory}",
+                category="éxito",
             )
             story_path = Path(story_directory) / "story.md"
-            story = await asyncio.to_thread(
-                story_path.read_text, encoding="utf-8"
+            context.user_data["state"] = "delivering"
+            log_user_action(
+                LOGGER,
+                user_id=user.id,
+                username=user.username or user.full_name,
+                action="Esperando turno para entregar la historia",
+                category="entrega",
             )
-            for chunk in split_story(story):
-                await context.bot.send_message(chat_id=chat_id, text=chunk)
-            with story_path.open("rb") as document:
-                await context.bot.send_document(
-                    chat_id=chat_id,
-                    document=document,
-                    filename=story_path.name,
-                    caption="Historia completa en formato Markdown.",
+            try:
+                async with self.delivery_semaphore:
+                    delivered = await self._deliver_story(
+                        context=context,
+                        chat_id=chat_id,
+                        user=user,
+                        story_path=story_path,
+                    )
+                    if not delivered:
+                        context.user_data.clear()
+                        await self._safe_notice(
+                            context,
+                            chat_id,
+                            "La historia fue generada y permanece guardada, pero "
+                            "Telegram no pudo recibir el archivo. Puedes comenzar "
+                            "otra solicitud con /newstory.",
+                            user,
+                        )
+                        return
+                    context.user_data.update(
+                        state="evaluating",
+                        story_directory=str(story_directory),
+                        metric_index=0,
+                        scores={},
+                        evaluator=_evaluator_name(user),
+                    )
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=(
+                            "Ahora evalúa la historia. Cada parámetro se puntúa del "
+                            "1 (mínimo) al 10 (máximo). Usa /cancel si quieres abandonar."
+                        ),
+                    )
+                    await self._ask_metric(context, chat_id)
+            except Exception:
+                log_user_action(
+                    LOGGER,
+                    user_id=user.id,
+                    username=user.username or user.full_name,
+                    action=(
+                        "La historia fue generada, pero ocurrió un error "
+                        "durante la entrega o el inicio de la evaluación"
+                    ),
+                    category="error",
+                    level=logging.ERROR,
+                    exc_info=True,
                 )
-            LOGGER.info("Usuario %s — historia entregada por Telegram", user.id)
-            context.user_data.update(
-                state="evaluating",
-                story_directory=str(story_directory),
-                metric_index=0,
-                scores={},
-                evaluator=_evaluator_name(user),
-            )
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=(
-                    "Ahora evalúa la historia. Cada parámetro se puntúa del "
-                    "1 (mínimo) al 10 (máximo). Usa /cancel si quieres abandonar."
-                ),
-            )
-            await self._ask_metric(context, chat_id)
-        except Exception:
-            LOGGER.exception(
-                "Usuario %s — falló la generación o entrega de una historia",
-                user.id,
-            )
-            context.user_data.clear()
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=(
-                    "No pude generar o entregar la historia. Comprueba la "
-                    "configuración y vuelve a intentarlo más tarde."
-                ),
-            )
+                context.user_data.clear()
+                await self._safe_notice(
+                    context,
+                    chat_id,
+                    "La historia fue generada y permanece guardada, pero "
+                    "la entrega no pudo completarse. Usa /newstory para continuar.",
+                    user,
+                )
         finally:
             self.active_users.discard(user.id)
 
+    async def _deliver_story(
+        self, *, context, chat_id: int, user, story_path: Path
+    ) -> bool:
+        if not await self._send_document_with_retry(
+            context=context,
+            chat_id=chat_id,
+            user=user,
+            story_path=story_path,
+        ):
+            return False
+        story = await asyncio.to_thread(story_path.read_text, encoding="utf-8")
+        chunks = telegram_story_chunks(story)
+        for index, chunk in enumerate(chunks, start=1):
+            try:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=chunk,
+                    parse_mode=ParseMode.HTML,
+                )
+            except TelegramError:
+                log_user_action(
+                    LOGGER,
+                    user_id=user.id,
+                    username=user.username or user.full_name,
+                    action=(
+                        f"Falló el fragmento {index}/{len(chunks)}; "
+                        "se activó la entrega solo por archivo"
+                    ),
+                    category="advertencia",
+                    level=logging.WARNING,
+                    exc_info=True,
+                )
+                await self._safe_notice(
+                    context,
+                    chat_id,
+                    "La historia fue generada correctamente. Telegram no pudo "
+                    "mostrar todos los fragmentos, pero tienes el archivo completo.",
+                    user,
+                )
+                break
+        log_user_action(
+            LOGGER,
+            user_id=user.id,
+            username=user.username or user.full_name,
+            action="Historia entregada por Telegram",
+            category="éxito",
+        )
+        return True
+
+    async def _send_document_with_retry(
+        self, *, context, chat_id: int, user, story_path: Path
+    ) -> bool:
+        attempts = len(DOCUMENT_RETRY_DELAYS) + 1
+        for attempt in range(1, attempts + 1):
+            log_user_action(
+                LOGGER,
+                user_id=user.id,
+                username=user.username or user.full_name,
+                action=f"Enviando archivo, intento {attempt}/{attempts}",
+                category="entrega",
+            )
+            try:
+                with story_path.open("rb") as document:
+                    await context.bot.send_document(
+                        chat_id=chat_id,
+                        document=document,
+                        filename=story_path.name,
+                        caption="Historia completa en formato Markdown.",
+                    )
+                return True
+            except BadRequest:
+                log_user_action(
+                    LOGGER,
+                    user_id=user.id,
+                    username=user.username or user.full_name,
+                    action="Telegram rechazó permanentemente el archivo",
+                    category="error",
+                    level=logging.ERROR,
+                    exc_info=True,
+                )
+                return False
+            except NetworkError:
+                if attempt == attempts:
+                    log_user_action(
+                        LOGGER,
+                        user_id=user.id,
+                        username=user.username or user.full_name,
+                        action="Se agotaron los reintentos del archivo",
+                        category="error",
+                        level=logging.ERROR,
+                        exc_info=True,
+                    )
+                    return False
+                delay = DOCUMENT_RETRY_DELAYS[attempt - 1]
+                log_user_action(
+                    LOGGER,
+                    user_id=user.id,
+                    username=user.username or user.full_name,
+                    action=f"Error temporal; nuevo intento en {delay} segundos",
+                    category="advertencia",
+                    level=logging.WARNING,
+                    exc_info=True,
+                )
+                await asyncio.sleep(delay)
+            except TelegramError:
+                log_user_action(
+                    LOGGER,
+                    user_id=user.id,
+                    username=user.username or user.full_name,
+                    action="Telegram rechazó permanentemente el archivo",
+                    category="error",
+                    level=logging.ERROR,
+                    exc_info=True,
+                )
+                return False
+        return False
+
+    async def _safe_notice(self, context, chat_id: int, text: str, user) -> None:
+        try:
+            await context.bot.send_message(chat_id=chat_id, text=text)
+        except TelegramError:
+            log_user_action(
+                LOGGER,
+                user_id=user.id,
+                username=user.username or user.full_name,
+                action="No se pudo enviar el aviso al usuario",
+                category="advertencia",
+                level=logging.WARNING,
+                exc_info=True,
+            )
+
     async def _ask_metric(self, context, chat_id: int) -> None:
         metric = METRICS[context.user_data["metric_index"]]
+        explanation = METRIC_EXPLANATIONS[metric].message()
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"{METRIC_EXPLANATIONS[metric]}\n\nElige una puntuación:",
+            text=f"{explanation}\n\nElige una puntuación:",
+            parse_mode=ParseMode.HTML,
             reply_markup=_score_keyboard(metric),
         )
 
@@ -306,8 +505,10 @@ class TelegramStoryBot:
         await query.answer()
         _user_log(update, f"puntuó {metric} con {score}/10")
         context.user_data["scores"][metric] = score
+        explanation = METRIC_EXPLANATIONS[metric].message()
         await query.edit_message_text(
-            f"{METRIC_EXPLANATIONS[metric]}\n\nPuntuación: {score}/10"
+            f"{explanation}\n\nPuntuación elegida: <b>{score}/10</b>",
+            parse_mode=ParseMode.HTML,
         )
         context.user_data["metric_index"] += 1
         if context.user_data["metric_index"] < len(METRICS):
@@ -352,7 +553,15 @@ def _evaluator_name(user) -> str:
 
 def build_application(token: str, bot: TelegramStoryBot) -> Application:
     application = (
-        Application.builder().token(token).concurrent_updates(True).build()
+        Application.builder()
+        .token(token)
+        .connect_timeout(15)
+        .read_timeout(30)
+        .write_timeout(30)
+        .media_write_timeout(60)
+        .pool_timeout(10)
+        .concurrent_updates(True)
+        .build()
     )
     application.add_handler(CommandHandler("start", bot.start))
     application.add_handler(CommandHandler("help", bot.help))
@@ -374,10 +583,7 @@ def build_application(token: str, bot: TelegramStoryBot) -> Application:
 
 
 def main() -> int:
-    logging.basicConfig(
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        level=logging.INFO,
-    )
+    configure_console_logging()
     try:
         settings = load_settings()
         generator = create_generator(settings.generator_name)

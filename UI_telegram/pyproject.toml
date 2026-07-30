@@ -11,6 +11,7 @@ requires-python = ">=3.11"
 dependencies = [
   "asg-evaluation>=0.1.0",
   "asg-top-down>=0.1.0",
+  "colorama>=0.4.6",
   "python-dotenv>=1.0",
   "python-telegram-bot>=22.6,<23",
 ]

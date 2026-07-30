@@ -1,0 +1,32 @@
+{
+  "characters": [
+    {
+      "name": "Beba",
+      "role": "Protagonista",
+      "goal": "Encontrar su lugar en el campo y entender por qué tiene un cuerno que brilla.",
+      "motivation": "Demostrar que no es una cabra común y corriente a pesar de sus torpezas.",
+      "conflict": "Su tendencia a meterse en situaciones absurdas choca con la profunda tristeza secreta de haber perdido a su rebaño original.",
+      "arc": "Aprende a aceptar su rareza y descubre que compartir sus lágrimas transforma su dolor en belleza."
+    },
+    {
+      "name": "Cornelio",
+      "role": "Deuteragonista",
+      "goal": "Recuperar su antiguo esplendor como guardián del bosque.",
+      "motivation": "Aterrizar en la realidad tras siglos de orgullo mágico.",
+      "conflict": "Es un espíritu del bosque atrapado en el cuerpo de un tejón cínico que detesta los chistes de cabras.",
+      "arc": "Deja de lado su arrogancia al formar una amistad genuina con Beba, encontrando consuelo en el humor."
+    },
+    {
+      "name": "Silvia",
+      "role": "Secundario",
+      "goal": "Hacer que todos digan la verdad sin importar cuán hiriente sea.",
+      "motivation": "Proteger el valle de las ilusiones.",
+      "conflict": "Una dríada sarcástica que odia las mentiras piadosas pero llora en secreto por el árbol que perdió.",
+      "arc": "Comprende que el humor y la empatía son tan vitales como la honestidad brutal."
+    }
+  ],
+  "relationships": [
+    "Beba y Cornelio comienzan como compañeros de viaje por necesidad, pero desarrollan un vínculo inquebrantable tras compartir sus peores recuerdos.",
+    "Silvia pone a prueba la paciencia de Beba con su sarcasmo, pero termina siendo la clave para que la cabra acepte su pasado."
+  ]
+}

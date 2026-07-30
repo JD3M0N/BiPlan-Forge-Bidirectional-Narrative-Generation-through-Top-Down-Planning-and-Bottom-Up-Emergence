@@ -1,0 +1,67 @@
+{
+  "logline": "Una cabra con un cuerno de unicornio y un tejón cínico emprenden un viaje cómico y desgarrador por un campo fantástico para transformar el dolor de su pasado en flores luminosas.",
+  "central_conflict": "Beba intenta lidiar con su absurda condición de cabra unicornio y su torpeza mientras oculta la profunda tristeza de haber perdido a su rebaño original.",
+  "theme": "La amistad genuina y la aceptación de la vulnerabilidad transforman la tragedia en belleza.",
+  "beats": [
+    {
+      "order": 1,
+      "name": "Planteamiento",
+      "purpose": "Presentar a Beba, su absurdo cuerno luminoso y su torpe vida en la Pradera de los Tréboles Sarcásticos, estableciendo su comedia diaria y su dolor oculto.",
+      "events": [
+        "Beba intenta pastar pero se tropieza con su propio cuerno que brilla de forma ridícula.",
+        "Conoce a Cornelio, un espíritu del bosque atrapado en un tejón cínico que se burla de ella.",
+        "Ambos deciden viajar juntos por necesidad, cruzando hacia el Barranco del Eco Olvidado."
+      ],
+      "characters": [
+        "Beba",
+        "Cornelio"
+      ]
+    },
+    {
+      "order": 2,
+      "name": "Escalada",
+      "purpose": "Aumentar la tensión cómica y emocional cuando el dúo se encuentra con la dríada Silvia, quien los fuerza a enfrentar verdades incómodas.",
+      "events": [
+        "Llegan a la zona dominada por Silvia, la dríada que exige sinceridad absoluta mediante insultos ingeniosos.",
+        "Cornelio discute con Silvia mientras Beba intenta mediar con torpeza caprina, provocando situaciones hilarantes.",
+        "Silvia revela su propia tragedia sobre su árbol perdido, obligando a Beba y Cornelio a dejar de lado las bromas superficiales."
+      ],
+      "characters": [
+        "Beba",
+        "Cornelio",
+        "Silvia"
+      ]
+    },
+    {
+      "order": 3,
+      "name": "Clímax",
+      "purpose": "Llevar la carga emocional al límite en la Cabaña del Pastor Ciego, donde Beba finalmente confronta la pérdida de su rebaño.",
+      "events": [
+        "Beba se quiebra emocionalmente al recordar a su antiguo rebaño que desapareció en la niebla de la primavera eterna.",
+        "Su cuerno emite una luz cegadora y descontrolada mientras las lágrimas brotan sin control.",
+        "Cornelio y Silvia la acompañan en silencio, demostrando su lealtad y rompiendo el cinismo del tejón."
+      ],
+      "characters": [
+        "Beba",
+        "Cornelio",
+        "Silvia"
+      ]
+    },
+    {
+      "order": 4,
+      "name": "Resolución",
+      "purpose": "Mostrar la transformación del dolor en flores luminosas y consolidar la nueva familia encontrada del campo místico.",
+      "events": [
+        "Las lágrimas compartidas de Beba se convierten en un campo de flores luminosas según las reglas del mundo.",
+        "Beba acepta su rareza y su condición de cabra unicornio con orgullo y serenidad.",
+        "El trío continúa su camino por el campo sabiendo que la risa y el llanto van de la mano."
+      ],
+      "characters": [
+        "Beba",
+        "Cornelio",
+        "Silvia"
+      ]
+    }
+  ],
+  "ending": "Beba, Cornelio y Silvia caminan hacia el horizonte del valle brumoso, con el cuerno de Beba brillando suavemente en una perfecta armonía de alegría y melancolía."
+}

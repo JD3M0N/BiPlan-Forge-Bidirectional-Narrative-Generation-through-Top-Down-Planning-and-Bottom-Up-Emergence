@@ -1,0 +1,15 @@
+{
+  "original_prompt": "Dame una historia de una cabra unicornio que conoce seres misticos en el campo, que sea divertida y tenga una historia que te haga llorar a la vez",
+  "title": "El Cuerno y la Lágrima",
+  "language": "es",
+  "genre": "Fantasía humorística y emotiva",
+  "tone": "Divertido y conmovedor",
+  "target_words": 1500,
+  "premise": "Una cabra con un cuerno de unicornio en medio de la frente recorre el campo conociendo diversas criaturas mágicas, viviendo situaciones cómicas pero descubriendo un profundo secreto sobre la pérdida y la verdadera amistad.",
+  "constraints": [
+    "Incluir seres místicos",
+    "Combinar comedia y drama",
+    "Extensión de 1500 palabras",
+    "Idioma español"
+  ]
+}

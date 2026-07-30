@@ -1,0 +1,24 @@
+{
+  "characters": [
+    {
+      "name": "Edian",
+      "role": "Protagonista",
+      "goal": "Volver loco al bot de inteligencia artificial con narrativas imposibles y sin sentido.",
+      "motivation": "Encontrar diversión y caos en la monótona rutina de la oficina moderna.",
+      "conflict": "Sus historias absurdas amenazan con colapsar los servidores principales de la empresa.",
+      "arc": "Pasa de ser un empleado aburrido a convertirse en la leyenda viviente del absurdo digital, manteniendo su afro impecable."
+    },
+    {
+      "name": "Gerardo",
+      "role": "Director de Sistemas",
+      "goal": "Salvar la IA corporativa de un colapso inminente.",
+      "motivation": "Mantener su puesto de trabajo y la cordura en un entorno tecnológico caótico.",
+      "conflict": "No logra entender cómo un hombre alto con un afro imponente puede hackear la lógica de la máquina solo con imaginación pura.",
+      "arc": "Acepta el caos y termina rindiéndose ante la genialidad sin sentido de Edian."
+    }
+  ],
+  "relationships": [
+    "Edian pone a prueba la paciencia de Gerardo con cada nueva historia generada en el bot.",
+    "Gerardo persigue a Edian por los pasillos intentando descifrar la lógica detrás de sus narrativas absurdas."
+  ]
+}

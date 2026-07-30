@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import html
+import re
+from dataclasses import dataclass
+
 GUIDED_FIELDS = (
     ("language", "¿En qué idioma quieres la historia?"),
     ("genre", "¿Cuál será el género?"),
@@ -16,32 +20,62 @@ GUIDED_FIELDS = (
     ),
 )
 
+@dataclass(frozen=True)
+class MetricExplanation:
+    name: str
+    description: str
+    low: str
+    high: str
+
+    def message(self) -> str:
+        return (
+            f"<b>{html.escape(self.name)}</b>\n"
+            f"{html.escape(self.description)}\n\n"
+            f"1 — {html.escape(self.low)}\n"
+            f"10 — {html.escape(self.high)}"
+        )
+
+
 METRIC_EXPLANATIONS = {
-    "coherence": (
-        "Coherencia: sentido global, conexión lógica entre los eventos y "
-        "progresión causal sin huecos."
+    "coherence": MetricExplanation(
+        "Coherencia",
+        "Conexión lógica entre los eventos y progresión causal sin huecos.",
+        "Incoherente",
+        "Totalmente coherente",
     ),
-    "pacing": (
-        "Ritmo: equilibrio entre inicio, nudo y desenlace, y buena "
-        "dosificación de información y tensión."
+    "pacing": MetricExplanation(
+        "Ritmo",
+        "Equilibrio entre inicio, nudo y desenlace, información y tensión.",
+        "Muy desequilibrado",
+        "Excelente y bien dosificado",
     ),
-    "creativity": (
-        "Creatividad: originalidad, ideas valiosas y elementos inesperados "
-        "sin depender demasiado de clichés."
+    "creativity": MetricExplanation(
+        "Creatividad",
+        "Originalidad, ideas valiosas y elementos inesperados.",
+        "Nada original",
+        "Muy original",
     ),
-    "engagement": (
-        "Interés: capacidad de mantener tu atención, disfrute e impacto "
-        "emocional de principio a fin."
+    "engagement": MetricExplanation(
+        "Interés",
+        "Capacidad de mantener tu atención y generar impacto emocional.",
+        "No mantiene el interés",
+        "Muy cautivadora",
     ),
-    "relevance": (
-        "Relevancia: fidelidad a la solicitud original y ausencia de "
-        "elementos fuera de lugar."
+    "relevance": MetricExplanation(
+        "Relevancia",
+        "Fidelidad a la solicitud original y al tema pedido.",
+        "No corresponde al prompt",
+        "Completamente fiel al prompt",
     ),
-    "satisfaction": (
-        "Satisfacción: valoración global de cuánto cumplió la historia tus "
-        "expectativas."
+    "satisfaction": MetricExplanation(
+        "Satisfacción",
+        "Valoración global de cuánto cumplió la historia tus expectativas.",
+        "Insatisfecho",
+        "Muy satisfecho",
     ),
 }
+
+HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$")
 
 
 def validate_guided_value(field: str, value: str) -> str:
@@ -95,3 +129,73 @@ def split_story(text: str, limit: int = 3900) -> list[str]:
     if remaining or not chunks:
         chunks.append(remaining)
     return chunks
+
+
+def _take_safe_prefix(text: str, limit: int) -> tuple[str, str]:
+    """Corta texto sin partir una entidad HTML generada por escape()."""
+    used = 0
+    last_space = -1
+    for index, character in enumerate(text):
+        escaped_length = len(html.escape(character))
+        if used + escaped_length > limit:
+            boundary = last_space if last_space > 0 else index
+            if boundary == 0:
+                boundary = 1
+            return text[:boundary], text[boundary:].lstrip()
+        used += escaped_length
+        if character.isspace():
+            last_space = index
+    return text, ""
+
+
+def _render_block(text: str, bold: bool, limit: int) -> list[str]:
+    wrapper = 7 if bold else 0
+    available = limit - wrapper
+    if available < 1:
+        raise ValueError("limit es demasiado pequeño para el formato")
+    rendered: list[str] = []
+    remaining = text
+    while remaining:
+        piece, remaining = _take_safe_prefix(remaining, available)
+        escaped = html.escape(piece)
+        rendered.append(f"<b>{escaped}</b>" if bold else escaped)
+    return rendered or ["<b></b>" if bold else ""]
+
+
+def telegram_story_chunks(markdown: str, limit: int = 3900) -> list[str]:
+    """Convierte encabezados Markdown en HTML y crea mensajes HTML seguros."""
+    if limit < 8:
+        raise ValueError("limit debe ser al menos 8")
+    blocks: list[tuple[str, bool]] = []
+    paragraph: list[str] = []
+
+    def flush_paragraph() -> None:
+        if paragraph:
+            blocks.append(("\n".join(paragraph), False))
+            paragraph.clear()
+
+    for line in markdown.splitlines():
+        heading = HEADING.match(line)
+        if heading:
+            flush_paragraph()
+            blocks.append((heading.group(1), True))
+        elif not line.strip():
+            flush_paragraph()
+        else:
+            paragraph.append(line)
+    flush_paragraph()
+
+    messages: list[str] = []
+    current = ""
+    for raw, bold in blocks:
+        for rendered in _render_block(raw, bold, limit):
+            candidate = f"{current}\n\n{rendered}" if current else rendered
+            if len(candidate) <= limit:
+                current = candidate
+            else:
+                if current:
+                    messages.append(current)
+                current = rendered
+    if current or not messages:
+        messages.append(current)
+    return messages
