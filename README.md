@@ -11,7 +11,7 @@ Requiere Python 3.11 o posterior.
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e "Models/Top-Down[dev]"
+python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
@@ -43,6 +43,11 @@ protagonista, conflicto, ambientación, tono y extensión, por ejemplo:
 Cuando falten idioma o extensión se usarán español y unas 1500 palabras. Cada
 ejecución crea una carpeta independiente en `Stories/Top-Down` con la historia,
 el borrador y todos los artefactos de planificación y revisión.
+
+Toda historia terminada incluye además `evaluation.json`, una plantilla para
+evaluaciones humanas con puntuaciones de 1 a 10. Puede completarse manualmente
+o desde la opción `Evaluar historia` de la consola unificada. Los parámetros y
+el formato están descritos en [docs/evaluation_metrics.md](docs/evaluation_metrics.md).
 
 ## Desarrollo
 
@@ -127,6 +132,7 @@ El menú ofrece:
 
 - Top-Down → `Generate story`.
 - Bottom-Up → ejecución normal, experimento batch y Escape Room Visual.
+- Evaluar historia → selecciona un relato y agrega una evaluación humana.
 
 El modo visual dibuja el mundo completo o la perspectiva parcial de cada
 agente y avanza cada 1.5 segundos de forma predeterminada.

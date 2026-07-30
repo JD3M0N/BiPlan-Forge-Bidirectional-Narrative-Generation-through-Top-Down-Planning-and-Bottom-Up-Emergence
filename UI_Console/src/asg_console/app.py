@@ -8,6 +8,12 @@ import sys
 from pathlib import Path
 from typing import Callable
 
+from asg_evaluation import (
+    METRICS,
+    add_evaluation,
+    create_evaluation_template,
+    discover_stories,
+)
 from asg_escape_room.cli import room_with_agents, run_batch, run_one
 from asg_escape_room.config import find_project_root
 from asg_escape_room.config import load_settings as load_bottom_up_settings
@@ -183,6 +189,7 @@ class BottomUpMenu:
                 result, model.event_log, provider
             )
             repository.save_text("story.md", story)
+            create_evaluation_template(repository.run_dir)
             repository.complete_stage("narrative")
             repository.complete(narrator, error)
             return repository.run_dir
@@ -314,6 +321,7 @@ class ConsoleApp:
                 "\nMenú principal\n"
                 "  1. Top-Down\n"
                 "  2. Bottom-Up\n"
+                "  3. Evaluar historia\n"
                 "  0. Salir"
             )
             try:
@@ -325,6 +333,8 @@ class ConsoleApp:
                     self.top_down.run()
                 elif choice == "2":
                     self.bottom_up.run()
+                elif choice == "3":
+                    self._evaluate_story()
                 else:
                     self.output("Opción inválida.")
             except (EOFError, KeyboardInterrupt):
@@ -333,6 +343,52 @@ class ConsoleApp:
             except Exception as exc:
                 self.output(f"Error: {exc}")
 
+    def _evaluate_story(self) -> None:
+        root = find_project_root()
+        stories_root = root / "Stories"
+        stories = discover_stories(stories_root)
+        if not stories:
+            self.output("No hay historias disponibles para evaluar.")
+            return
+        self.output("\nHistorias disponibles")
+        for index, directory in enumerate(stories, start=1):
+            self.output(f"  {index}. {directory.relative_to(stories_root)}")
+        self.output("  0. Cancelar")
+        selected = self._story_choice(len(stories))
+        if selected is None:
+            return
+        user = self.input("Usuario evaluador: ").strip()
+        while not user:
+            self.output("El usuario no puede estar vacío.")
+            user = self.input("Usuario evaluador: ").strip()
+        scores = {metric: self._score(metric) for metric in METRICS}
+        destination = add_evaluation(stories[selected], user, scores)
+        self.output(f"Evaluación guardada en: {destination}")
+
+    def _story_choice(self, count: int) -> int | None:
+        while True:
+            value = self.input("Selecciona una historia: ").strip()
+            try:
+                selected = int(value)
+            except ValueError:
+                selected = -1
+            if selected == 0:
+                return None
+            if 1 <= selected <= count:
+                return selected - 1
+            self.output("Selección inválida.")
+
+    def _score(self, metric: str) -> int:
+        while True:
+            value = self.input(f"{metric} [1-10]: ").strip()
+            try:
+                score = int(value)
+            except ValueError:
+                score = 0
+            if 1 <= score <= 10:
+                return score
+            self.output("Introduce un entero entre 1 y 10.")
+
 
 def main() -> int:
     return ConsoleApp().run()
@@ -340,4 +396,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

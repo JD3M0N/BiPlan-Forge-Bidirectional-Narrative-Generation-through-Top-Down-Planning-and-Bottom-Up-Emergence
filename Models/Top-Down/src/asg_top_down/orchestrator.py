@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from asg_evaluation import create_evaluation_template
+
 from .agents import (
     AnalystAgent,
     CharacterDesignerAgent,
@@ -58,10 +60,10 @@ class StoryOrchestrator:
 
             story = self.editor.run(request, outline, draft, review)
             repository.save_text("story.md", story)
+            create_evaluation_template(repository.run_dir)
             repository.complete_stage("story")
             repository.complete()
             return repository.run_dir
         except Exception as exc:
             repository.fail(str(exc))
             raise
-

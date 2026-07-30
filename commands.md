@@ -79,6 +79,7 @@ Opens the main menu:
 ```text
 1. Top-Down
 2. Bottom-Up
+3. Evaluate story
 0. Exit
 ```
 
@@ -86,6 +87,9 @@ The Top-Down menu runs `Generate story`. The Bottom-Up menu provides a normal
 escape-room run, the 60-run batch experiment, and the live visual mode. The
 existing `generate-story` and `run-escape-room` commands remain available for
 scripts and direct execution.
+
+`Evaluate story` searches both story families, asks for an evaluator user and
+the six scores from 1 to 10, then appends the result to `evaluation.json`.
 
 ### Use Escape Room Visual
 
@@ -213,10 +217,10 @@ reproducibility, narration, storage, and Top-Down adapter tests.
 ## Run All Tests
 
 ```powershell
-python -m pytest Models/Top-Down/tests Models/Bottom-Up/escape-room/tests UI_Console/tests
+python -m pytest Models/Evaluation/tests Models/Top-Down/tests Models/Bottom-Up/escape-room/tests UI_Console/tests
 ```
 
-Runs the complete automated test suite for both approaches.
+Runs the complete automated test suite for evaluation and both approaches.
 
 Use concise output:
 

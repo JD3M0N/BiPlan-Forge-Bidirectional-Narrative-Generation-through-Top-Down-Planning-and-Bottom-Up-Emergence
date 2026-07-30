@@ -7,6 +7,8 @@ import secrets
 import sys
 from pathlib import Path
 
+from asg_evaluation import create_evaluation_template
+
 from .config import find_project_root, load_settings
 from .engine import run_simulation
 from .narrative import GeminiNarrativeProvider, generate_story
@@ -72,6 +74,7 @@ def run_one(args: argparse.Namespace) -> Path:
             provider = GeminiNarrativeProvider(settings.api_key, settings.model)
         story, narrator, error = generate_story(result, model.event_log, provider)
         repository.save_text("story.md", story)
+        create_evaluation_template(repository.run_dir)
         repository.complete_stage("narrative")
         repository.complete(narrator, error)
         return repository.run_dir

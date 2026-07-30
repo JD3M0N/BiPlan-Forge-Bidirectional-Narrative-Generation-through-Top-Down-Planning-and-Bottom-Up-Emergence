@@ -1,4 +1,5 @@
 import argparse
+import json
 from pathlib import Path
 
 from asg_console import app
@@ -157,6 +158,52 @@ def test_completed_visual_run_saves_all_artifacts(
         "result.json",
         "metrics.json",
         "story.md",
+        "evaluation.json",
         "metadata.json",
     } <= {path.name for path in output.iterdir()}
 
+
+def test_console_evaluates_story_and_retries_invalid_values(
+    tmp_path, monkeypatch
+) -> None:
+    story = tmp_path / "Stories" / "Top-Down" / "story-one"
+    story.mkdir(parents=True)
+    (story / "story.md").write_text("# Historia", encoding="utf-8")
+    monkeypatch.setattr(app, "find_project_root", lambda: tmp_path)
+    messages = []
+    application = ConsoleApp(
+        input_fn=input_sequence(
+            [
+                "x",
+                "1",
+                "",
+                "Ana",
+                "0",
+                "8",
+                "9",
+                "7",
+                "10",
+                "8",
+                "9",
+            ]
+        ),
+        output=messages.append,
+        top_down=MenuSpy(),
+        bottom_up=MenuSpy(),
+    )
+    application._evaluate_story()
+    document = json.loads(
+        (story / "evaluation.json").read_text(encoding="utf-8")
+    )
+    assert document["evaluations"][0] == {
+        "user": "Ana",
+        "coherence": 8,
+        "pacing": 9,
+        "creativity": 7,
+        "engagement": 10,
+        "relevance": 8,
+        "satisfaction": 9,
+    }
+    assert "Selección inválida." in messages
+    assert "El usuario no puede estar vacío." in messages
+    assert "Introduce un entero entre 1 y 10." in messages

@@ -23,6 +23,11 @@ def test_seed_is_random_when_omitted(tmp_path, maps_dir, monkeypatch) -> None:
     output = cli.run_one(args)
     request = json.loads((output / "request.json").read_text(encoding="utf-8"))
     assert request["seed"] == 987654321
+    evaluation = json.loads(
+        (output / "evaluation.json").read_text(encoding="utf-8")
+    )
+    assert evaluation["schema_version"] == 1
+    assert evaluation["evaluations"][0]["user"] is None
 
 
 def test_explicit_seed_is_preserved(tmp_path, maps_dir, monkeypatch) -> None:

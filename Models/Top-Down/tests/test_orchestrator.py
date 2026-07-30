@@ -15,6 +15,7 @@ EXPECTED_FILES = {
     "outline.json",
     "draft.md",
     "review.json",
+    "evaluation.json",
     "metadata.json",
 }
 
@@ -69,4 +70,3 @@ def test_failure_preserves_completed_artifacts_and_metadata(tmp_path) -> None:
     assert (run_dir / "draft.md").exists()
     assert not (run_dir / "story.md").exists()
     assert "fallo simulado" in metadata["error"]
-
