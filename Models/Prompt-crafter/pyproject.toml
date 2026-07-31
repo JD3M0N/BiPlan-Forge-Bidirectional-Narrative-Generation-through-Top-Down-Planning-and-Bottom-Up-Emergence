@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "asg-prompt-crafter"
+version = "0.1.0"
+description = "Agente para enriquecer prompts narrativos"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["google-genai>=1.0", "pydantic>=2.7", "python-dotenv>=1.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+craft-prompt = "asg_prompt_crafter.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/asg_prompt_crafter"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

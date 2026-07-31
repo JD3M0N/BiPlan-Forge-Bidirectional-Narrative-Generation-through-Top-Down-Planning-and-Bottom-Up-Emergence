@@ -58,6 +58,27 @@ python -m pytest Models/Top-Down/tests
 El proveedor de lenguaje está definido mediante un protocolo. Los tests usan
 un proveedor simulado y no consumen la API de Gemini.
 
+## Prompt-crafter
+
+El módulo independiente `Models/Prompt-crafter` convierte una idea narrativa
+breve en tres prompts enriquecidos, sustancialmente diferentes y listos para
+usar con un generador como Top-Down. También recomienda la alternativa con
+mayor potencial narrativo, pero no genera ni guarda una historia.
+
+```powershell
+craft-prompt
+```
+
+Puede utilizarse desde Python mediante `PromptCrafterAgent.craft(prompt)`. El
+resultado conserva el prompt original e incluye las tres alternativas y la
+justificación de la recomendación. Consulta
+[`Models/Prompt-crafter/README.md`](Models/Prompt-crafter/README.md) para ver la
+API completa.
+
+```powershell
+python -m pytest Models/Prompt-crafter/tests
+```
+
 ## Escape Room Bottom-Up
 
 La implementación Bottom-Up simula una habitación cooperativa con dos o tres

@@ -1,4 +1,5 @@
 -e ./Models/Evaluation[dev]
+-e ./Models/Prompt-crafter[dev]
 -e ./Models/Top-Down[dev]
 -e ./Models/Bottom-Up/escape-room[dev]
 -e ./UI_Console[dev]
