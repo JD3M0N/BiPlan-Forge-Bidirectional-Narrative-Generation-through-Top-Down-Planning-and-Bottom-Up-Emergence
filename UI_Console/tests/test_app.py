@@ -7,6 +7,7 @@ from asg_console.app import BottomUpMenu, ConsoleApp, TopDownMenu
 from asg_console.visualizer import VisualOutcome
 from asg_escape_room import EscapeRoomModel, run_simulation
 from asg_escape_room.config import Settings as BottomSettings
+from asg_prompt_crafter import CraftResult, PromptAlternative
 
 
 class MenuSpy:
@@ -73,11 +74,133 @@ def test_top_down_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(app, "GeminiProvider", Provider)
     monkeypatch.setattr(app, "StoryOrchestrator", Orchestrator)
     menu = TopDownMenu(
-        input_fn=input_sequence(["1", "Una historia", "0"]),
+        input_fn=input_sequence(["1", "2", "Una historia", "0"]),
         output=lambda message: None,
     )
     menu.run()
     assert captured["prompt"] == "Una historia"
+
+
+def test_top_down_assisted_prompt_uses_selected_alternative(
+    tmp_path, monkeypatch
+) -> None:
+    captured = {}
+
+    class Provider:
+        def __init__(self, api_key, model):
+            self.model_name = model
+
+    class Crafter:
+        def __init__(self, provider):
+            captured["crafter_provider"] = provider
+
+        def craft(self, prompt):
+            captured["idea"] = prompt
+            return CraftResult(
+                original_prompt=prompt,
+                alternatives=[
+                    PromptAlternative(
+                        id="one",
+                        name="Primera",
+                        creative_direction="Dirección uno",
+                        prompt="Prompt enriquecido uno",
+                    ),
+                    PromptAlternative(
+                        id="two",
+                        name="Segunda",
+                        creative_direction="Dirección dos",
+                        prompt="Prompt enriquecido dos",
+                    ),
+                    PromptAlternative(
+                        id="three",
+                        name="Tercera",
+                        creative_direction="Dirección tres",
+                        prompt="Prompt enriquecido tres",
+                    ),
+                ],
+                recommended_id="two",
+                recommendation_reason="Es la más sólida.",
+            )
+
+    class Orchestrator:
+        def __init__(self, provider, output_root):
+            captured["orchestrator_provider"] = provider
+
+        def run(self, prompt):
+            captured["prompt"] = prompt
+            return tmp_path
+
+    settings = type(
+        "Settings",
+        (),
+        {"api_key": "test", "model": "fake", "output_root": tmp_path},
+    )()
+    monkeypatch.setattr(app, "load_top_down_settings", lambda: settings)
+    monkeypatch.setattr(app, "GeminiProvider", Provider)
+    monkeypatch.setattr(app, "PromptCrafterAgent", Crafter)
+    monkeypatch.setattr(app, "StoryOrchestrator", Orchestrator)
+    messages = []
+    menu = TopDownMenu(
+        input_fn=input_sequence(["1", "1", "Idea breve", "x", "2", "0"]),
+        output=messages.append,
+    )
+
+    menu.run()
+
+    assert captured["idea"] == "Idea breve"
+    assert captured["prompt"] == "Prompt enriquecido dos"
+    assert captured["crafter_provider"] is captured["orchestrator_provider"]
+    assert any("Segunda [two] — RECOMENDADA" in message for message in messages)
+    assert "Selección inválida." in messages
+
+
+def test_top_down_can_cancel_assisted_selection(monkeypatch) -> None:
+    class UnexpectedOrchestrator:
+        def __init__(self, provider, output_root):
+            raise AssertionError("No debe generar una historia")
+
+    class Provider:
+        model_name = "fake"
+
+        def __init__(self, api_key, model):
+            pass
+
+    class Crafter:
+        def __init__(self, provider):
+            pass
+
+        def craft(self, prompt):
+            alternatives = [
+                PromptAlternative(
+                    id=str(index),
+                    name=f"Opción {index}",
+                    creative_direction="Dirección",
+                    prompt=f"Prompt {index}",
+                )
+                for index in range(1, 4)
+            ]
+            return CraftResult(
+                original_prompt=prompt,
+                alternatives=alternatives,
+                recommended_id="1",
+                recommendation_reason="Razón",
+            )
+
+    settings = type(
+        "Settings",
+        (),
+        {"api_key": "test", "model": "fake", "output_root": Path()},
+    )()
+    monkeypatch.setattr(app, "load_top_down_settings", lambda: settings)
+    monkeypatch.setattr(app, "GeminiProvider", Provider)
+    monkeypatch.setattr(app, "PromptCrafterAgent", Crafter)
+    monkeypatch.setattr(app, "StoryOrchestrator", UnexpectedOrchestrator)
+    menu = TopDownMenu(
+        input_fn=input_sequence(["1", "1", "Idea", "0", "0"]),
+        output=lambda message: None,
+    )
+
+    menu.run()
 
 
 def test_normal_bottom_up_uses_selected_options(maps_dir, monkeypatch) -> None:

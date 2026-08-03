@@ -10,3 +10,7 @@ agregar una evaluación humana a su `evaluation.json`.
 ```powershell
 asg-console
 ```
+
+Al crear una historia Top-Down se puede escribir el prompt manualmente o usar
+el modo asistido. Este último enriquece una idea inicial, muestra tres enfoques
+creativos y permite seleccionar cuál se enviará al pipeline Top-Down.

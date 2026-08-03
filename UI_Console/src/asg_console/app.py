@@ -23,6 +23,7 @@ from asg_escape_room.narrative import (
     generate_story,
 )
 from asg_escape_room.storage import RunRepository
+from asg_prompt_crafter import CraftResult, PromptCrafterAgent
 from asg_top_down.config import load_settings as load_top_down_settings
 from asg_top_down.orchestrator import StoryOrchestrator
 from asg_top_down.provider import GeminiProvider
@@ -47,17 +48,78 @@ class TopDownMenu:
             if choice != "1":
                 self.output("Opción inválida.")
                 continue
-            prompt = self.input("Describe la historia:\n> ").strip()
-            if not prompt:
-                self.output("El prompt no puede estar vacío.")
+            prompt_mode = self._prompt_mode()
+            if prompt_mode is None:
                 continue
+            if prompt_mode == "manual":
+                prompt = self.input("Describe la historia:\n> ").strip()
+                if not prompt:
+                    self.output("El prompt no puede estar vacío.")
+                    continue
             settings = load_top_down_settings()
             provider = GeminiProvider(settings.api_key, settings.model)
+            if prompt_mode == "assisted":
+                prompt = self._assisted_prompt(provider)
+                if prompt is None:
+                    continue
             self.output(f"Generando con {settings.model}...")
-            output = StoryOrchestrator(provider, settings.output_root).run(
-                prompt
-            )
+            output = StoryOrchestrator(provider, settings.output_root).run(prompt)
             self.output(f"Historia terminada: {output / 'story.md'}")
+
+    def _prompt_mode(self) -> str | None:
+        while True:
+            self.output(
+                "\n¿Cómo quieres crear el prompt?\n"
+                "  1. Prompt asistido (3 alternativas)\n"
+                "  2. Prompt manual\n"
+                "  0. Cancelar"
+            )
+            choice = self.input("> ").strip()
+            if choice == "1":
+                return "assisted"
+            if choice == "2":
+                return "manual"
+            if choice == "0":
+                return None
+            self.output("Opción inválida.")
+
+    def _assisted_prompt(self, provider: GeminiProvider) -> str | None:
+        idea = self.input("Describe la idea inicial de la historia:\n> ").strip()
+        if not idea:
+            self.output("El prompt no puede estar vacío.")
+            return None
+        self.output(f"Creando 3 alternativas con {provider.model_name}...")
+        result = PromptCrafterAgent(provider).craft(idea)
+        self._show_alternatives(result)
+        while True:
+            choice = self.input("Elige un prompt [1-3] o 0 para cancelar: ").strip()
+            if choice == "0":
+                return None
+            try:
+                index = int(choice) - 1
+            except ValueError:
+                index = -1
+            if 0 <= index < len(result.alternatives):
+                selected = result.alternatives[index]
+                self.output(f"Prompt seleccionado: {selected.name}")
+                return selected.prompt
+            self.output("Selección inválida.")
+
+    def _show_alternatives(self, result: CraftResult) -> None:
+        self.output("\nAlternativas mejoradas")
+        for index, alternative in enumerate(result.alternatives, start=1):
+            recommended = (
+                " — RECOMENDADA"
+                if alternative.id == result.recommended_id
+                else ""
+            )
+            self.output(
+                f"\n{index}. {alternative.name} [{alternative.id}]"
+                f"{recommended}\n"
+                f"Enfoque: {alternative.creative_direction}\n\n"
+                f"{alternative.prompt}"
+            )
+        self.output(f"\nRecomendación: {result.recommendation_reason}")
 
 
 class BottomUpMenu:

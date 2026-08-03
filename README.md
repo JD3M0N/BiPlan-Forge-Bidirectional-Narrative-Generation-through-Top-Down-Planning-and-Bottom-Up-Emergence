@@ -151,7 +151,7 @@ asg-console
 
 El menú ofrece:
 
-- Top-Down → `Generate story`.
+- Top-Down → `Generate story`, con prompt manual o tres alternativas asistidas.
 - Bottom-Up → ejecución normal, experimento batch y Escape Room Visual.
 - Evaluar historia → selecciona un relato y agrega una evaluación humana.
 

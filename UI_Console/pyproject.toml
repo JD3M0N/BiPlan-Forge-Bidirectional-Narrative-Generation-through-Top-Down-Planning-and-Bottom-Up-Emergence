@@ -8,7 +8,12 @@ version = "0.1.0"
 description = "Interfaz de consola unificada para ASG Top-Down y Bottom-Up"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["asg-evaluation>=0.1.0", "asg-top-down>=0.1.0", "asg-escape-room>=0.1.0"]
+dependencies = [
+  "asg-evaluation>=0.1.0",
+  "asg-top-down>=0.1.0",
+  "asg-escape-room>=0.1.0",
+  "asg-prompt-crafter>=0.1.0",
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
