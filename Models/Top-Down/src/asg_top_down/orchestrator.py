@@ -38,7 +38,7 @@ class StoryOrchestrator:
     ) -> None:
         self.provider = provider
         self.output_root = output_root
-        self.taxonomies = TaxonomyRepository(taxonomy_root)
+        self.taxonomies = TaxonomyRepository(taxonomy_root, provider=provider)
         self.analyst = AnalystAgent(provider)
         self.planner = PlannerAgent(provider, self.taxonomies)
         self.world_builder = WorldBuilderAgent(provider)

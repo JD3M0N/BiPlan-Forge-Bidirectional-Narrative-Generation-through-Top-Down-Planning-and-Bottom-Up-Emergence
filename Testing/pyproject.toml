@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "asg-testing"
+version = "0.1.0"
+description = "Herramientas de diagnóstico para Automatic Story Generation"
+requires-python = ">=3.11"
+dependencies = ["asg-top-down>=0.1.0"]
+
+[project.scripts]
+test-identify-taxonomy = "asg_testing.identify_taxonomy:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/asg_testing"]

@@ -3,6 +3,11 @@ from ..schemas import StoryPlanArtifact, StoryRequest
 from ..taxonomies import TaxonomyRepository
 
 
+def taxonomy_query(request: StoryRequest) -> str:
+    """Build the exact text scored by the taxonomy repository."""
+    return f"{request.original_prompt} {request.premise} {request.genre} {request.tone}"
+
+
 class PlannerAgent(Agent[StoryPlanArtifact]):
     name = "planner"
 
@@ -11,9 +16,7 @@ class PlannerAgent(Agent[StoryPlanArtifact]):
         self.taxonomies = taxonomies
 
     def run(self, request: StoryRequest) -> StoryPlanArtifact:
-        catalog = self.taxonomies.recommend_archetypes(
-            f"{request.original_prompt} {request.premise} {request.genre} {request.tone}"
-        )
+        catalog = self.taxonomies.recommend_archetypes(taxonomy_query(request))
         plan = self.provider.generate_structured(
             system_instruction=(
                 "Eres planificador narrativo. Selecciona exactamente un arquetipo principal "

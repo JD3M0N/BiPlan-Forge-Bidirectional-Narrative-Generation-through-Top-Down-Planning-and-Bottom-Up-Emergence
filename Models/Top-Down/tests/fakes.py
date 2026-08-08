@@ -1,4 +1,5 @@
 from collections import Counter
+import json
 
 from pydantic import BaseModel
 
@@ -44,6 +45,15 @@ class FakeProvider:
         self.calls.append(("structured", schema.__name__))
         if self.fail_on == schema.__name__:
             raise RuntimeError("fallo simulado")
+        if schema.__name__ == "SemanticArchetypeRanking":
+            catalog = json.loads(prompt.split("CATALOGO:\n", 1)[1])
+            preferred = {"discovery": 0.9, "mystery": 0.8}
+            return schema.model_validate({
+                "scores": [
+                    {"archetype_id": item["id"], "relevance": preferred.get(item["id"], 0.1)}
+                    for item in catalog
+                ]
+            })
         return RESPONSES[schema].model_copy(deep=True)
 
     def generate_text(self, *, system_instruction: str, prompt: str) -> str:
