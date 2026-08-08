@@ -1,0 +1,1 @@
+{"id":"ruler","name":"Ruler","spanish_aliases":["gobernante","líder"],"description":"Creates order and must decide whether authority serves the community or the self.","drives":["order","legacy"],"strengths":["responsibility","coordination"],"shadows":["tyranny","rigidity"],"plot_functions":["authority","institutional antagonist"]}

@@ -41,10 +41,14 @@ class ArtifactRepository:
         content = json.dumps(
             value.model_dump(mode="json"), ensure_ascii=False, indent=2
         )
-        (self.run_dir / filename).write_text(content + "\n", encoding="utf-8")
+        destination = self.run_dir / filename
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(content + "\n", encoding="utf-8")
 
     def save_text(self, filename: str, value: str) -> None:
-        (self.run_dir / filename).write_text(value.rstrip() + "\n", encoding="utf-8")
+        destination = self.run_dir / filename
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(value.rstrip() + "\n", encoding="utf-8")
 
     def complete_stage(self, stage: str) -> None:
         self.metadata.completed_stages.append(stage)
@@ -67,4 +71,3 @@ class ArtifactRepository:
             self.metadata.model_dump(mode="json"), ensure_ascii=False, indent=2
         )
         (self.run_dir / "metadata.json").write_text(content + "\n", encoding="utf-8")
-

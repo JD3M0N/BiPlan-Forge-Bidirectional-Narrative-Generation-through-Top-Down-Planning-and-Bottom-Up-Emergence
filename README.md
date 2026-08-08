@@ -42,7 +42,12 @@ protagonista, conflicto, ambientación, tono y extensión, por ejemplo:
 
 Cuando falten idioma o extensión se usarán español y unas 1500 palabras. Cada
 ejecución crea una carpeta independiente en `Stories/Top-Down` con la historia,
-el borrador y todos los artefactos de planificación y revisión.
+las escenas, las taxonomías seleccionadas y los artefactos de revisión.
+
+El pipeline Top-Down v2 selecciona un arquetipo principal y hasta dos
+secundarios desde `Taxonomies/`. Un agente Director organiza beats en escenas y
+un procesador CPC elimina las relaciones causales que formarían ciclos. El DAG
+resultante se guarda en JSON y como una visualización Mermaid.
 
 Toda historia terminada incluye además `evaluation.json`, una plantilla para
 evaluaciones humanas con puntuaciones de 1 a 10. Puede completarse manualmente

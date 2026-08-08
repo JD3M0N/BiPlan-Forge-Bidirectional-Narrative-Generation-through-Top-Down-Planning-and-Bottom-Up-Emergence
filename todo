@@ -21,3 +21,8 @@
 
 - [x] TODO: Agregarle rating a las historias
   - Terminado cuando: `Stories` guarda un json con mettricas de evaluacion.
+
+- [ ] TODO: Crear db de esquemas de historias
+- [ ] TODO: Crear directo que haga story beats into scenes
+- [ ] TODO: Verificar los story beats con The CPC Method and Greedy Cycle-breaking para asegurar que no haya ciclos.
+- [ ] TODO: Comentarle a piad la idea de un grafo (mapa) de lugares donde guardar la posicion de los personajes
