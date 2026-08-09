@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import secrets
 import sys
 from pathlib import Path
@@ -26,6 +27,7 @@ from asg_escape_room.storage import RunRepository
 from asg_prompt_crafter import CraftResult, PromptCrafterAgent
 from asg_top_down.config import load_settings as load_top_down_settings
 from asg_top_down.orchestrator import StoryOrchestrator
+from asg_top_down.progress import format_progress
 from asg_top_down.provider import GeminiProvider
 
 from .visualizer import EscapeRoomVisualizer
@@ -63,7 +65,14 @@ class TopDownMenu:
                 if prompt is None:
                     continue
             self.output(f"Generando con {settings.model}...")
-            output = StoryOrchestrator(provider, settings.output_root).run(prompt)
+            orchestrator = StoryOrchestrator(provider, settings.output_root)
+            if "on_progress" in inspect.signature(orchestrator.run).parameters:
+                output = orchestrator.run(
+                    prompt,
+                    on_progress=lambda update: self.output(format_progress(update)),
+                )
+            else:
+                output = orchestrator.run(prompt)
             self.output(f"Historia terminada: {output / 'story.md'}")
 
     def _prompt_mode(self) -> str | None:

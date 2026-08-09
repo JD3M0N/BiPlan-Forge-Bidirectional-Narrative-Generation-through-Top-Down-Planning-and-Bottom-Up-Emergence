@@ -12,6 +12,7 @@ from .agents import (
 from .graph import StorylineGraphProcessor, StorylineValidationError, render_mermaid
 from .nekg import NarrativeEntityGraph
 from .provider import LanguageModelProvider
+from .progress import ProgressCallback, ProgressUpdate
 from .schemas import (
     NodeReview, NodeReviewsArtifact, ReplanningAttempt, ReplanningHistoryArtifact,
 )
@@ -82,25 +83,53 @@ class StoryOrchestrator:
             repository.save_json("replanning_history.json", history)
         raise StorylineValidationError(["No valid CBN-CPN-CEN DAG after five replanning attempts", *diagnostics])
 
-    def run(self, prompt: str) -> Path:
+    def run(
+        self, prompt: str, on_progress: ProgressCallback | None = None
+    ) -> Path:
+        last_percent = -1
+
+        def progress(
+            percent: int,
+            stage: str,
+            description: str,
+            chapter: int | None = None,
+            total_chapters: int | None = None,
+        ) -> None:
+            nonlocal last_percent
+            if on_progress is None or percent < last_percent:
+                return
+            last_percent = percent
+            on_progress(ProgressUpdate(
+                percent=percent,
+                stage=stage,
+                description=description,
+                chapter=chapter,
+                total_chapters=total_chapters,
+            ))
+
+        progress(0, "analyst", "Analizando la solicitud")
         request = self.analyst.run(prompt)
         repository = ArtifactRepository(self.output_root, self.provider.model_name, request.title)
         try:
             repository.save_json("request.json", request)
             repository.complete_stage("analyst")
+            progress(10, "planner", "Planificando la historia")
             plan = self.planner.run(request)
             repository.save_json("archetypes.json", plan.archetypes)
             repository.save_json("story_plan.json", plan)
             repository.complete_stage("planner")
+            progress(20, "world", "Construyendo el mundo")
             world = self.world_builder.run(request, plan)
             repository.save_json("world.json", world)
             repository.complete_stage("world")
+            progress(30, "characters", "Diseñando los personajes")
             characters = self.character_designer.run(request, plan, world)
             repository.save_json("characters.json", characters)
             repository.complete_stage("characters")
 
             archetype_ids = [plan.archetypes.primary, *plan.archetypes.secondary]
             archetypes = self.taxonomies.get_archetypes(archetype_ids)
+            progress(40, "director", "Trazando el grafo narrativo")
             graph, plan_drama = self._build_storyline(
                 request, plan, world, characters, archetypes, repository,
             )
@@ -121,7 +150,17 @@ class StoryOrchestrator:
             repository.complete_stage("graph")
 
             chapter_texts: list[str] = []
+            total_chapters = len(graph.chapters)
             for chapter in graph.chapters:
+                chapter_number = len(chapter_texts) + 1
+                chapter_start = 50 + (chapter_number - 1) * 30 // total_chapters
+                progress(
+                    chapter_start,
+                    "scenes",
+                    f"Escribiendo capítulo {chapter_number} de {total_chapters}",
+                    chapter_number,
+                    total_chapters,
+                )
                 prior = _continuity_context("\n\n".join(chapter_texts))
                 revision = ""
                 text = ""
@@ -143,10 +182,12 @@ class StoryOrchestrator:
                     raise ValueError(f"Chapter {chapter.id} failed words or goal coverage after two rewrites")
                 repository.save_text(_chapter_filename(chapter.order), text)
                 chapter_texts.append(text.strip())
+            progress(80, "scenes", "Capítulos terminados")
             draft = "\n\n".join(chapter_texts)
             repository.save_text("draft.md", draft)
             repository.complete_stage("scenes")
 
+            progress(85, "review", "Revisando el borrador")
             story_drama = self.drama.run(graph, draft)
             if not story_drama.passed:
                 for _ in range(2):
@@ -166,6 +207,7 @@ class StoryOrchestrator:
             repository.complete_stage("review")
             correction = ""
             story = draft
+            progress(90, "editing", "Editando la versión final")
             for _ in range(3):
                 story = self.editor.run(request, plan, graph, story, review, correction)
                 total = _word_count(story)
@@ -180,10 +222,12 @@ class StoryOrchestrator:
             else:
                 raise ValueError("Final story failed Freytag or global word target after two corrections")
             repository.save_json("freytag_story_review.json", final_drama)
+            progress(98, "saving", "Guardando la historia")
             repository.save_text("story.md", story)
             create_evaluation_template(repository.run_dir)
             repository.complete_stage("story")
             repository.complete()
+            progress(100, "completed", "Historia terminada")
             return repository.run_dir
         except Exception as exc:
             repository.fail(str(exc))

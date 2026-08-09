@@ -2,6 +2,7 @@ import json
 import pytest
 
 from asg_top_down.orchestrator import StoryOrchestrator
+from asg_top_down.progress import ProgressUpdate, format_progress
 from fakes import FakeProvider, RESPONSES
 from asg_top_down.schemas import DirectedStoryArtifact
 
@@ -17,6 +18,30 @@ def test_pipeline_writes_storyteller_artifacts(tmp_path) -> None:
     metadata = json.loads((run_dir / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["status"] == "completed"
     assert provider.text_calls["scene"] == 5
+
+
+def test_pipeline_reports_monotonic_progress_by_chapter(tmp_path) -> None:
+    updates = []
+
+    StoryOrchestrator(FakeProvider(), tmp_path).run(
+        "Una historia", on_progress=updates.append
+    )
+
+    assert updates[0].percent == 0
+    assert updates[-1] == ProgressUpdate(100, "completed", "Historia terminada")
+    assert [item.percent for item in updates] == sorted(
+        item.percent for item in updates
+    )
+    chapters = [item for item in updates if item.chapter is not None]
+    assert [item.chapter for item in chapters] == [1, 2, 3, 4, 5]
+    assert {item.total_chapters for item in chapters} == {5}
+
+
+def test_progress_bar_has_percentage_and_description() -> None:
+    rendered = format_progress(
+        ProgressUpdate(80, "scenes", "Escribiendo capítulo 4 de 5", 4, 5)
+    )
+    assert rendered == "[████████░░] 80% — Escribiendo capítulo 4 de 5"
 
 
 def test_failure_preserves_metadata(tmp_path) -> None:

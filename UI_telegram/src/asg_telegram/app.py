@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 from pathlib import Path
 
 from asg_evaluation import METRICS, add_evaluation
+from asg_top_down.progress import ProgressUpdate, format_progress
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.error import BadRequest, NetworkError, TelegramError
@@ -230,8 +232,12 @@ class TelegramStoryBot:
         )
         context.user_data.clear()
         context.user_data["state"] = "generating"
-        await update.effective_message.reply_text(
-            f"Generando con {self.generator.display_name}. Puede tardar unos minutos…"
+        progress_message = await update.effective_message.reply_text(
+            format_progress(ProgressUpdate(
+                percent=0,
+                stage="starting",
+                description=f"Iniciando generación {self.generator.display_name}",
+            ))
         )
         context.application.create_task(
             self._generate_and_deliver(
@@ -239,17 +245,41 @@ class TelegramStoryBot:
                 chat_id=update.effective_chat.id,
                 user=update.effective_user,
                 prompt=prompt,
+                progress_message_id=progress_message.message_id,
             ),
             update=update,
         )
 
     async def _generate_and_deliver(
-        self, *, context, chat_id: int, user, prompt: str
+        self,
+        *,
+        context,
+        chat_id: int,
+        user,
+        prompt: str,
+        progress_message_id: int | None = None,
     ) -> None:
+        loop = asyncio.get_running_loop()
+        last_progress: list[ProgressUpdate] = []
+
+        def report_progress(update: ProgressUpdate) -> None:
+            last_progress[:] = [update]
+            if progress_message_id is None:
+                return
+            future = asyncio.run_coroutine_threadsafe(
+                self._safe_edit_progress(
+                    context, chat_id, progress_message_id, format_progress(update)
+                ),
+                loop,
+            )
+            future.result()
+
         try:
             try:
+                parameters = inspect.signature(self.generator.generate).parameters
+                args = (prompt, report_progress) if len(parameters) >= 2 else (prompt,)
                 story_directory = await asyncio.to_thread(
-                    self.generator.generate, prompt
+                    self.generator.generate, *args
                 )
             except Exception:
                 log_user_action(
@@ -261,6 +291,18 @@ class TelegramStoryBot:
                     level=logging.ERROR,
                     exc_info=True,
                 )
+                if progress_message_id is not None:
+                    percent = last_progress[-1].percent if last_progress else 0
+                    await self._safe_edit_progress(
+                        context,
+                        chat_id,
+                        progress_message_id,
+                        format_progress(ProgressUpdate(
+                            percent=percent,
+                            stage="failed",
+                            description="Generación fallida",
+                        )),
+                    )
                 context.user_data.clear()
                 await self._safe_notice(
                     context,
@@ -343,6 +385,19 @@ class TelegramStoryBot:
                 )
         finally:
             self.active_users.discard(user.id)
+
+    async def _safe_edit_progress(
+        self, context, chat_id: int, message_id: int, text: str
+    ) -> None:
+        try:
+            await context.bot.edit_message_text(
+                chat_id=chat_id, message_id=message_id, text=text
+            )
+        except BadRequest as exc:
+            if "message is not modified" not in str(exc).lower():
+                LOGGER.warning("No se pudo actualizar el progreso: %s", exc)
+        except TelegramError as exc:
+            LOGGER.warning("No se pudo actualizar el progreso: %s", exc)
 
     async def _deliver_story(
         self, *, context, chat_id: int, user, story_path: Path

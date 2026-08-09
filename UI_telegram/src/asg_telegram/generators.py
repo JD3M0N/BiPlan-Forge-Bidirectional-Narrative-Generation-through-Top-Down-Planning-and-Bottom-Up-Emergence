@@ -7,6 +7,7 @@ from typing import Callable, Protocol
 
 from asg_top_down.config import load_settings as load_top_down_settings
 from asg_top_down.orchestrator import StoryOrchestrator
+from asg_top_down.progress import ProgressCallback
 from asg_top_down.provider import GeminiProvider
 
 
@@ -14,7 +15,9 @@ class StoryGenerator(Protocol):
     @property
     def display_name(self) -> str: ...
 
-    def generate(self, prompt: str) -> Path: ...
+    def generate(
+        self, prompt: str, on_progress: ProgressCallback | None = None
+    ) -> Path: ...
 
 
 class TopDownGenerator:
@@ -22,10 +25,14 @@ class TopDownGenerator:
     def display_name(self) -> str:
         return "Top-Down"
 
-    def generate(self, prompt: str) -> Path:
+    def generate(
+        self, prompt: str, on_progress: ProgressCallback | None = None
+    ) -> Path:
         settings = load_top_down_settings()
         provider = GeminiProvider(settings.api_key, settings.model)
-        return StoryOrchestrator(provider, settings.output_root).run(prompt)
+        return StoryOrchestrator(provider, settings.output_root).run(
+            prompt, on_progress=on_progress
+        )
 
 
 GeneratorFactory = Callable[[], StoryGenerator]

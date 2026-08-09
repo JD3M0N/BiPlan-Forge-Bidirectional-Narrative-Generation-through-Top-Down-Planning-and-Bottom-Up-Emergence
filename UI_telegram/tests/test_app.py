@@ -7,6 +7,7 @@ from telegram.error import BadRequest, TimedOut
 
 from asg_telegram import app
 from asg_telegram.app import TelegramStoryBot, _evaluator_name, build_application
+from asg_top_down.progress import ProgressUpdate
 
 
 class FakeGenerator:
@@ -25,6 +26,7 @@ class FakeBot:
     def __init__(self):
         self.messages = []
         self.documents = []
+        self.edits = []
 
     async def send_message(self, **kwargs):
         self.messages.append(kwargs)
@@ -36,6 +38,9 @@ class FakeBot:
                 "content": kwargs["document"].read().decode("utf-8"),
             }
         )
+
+    async def edit_message_text(self, **kwargs):
+        self.edits.append(kwargs)
 
 
 def make_story(tmp_path, text="# Historia\n\nContenido"):
@@ -77,6 +82,33 @@ def test_generation_delivers_messages_document_and_starts_evaluation(tmp_path):
     assert "<b>Coherencia</b>" in fake_bot.messages[-1]["text"]
     assert "1 — Incoherente" in fake_bot.messages[-1]["text"]
     assert "10 — Totalmente coherente" in fake_bot.messages[-1]["text"]
+
+
+def test_generation_edits_one_progress_message_until_complete(tmp_path):
+    story = make_story(tmp_path)
+
+    class ProgressGenerator(FakeGenerator):
+        def generate(self, prompt, on_progress=None):
+            on_progress(ProgressUpdate(25, "world", "Construyendo el mundo"))
+            on_progress(ProgressUpdate(100, "completed", "Historia terminada"))
+            return super().generate(prompt)
+
+    handler = TelegramStoryBot(ProgressGenerator(story))
+    bot = FakeBot()
+    context = SimpleNamespace(bot=bot, user_data={})
+    user = SimpleNamespace(id=11, username="ana", full_name="Ana")
+
+    asyncio.run(handler._generate_and_deliver(
+        context=context,
+        chat_id=20,
+        user=user,
+        prompt="Una historia",
+        progress_message_id=99,
+    ))
+
+    assert len(bot.edits) == 2
+    assert {edit["message_id"] for edit in bot.edits} == {99}
+    assert "100% — Historia terminada" in bot.edits[-1]["text"]
 
 
 def test_active_users_are_isolated(tmp_path):

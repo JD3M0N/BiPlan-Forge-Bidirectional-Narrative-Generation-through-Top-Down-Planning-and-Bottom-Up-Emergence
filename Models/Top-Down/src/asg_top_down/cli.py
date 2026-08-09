@@ -5,6 +5,7 @@ import sys
 from .config import load_settings
 from .errors import ASGError
 from .orchestrator import StoryOrchestrator
+from .progress import format_progress
 from .provider import GeminiProvider
 
 EXAMPLE_PROMPT = (
@@ -28,7 +29,13 @@ def main() -> int:
         provider = GeminiProvider(settings.api_key, settings.model)
         orchestrator = StoryOrchestrator(provider, settings.output_root)
         print(f"\nGenerando con {settings.model}...")
-        output = orchestrator.run(prompt)
+        output = orchestrator.run(
+            prompt,
+            on_progress=lambda update: print(
+                f"\r{format_progress(update)}", end="", flush=True
+            ),
+        )
+        print()
         print(f"\nHistoria terminada: {output / 'story.md'}")
         return 0
     except (ASGError, KeyboardInterrupt) as exc:
@@ -39,4 +46,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
