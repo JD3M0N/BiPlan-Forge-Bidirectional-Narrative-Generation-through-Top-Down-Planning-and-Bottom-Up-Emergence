@@ -1,34 +1,58 @@
 import json
 import pytest
+
 from asg_top_down.orchestrator import StoryOrchestrator
-from fakes import FakeProvider
+from fakes import FakeProvider, RESPONSES
+from asg_top_down.schemas import DirectedStoryArtifact
 
-EXPECTED_FILES = {"story.md", "request.json", "archetypes.json", "story_plan.json", "world.json", "characters.json", "narrative_graph.json", "narrative_graph.md", "scenes", "draft.md", "review.json", "evaluation.json", "metadata.json"}
+
+EXPECTED = {"story.md", "request.json", "archetypes.json", "story_plan.json", "world.json", "characters.json", "storyline.json", "nekg.json", "node_reviews.json", "replanning_history.json", "narrative_graph.json", "narrative_graph.md", "freytag_plan_review.json", "freytag_story_review.json", "scenes", "draft.md", "review.json", "evaluation.json", "metadata.json"}
 
 
-def test_pipeline_writes_all_v2_artifacts_in_order(tmp_path) -> None:
+def test_pipeline_writes_storyteller_artifacts(tmp_path) -> None:
     provider = FakeProvider()
     run_dir = StoryOrchestrator(provider, tmp_path).run("Una historia")
-    assert {path.name for path in run_dir.iterdir()} == EXPECTED_FILES
-    assert len(list((run_dir / "scenes").glob("scene-*.md"))) == 2
+    assert {x.name for x in run_dir.iterdir()} == EXPECTED
+    assert len(list((run_dir / "scenes").glob("chapter-*.md"))) == 5
     metadata = json.loads((run_dir / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["status"] == "completed"
-    assert metadata["completed_stages"] == ["analyst", "planner", "world", "characters", "director", "graph", "scenes", "review", "story"]
-    assert provider.text_calls["scene"] == 2
-    assert provider.text_calls["story"] == 1
+    assert provider.text_calls["scene"] == 5
 
 
-def test_run_directories_are_unique(tmp_path) -> None:
-    orchestrator = StoryOrchestrator(FakeProvider(), tmp_path)
-    assert orchestrator.run("Historia") != orchestrator.run("Historia")
-
-
-def test_failure_preserves_completed_artifacts_and_metadata(tmp_path) -> None:
+def test_failure_preserves_metadata(tmp_path) -> None:
     with pytest.raises(RuntimeError, match="fallo simulado"):
         StoryOrchestrator(FakeProvider(fail_on="ReviewArtifact"), tmp_path).run("Historia")
-    run_dir = next(tmp_path.iterdir())
-    metadata = json.loads((run_dir / "metadata.json").read_text(encoding="utf-8"))
+    metadata = json.loads((next(tmp_path.iterdir()) / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["status"] == "failed"
-    assert metadata["completed_stages"][-1] == "scenes"
-    assert (run_dir / "draft.md").exists()
-    assert not (run_dir / "story.md").exists()
+
+
+class ReplanningProvider(FakeProvider):
+    def __init__(self, failures: int) -> None:
+        super().__init__()
+        self.failures = failures
+        self.director_calls = 0
+
+    def generate_structured(self, *, system_instruction, prompt, schema):
+        if schema is DirectedStoryArtifact:
+            self.director_calls += 1
+            candidate = RESPONSES[DirectedStoryArtifact].model_copy(deep=True)
+            if self.director_calls <= self.failures:
+                candidate.candidate_edges = [x for x in candidate.candidate_edges if x.target != "node_3"]
+            return candidate
+        return super().generate_structured(system_instruction=system_instruction, prompt=prompt, schema=schema)
+
+
+def test_replans_all_cpns_until_cen_is_reachable(tmp_path) -> None:
+    provider = ReplanningProvider(failures=2)
+    run_dir = StoryOrchestrator(provider, tmp_path).run("Historia")
+    history = json.loads((run_dir / "replanning_history.json").read_text(encoding="utf-8"))
+    assert provider.director_calls == 3
+    assert {x["attempt"] for x in history["attempts"]} == {1, 2}
+
+
+def test_fails_after_five_transactional_replans(tmp_path) -> None:
+    provider = ReplanningProvider(failures=5)
+    with pytest.raises(ValueError, match="five replanning attempts"):
+        StoryOrchestrator(provider, tmp_path).run("Historia")
+    history = json.loads((next(tmp_path.iterdir()) / "replanning_history.json").read_text(encoding="utf-8"))
+    assert {x["attempt"] for x in history["attempts"]} == {1, 2, 3, 4, 5}

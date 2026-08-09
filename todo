@@ -26,3 +26,6 @@
 - [ ] TODO: Crear directo que haga story beats into scenes
 - [ ] TODO: Verificar los story beats con The CPC Method and Greedy Cycle-breaking para asegurar que no haya ciclos.
 - [ ] TODO: Comentarle a piad la idea de un grafo (mapa) de lugares donde guardar la posicion de los personajes
+- [ ] TODO: Usar un modelo de embeding para reconocimiento lexico del prompt del usuario para la taxonomia 
+- [ ] TODO: Ver si tiene sentido ver las situaciones dramaticas de polti para el gestor de drama
+- [ ] TODO: Modificar Control de palabras por capítulo (±10 %) y global (±5 %).

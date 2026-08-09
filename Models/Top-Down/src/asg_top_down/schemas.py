@@ -1,4 +1,4 @@
-"""Validated contracts exchanged by the Top-Down v2 pipeline."""
+"""Validated contracts exchanged by the STORYTELLER-style pipeline."""
 
 from datetime import datetime
 from typing import Literal
@@ -64,65 +64,143 @@ class CharactersArtifact(BaseModel):
     relationships: list[str] = Field(default_factory=list)
 
 
-class StoryBeat(BaseModel):
-    id: str
-    scene_id: str
-    global_order: int = Field(ge=1)
-    local_order: int = Field(ge=1)
-    beat_type: str
-    objective: str
-    conflict: str
-    action: str
-    outcome: str
-    participants: list[str]
-    emotional_shift: str
-    setup_refs: list[str] = Field(default_factory=list)
-    payoff_refs: list[str] = Field(default_factory=list)
-
-
-class Scene(BaseModel):
-    id: str
-    order: int = Field(ge=1)
-    title: str
-    purpose: str
-    point_of_view: str
-    location: str
-    characters: list[str]
-    target_words: int = Field(ge=50)
-    entry_state: str
-    exit_state: str
-    beat_ids: list[str] = Field(min_length=1)
-
-
+FreytagPhase = Literal["exposition", "rising_action", "climax", "falling_action", "denouement"]
+NodeType = Literal["CBN", "CPN", "CEN"]
 EdgeType = Literal["causes", "enables", "motivates", "reveals", "setup_payoff"]
 
 
-class CausalEdge(BaseModel):
+class NodeGoal(BaseModel):
+    purpose: str
+    archetype_id: str
+    taxonomy_beat: str
+    success_criteria: list[str] = Field(min_length=1)
+
+
+class ChapterPlan(BaseModel):
+    id: str
+    order: int = Field(ge=1)
+    title: str
+    abstract: str
+    target_words: int = Field(ge=50)
+    freytag_phases: list[FreytagPhase] = Field(min_length=1)
+
+
+class PlotNode(BaseModel):
+    id: str
+    chapter_id: str
+    node_type: NodeType
+    subject: str = Field(min_length=1)
+    verb: str = Field(min_length=1)
+    object: str = ""
+    timestamp: int = Field(ge=0)
+    global_order: int = Field(ge=1)
+    local_order: int = Field(ge=1)
+    target_words: int = Field(ge=1)
+    goals: list[NodeGoal] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def normalize_sv(self) -> "PlotNode":
+        if not self.object.strip():
+            self.object = self.subject
+        return self
+
+
+class NarrativeEdge(BaseModel):
     source: str
     target: str
     relation: EdgeType
-    strength: int = Field(ge=1, le=5)
+    strength: int = Field(default=3, ge=1, le=5)
     rationale: str
 
 
 class DirectedStoryArtifact(BaseModel):
-    scenes: list[Scene] = Field(min_length=1)
-    beats: list[StoryBeat] = Field(min_length=1)
-    candidate_edges: list[CausalEdge] = Field(default_factory=list)
+    """Candidate storyline emitted by the Director."""
+    chapters: list[ChapterPlan] = Field(min_length=1)
+    nodes: list[PlotNode] = Field(min_length=3)
+    candidate_edges: list[NarrativeEdge] = Field(min_length=1)
 
 
 class DiscardedEdge(BaseModel):
-    edge: CausalEdge
+    edge: NarrativeEdge
     reason: Literal["would_create_cycle"]
 
 
-class NarrativeGraphArtifact(BaseModel):
-    scenes: list[Scene]
-    beats: list[StoryBeat]
-    candidate_edges: list[CausalEdge]
-    accepted_edges: list[CausalEdge]
-    discarded_edges: list[DiscardedEdge]
+class StorylineArtifact(BaseModel):
+    chapters: list[ChapterPlan]
+    nodes: list[PlotNode]
+    candidate_edges: list[NarrativeEdge]
+    accepted_edges: list[NarrativeEdge]
+    discarded_edges: list[DiscardedEdge] = Field(default_factory=list)
     topological_order: list[str]
+
+
+# Backwards-compatible public name used by console integrations.
+NarrativeGraphArtifact = StorylineArtifact
+
+
+class NarrativeEntity(BaseModel):
+    id: str
+    name: str
+    kinds: list[str] = Field(default_factory=list)
+
+
+class EntityRelation(BaseModel):
+    source: str
+    verb: str
+    target: str
+    plot_node_id: str
+    timestamp: int = Field(ge=0)
+
+
+class NarrativeEntityGraphArtifact(BaseModel):
+    entities: list[NarrativeEntity]
+    relations: list[EntityRelation]
+
+
+class NodeReview(BaseModel):
+    node_id: str
+    accepted: bool
+    issues: list[str] = Field(default_factory=list)
+    explanation: str
+
+
+class NodeReviewsArtifact(BaseModel):
+    reviews: list[NodeReview] = Field(default_factory=list)
+
+
+class ReplanningAttempt(BaseModel):
+    chapter_id: str
+    attempt: int = Field(ge=1, le=5)
+    diagnostics: list[str]
+
+
+class ReplanningHistoryArtifact(BaseModel):
+    attempts: list[ReplanningAttempt] = Field(default_factory=list)
+
+
+class FreytagPhaseAssessment(BaseModel):
+    phase: FreytagPhase
+    present: bool
+    chapter_ids: list[str]
+    node_ids: list[str]
+    intensity: int = Field(ge=1, le=10)
+    evidence: str
+
+
+class FreytagReviewArtifact(BaseModel):
+    passed: bool
+    phases: list[FreytagPhaseAssessment]
+    issues: list[str] = Field(default_factory=list)
+    revision_instructions: list[str] = Field(default_factory=list)
+
+
+class ChapterComplianceArtifact(BaseModel):
+    passed: bool
+    actual_words: int = Field(ge=0)
+    covered_node_ids: list[str] = Field(default_factory=list)
+    covered_goals: list[str] = Field(default_factory=list)
+    issues: list[str] = Field(default_factory=list)
+    revision_instructions: list[str] = Field(default_factory=list)
 
 
 class ReviewArtifact(BaseModel):

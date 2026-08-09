@@ -7,9 +7,11 @@ from .director import DirectorAgent
 from .editor import EditorAgent
 from .planner import PlannerAgent
 from .world import WorldBuilderAgent
-from .writer import SceneWriterAgent
+from .writer import ChapterComplianceAgent, SceneWriterAgent
+from .drama import DramaAgent
 
 __all__ = [
     "AnalystAgent", "PlannerAgent", "WorldBuilderAgent", "CharacterDesignerAgent",
-    "DirectorAgent", "SceneWriterAgent", "CriticAgent", "EditorAgent",
+    "DirectorAgent", "SceneWriterAgent", "ChapterComplianceAgent", "DramaAgent",
+    "CriticAgent", "EditorAgent",
 ]

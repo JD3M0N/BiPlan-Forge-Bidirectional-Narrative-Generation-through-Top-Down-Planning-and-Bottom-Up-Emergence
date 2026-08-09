@@ -5,7 +5,7 @@ from ..schemas import NarrativeGraphArtifact, ReviewArtifact, StoryPlanArtifact,
 class EditorAgent(Agent[str]):
     name = "story"
 
-    def run(self, request: StoryRequest, plan: StoryPlanArtifact, graph: NarrativeGraphArtifact, draft: str, review: ReviewArtifact) -> str:
+    def run(self, request: StoryRequest, plan: StoryPlanArtifact, graph: NarrativeGraphArtifact, draft: str, review: ReviewArtifact, correction: str = "") -> str:
         return self.provider.generate_text(
             system_instruction=(
                 "Eres editor literario. Reescribe una sola vez el borrador aplicando la crítica. "
@@ -13,5 +13,6 @@ class EditorAgent(Agent[str]):
                 "únicamente la historia final completa en Markdown."
             ),
             prompt=(f"REQUISITOS:\n{json_text(request)}\n\nPLAN:\n{json_text(plan)}\n\nGRAFO:\n{json_text(graph)}"
-                    f"\n\nCRÍTICA:\n{json_text(review)}\n\nBORRADOR:\n{draft}"),
+                    f"\n\nCRÍTICA:\n{json_text(review)}\n\nCORRECCIÓN OBLIGATORIA:\n{correction or 'ninguna'}"
+                    f"\n\nBORRADOR:\n{draft}"),
         )
