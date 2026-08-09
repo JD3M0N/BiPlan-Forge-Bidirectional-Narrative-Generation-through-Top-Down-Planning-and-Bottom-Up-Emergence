@@ -50,10 +50,13 @@ RESPONSES: dict[type[BaseModel], BaseModel] = {
 class FakeProvider:
     model_name = "fake-flash"
 
-    def __init__(self, fail_on: str | None = None) -> None:
+    def __init__(self, fail_on: str | None = None, *, scene_words: int = 300,
+                 story_words: int = 1500) -> None:
         self.calls = []
         self.text_calls = Counter()
         self.fail_on = fail_on
+        self.scene_words = scene_words
+        self.story_words = story_words
 
     def generate_structured(self, *, system_instruction: str, prompt: str, schema: type[BaseModel]) -> BaseModel:
         self.calls.append(("structured", schema.__name__))
@@ -64,7 +67,9 @@ class FakeProvider:
             return schema.model_validate({"scores": [{"archetype_id": x["id"], "relevance": .9 if x["id"] in {"discovery", "mystery"} else .1} for x in catalog]})
         if schema is ChapterComplianceArtifact:
             ids = sorted(set(re.findall(r'"id": "(node_\d+)"', prompt)), key=lambda x: int(x.split("_")[1]))
-            return ChapterComplianceArtifact(passed=True, actual_words=300, covered_node_ids=ids, covered_goals=["all"])
+            beats = re.findall(r'"taxonomy_beat": "([^"]+)"', prompt)
+            goals = [f"{node_id}:{beat}" for node_id, beat in zip(ids, beats)]
+            return ChapterComplianceArtifact(passed=True, actual_words=300, covered_node_ids=ids, covered_goals=goals)
         return RESPONSES[schema].model_copy(deep=True)
 
     def generate_text(self, *, system_instruction: str, prompt: str) -> str:
@@ -73,5 +78,5 @@ class FakeProvider:
         self.text_calls[kind] += 1
         if self.fail_on == kind:
             raise RuntimeError("fallo simulado")
-        count = 1500 if kind == "story" else 300
+        count = self.story_words if kind == "story" else self.scene_words
         return " ".join(["palabra"] * count)

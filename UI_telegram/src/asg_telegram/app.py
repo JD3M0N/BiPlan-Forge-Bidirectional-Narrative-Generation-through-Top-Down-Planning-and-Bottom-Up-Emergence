@@ -6,9 +6,11 @@ import asyncio
 import inspect
 import logging
 from pathlib import Path
+from types import SimpleNamespace
 
 from asg_evaluation import METRICS, add_evaluation
 from asg_top_down.progress import ProgressUpdate, format_progress
+from asg_top_down.errors import ASGError
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.error import BadRequest, NetworkError, TelegramError
@@ -31,6 +33,7 @@ from .prompts import (
     telegram_story_chunks,
     validate_guided_value,
 )
+from .queue import QueueRepository
 
 LOGGER = logging.getLogger(__name__)
 DOCUMENT_RETRY_DELAYS = (1, 2, 4)
@@ -85,10 +88,40 @@ def _score_keyboard(metric: str) -> InlineKeyboardMarkup:
 
 
 class TelegramStoryBot:
-    def __init__(self, generator: StoryGenerator) -> None:
+    def __init__(self, generator: StoryGenerator, queue: QueueRepository | None = None) -> None:
         self.generator = generator
+        self.queue = queue
         self.active_users: set[int] = set()
         self.delivery_semaphore = asyncio.Semaphore(1)
+        self.generation_semaphore = asyncio.Semaphore(1)
+
+    async def restore_queue(self, application) -> None:
+        if not self.queue:
+            return
+        jobs = self.queue.recover_interrupted()
+        for job in jobs:
+            self.active_users.add(job.user_id)
+            user = SimpleNamespace(id=job.user_id, username=job.username, full_name=job.username)
+            context = SimpleNamespace(
+                bot=application.bot, application=application,
+                user_data=application.user_data[job.user_id],
+            )
+            if job.id in self.queue.last_recovered_ids:
+                try:
+                    await application.bot.send_message(
+                        chat_id=job.chat_id,
+                        text=(
+                            "El bot se reinició durante tu historia. La solicitud sigue "
+                            "guardada y se reanudará desde el último checkpoint válido."
+                        ),
+                    )
+                except TelegramError:
+                    LOGGER.warning("No se pudo avisar la recuperación del trabajo %s", job.id)
+            application.create_task(self._generate_and_deliver(
+                context=context, chat_id=job.chat_id, user=user, prompt=job.prompt,
+                progress_message_id=job.progress_message_id, job_id=job.id,
+            ))
+        await self._refresh_queue(application)
 
     async def start(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -133,6 +166,14 @@ class TelegramStoryBot:
     ) -> None:
         user_id = update.effective_user.id
         _user_log(update, "ejecutó /cancel")
+        if self.queue and self.queue.cancel_user(user_id):
+            self.active_users.discard(user_id)
+            context.user_data.clear()
+            await update.effective_message.reply_text(
+                "Tu solicitud fue retirada de la cola. Puedes usar /newstory cuando quieras."
+            )
+            await self._refresh_queue(context.application)
+            return
         if user_id in self.active_users:
             await update.effective_message.reply_text(
                 "La generación o entrega ya está en curso y no puede cancelarse. "
@@ -239,6 +280,16 @@ class TelegramStoryBot:
                 description=f"Iniciando generación {self.generator.display_name}",
             ))
         )
+        job_id = None
+        if self.queue:
+            job = self.queue.enqueue(
+                user_id=user_id,
+                username=update.effective_user.username or update.effective_user.full_name,
+                chat_id=update.effective_chat.id, prompt=prompt,
+                progress_message_id=progress_message.message_id,
+            )
+            job_id = job.id
+            await self._refresh_queue(context.application)
         context.application.create_task(
             self._generate_and_deliver(
                 context=context,
@@ -246,6 +297,7 @@ class TelegramStoryBot:
                 user=update.effective_user,
                 prompt=prompt,
                 progress_message_id=progress_message.message_id,
+                job_id=job_id,
             ),
             update=update,
         )
@@ -258,6 +310,7 @@ class TelegramStoryBot:
         user,
         prompt: str,
         progress_message_id: int | None = None,
+        job_id: str | None = None,
     ) -> None:
         loop = asyncio.get_running_loop()
         last_progress: list[ProgressUpdate] = []
@@ -275,13 +328,48 @@ class TelegramStoryBot:
             future.result()
 
         try:
+            async with self.generation_semaphore:
+                if job_id and self.queue:
+                    if self.queue.position(job_id) is None:
+                        return
+                    self.queue.mark_running(job_id)
+                    await self._refresh_queue(context.application)
+                await self._run_generation_and_delivery(
+                    context=context, chat_id=chat_id, user=user, prompt=prompt,
+                    progress_message_id=progress_message_id, job_id=job_id,
+                    report_progress=report_progress, last_progress=last_progress,
+                )
+        finally:
+            self.active_users.discard(user.id)
+            if self.queue:
+                await self._refresh_queue(context.application)
+
+    async def _run_generation_and_delivery(
+        self, *, context, chat_id, user, prompt, progress_message_id,
+        job_id, report_progress, last_progress,
+    ) -> None:
+        try:
             try:
                 parameters = inspect.signature(self.generator.generate).parameters
-                args = (prompt, report_progress) if len(parameters) >= 2 else (prompt,)
-                story_directory = await asyncio.to_thread(
-                    self.generator.generate, *args
+                run_created = (
+                    (lambda path: self.queue.set_run_dir(job_id, str(path)))
+                    if job_id and self.queue else None
                 )
-            except Exception:
+                args = (
+                    (prompt, report_progress, run_created) if len(parameters) >= 3
+                    else (prompt, report_progress) if len(parameters) >= 2 else (prompt,)
+                )
+                job = self.queue.get(job_id) if job_id and self.queue else None
+                operation = self.generator.generate
+                if job and job.run_dir and hasattr(self.generator, "resume"):
+                    operation = self.generator.resume
+                    args = (Path(job.run_dir), report_progress, run_created)
+                story_directory = await asyncio.to_thread(
+                    operation, *args
+                )
+            except Exception as exc:
+                if job_id and self.queue:
+                    self.queue.finish(job_id, "failed", error_code=getattr(exc, "code", "UNEXPECTED_ERROR"))
                 log_user_action(
                     LOGGER,
                     user_id=user.id,
@@ -300,18 +388,26 @@ class TelegramStoryBot:
                         format_progress(ProgressUpdate(
                             percent=percent,
                             stage="failed",
-                            description="Generación fallida",
+                            description=(
+                                f"{getattr(exc, 'stage', last_progress[-1].stage if last_progress else 'unknown')}: "
+                                f"{getattr(exc, 'summary', 'Generación fallida')}"
+                            )[:180],
                         )),
                     )
                 context.user_data.clear()
                 await self._safe_notice(
                     context,
                     chat_id,
-                    "No pude generar la historia. Comprueba la configuración "
-                    "de Gemini y vuelve a intentarlo más tarde.",
+                    exc.public_message() if isinstance(exc, ASGError) else (
+                        "No pude generar la historia por un error interno inesperado. "
+                        "Consulta el registro de la consola y vuelve a intentarlo. "
+                        "Código: UNEXPECTED_ERROR."
+                    ),
                     user,
                 )
                 return
+            if job_id and self.queue:
+                self.queue.set_run_dir(job_id, str(story_directory))
             log_user_action(
                 LOGGER,
                 user_id=user.id,
@@ -319,6 +415,20 @@ class TelegramStoryBot:
                 action=f"Generación terminada y guardada en {story_directory}",
                 category="éxito",
             )
+            usage_path = Path(story_directory) / "llm_usage_summary.json"
+            if progress_message_id is not None and usage_path.is_file():
+                try:
+                    import json
+                    usage = json.loads(usage_path.read_text(encoding="utf-8"))
+                    await self._safe_edit_progress(
+                        context, chat_id, progress_message_id,
+                        "[██████████] 100% — Historia terminada\n"
+                        f"Gemini: {usage.get('calls', 0)} llamadas, "
+                        f"{usage.get('total_tokens', 0)} tokens, "
+                        f"{round(usage.get('total_wait_seconds', 0))}s esperando cuota.",
+                    )
+                except (OSError, ValueError):
+                    pass
             story_path = Path(story_directory) / "story.md"
             context.user_data["state"] = "delivering"
             log_user_action(
@@ -362,6 +472,8 @@ class TelegramStoryBot:
                         ),
                     )
                     await self._ask_metric(context, chat_id)
+                    if job_id and self.queue:
+                        self.queue.finish(job_id, "completed")
             except Exception:
                 log_user_action(
                     LOGGER,
@@ -384,7 +496,41 @@ class TelegramStoryBot:
                     user,
                 )
         finally:
-            self.active_users.discard(user.id)
+            if job_id and self.queue:
+                job = self.queue.get(job_id)
+                if job and job.status == "running":
+                    self.queue.finish(job_id, "failed", error_code="DELIVERY_FAILED")
+
+    async def _refresh_queue(self, application) -> None:
+        if not self.queue:
+            return
+        jobs = self.queue.active()
+        average = self.queue.average_duration()
+        for position, job in enumerate(jobs, 1):
+            if job.status == "running":
+                text = "Tu historia se está generando ahora. Posición 1."
+            else:
+                estimate = "estimación aún no disponible"
+                if average:
+                    low = max(1, round((position - 1) * average * .8 / 60))
+                    high = max(low, round((position - 1) * average * 1.2 / 60))
+                    estimate = f"{low}–{high} minutos"
+                text = (
+                    f"Tu historia está en la posición {position}.\n"
+                    f"Tiempo estimado: {estimate}.\n"
+                    "Te avisaré automáticamente cuando avance."
+                )
+            if job.progress_message_id:
+                try:
+                    await application.bot.edit_message_text(
+                        chat_id=job.chat_id, message_id=job.progress_message_id, text=text,
+                    )
+                except TelegramError:
+                    try:
+                        message = await application.bot.send_message(chat_id=job.chat_id, text=text)
+                        self.queue.set_progress_message(job.id, message.message_id)
+                    except TelegramError:
+                        pass
 
     async def _safe_edit_progress(
         self, context, chat_id: int, message_id: int, text: str
@@ -607,6 +753,9 @@ def _evaluator_name(user) -> str:
 
 
 def build_application(token: str, bot: TelegramStoryBot) -> Application:
+    async def post_init(application) -> None:
+        await bot.restore_queue(application)
+
     application = (
         Application.builder()
         .token(token)
@@ -616,6 +765,7 @@ def build_application(token: str, bot: TelegramStoryBot) -> Application:
         .media_write_timeout(60)
         .pool_timeout(10)
         .concurrent_updates(True)
+        .post_init(post_init)
         .build()
     )
     application.add_handler(CommandHandler("start", bot.start))
@@ -643,7 +793,11 @@ def main() -> int:
         settings = load_settings()
         generator = create_generator(settings.generator_name)
         application = build_application(
-            settings.telegram_token, TelegramStoryBot(generator)
+            settings.telegram_token,
+            TelegramStoryBot(
+                generator,
+                QueueRepository(settings.project_root / "Stories" / "telegram_queue.sqlite3"),
+            ),
         )
     except (TelegramConfigurationError, ValueError) as exc:
         LOGGER.error("%s", exc)

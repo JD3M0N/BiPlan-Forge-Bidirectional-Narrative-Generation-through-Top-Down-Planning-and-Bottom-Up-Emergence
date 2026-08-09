@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 import sys
 
+from asg_top_down.errors import ASGError
+
 from colorama import Fore, Style, just_fix_windows_console
 
 COLORS = {
@@ -44,7 +46,12 @@ class ConsoleFormatter(logging.Formatter):
         lines.append(f"Acción  : {record.getMessage()}")
         if record.exc_info:
             exception = record.exc_info[1]
-            lines.append(f"Detalle : {exception}")
+            detail = (
+                exception.public_message()
+                if isinstance(exception, ASGError)
+                else f"Error interno inesperado ({type(exception).__name__})."
+            )
+            lines.append(f"Detalle : {detail}")
         lines.append(f"{'─' * 62}{Style.RESET_ALL}")
         return "\n".join(lines)
 

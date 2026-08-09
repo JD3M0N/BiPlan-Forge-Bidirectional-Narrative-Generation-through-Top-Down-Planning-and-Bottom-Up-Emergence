@@ -26,7 +26,12 @@ def main() -> int:
             print("Error: el prompt no puede estar vacío.", file=sys.stderr)
             return 2
         settings = load_settings()
-        provider = GeminiProvider(settings.api_key, settings.model)
+        provider = GeminiProvider(
+            settings.api_key, settings.model,
+            rpm_limit=settings.rpm_limit, rpm_reserve=settings.rpm_reserve,
+            tpm_limit=settings.tpm_limit, max_retries=settings.max_retries,
+            max_retry_delay=settings.max_retry_delay,
+        )
         orchestrator = StoryOrchestrator(provider, settings.output_root)
         print(f"\nGenerando con {settings.model}...")
         output = orchestrator.run(
@@ -39,7 +44,7 @@ def main() -> int:
         print(f"\nHistoria terminada: {output / 'story.md'}")
         return 0
     except (ASGError, KeyboardInterrupt) as exc:
-        message = str(exc) if str(exc) else "operación cancelada"
+        message = exc.public_message() if isinstance(exc, ASGError) else "operación cancelada"
         print(f"\nError: {message}", file=sys.stderr)
         return 1
 

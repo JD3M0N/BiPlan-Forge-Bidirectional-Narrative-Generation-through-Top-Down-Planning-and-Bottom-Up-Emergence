@@ -1,7 +1,7 @@
 """Validated contracts exchanged by the STORYTELLER-style pipeline."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -203,6 +203,58 @@ class ChapterComplianceArtifact(BaseModel):
     revision_instructions: list[str] = Field(default_factory=list)
 
 
+class ChapterComplianceAttempt(BaseModel):
+    chapter_id: str
+    chapter_title: str
+    attempt: int = Field(ge=1, le=3)
+    target_words: int
+    actual_words: int
+    word_difference: int
+    expected_node_ids: list[str]
+    covered_node_ids: list[str]
+    missing_node_ids: list[str]
+    expected_goals: list[str]
+    covered_goals: list[str]
+    missing_goals: list[str]
+    passed: bool
+    issues: list[str]
+    revision_instructions: list[str]
+
+
+class ChapterComplianceHistory(BaseModel):
+    attempts: list[ChapterComplianceAttempt] = Field(default_factory=list)
+
+
+class ErrorReport(BaseModel):
+    code: str
+    stage: str
+    run_id: str
+    summary: str
+    details: dict[str, Any] = Field(default_factory=dict)
+    recommendations: list[str] = Field(default_factory=list)
+
+
+class LLMUsageRecord(BaseModel):
+    operation: str
+    model: str
+    timestamp: datetime
+    duration_seconds: float = Field(ge=0)
+    prompt_tokens: int = Field(default=0, ge=0)
+    candidate_tokens: int = Field(default=0, ge=0)
+    thoughts_tokens: int = Field(default=0, ge=0)
+    cached_tokens: int = Field(default=0, ge=0)
+    total_tokens: int = Field(default=0, ge=0)
+    retries: int = Field(default=0, ge=0)
+    wait_seconds: float = Field(default=0, ge=0)
+
+
+class LLMUsageArtifact(BaseModel):
+    records: list[LLMUsageRecord] = Field(default_factory=list)
+    calls: int = 0
+    total_tokens: int = 0
+    total_wait_seconds: float = 0
+
+
 class ReviewArtifact(BaseModel):
     coherence_score: int = Field(ge=1, le=10)
     continuity_score: int = Field(ge=1, le=10)
@@ -223,3 +275,5 @@ class RunMetadata(BaseModel):
     status: Literal["running", "completed", "failed"]
     completed_stages: list[str] = Field(default_factory=list)
     error: str | None = None
+    error_code: str | None = None
+    error_stage: str | None = None

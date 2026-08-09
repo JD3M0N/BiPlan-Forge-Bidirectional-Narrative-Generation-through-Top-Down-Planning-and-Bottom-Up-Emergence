@@ -8,7 +8,8 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from .schemas import RunMetadata
+from .errors import ASGError
+from .schemas import ErrorReport, RunMetadata
 
 
 def slugify(value: str) -> str:
@@ -37,6 +38,20 @@ class ArtifactRepository:
         )
         self._write_metadata()
 
+    @classmethod
+    def open_existing(cls, run_dir: Path) -> "ArtifactRepository":
+        instance = cls.__new__(cls)
+        instance.run_dir = Path(run_dir)
+        instance.metadata = RunMetadata.model_validate_json(
+            (instance.run_dir / "metadata.json").read_text(encoding="utf-8")
+        )
+        instance.metadata.status = "running"
+        instance.metadata.error = None
+        instance.metadata.error_code = None
+        instance.metadata.error_stage = None
+        instance._write_metadata()
+        return instance
+
     def save_json(self, filename: str, value: BaseModel) -> None:
         content = json.dumps(
             value.model_dump(mode="json"), ensure_ascii=False, indent=2
@@ -51,7 +66,8 @@ class ArtifactRepository:
         destination.write_text(value.rstrip() + "\n", encoding="utf-8")
 
     def complete_stage(self, stage: str) -> None:
-        self.metadata.completed_stages.append(stage)
+        if stage not in self.metadata.completed_stages:
+            self.metadata.completed_stages.append(stage)
         self.metadata.updated_at = datetime.now(timezone.utc)
         self._write_metadata()
 
@@ -60,9 +76,28 @@ class ArtifactRepository:
         self.metadata.updated_at = datetime.now(timezone.utc)
         self._write_metadata()
 
-    def fail(self, error: str) -> None:
+    def fail(self, error: Exception) -> None:
+        if isinstance(error, ASGError):
+            error.run_id = self.metadata.run_id
+            self.metadata.error = error.summary
+            self.metadata.error_code = error.code
+            self.metadata.error_stage = error.stage
+            self.save_json("error_report.json", ErrorReport(
+                code=error.code, stage=error.stage, run_id=self.metadata.run_id,
+                summary=error.summary, details=error.details,
+                recommendations=error.recommendations,
+            ))
+        else:
+            self.metadata.error = "Ocurrió un error interno inesperado."
+            self.metadata.error_code = "UNEXPECTED_ERROR"
+            self.metadata.error_stage = "unknown"
+            self.save_json("error_report.json", ErrorReport(
+                code="UNEXPECTED_ERROR", stage="unknown", run_id=self.metadata.run_id,
+                summary="Ocurrió un error interno inesperado.",
+                details={"exception_type": type(error).__name__},
+                recommendations=["Consulta el registro local y vuelve a intentarlo."],
+            ))
         self.metadata.status = "failed"
-        self.metadata.error = error
         self.metadata.updated_at = datetime.now(timezone.utc)
         self._write_metadata()
 

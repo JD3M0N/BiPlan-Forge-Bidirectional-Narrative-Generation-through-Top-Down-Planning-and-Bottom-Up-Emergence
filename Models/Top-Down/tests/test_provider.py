@@ -2,7 +2,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from asg_top_down.errors import EmptyResponseError, ProviderError, StructuredResponseError
+from asg_top_down.errors import (
+    EmptyResponseError, GeminiDailyQuotaError, ProviderError, StructuredResponseError,
+)
 from asg_top_down.provider import GeminiProvider
 from asg_top_down.schemas import StoryRequest
 
@@ -11,11 +13,16 @@ class FakeModels:
     def __init__(self, response=None, error: Exception | None = None) -> None:
         self.response = response
         self.error = error
+        self.count_calls = 0
 
     def generate_content(self, **kwargs):
         if self.error:
             raise self.error
         return self.response
+
+    def count_tokens(self, **kwargs):
+        self.count_calls += 1
+        return SimpleNamespace(total_tokens=42)
 
 
 def provider_with(response=None, error: Exception | None = None) -> GeminiProvider:
@@ -49,6 +56,47 @@ def test_text_generation_rejects_empty_response() -> None:
 
 def test_provider_wraps_transport_errors() -> None:
     provider = provider_with(error=OSError("sin red"))
-    with pytest.raises(ProviderError, match="sin red"):
+    with pytest.raises(ProviderError, match="comunicarse con Gemini"):
         provider.generate_text(system_instruction="test", prompt="test")
 
+
+def test_usage_metadata_is_recorded_without_count_tokens_by_default() -> None:
+    response = SimpleNamespace(
+        text="respuesta",
+        usage_metadata=SimpleNamespace(
+            prompt_token_count=10, candidates_token_count=5,
+            thoughts_token_count=2, cached_content_token_count=1,
+            total_token_count=17,
+        ),
+    )
+    provider = provider_with(response)
+    assert provider.generate_text(system_instruction="test", prompt="test") == "respuesta"
+    assert provider._client.models.count_calls == 0
+    assert provider.usage_records[0].total_tokens == 17
+
+
+def test_usage_callback_receives_each_completed_call() -> None:
+    provider = provider_with(SimpleNamespace(text="respuesta", usage_metadata=None))
+    received = []
+    provider.usage_callback = received.append
+    provider.generate_text(system_instruction="test", prompt="test")
+    assert received == provider.usage_records
+
+
+def test_tpm_preflight_calls_count_tokens_only_when_configured() -> None:
+    provider = provider_with(SimpleNamespace(text="respuesta", usage_metadata=None))
+    acquired = []
+    provider._token_limiter = SimpleNamespace(acquire=lambda tokens, callback: acquired.append(tokens))
+    provider.wait_callback = None
+    provider.generate_text(system_instruction="sistema", prompt="texto")
+    assert provider._client.models.count_calls == 1
+    assert acquired == [42]
+
+
+def test_daily_quota_is_not_retried() -> None:
+    provider = provider_with(error=Exception(
+        "429 Quota exceeded for metric: requests_per_day, 'quotaId': 'PerDay'"
+    ))
+    provider.max_retries = 3
+    with pytest.raises(GeminiDailyQuotaError):
+        provider._generate("text", provider._client.models.generate_content)

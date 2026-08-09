@@ -24,9 +24,11 @@ def test_repository_never_serializes_an_api_key(tmp_path) -> None:
         "created_at",
         "updated_at",
         "status",
-        "completed_stages",
-        "error",
-    }
+            "completed_stages",
+            "error",
+            "error_code",
+            "error_stage",
+        }
 
 
 def test_settings_require_api_key(tmp_path, monkeypatch) -> None:
@@ -48,4 +50,3 @@ def test_cli_rejects_empty_prompt(monkeypatch, capsys) -> None:
     monkeypatch.setattr("builtins.input", lambda _: "")
     assert cli.main() == 2
     assert "no puede estar vacío" in capsys.readouterr().err
-

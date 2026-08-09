@@ -59,3 +59,8 @@ DEFAULT_REGISTRY.register("mi-modelo", MiGenerador)
 
 Después establece `STORY_GENERATOR=mi-modelo`. Los handlers de Telegram no
 necesitan cambios.
+Las solicitudes de historias se guardan en `Stories/telegram_queue.sqlite3` y
+se procesan de una en una. El mensaje de progreso muestra la posición FIFO y
+una estimación basada en las últimas diez historias. `/cancel` retira una
+solicitud que aún esté esperando. Tras reiniciar el bot, los trabajos
+interrumpidos vuelven al frente de la cola y se reanudan desde sus artefactos.

@@ -15,6 +15,11 @@ class Settings:
     api_key: str
     model: str
     output_root: Path
+    rpm_limit: int = 15
+    rpm_reserve: int = 1
+    tpm_limit: int = 0
+    max_retries: int = 3
+    max_retry_delay: int = 120
 
 
 def find_project_root(start: Path | None = None) -> Path:
@@ -38,5 +43,9 @@ def load_settings(start: Path | None = None) -> Settings:
         model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
         or "gemini-2.5-flash",
         output_root=root / "Stories" / "Top-Down",
+        rpm_limit=max(1, int(os.getenv("GEMINI_RPM_LIMIT", "15"))),
+        rpm_reserve=max(0, int(os.getenv("GEMINI_RPM_RESERVE", "1"))),
+        tpm_limit=max(0, int(os.getenv("GEMINI_TPM_LIMIT", "0"))),
+        max_retries=max(1, int(os.getenv("GEMINI_MAX_RETRIES", "3"))),
+        max_retry_delay=max(1, int(os.getenv("GEMINI_MAX_RETRY_DELAY", "120"))),
     )
-

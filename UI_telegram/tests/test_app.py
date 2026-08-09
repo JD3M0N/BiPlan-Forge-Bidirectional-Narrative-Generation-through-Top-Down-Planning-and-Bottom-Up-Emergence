@@ -8,6 +8,7 @@ from telegram.error import BadRequest, TimedOut
 from asg_telegram import app
 from asg_telegram.app import TelegramStoryBot, _evaluator_name, build_application
 from asg_top_down.progress import ProgressUpdate
+from asg_top_down.errors import ChapterComplianceError
 
 
 class FakeGenerator:
@@ -20,6 +21,22 @@ class FakeGenerator:
     def generate(self, prompt: str) -> Path:
         self.prompts.append(prompt)
         return self.story_directory
+
+
+class FailingGenerator:
+    display_name = "Fake"
+
+    def generate(self, prompt: str):
+        error = ChapterComplianceError(
+            "No se pudo completar el capítulo 1 «El eco».",
+            details={
+                "attempts": 3,
+                "missing_node_ids": ["node_2"],
+                "missing_goals": ["node_2:investigation"],
+            },
+        )
+        error.run_id = "run-seguro"
+        raise error
 
 
 class FakeBot:
@@ -109,6 +126,26 @@ def test_generation_edits_one_progress_message_until_complete(tmp_path):
     assert len(bot.edits) == 2
     assert {edit["message_id"] for edit in bot.edits} == {99}
     assert "100% — Historia terminada" in bot.edits[-1]["text"]
+
+
+def test_generation_reports_actionable_safe_error() -> None:
+    handler = TelegramStoryBot(FailingGenerator())
+    bot = FakeBot()
+    context = SimpleNamespace(bot=bot, user_data={})
+    user = SimpleNamespace(id=11, username="ana", full_name="Ana")
+
+    asyncio.run(handler._generate_and_deliver(
+        context=context, chat_id=20, user=user, prompt="Historia",
+        progress_message_id=99,
+    ))
+
+    notice = bot.messages[-1]["text"]
+    assert "CHAPTER_COMPLIANCE_FAILED" in notice
+    assert "node_2" in notice
+    assert "node_2:investigation" in notice
+    assert "run-seguro" in notice
+    assert "GEMINI_API_KEY" not in notice
+    assert "scenes:" in bot.edits[-1]["text"]
 
 
 def test_active_users_are_isolated(tmp_path):

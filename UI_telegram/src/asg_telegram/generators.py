@@ -16,8 +16,12 @@ class StoryGenerator(Protocol):
     def display_name(self) -> str: ...
 
     def generate(
-        self, prompt: str, on_progress: ProgressCallback | None = None
+        self, prompt: str, on_progress: ProgressCallback | None = None,
+        on_run_created=None,
     ) -> Path: ...
+
+    def resume(self, run_dir: Path, on_progress: ProgressCallback | None = None,
+               on_run_created=None) -> Path: ...
 
 
 class TopDownGenerator:
@@ -26,12 +30,31 @@ class TopDownGenerator:
         return "Top-Down"
 
     def generate(
-        self, prompt: str, on_progress: ProgressCallback | None = None
+        self, prompt: str, on_progress: ProgressCallback | None = None,
+        on_run_created=None,
     ) -> Path:
         settings = load_top_down_settings()
-        provider = GeminiProvider(settings.api_key, settings.model)
+        provider = GeminiProvider(
+            settings.api_key, settings.model,
+            rpm_limit=settings.rpm_limit, rpm_reserve=settings.rpm_reserve,
+            tpm_limit=settings.tpm_limit, max_retries=settings.max_retries,
+            max_retry_delay=settings.max_retry_delay,
+        )
         return StoryOrchestrator(provider, settings.output_root).run(
-            prompt, on_progress=on_progress
+            prompt, on_progress=on_progress, on_run_created=on_run_created,
+        )
+
+    def resume(self, run_dir: Path, on_progress: ProgressCallback | None = None,
+               on_run_created=None) -> Path:
+        settings = load_top_down_settings()
+        provider = GeminiProvider(
+            settings.api_key, settings.model,
+            rpm_limit=settings.rpm_limit, rpm_reserve=settings.rpm_reserve,
+            tpm_limit=settings.tpm_limit, max_retries=settings.max_retries,
+            max_retry_delay=settings.max_retry_delay,
+        )
+        return StoryOrchestrator(provider, settings.output_root).resume(
+            run_dir, on_progress=on_progress, on_run_created=on_run_created,
         )
 
 

@@ -37,8 +37,10 @@ class ChapterComplianceAgent(Agent[ChapterComplianceArtifact]):
         return self.provider.generate_structured(
             system_instruction=(
                 "Audita un capítulo. passed solo puede ser true cuando se realizan todos los nodos "
-                "SVO, todos sus goals y el conteo está dentro de ±10% del target. Cuenta palabras "
-                "separadas por espacios y devuelve instrucciones concretas si falla."
+                "SVO, todos sus goals, la continuidad y las fases dramáticas asignadas. Cuenta "
+                "las palabras como dato informativo, pero la longitud nunca decide passed. "
+                "Devuelve instrucciones concretas si falla. En covered_goals usa exactamente claves "
+                "con formato node_id:taxonomy_beat para cada goal realizado."
             ),
             prompt=f"CAPÍTULO:\n{json_text(chapter)}\n\nNODOS:\n{json_text(nodes)}\n\nTEXTO:\n{text}",
             schema=ChapterComplianceArtifact,
