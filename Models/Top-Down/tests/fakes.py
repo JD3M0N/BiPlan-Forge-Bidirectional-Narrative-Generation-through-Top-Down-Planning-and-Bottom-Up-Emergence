@@ -53,12 +53,14 @@ class FakeProvider:
     def __init__(self, fail_on: str | None = None, *, scene_words: int = 300,
                  story_words: int = 1500) -> None:
         self.calls = []
+        self.system_instructions = []
         self.text_calls = Counter()
         self.fail_on = fail_on
         self.scene_words = scene_words
         self.story_words = story_words
 
     def generate_structured(self, *, system_instruction: str, prompt: str, schema: type[BaseModel]) -> BaseModel:
+        self.system_instructions.append(system_instruction)
         self.calls.append(("structured", schema.__name__))
         if self.fail_on == schema.__name__:
             raise RuntimeError("fallo simulado")
@@ -73,6 +75,7 @@ class FakeProvider:
         return RESPONSES[schema].model_copy(deep=True)
 
     def generate_text(self, *, system_instruction: str, prompt: str) -> str:
+        self.system_instructions.append(system_instruction)
         kind = "story" if "editor literario" in system_instruction else "scene"
         self.calls.append(("text", kind))
         self.text_calls[kind] += 1

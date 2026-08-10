@@ -19,7 +19,9 @@ class SceneWriterAgent(Agent[str]):
                 "Eres escritor de ficción. Redacta únicamente el capítulo solicitado en Markdown. "
                 "Realiza explícitamente todos los nodos en orden topológico, sus goals taxonómicos "
                 "y fases dramáticas sin mencionar el proceso. Respeta el presupuesto de palabras "
-                "y no contradigas el texto previo ni el NEKG."
+                "y no contradigas el texto previo ni el NEKG. Adapta convenciones, voz y recursos "
+                "al género solicitado, incluidos subgéneros y combinaciones de géneros; no "
+                "asumas por defecto una ficción convencional."
             ),
             prompt=(f"REQUISITOS:\n{json_text(request)}\n\nPLAN:\n{json_text(plan)}\n\nMUNDO:\n{json_text(world)}"
                     f"\n\nPERSONAJES:\n{json_text(characters)}\n\nCAPÍTULO:\n{json_text(chapter)}"

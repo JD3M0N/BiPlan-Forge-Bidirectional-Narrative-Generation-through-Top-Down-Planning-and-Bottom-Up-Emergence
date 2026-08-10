@@ -21,3 +21,16 @@ def test_defaults_and_sv_normalization() -> None:
     assert RESPONSES[StoryRequest].target_words == 1500
     node = RESPONSES[DirectedStoryArtifact].nodes[0].model_copy(update={"object": ""})
     assert node.model_validate(node.model_dump()).object == node.subject
+
+
+def test_analyst_receives_configured_default_and_explicit_priority() -> None:
+    provider = FakeProvider()
+    analyst = AnalystAgent(provider, default_target_words=2400)
+    explicit = analyst.run(
+        "Escribe una historia de 900 palabras"
+    )
+    instruction = provider.system_instructions[-1]
+    assert "2400 palabras" in instruction
+    assert "explícitamente" in instruction
+    assert explicit.target_words == 900
+    assert analyst.run("Escribe una historia breve").target_words == 2400

@@ -32,7 +32,10 @@ def main() -> int:
             tpm_limit=settings.tpm_limit, max_retries=settings.max_retries,
             max_retry_delay=settings.max_retry_delay,
         )
-        orchestrator = StoryOrchestrator(provider, settings.output_root)
+        orchestrator = StoryOrchestrator(
+            provider, settings.output_root,
+            default_target_words=settings.default_target_words,
+        )
         print(f"\nGenerando con {settings.model}...")
         output = orchestrator.run(
             prompt,

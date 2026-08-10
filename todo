@@ -11,7 +11,7 @@
   - Terminado cuando: el usuario puede proporcionar por voz la solicitud de una
     historia y el sistema la utiliza como entrada del pipeline.
 
-- [ ] TODO: Crear un módulo agente que modifique prompts.
+- [x] TODO: Crear un módulo agente que modifique prompts.
   - Terminado cuando: el agente puede revisar y mejorar un prompt antes de
     enviarlo al modelo encargado de generar la historia.
 
@@ -24,9 +24,9 @@
 
 - [ ] TODO: Crear db de esquemas de historias
 - [ ] TODO: Crear directo que haga story beats into scenes
-- [ ] TODO: Verificar los story beats con The CPC Method and Greedy Cycle-breaking para asegurar que no haya ciclos.
+- [x] TODO: Verificar los story beats con The CPC Method and Greedy Cycle-breaking para asegurar que no haya ciclos.
 - [ ] TODO: Comentarle a piad la idea de un grafo (mapa) de lugares donde guardar la posicion de los personajes
 - [ ] TODO: Usar un modelo de embeding para reconocimiento lexico del prompt del usuario para la taxonomia 
 - [ ] TODO: Ver si tiene sentido ver las situaciones dramaticas de polti para el gestor de drama
-- [ ] TODO: Modificar Control de palabras por capítulo (±10 %) y global (±5 %).
-- [ ] TODO: Annadir versionado a todo
+- [x] TODO: Modificar Control de palabras por capítulo (±10 %) y global (±5 %).
+- [x] TODO: Annadir versionado a todo

@@ -58,7 +58,7 @@ def test_top_down_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
             self.model_name = model
 
     class Orchestrator:
-        def __init__(self, provider, output_root):
+        def __init__(self, provider, output_root, default_target_words=1500):
             pass
 
         def run(self, prompt):
@@ -68,7 +68,10 @@ def test_top_down_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
     settings = type(
         "Settings",
         (),
-        {"api_key": "test", "model": "fake", "output_root": tmp_path},
+        {
+            "api_key": "test", "model": "fake", "output_root": tmp_path,
+            "default_target_words": 1500,
+        },
     )()
     monkeypatch.setattr(app, "load_top_down_settings", lambda: settings)
     monkeypatch.setattr(app, "GeminiProvider", Provider)
@@ -123,7 +126,7 @@ def test_top_down_assisted_prompt_uses_selected_alternative(
             )
 
     class Orchestrator:
-        def __init__(self, provider, output_root):
+        def __init__(self, provider, output_root, default_target_words=1500):
             captured["orchestrator_provider"] = provider
 
         def run(self, prompt):
@@ -133,7 +136,10 @@ def test_top_down_assisted_prompt_uses_selected_alternative(
     settings = type(
         "Settings",
         (),
-        {"api_key": "test", "model": "fake", "output_root": tmp_path},
+        {
+            "api_key": "test", "model": "fake", "output_root": tmp_path,
+            "default_target_words": 1500,
+        },
     )()
     monkeypatch.setattr(app, "load_top_down_settings", lambda: settings)
     monkeypatch.setattr(app, "GeminiProvider", Provider)

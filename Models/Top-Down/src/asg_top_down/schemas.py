@@ -225,6 +225,24 @@ class ChapterComplianceHistory(BaseModel):
     attempts: list[ChapterComplianceAttempt] = Field(default_factory=list)
 
 
+class LengthAuditEntry(BaseModel):
+    target_words: int = Field(ge=1)
+    minimum_words: int = Field(ge=0)
+    maximum_words: int = Field(ge=1)
+    actual_words: int = Field(ge=0)
+    within_tolerance: bool
+
+
+class ChapterLengthAudit(LengthAuditEntry):
+    chapter_id: str
+    chapter_title: str
+
+
+class LengthAuditArtifact(BaseModel):
+    chapters: list[ChapterLengthAudit] = Field(default_factory=list)
+    total: LengthAuditEntry
+
+
 class ErrorReport(BaseModel):
     code: str
     stage: str

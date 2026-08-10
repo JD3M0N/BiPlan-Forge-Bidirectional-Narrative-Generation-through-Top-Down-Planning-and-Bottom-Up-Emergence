@@ -23,6 +23,8 @@ class PlannerAgent(Agent[StoryPlanArtifact]):
                 "del catálogo y como máximo dos secundarios distintos. Fundamenta la elección "
                 "en el prompt y crea una progresión causal de al menos tres fases. Usa los IDs "
                 "canónicos sin inventar arquetipos."
+                " La progresión debe mostrar causalidad y tensión creciente, incluir puntos "
+                "de giro, clímax y resolución, y conectar el arco del protagonista con el tema."
             ),
             prompt=f"REQUISITOS:\n{json_text(request)}\n\nCATÁLOGO:\n{json_text(catalog)}",
             schema=StoryPlanArtifact,

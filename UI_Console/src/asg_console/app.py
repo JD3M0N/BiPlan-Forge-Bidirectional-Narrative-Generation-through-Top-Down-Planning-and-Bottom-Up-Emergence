@@ -65,7 +65,10 @@ class TopDownMenu:
                 if prompt is None:
                     continue
             self.output(f"Generando con {settings.model}...")
-            orchestrator = StoryOrchestrator(provider, settings.output_root)
+            orchestrator = StoryOrchestrator(
+                provider, settings.output_root,
+                default_target_words=settings.default_target_words,
+            )
             if "on_progress" in inspect.signature(orchestrator.run).parameters:
                 output = orchestrator.run(
                     prompt,

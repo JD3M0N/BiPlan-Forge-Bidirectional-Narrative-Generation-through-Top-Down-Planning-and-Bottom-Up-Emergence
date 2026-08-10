@@ -40,7 +40,10 @@ class TopDownGenerator:
             tpm_limit=settings.tpm_limit, max_retries=settings.max_retries,
             max_retry_delay=settings.max_retry_delay,
         )
-        return StoryOrchestrator(provider, settings.output_root).run(
+        return StoryOrchestrator(
+            provider, settings.output_root,
+            default_target_words=settings.default_target_words,
+        ).run(
             prompt, on_progress=on_progress, on_run_created=on_run_created,
         )
 
@@ -53,7 +56,10 @@ class TopDownGenerator:
             tpm_limit=settings.tpm_limit, max_retries=settings.max_retries,
             max_retry_delay=settings.max_retry_delay,
         )
-        return StoryOrchestrator(provider, settings.output_root).resume(
+        return StoryOrchestrator(
+            provider, settings.output_root,
+            default_target_words=settings.default_target_words,
+        ).resume(
             run_dir, on_progress=on_progress, on_run_created=on_run_created,
         )
 

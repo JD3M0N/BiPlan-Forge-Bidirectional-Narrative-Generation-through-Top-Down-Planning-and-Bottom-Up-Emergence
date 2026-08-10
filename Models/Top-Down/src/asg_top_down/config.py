@@ -20,6 +20,7 @@ class Settings:
     tpm_limit: int = 0
     max_retries: int = 3
     max_retry_delay: int = 120
+    default_target_words: int = 1500
 
 
 def find_project_root(start: Path | None = None) -> Path:
@@ -38,6 +39,16 @@ def load_settings(start: Path | None = None) -> Settings:
         raise ConfigurationError(
             "Falta GEMINI_API_KEY. Añádela al archivo .env de la raíz."
         )
+    try:
+        default_target_words = int(os.getenv("STORY_DEFAULT_WORDS", "1500"))
+    except ValueError as exc:
+        raise ConfigurationError(
+            "STORY_DEFAULT_WORDS debe ser un número entero."
+        ) from exc
+    if not 300 <= default_target_words <= 20_000:
+        raise ConfigurationError(
+            "STORY_DEFAULT_WORDS debe estar entre 300 y 20000."
+        )
     return Settings(
         api_key=api_key,
         model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
@@ -48,4 +59,5 @@ def load_settings(start: Path | None = None) -> Settings:
         tpm_limit=max(0, int(os.getenv("GEMINI_TPM_LIMIT", "0"))),
         max_retries=max(1, int(os.getenv("GEMINI_MAX_RETRIES", "3"))),
         max_retry_delay=max(1, int(os.getenv("GEMINI_MAX_RETRY_DELAY", "120"))),
+        default_target_words=default_target_words,
     )

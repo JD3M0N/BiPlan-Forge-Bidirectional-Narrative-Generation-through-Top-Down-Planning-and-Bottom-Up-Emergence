@@ -12,17 +12,18 @@ from .agents import (
 )
 from .graph import StorylineGraphProcessor, StorylineValidationError, render_mermaid
 from .errors import (
-    ASGError, ChapterComplianceError, FinalLengthError,
+    ASGError, ChapterComplianceError,
     FreytagValidationError, QueueRecoveryError, StorylinePlanningError,
 )
 from .nekg import NarrativeEntityGraph
 from .provider import LanguageModelProvider
 from .progress import ProgressCallback, ProgressUpdate
 from .schemas import (
-    ChapterComplianceAttempt, ChapterComplianceHistory, NodeReview,
+    ChapterComplianceAttempt, ChapterComplianceHistory, ChapterLengthAudit, NodeReview,
     CharactersArtifact, DirectedStoryArtifact, FreytagReviewArtifact, LLMUsageArtifact,
     NodeReviewsArtifact, ReplanningAttempt, ReplanningHistoryArtifact,
-    ReviewArtifact, StoryPlanArtifact, StoryRequest, StorylineArtifact, WorldArtifact,
+    LengthAuditArtifact, LengthAuditEntry, ReviewArtifact, StoryPlanArtifact,
+    StoryRequest, StorylineArtifact, WorldArtifact,
 )
 from .storage import ArtifactRepository
 from .taxonomies import TaxonomyRepository
@@ -40,9 +41,12 @@ def _word_count(text: str) -> int:
     return len(text.split())
 
 
-def _length_bounds(target_words: int) -> tuple[int, int]:
-    """Return nearest-integer bounds for the accepted -10%/+20% range."""
-    return math.floor(target_words * .90 + .5), math.floor(target_words * 1.20 + .5)
+def _length_bounds(target_words: int, tolerance: float = .05) -> tuple[int, int]:
+    """Return nearest-integer bounds for a symmetric audit tolerance."""
+    return (
+        math.floor(target_words * (1 - tolerance) + .5),
+        math.floor(target_words * (1 + tolerance) + .5),
+    )
 
 
 def _load_checkpoint(schema, path: Path):
@@ -56,11 +60,12 @@ def _load_checkpoint(schema, path: Path):
 
 class StoryOrchestrator:
     def __init__(self, provider: LanguageModelProvider, output_root: Path,
-                 taxonomy_root: Path | None = None) -> None:
+                 taxonomy_root: Path | None = None,
+                 default_target_words: int = 1500) -> None:
         self.provider = provider
         self.output_root = output_root
         self.taxonomies = TaxonomyRepository(taxonomy_root, provider=provider)
-        self.analyst = AnalystAgent(provider)
+        self.analyst = AnalystAgent(provider, default_target_words)
         self.planner = PlannerAgent(provider, self.taxonomies)
         self.world_builder = WorldBuilderAgent(provider)
         self.character_designer = CharacterDesignerAgent(provider, self.taxonomies)
@@ -374,7 +379,6 @@ class StoryOrchestrator:
                 repository.complete_stage("review")
             correction = ""
             story = draft
-            minimum, maximum = _length_bounds(request.target_words)
             progress(90, "editing", "Editando la versión final")
             editing_dir = repository.run_dir / "editing"
             existing_attempts = sorted(editing_dir.glob("attempt-*.md")) if editing_dir.is_dir() else []
@@ -389,7 +393,7 @@ class StoryOrchestrator:
                     FreytagReviewArtifact.model_validate_json(saved_drama.read_text(encoding="utf-8"))
                     if saved_drama.is_file() else self.drama.run(graph, story)
                 )
-                editing_complete = minimum <= total <= maximum and final_drama.passed
+                editing_complete = final_drama.passed
             for edit_index in range(len(existing_attempts), 3):
                 if editing_complete:
                     break
@@ -398,13 +402,11 @@ class StoryOrchestrator:
                 final_drama = self.drama.run(graph, story)
                 repository.save_text(f"editing/attempt-{edit_index + 1}.md", story)
                 repository.save_json(f"editing/attempt-{edit_index + 1}-freytag.json", final_drama)
-                length_ok = minimum <= total <= maximum
-                if length_ok and final_drama.passed:
+                if final_drama.passed:
                     editing_complete = True
                     break
                 correction = "; ".join([
                     *final_drama.issues, *final_drama.revision_instructions,
-                    f"Conteo {total}; ajustar al rango permitido {minimum}-{maximum} palabras.",
                 ])
             if not editing_complete:
                 if not final_drama.passed:
@@ -413,16 +415,33 @@ class StoryOrchestrator:
                         details={"issues": final_drama.issues, "attempts": 3},
                         recommendations=final_drama.revision_instructions,
                     )
-                raise FinalLengthError(
-                    f"La historia terminó con {total} palabras; se permiten entre {minimum} y {maximum}.",
-                    details={
-                        "actual_words": total, "target_words": request.target_words,
-                        "minimum_words": minimum, "maximum_words": maximum,
-                        "attempts": 3,
-                    },
-                    recommendations=["Aumenta el margen solicitado o simplifica la trama."],
-                )
             repository.save_json("freytag_story_review.json", final_drama)
+            chapter_length_audits = []
+            for chapter, chapter_text in zip(graph.chapters, chapter_texts):
+                chapter_minimum, chapter_maximum = _length_bounds(
+                    chapter.target_words, .10
+                )
+                chapter_actual = _word_count(chapter_text)
+                chapter_length_audits.append(ChapterLengthAudit(
+                    chapter_id=chapter.id,
+                    chapter_title=chapter.title,
+                    target_words=chapter.target_words,
+                    minimum_words=chapter_minimum,
+                    maximum_words=chapter_maximum,
+                    actual_words=chapter_actual,
+                    within_tolerance=chapter_minimum <= chapter_actual <= chapter_maximum,
+                ))
+            minimum, maximum = _length_bounds(request.target_words, .05)
+            repository.save_json("length_audit.json", LengthAuditArtifact(
+                chapters=chapter_length_audits,
+                total=LengthAuditEntry(
+                    target_words=request.target_words,
+                    minimum_words=minimum,
+                    maximum_words=maximum,
+                    actual_words=total,
+                    within_tolerance=minimum <= total <= maximum,
+                ),
+            ))
             progress(98, "saving", "Guardando la historia")
             repository.save_text("story.md", story)
             save_usage()
