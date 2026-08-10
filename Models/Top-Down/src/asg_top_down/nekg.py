@@ -3,7 +3,7 @@
 import re
 import unicodedata
 
-from .schemas import EntityRelation, NarrativeEntity, NarrativeEntityGraphArtifact, PlotNode
+from .schemas import EntityRelation, EntityStateChange, NarrativeEntity, NarrativeEntityGraphArtifact, PlotNode
 
 
 def _key(value: str) -> str:
@@ -23,6 +23,17 @@ class NarrativeEntityGraph:
         relation = EntityRelation(source=source, verb=node.verb, target=target, plot_node_id=node.id, timestamp=node.timestamp)
         if relation not in self._relations:
             self._relations.append(relation)
+
+    def apply(self, node: PlotNode, state_changes: list[EntityStateChange] | None = None) -> None:
+        """Apply an accepted event immediately so it can ground the next CPN."""
+        self.add_node(node)
+        for change in state_changes or []:
+            entity_id = _key(change.entity)
+            entity = self._entities.setdefault(entity_id, NarrativeEntity(id=entity_id, name=change.entity))
+            entity.state[change.attribute] = change.value
+            entity.last_event_id = node.id
+        for entity_id in {_key(node.subject), _key(node.object)}:
+            self._entities[entity_id].last_event_id = node.id
 
     def related(self, subject: str, object_: str | None = None, limit: int = 10) -> list[EntityRelation]:
         source, target = _key(subject), _key(object_ or subject)

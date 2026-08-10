@@ -1,5 +1,32 @@
 # ASG Top-Down STORYTELLER
 
+La ruta de producción usa `StoryGenerator`, un planificador incremental fiel al
+bucle de STORYTELLER. Primero recupera conocimiento narrativo compositivo desde
+SQLite, crea capítulos y anclas CBN/CEN, y después genera y revisa cada CPN
+antes de incorporarlo a STORYLINE y NEKG. Un nodo rechazado se reintenta de
+forma aislada; los nodos posteriores consultan el estado ya aceptado.
+
+La base se reconstruye desde `schema_db/migrations/` y
+`schema_db/seeds/catalog.json` en `.cache/narrative-schemas.sqlite3`. Separa
+macrotramas, situaciones, arcos, beats, géneros y roles. La recuperación combina
+señales léxicas con embeddings de Gemini y cachea los vectores de documentos.
+
+```python
+from asg_top_down import StoryGenerator
+
+run = StoryGenerator(provider, output_root).generate(prompt_or_request)
+print(run.story_path)
+```
+
+Los artefactos v2 son `blueprint.json`, `retrieval_trace.json`, `outline.json`,
+`chapter_anchors.json`, `storyline.json`, `nekg.json`, `node_reviews.json`,
+`chapters/*.md`, `diagnostic_audit.json` y `story.md`. El diagnóstico no asigna
+puntuaciones de calidad.
+
+```powershell
+compare-story-runs Stories/Top-Down/anterior Stories/Top-Down/nueva --output comparacion.html
+```
+
 Pipeline modular que transforma requisitos en capítulos y nodos SVO de tipo
 CBN, CPN y CEN. La STORYLINE se acepta únicamente cuando todas sus dependencias
 forman un DAG, cada CPN pertenece a un camino CBN-CEN y los capítulos están

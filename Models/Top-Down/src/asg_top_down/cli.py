@@ -4,7 +4,7 @@ import sys
 
 from .config import load_settings
 from .errors import ASGError
-from .orchestrator import StoryOrchestrator
+from .generator import StoryGenerator
 from .progress import format_progress
 from .provider import GeminiProvider
 
@@ -31,10 +31,12 @@ def main() -> int:
             rpm_limit=settings.rpm_limit, rpm_reserve=settings.rpm_reserve,
             tpm_limit=settings.tpm_limit, max_retries=settings.max_retries,
             max_retry_delay=settings.max_retry_delay,
+            embedding_model=settings.embedding_model,
         )
-        orchestrator = StoryOrchestrator(
+        orchestrator = StoryGenerator(
             provider, settings.output_root,
             default_target_words=settings.default_target_words,
+            max_cpn_retries=settings.max_cpn_retries,
         )
         print(f"\nGenerando con {settings.model}...")
         output = orchestrator.run(
@@ -44,7 +46,7 @@ def main() -> int:
             ),
         )
         print()
-        print(f"\nHistoria terminada: {output / 'story.md'}")
+        print(f"\nHistoria terminada: {output.story_path}")
         return 0
     except (ASGError, KeyboardInterrupt) as exc:
         message = exc.public_message() if isinstance(exc, ASGError) else "operación cancelada"

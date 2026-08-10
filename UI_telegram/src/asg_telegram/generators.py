@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Callable, Protocol
 
 from asg_top_down.config import load_settings as load_top_down_settings
-from asg_top_down.orchestrator import StoryOrchestrator
+from asg_top_down import StoryGenerator as IncrementalStoryGenerator
 from asg_top_down.progress import ProgressCallback
 from asg_top_down.provider import GeminiProvider
 
@@ -39,13 +39,15 @@ class TopDownGenerator:
             rpm_limit=settings.rpm_limit, rpm_reserve=settings.rpm_reserve,
             tpm_limit=settings.tpm_limit, max_retries=settings.max_retries,
             max_retry_delay=settings.max_retry_delay,
+            embedding_model=settings.embedding_model,
         )
-        return StoryOrchestrator(
+        return IncrementalStoryGenerator(
             provider, settings.output_root,
             default_target_words=settings.default_target_words,
+            max_cpn_retries=settings.max_cpn_retries,
         ).run(
             prompt, on_progress=on_progress, on_run_created=on_run_created,
-        )
+        ).run_dir
 
     def resume(self, run_dir: Path, on_progress: ProgressCallback | None = None,
                on_run_created=None) -> Path:
@@ -55,13 +57,15 @@ class TopDownGenerator:
             rpm_limit=settings.rpm_limit, rpm_reserve=settings.rpm_reserve,
             tpm_limit=settings.tpm_limit, max_retries=settings.max_retries,
             max_retry_delay=settings.max_retry_delay,
+            embedding_model=settings.embedding_model,
         )
-        return StoryOrchestrator(
+        return IncrementalStoryGenerator(
             provider, settings.output_root,
             default_target_words=settings.default_target_words,
+            max_cpn_retries=settings.max_cpn_retries,
         ).resume(
             run_dir, on_progress=on_progress, on_run_created=on_run_created,
-        )
+        ).run_dir
 
 
 GeneratorFactory = Callable[[], StoryGenerator]

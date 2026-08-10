@@ -10,3 +10,5 @@ dist/
 build/
 .venv/
 Stories/
+.cache/
+story-comparison.html

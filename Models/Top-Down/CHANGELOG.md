@@ -2,6 +2,30 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [2.0.0] - 2026-08-09
+
+- Reimplementado el generador Top-Down mediante el flujo incremental de
+  STORYTELLER: estructura de capítulos, anclas CBN/CEN y generación y revisión
+  individual de cada CPN.
+- Incorporadas STORYLINE y NEKG activas durante la planificación, con relaciones
+  causales y seguimiento de ubicación, posesiones, conocimiento, estado y
+  relaciones de las entidades.
+- Sustituidas las taxonomías monolíticas por una base SQLite reproducible desde
+  migraciones y semillas, separando macrotramas, situaciones dramáticas, arcos,
+  beats, géneros y roles.
+- Añadida recuperación híbrida mediante FTS5/BM25 y embeddings Gemini cacheados,
+  con fallback léxico cuando el servicio de embeddings no está disponible.
+- Añadidas las interfaces públicas `StoryGenerator`, `StoryRun`,
+  `NarrativeSchemaRepository`, `IncrementalPlotPlanner` y `StorylineState`.
+- Reemplazada la puntuación autorreferencial de calidad por una auditoría
+  diagnóstica sin notas numéricas.
+- Añadidos artefactos versionados de blueprint, trazas de recuperación, outline,
+  anclas, revisiones de nodos, capítulos y estado narrativo.
+- Incorporado `compare-story-runs` para revisar visualmente historias anteriores
+  y nuevas lado a lado.
+- Añadidas pruebas de migración, caché, fallback sin red, recuperación híbrida,
+  planificación incremental, actualización del NEKG y comparación visual.
+
 ## [1.1.0] - 2026-08-09
 
 - Añadida la configuración `STORY_DEFAULT_WORDS`, con validación y prioridad

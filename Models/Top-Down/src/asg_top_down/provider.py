@@ -52,17 +52,23 @@ class LanguageModelProvider(Protocol):
 
     def generate_text(self, *, system_instruction: str, prompt: str) -> str: ...
 
+    def embed_query(self, text: str) -> list[float]: ...
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]: ...
+
 
 class GeminiProvider:
     """Adaptador pequeño que contiene todo el acoplamiento con google-genai."""
 
     def __init__(self, api_key: str, model_name: str, *, rpm_limit: int = 15,
                  rpm_reserve: int = 1, tpm_limit: int = 0,
-                 max_retries: int = 3, max_retry_delay: int = 120) -> None:
+                 max_retries: int = 3, max_retry_delay: int = 120,
+                 embedding_model: str = "gemini-embedding-2") -> None:
         from google import genai
         from google.genai import types
 
         self.model_name = model_name
+        self.embedding_model_name = embedding_model
         self.tpm_limit = tpm_limit
         self._token_limiter = TokenWindowLimiter(tpm_limit) if tpm_limit else None
         self.max_retries = max_retries
@@ -79,6 +85,31 @@ class GeminiProvider:
         self.wait_callback: Callable[[int, str], None] | None = None
         self.usage_callback: Callable[[LLMUsageRecord], None] | None = None
         self.usage_records: list[LLMUsageRecord] = []
+
+    def _embed(self, texts: list[str], prefix: str) -> list[list[float]]:
+        """Embed a batch using the asymmetric retrieval format recommended by Gemini."""
+        try:
+            contents = [f"{prefix}{text}" for text in texts]
+            # Embeddings 2 aggregates multiple contents into one multimodal vector;
+            # submit text documents independently so each catalog row keeps its vector.
+            if self.embedding_model_name.endswith("-2") and len(contents) > 1:
+                return [self._embed([content.removeprefix(prefix)], prefix)[0] for content in contents]
+            response = self._client.models.embed_content(
+                model=self.embedding_model_name, contents=contents,
+            )
+            embeddings = getattr(response, "embeddings", None)
+            if embeddings is None:
+                single = getattr(response, "embedding", None)
+                embeddings = [single] if single is not None else []
+            return [list(item.values) for item in embeddings]
+        except Exception as exc:
+            raise _safe_provider_error(exc) from exc
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._embed([text], "task: search result | query: ")[0]
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return self._embed(texts, "title: narrative schema | text: ")
 
     def _preflight_tokens(self, prompt: str, system_instruction: str) -> None:
         if not getattr(self, "_token_limiter", None):

@@ -85,6 +85,28 @@ class ChapterPlan(BaseModel):
     freytag_phases: list[FreytagPhase] = Field(min_length=1)
 
 
+class StoryOutlineArtifact(BaseModel):
+    """High-level STORYTELLER frame produced before any plot node exists."""
+
+    premise: str
+    synopsis: str
+    chapters: list[ChapterPlan] = Field(min_length=1)
+
+
+class ChapterAnchors(BaseModel):
+    chapter_id: str
+    begin_subject: str
+    begin_verb: str
+    begin_object: str
+    end_subject: str
+    end_verb: str
+    end_object: str
+
+
+class ChapterAnchorsArtifact(BaseModel):
+    anchors: list[ChapterAnchors] = Field(min_length=1)
+
+
 class PlotNode(BaseModel):
     id: str
     chapter_id: str
@@ -97,12 +119,79 @@ class PlotNode(BaseModel):
     local_order: int = Field(ge=1)
     target_words: int = Field(ge=1)
     goals: list[NodeGoal] = Field(min_length=1)
+    preconditions: list[str] = Field(default_factory=list)
+    effects: list[str] = Field(default_factory=list)
+    intention: str = ""
+    conflict: str = ""
 
     @model_validator(mode="after")
     def normalize_sv(self) -> "PlotNode":
         if not self.object.strip():
             self.object = self.subject
         return self
+
+
+class EntityStateChange(BaseModel):
+    entity: str
+    attribute: Literal["location", "possession", "knowledge", "status", "relationship"]
+    value: str
+
+
+class PlotNodeProposal(BaseModel):
+    subject: str
+    verb: str
+    object: str
+    purpose: str
+    schema_beat_id: str
+    preconditions: list[str] = Field(min_length=1)
+    effects: list[str] = Field(min_length=1)
+    intention: str = Field(min_length=1)
+    conflict: str = Field(min_length=1)
+    reaches_chapter_end: bool = False
+    state_changes: list[EntityStateChange] = Field(default_factory=list)
+
+
+class PlotNodeReview(BaseModel):
+    accepted: bool
+    causal: bool
+    intentional: bool
+    conflict_present: bool
+    continuous: bool
+    novel: bool
+    advances_ending: bool
+    world_consistent: bool
+    issues: list[str] = Field(default_factory=list)
+    revised: PlotNodeProposal | None = None
+
+    @model_validator(mode="after")
+    def acceptance_is_earned(self) -> "PlotNodeReview":
+        checks = (self.causal, self.intentional, self.conflict_present, self.continuous,
+                  self.novel, self.advances_ending, self.world_consistent)
+        if self.accepted and not all(checks):
+            raise ValueError("accepted CPN must pass every narrative check")
+        return self
+
+
+class AcceptedNodeRecord(BaseModel):
+    node: PlotNode
+    state_changes: list[EntityStateChange] = Field(default_factory=list)
+    review: PlotNodeReview
+    attempt: int = Field(ge=1)
+
+
+class IncrementalStorylineArtifact(BaseModel):
+    chapters: list[ChapterPlan]
+    nodes: list[PlotNode]
+    accepted_edges: list["NarrativeEdge"]
+    topological_order: list[str]
+
+
+class DiagnosticAudit(BaseModel):
+    causal_issues: list[str] = Field(default_factory=list)
+    intentionality_issues: list[str] = Field(default_factory=list)
+    continuity_issues: list[str] = Field(default_factory=list)
+    template_like_passages: list[str] = Field(default_factory=list)
+    revision_suggestions: list[str] = Field(default_factory=list)
 
 
 class NarrativeEdge(BaseModel):
@@ -142,6 +231,8 @@ class NarrativeEntity(BaseModel):
     id: str
     name: str
     kinds: list[str] = Field(default_factory=list)
+    state: dict[str, str] = Field(default_factory=dict)
+    last_event_id: str | None = None
 
 
 class EntityRelation(BaseModel):

@@ -26,7 +26,7 @@ from asg_escape_room.narrative import (
 from asg_escape_room.storage import RunRepository
 from asg_prompt_crafter import CraftResult, PromptCrafterAgent
 from asg_top_down.config import load_settings as load_top_down_settings
-from asg_top_down.orchestrator import StoryOrchestrator
+from asg_top_down import StoryGenerator as StoryOrchestrator
 from asg_top_down.progress import format_progress
 from asg_top_down.provider import GeminiProvider
 
@@ -76,7 +76,8 @@ class TopDownMenu:
                 )
             else:
                 output = orchestrator.run(prompt)
-            self.output(f"Historia terminada: {output / 'story.md'}")
+            output_dir = output.run_dir if hasattr(output, "run_dir") else output
+            self.output(f"Historia terminada: {output_dir / 'story.md'}")
 
     def _prompt_mode(self) -> str | None:
         while True:
