@@ -24,6 +24,12 @@ Los artefactos v2 incluyen `blueprint.json`, `craft_contract.json`, `outline.jso
 `diagnostic_audit.json` y `story.md`. El diagnóstico no asigna puntuaciones de
 calidad.
 
+Durante la construcción incremental, `planning_checkpoint/` conserva STORYLINE,
+NEKG y el historial de revisiones después de cada aceptación o rechazo. Una
+respuesta estructurada inválida se reintenta una vez; si una revisión CPN sigue
+siendo inválida o contradictoria, se registra como intento rechazado sin perder
+la ejecución completa.
+
 El contrato de craft registra promesas con planteamiento, progreso y pago; los
 sliders de simpatía, competencia y proactividad de cada personaje principal; y
 los ciclos `yes_but`/`no_and`. Esos requisitos se enlazan a nodos aceptados,

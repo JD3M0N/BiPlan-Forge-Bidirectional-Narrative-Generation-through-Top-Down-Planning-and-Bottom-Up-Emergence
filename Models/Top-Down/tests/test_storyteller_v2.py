@@ -4,6 +4,7 @@ import pytest
 
 from asg_top_down.generator import StoryGenerator
 from asg_top_down.compare import build_comparison
+from asg_top_down.errors import StorylinePlanningError, StructuredResponseError
 from asg_top_down.incremental import IncrementalPlotPlanner
 from asg_top_down.narrative_db import NarrativeSchemaRepository
 from asg_top_down.schemas import (
@@ -152,6 +153,28 @@ class RevisionProvider(V2Provider):
         return super().generate_text(system_instruction=system_instruction, prompt=prompt)
 
 
+class InvalidNodeReviewProvider(V2Provider):
+    def __init__(self, invalid_reviews: int):
+        super().__init__()
+        self.invalid_reviews = invalid_reviews
+        self.review_calls = 0
+
+    def generate_structured(self, *, system_instruction, prompt, schema):
+        if schema is PlotNodeReview:
+            self.review_calls += 1
+            if self.review_calls <= self.invalid_reviews:
+                raise StructuredResponseError(
+                    "respuesta inválida simulada",
+                    details={
+                        "schema": "PlotNodeReview", "attempts": 2,
+                        "validation_errors": [{"location": "$", "type": "model_validator"}],
+                    },
+                )
+        return super().generate_structured(
+            system_instruction=system_instruction, prompt=prompt, schema=schema,
+        )
+
+
 def test_schema_database_is_reproducible_and_embedding_cache_is_reused(tmp_path):
     provider = V2Provider()
     repository = NarrativeSchemaRepository(tmp_path / "schemas.db", provider=provider)
@@ -188,6 +211,7 @@ def test_incremental_generator_updates_nekg_and_writes_new_artifacts(tmp_path):
             "storyline.json", "nekg.json", "node_reviews.json", "craft_contract.json",
             "draft.md", "craft_audit.json", "craft_revision_history.json",
             "diagnostic_audit.json", "story.md"} <= names
+    assert (result.run_dir / "planning_checkpoint" / "storyline.json").is_file()
     graph = json.loads((result.run_dir / "storyline.json").read_text(encoding="utf-8"))
     assert [node["node_type"] for node in graph["nodes"]] == ["CBN", "CPN", "CPN", "CEN"]
     assert len(graph["accepted_edges"]) == 3
@@ -242,6 +266,41 @@ def test_rewriter_failure_preserves_draft_and_audit(tmp_path):
     assert (run_dir / "craft_revisions" / "attempt-0-audit.json").is_file()
     metadata = json.loads((run_dir / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["status"] == "failed"
+
+
+def test_invalid_node_review_consumes_attempt_and_generation_recovers(tmp_path):
+    provider = InvalidNodeReviewProvider(1)
+    schemas = NarrativeSchemaRepository(tmp_path / "schemas.db", provider=provider)
+    request = StoryRequest(original_prompt="misterio", title="Señal", genre="detective",
+                           tone="tenso", premise="Una señal oculta la verdad", target_words=450)
+    result = StoryGenerator(provider, tmp_path / "stories", schema_repository=schemas).generate(request)
+    checkpoint = json.loads(
+        (result.run_dir / "planning_checkpoint" / "node_reviews.json").read_text(encoding="utf-8")
+    )
+    invalid = next(item for item in checkpoint["rejected"] if item.get("stage") == "review")
+    assert invalid["validation"]["schema"] == "PlotNodeReview"
+    assert invalid["validation"]["structured_attempts"] == 2
+    assert provider.review_calls == 3
+
+
+def test_invalid_node_reviews_exhaust_as_storyline_error_with_checkpoints(tmp_path):
+    provider = InvalidNodeReviewProvider(99)
+    schemas = NarrativeSchemaRepository(tmp_path / "schemas.db", provider=provider)
+    request = StoryRequest(original_prompt="misterio", title="Señal", genre="detective",
+                           tone="tenso", premise="Una señal oculta la verdad", target_words=450)
+    generator = StoryGenerator(
+        provider, tmp_path / "stories", schema_repository=schemas, max_cpn_retries=1,
+    )
+    with pytest.raises(StorylinePlanningError):
+        generator.generate(request)
+    run_dir = next((tmp_path / "stories").iterdir())
+    checkpoint = run_dir / "planning_checkpoint" / "node_reviews.json"
+    assert checkpoint.is_file()
+    reviews = json.loads(checkpoint.read_text(encoding="utf-8"))
+    assert len(reviews["rejected"]) == 2
+    error = json.loads((run_dir / "error_report.json").read_text(encoding="utf-8"))
+    assert error["code"] == "STORYLINE_PLANNING_FAILED"
+    assert error["details"]["attempts"] == 2
 
 
 def test_comparison_sheet_contains_both_stories(tmp_path):

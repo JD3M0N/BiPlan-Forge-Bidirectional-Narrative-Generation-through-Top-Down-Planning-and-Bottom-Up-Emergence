@@ -8,6 +8,7 @@ import math
 from pydantic import BaseModel, Field
 
 from .craft import validate_craft_outline, validate_storyline_craft
+from .errors import StorylinePlanningError, StructuredResponseError
 from .nekg import NarrativeEntityGraph
 from .narrative_db import NarrativeBlueprint
 from .schemas import (
@@ -60,6 +61,22 @@ class IncrementalPlotPlanner:
         self.max_retries = max_retries
         self.nekg = NarrativeEntityGraph()
         self.history = NodeReviewHistory()
+
+    def _checkpoint(self, callback) -> None:
+        if callback is not None:
+            callback(self.state.artifact(), self.nekg.artifact(), self.history)
+
+    @staticmethod
+    def _structured_rejection(exc: StructuredResponseError, stage: str) -> tuple[str, dict]:
+        schema = str(exc.details.get("schema", "structured response"))
+        attempts = int(exc.details.get("attempts", 1))
+        issue = f"Invalid {schema} after {attempts} structured attempts during {stage}"
+        return issue, {
+            "stage": stage,
+            "schema": schema,
+            "structured_attempts": attempts,
+            "validation_errors": exc.details.get("validation_errors", []),
+        }
 
     def outline(self, request: StoryRequest, plan: StoryPlanArtifact,
                 blueprint: NarrativeBlueprint, craft: CraftContractArtifact | None = None,
@@ -213,7 +230,8 @@ class IncrementalPlotPlanner:
 
     def plan(self, outline: StoryOutlineArtifact, anchors: ChapterAnchorsArtifact,
              blueprint: NarrativeBlueprint, craft: CraftContractArtifact | None = None,
-             characters: CharactersArtifact | None = None) -> tuple[IncrementalStorylineArtifact, NodeReviewHistory]:
+             characters: CharactersArtifact | None = None,
+             on_checkpoint=None) -> tuple[IncrementalStorylineArtifact, NodeReviewHistory]:
         self.state = StorylineState(outline.chapters)
         by_chapter = {x.chapter_id: x for x in anchors.anchors}
         global_order = 1
@@ -241,13 +259,37 @@ class IncrementalPlotPlanner:
             links = [] if previous is None else [NarrativeEdge(source=previous.id, target=begin.id,
                 relation="enables", strength=5, rationale="The previous chapter state enables this beginning")]
             self.state.accept(begin, links); self.nekg.apply(begin); previous = begin; global_order += 1
+            self._checkpoint(on_checkpoint)
             for slot in range(1, budget + 1):
                 revision = ""
                 for attempt in range(1, self.max_retries + 2):
-                    proposal = self._proposal(chapter, anchor, blueprint, revision, slot, budget,
-                                              remaining_beats, remaining_milestones,
-                                              remaining_cycles)
-                    review = self._review(proposal, chapter, anchor)
+                    try:
+                        proposal = self._proposal(chapter, anchor, blueprint, revision, slot, budget,
+                                                  remaining_beats, remaining_milestones,
+                                                  remaining_cycles)
+                    except StructuredResponseError as exc:
+                        issue, validation = self._structured_rejection(exc, "proposal")
+                        self.history.rejected.append({
+                            "chapter_id": chapter.id, "slot": slot, "attempt": attempt,
+                            "stage": "proposal", "proposal": None, "issues": [issue],
+                            "validation": validation,
+                        })
+                        revision = issue
+                        self._checkpoint(on_checkpoint)
+                        continue
+                    try:
+                        review = self._review(proposal, chapter, anchor)
+                    except StructuredResponseError as exc:
+                        issue, validation = self._structured_rejection(exc, "review")
+                        self.history.rejected.append({
+                            "chapter_id": chapter.id, "slot": slot, "attempt": attempt,
+                            "stage": "review",
+                            "proposal": proposal.model_dump(mode="json"),
+                            "issues": [issue], "validation": validation,
+                        })
+                        revision = issue
+                        self._checkpoint(on_checkpoint)
+                        continue
                     candidate = review.revised if review.revised is not None else proposal
                     craft_issues = self._proposal_craft_issues(
                         candidate, remaining_beats, remaining_milestones, remaining_cycles,
@@ -268,15 +310,40 @@ class IncrementalPlotPlanner:
                                                 if item.id not in claimed_milestones]
                         remaining_cycles = [item for item in remaining_cycles if item.id not in claimed_cycles]
                         previous = node; global_order += 1
+                        self._checkpoint(on_checkpoint)
                         break
                     issues = [*review.issues, *craft_issues]
                     self.history.rejected.append({"chapter_id": chapter.id, "slot": slot, "attempt": attempt,
                                                   "proposal": proposal.model_dump(mode="json"), "issues": issues})
                     revision = "; ".join(issues)
+                    self._checkpoint(on_checkpoint)
                 else:
-                    raise ValueError(f"CPN {chapter.id}:{slot} failed after {self.max_retries + 1} attempts")
+                    rejected = [item for item in self.history.rejected
+                                if item.get("chapter_id") == chapter.id and item.get("slot") == slot]
+                    raise StorylinePlanningError(
+                        f"No se pudo validar el CPN {chapter.id}:{slot} después de "
+                        f"{self.max_retries + 1} intentos.",
+                        details={
+                            "chapter_id": chapter.id,
+                            "slot": slot,
+                            "attempts": self.max_retries + 1,
+                            "rejections": rejected,
+                        },
+                        recommendations=[
+                            "Revisa planning_checkpoint/node_reviews.json o usa un modelo más capaz."
+                        ],
+                    )
             if remaining_beats or remaining_milestones or remaining_cycles:
-                raise ValueError(f"chapter {chapter.id} has uncovered craft requirements")
+                raise StorylinePlanningError(
+                    f"El capítulo {chapter.id} terminó con requisitos de craft sin cubrir.",
+                    details={
+                        "chapter_id": chapter.id,
+                        "remaining_craft_beats": [item.id for item in remaining_beats],
+                        "remaining_character_milestones": [item.id for item in remaining_milestones],
+                        "remaining_try_fail_cycles": [item.id for item in remaining_cycles],
+                    },
+                    recommendations=["Revisa el outline y los intentos CPN guardados."],
+                )
             end_proposal = PlotNodeProposal(subject=anchor.end_subject, verb=anchor.end_verb,
                 object=anchor.end_object, purpose="Pay off the chapter question", schema_beat_id="chapter_end",
                 preconditions=["chapter CPN consequences"], effects=["chapter end state established"],
@@ -289,6 +356,7 @@ class IncrementalPlotPlanner:
             self.state.accept(end, [NarrativeEdge(source=previous.id, target=end.id, relation="causes", strength=5,
                 rationale="Accepted CPN consequences produce the chapter ending")])
             self.nekg.apply(end); previous = end; global_order += 1
+            self._checkpoint(on_checkpoint)
         artifact = self.state.artifact()
         if craft is not None and characters is not None:
             validate_craft_outline(outline, craft, characters)

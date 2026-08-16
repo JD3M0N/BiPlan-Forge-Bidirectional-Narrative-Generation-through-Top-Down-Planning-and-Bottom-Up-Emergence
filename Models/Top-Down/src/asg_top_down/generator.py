@@ -150,7 +150,15 @@ class StoryGenerator:
             repository.save_json("outline.json", outline)
             anchors = planner.anchors(outline, world, characters); repository.save_json("chapter_anchors.json", anchors)
             self._notify(on_progress, 25, "outline", "Premisa, capítulos y anclas terminados")
-            storyline, reviews = planner.plan(outline, anchors, blueprint, craft, characters)
+            def save_planning_checkpoint(partial_storyline, partial_nekg, partial_reviews) -> None:
+                repository.save_json("planning_checkpoint/storyline.json", partial_storyline)
+                repository.save_json("planning_checkpoint/nekg.json", partial_nekg)
+                repository.save_json("planning_checkpoint/node_reviews.json", partial_reviews)
+
+            storyline, reviews = planner.plan(
+                outline, anchors, blueprint, craft, characters,
+                on_checkpoint=save_planning_checkpoint,
+            )
             repository.save_json("storyline.json", storyline)
             repository.save_json("nekg.json", planner.nekg.artifact())
             repository.save_json("node_reviews.json", reviews)

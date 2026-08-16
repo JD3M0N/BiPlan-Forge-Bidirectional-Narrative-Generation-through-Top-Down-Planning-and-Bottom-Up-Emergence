@@ -2,6 +2,11 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [1.1.2] - 2026-08-16
+
+- Actualizada la dependencia mínima a ASG Top-Down 2.0.2 para que revisiones CPN
+  inválidas consuman un reintento sin interrumpir inmediatamente la historia.
+
 ## [1.1.1] - 2026-08-16
 
 - Actualizada la dependencia mínima a ASG Top-Down 2.0.1 para probar el contrato

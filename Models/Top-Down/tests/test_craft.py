@@ -8,7 +8,8 @@ from asg_top_down.craft import (
 from asg_top_down.schemas import (
     Character, CharacterMilestone, CharacterSliderArc, CharactersArtifact,
     CraftAuditAnswer, CraftAuditArtifact, CraftBeat, CraftContractArtifact,
-    CraftPromise, ChapterPlan, SliderRange, StoryOutlineArtifact, TryFailCycle,
+    CraftPromise, ChapterPlan, PlotNodeReview, SliderRange, StoryOutlineArtifact,
+    TryFailCycle,
 )
 
 
@@ -118,3 +119,21 @@ def test_missing_critic_answer_becomes_a_blocking_failure():
     normalized = normalize_audit(raw, expected)
     assert normalized.passed is False
     assert normalized.failed_blocking_ids == ["missing"]
+
+
+def test_contradictory_accepted_review_is_normalized_to_rejection():
+    review = PlotNodeReview(
+        accepted=True, causal=True, intentional=True, conflict_present=True,
+        continuous=False, novel=True, advances_ending=True, world_consistent=True,
+    )
+    assert review.accepted is False
+    assert any("continuous" in issue for issue in review.issues)
+
+
+def test_explicit_rejection_is_never_promoted():
+    review = PlotNodeReview(
+        accepted=False, causal=True, intentional=True, conflict_present=True,
+        continuous=True, novel=True, advances_ending=True, world_consistent=True,
+    )
+    assert review.accepted is False
+    assert review.issues

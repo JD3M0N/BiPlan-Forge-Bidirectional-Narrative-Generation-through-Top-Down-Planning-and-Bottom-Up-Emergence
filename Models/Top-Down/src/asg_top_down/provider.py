@@ -1,6 +1,7 @@
 """Abstracción del proveedor LLM e implementación para Gemini."""
 
 from datetime import datetime, timezone
+import json
 import threading
 import time
 from typing import Callable, Protocol, TypeVar
@@ -73,6 +74,7 @@ class GeminiProvider:
         self._token_limiter = TokenWindowLimiter(tpm_limit) if tpm_limit else None
         self.max_retries = max_retries
         self.max_retry_delay = max_retry_delay
+        self.structured_validation_retries = 1
         capacity = max(1, rpm_limit - rpm_reserve)
         with _LIMITERS_LOCK:
             self._limiter = _LIMITERS.setdefault((capacity, 60), SlidingWindowLimiter(capacity))
@@ -196,31 +198,58 @@ class GeminiProvider:
     ) -> T:
         from google.genai import types
 
-        try:
-            self._preflight_tokens(prompt, system_instruction)
-            response = self._generate(
-                f"structured:{schema.__name__}",
-                lambda: self._client.models.generate_content(
-                    model=self.model_name, contents=prompt,
-                    config=types.GenerateContentConfig(
-                        system_instruction=system_instruction,
-                        response_mime_type="application/json", response_schema=schema,
+        validation_retries = max(0, getattr(self, "structured_validation_retries", 1))
+        current_prompt = prompt
+        last_errors: list[dict[str, str]] = []
+        for validation_attempt in range(validation_retries + 1):
+            try:
+                self._preflight_tokens(current_prompt, system_instruction)
+                response = self._generate(
+                    f"structured:{schema.__name__}",
+                    lambda: self._client.models.generate_content(
+                        model=self.model_name, contents=current_prompt,
+                        config=types.GenerateContentConfig(
+                            system_instruction=system_instruction,
+                            response_mime_type="application/json", response_schema=schema,
+                        ),
                     ),
-                ),
-            )
-            if response.parsed is not None:
-                return schema.model_validate(response.parsed)
-            if not response.text:
-                raise EmptyResponseError("Gemini devolvió una respuesta vacía.")
-            return schema.model_validate_json(response.text)
-        except ProviderError:
-            raise
-        except ValidationError as exc:
-            raise StructuredResponseError(
-                f"Gemini devolvió datos incompatibles con {schema.__name__}."
-            ) from exc
-        except Exception as exc:
-            raise _safe_provider_error(exc) from exc
+                )
+                if response.parsed is not None:
+                    return schema.model_validate(response.parsed)
+                if not response.text:
+                    raise EmptyResponseError("Gemini devolvió una respuesta vacía.")
+                return schema.model_validate_json(response.text)
+            except ProviderError:
+                raise
+            except ValidationError as exc:
+                last_errors = [
+                    {
+                        "location": ".".join(str(part) for part in error.get("loc", ())) or "$",
+                        "type": str(error.get("type", "validation_error")),
+                    }
+                    for error in exc.errors(include_url=False, include_context=False, include_input=False)
+                ]
+                if validation_attempt >= validation_retries:
+                    raise StructuredResponseError(
+                        f"Gemini devolvió datos incompatibles con {schema.__name__}.",
+                        details={
+                            "schema": schema.__name__,
+                            "attempts": validation_attempt + 1,
+                            "validation_errors": last_errors,
+                        },
+                        recommendations=[
+                            "Revisa los errores de validación guardados o usa un modelo más capaz."
+                        ],
+                    ) from exc
+                correction = json.dumps(last_errors, ensure_ascii=False)
+                current_prompt = (
+                    f"{prompt}\n\nSTRUCTURED OUTPUT CORRECTION:\n"
+                    f"The previous response failed validation at: {correction}. "
+                    "Return a complete replacement that exactly matches the requested schema."
+                )
+            except Exception as exc:
+                raise _safe_provider_error(exc) from exc
+        raise AssertionError("structured validation loop ended unexpectedly")
 
     def generate_text(self, *, system_instruction: str, prompt: str) -> str:
         from google.genai import types

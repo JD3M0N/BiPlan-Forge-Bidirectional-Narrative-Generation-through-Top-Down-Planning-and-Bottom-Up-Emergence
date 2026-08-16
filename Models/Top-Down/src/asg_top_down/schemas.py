@@ -284,11 +284,19 @@ class PlotNodeReview(BaseModel):
 
     @model_validator(mode="after")
     def acceptance_is_earned(self) -> "PlotNodeReview":
-        checks = (self.causal, self.intentional, self.conflict_present, self.continuous,
-                  self.novel, self.advances_ending, self.world_consistent,
-                  self.craft_coverage, self.consequence_persists, self.try_fail_valid)
-        if self.accepted and not all(checks):
-            raise ValueError("accepted CPN must pass every narrative check")
+        check_names = (
+            "causal", "intentional", "conflict_present", "continuous", "novel",
+            "advances_ending", "world_consistent", "craft_coverage",
+            "consequence_persists", "try_fail_valid",
+        )
+        failed = [name for name in check_names if not getattr(self, name)]
+        if self.accepted and failed:
+            self.accepted = False
+            issue = "Failed review checks: " + ", ".join(failed)
+            if issue not in self.issues:
+                self.issues.append(issue)
+        elif not self.accepted and not self.issues:
+            self.issues.append("The reviewer rejected the node without identifying a failed check")
         return self
 
 

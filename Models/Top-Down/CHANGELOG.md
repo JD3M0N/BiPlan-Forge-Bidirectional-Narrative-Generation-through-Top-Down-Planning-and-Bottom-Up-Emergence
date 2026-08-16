@@ -2,6 +2,12 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [2.0.2] - 2026-08-16
+
+- Normalizadas como rechazos recuperables las revisiones CPN contradictorias.
+- Añadido un reintento de respuestas estructuradas con diagnósticos sanitizados.
+- Incorporados checkpoints de planificación y recuperación ante schemas inválidos.
+
 ## [2.0.1] - 2026-08-16
 
 - Incorporado un contrato Sanderson para promesas, progreso, pagos, sliders de

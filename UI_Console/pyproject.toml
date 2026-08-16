@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "asg-console"
-version = "1.1.1"
+version = "1.1.2"
 description = "Interfaz de consola unificada para ASG Top-Down y Bottom-Up"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "asg-evaluation>=0.1.0",
-  "asg-top-down>=2.0.1",
+  "asg-top-down>=2.0.2",
   "asg-escape-room>=1.0.0",
   "asg-prompt-crafter>=0.1.0",
 ]

@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -14,10 +15,14 @@ class FakeModels:
         self.response = response
         self.error = error
         self.count_calls = 0
+        self.generate_calls = []
 
     def generate_content(self, **kwargs):
+        self.generate_calls.append(kwargs)
         if self.error:
             raise self.error
+        if isinstance(self.response, list):
+            return self.response.pop(0)
         return self.response
 
     def count_tokens(self, **kwargs):
@@ -38,6 +43,43 @@ def test_structured_generation_rejects_invalid_json() -> None:
         provider.generate_structured(
             system_instruction="test", prompt="test", schema=StoryRequest
         )
+
+
+def test_structured_generation_retries_validation_once_then_succeeds() -> None:
+    valid = StoryRequest(
+        original_prompt="historia", title="Título", genre="fantasía",
+        tone="tenso", premise="Una promesa",
+    ).model_dump_json()
+    provider = provider_with([
+        SimpleNamespace(parsed=None, text="{invalid"),
+        SimpleNamespace(parsed=None, text=valid),
+    ])
+    result = provider.generate_structured(
+        system_instruction="test", prompt="PRIVATE PROMPT", schema=StoryRequest,
+    )
+    assert result.title == "Título"
+    assert len(provider._client.models.generate_calls) == 2
+    correction = provider._client.models.generate_calls[1]["contents"]
+    assert "json_invalid" in correction
+    assert "{invalid" not in correction
+
+
+def test_structured_generation_reports_sanitized_errors_after_retry() -> None:
+    provider = provider_with([
+        SimpleNamespace(parsed=None, text="{}"),
+        SimpleNamespace(parsed=None, text="{}"),
+    ])
+    with pytest.raises(StructuredResponseError) as captured:
+        provider.generate_structured(
+            system_instruction="test", prompt="PRIVATE PROMPT", schema=StoryRequest,
+        )
+    details = captured.value.details
+    assert details["schema"] == "StoryRequest"
+    assert details["attempts"] == 2
+    assert {item["location"] for item in details["validation_errors"]} >= {
+        "original_prompt", "title", "genre", "tone", "premise",
+    }
+    assert "PRIVATE PROMPT" not in json.dumps(details)
 
 
 def test_structured_generation_rejects_empty_response() -> None:
