@@ -9,9 +9,11 @@ from .planner import PlannerAgent
 from .world import WorldBuilderAgent
 from .writer import ChapterComplianceAgent, SceneWriterAgent
 from .drama import DramaAgent
+from .craft import CraftContractAgent, CraftCriticAgent, CraftRewriterAgent
 
 __all__ = [
     "AnalystAgent", "PlannerAgent", "WorldBuilderAgent", "CharacterDesignerAgent",
     "DirectorAgent", "SceneWriterAgent", "ChapterComplianceAgent", "DramaAgent",
     "CriticAgent", "EditorAgent",
+    "CraftContractAgent", "CraftCriticAgent", "CraftRewriterAgent",
 ]

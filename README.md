@@ -42,7 +42,11 @@ protagonista, conflicto, ambientación, tono y extensión, por ejemplo:
 
 Cuando falten idioma o extensión se usarán español y unas 1500 palabras. Cada
 ejecución crea una carpeta independiente en `Stories/Top-Down` con la historia,
-las escenas, las taxonomías seleccionadas y los artefactos de revisión.
+las escenas, las taxonomías seleccionadas y los artefactos de revisión. La ruta
+Top-Down planifica promesas, progreso y pagos; sigue los sliders de simpatía,
+competencia y proactividad de los personajes principales; y exige que los
+intentos intermedios sean `yes_but` o `no_and`. Un crítico estructurado puede
+activar hasta dos reescrituras antes de seleccionar la mejor versión.
 
 El pipeline Top-Down v2 selecciona un arquetipo principal y hasta dos
 secundarios desde `Taxonomies/`. Un agente Director organiza beats en escenas y

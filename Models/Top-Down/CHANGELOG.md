@@ -2,6 +2,13 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [2.0.1] - 2026-08-16
+
+- Incorporado un contrato Sanderson para promesas, progreso, pagos, sliders de
+  personajes principales y ciclos Yes-but/No-and.
+- Añadidos un crítico estructurado, hasta dos reescrituras y la selección de la
+  mejor versión con historial auditable.
+
 ## [2.0.0] - 2026-08-09
 
 - Reimplementado el generador Top-Down mediante el flujo incremental de

@@ -2,6 +2,11 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [1.1.1] - 2026-08-16
+
+- Actualizada la dependencia mínima a ASG Top-Down 2.0.1 para probar el contrato
+  de craft y el ciclo crítico-reescritor desde la consola unificada.
+
 ## [1.1.0] - 2026-08-09
 
 - Migrada la generación Top-Down de la consola al nuevo `StoryGenerator`

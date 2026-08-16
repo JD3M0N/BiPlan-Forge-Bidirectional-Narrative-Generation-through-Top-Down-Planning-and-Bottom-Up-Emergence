@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, computed_field, model_validator
 
 
 class StoryRequest(BaseModel):
@@ -49,6 +49,36 @@ class WorldArtifact(BaseModel):
     atmosphere: str
 
 
+SliderName = Literal["sympathy", "competence", "proactivity"]
+ArcDirection = Literal["ascending", "descending"]
+
+
+class SliderRange(BaseModel):
+    start: int = Field(ge=1, le=10)
+    target: int = Field(ge=1, le=10)
+    rationale: str = Field(min_length=1)
+
+
+class CharacterSliderArc(BaseModel):
+    sympathy: SliderRange
+    competence: SliderRange
+    proactivity: SliderRange
+    focus: SliderName
+    direction: ArcDirection
+    justification: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def focus_matches_direction(self) -> "CharacterSliderArc":
+        selected = getattr(self, self.focus)
+        if selected.start == selected.target:
+            raise ValueError("the focus slider must change")
+        if self.direction == "ascending" and selected.target < selected.start:
+            raise ValueError("an ascending focus slider must increase")
+        if self.direction == "descending" and selected.target > selected.start:
+            raise ValueError("a descending focus slider must decrease")
+        return self
+
+
 class Character(BaseModel):
     name: str
     narrative_role: str
@@ -57,11 +87,86 @@ class Character(BaseModel):
     motivation: str
     conflict: str
     arc: str
+    importance: Literal["main", "supporting"] = "supporting"
+    slider_arc: CharacterSliderArc | None = None
 
 
 class CharactersArtifact(BaseModel):
     characters: list[Character] = Field(min_length=1)
     relationships: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def character_names_are_unique(self) -> "CharactersArtifact":
+        names = [character.name.casefold().strip() for character in self.characters]
+        if len(names) != len(set(names)):
+            raise ValueError("character names must be unique")
+        return self
+
+
+PromiseKind = Literal["tone", "plot", "character"]
+CraftBeatKind = Literal["setup", "progress", "payoff"]
+TryFailOutcome = Literal["yes_but", "no_and"]
+MilestoneStage = Literal["start", "transition", "end"]
+
+
+class CraftPromise(BaseModel):
+    id: str = Field(min_length=1)
+    kind: PromiseKind
+    character_name: str | None = None
+    statement: str = Field(min_length=1)
+    setup: str = Field(min_length=1)
+    progress_signals: list[str] = Field(min_length=1)
+    payoff: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def character_link_matches_kind(self) -> "CraftPromise":
+        if self.kind == "character" and not self.character_name:
+            raise ValueError("character promises require character_name")
+        if self.kind != "character" and self.character_name is not None:
+            raise ValueError("only character promises may reference a character")
+        return self
+
+
+class CraftContractArtifact(BaseModel):
+    promises: list[CraftPromise] = Field(min_length=3)
+    try_fail_target: int = Field(ge=2, le=7)
+
+    @model_validator(mode="after")
+    def core_promises_are_present(self) -> "CraftContractArtifact":
+        identifiers = [promise.id for promise in self.promises]
+        if len(identifiers) != len(set(identifiers)):
+            raise ValueError("craft promise ids must be unique")
+        if sum(promise.kind == "tone" for promise in self.promises) != 1:
+            raise ValueError("the craft contract requires exactly one tone promise")
+        if sum(promise.kind == "plot" for promise in self.promises) != 1:
+            raise ValueError("the craft contract requires exactly one plot promise")
+        if not any(promise.kind == "character" for promise in self.promises):
+            raise ValueError("the craft contract requires character promises")
+        return self
+
+
+class CraftBeat(BaseModel):
+    id: str = Field(min_length=1)
+    promise_id: str = Field(min_length=1)
+    kind: CraftBeatKind
+    description: str = Field(min_length=1)
+
+
+class CharacterMilestone(BaseModel):
+    id: str = Field(min_length=1)
+    character_name: str = Field(min_length=1)
+    stage: MilestoneStage
+    focus_slider: SliderName
+    demonstrated_value: int = Field(ge=1, le=10)
+    description: str = Field(min_length=1)
+
+
+class TryFailCycle(BaseModel):
+    id: str = Field(min_length=1)
+    action: str = Field(min_length=1)
+    outcome: TryFailOutcome
+    consequence: str = Field(min_length=1)
+    promise_id: str = Field(min_length=1)
 
 
 FreytagPhase = Literal["exposition", "rising_action", "climax", "falling_action", "denouement"]
@@ -83,6 +188,9 @@ class ChapterPlan(BaseModel):
     abstract: str
     target_words: int = Field(ge=50)
     freytag_phases: list[FreytagPhase] = Field(min_length=1)
+    craft_beats: list[CraftBeat] = Field(default_factory=list)
+    character_milestones: list[CharacterMilestone] = Field(default_factory=list)
+    try_fail_cycles: list[TryFailCycle] = Field(default_factory=list)
 
 
 class StoryOutlineArtifact(BaseModel):
@@ -123,6 +231,10 @@ class PlotNode(BaseModel):
     effects: list[str] = Field(default_factory=list)
     intention: str = ""
     conflict: str = ""
+    craft_beat_ids: list[str] = Field(default_factory=list)
+    character_milestone_ids: list[str] = Field(default_factory=list)
+    try_fail_cycle_ids: list[str] = Field(default_factory=list)
+    try_fail_outcome: TryFailOutcome | None = None
 
     @model_validator(mode="after")
     def normalize_sv(self) -> "PlotNode":
@@ -149,6 +261,10 @@ class PlotNodeProposal(BaseModel):
     conflict: str = Field(min_length=1)
     reaches_chapter_end: bool = False
     state_changes: list[EntityStateChange] = Field(default_factory=list)
+    craft_beat_ids: list[str] = Field(default_factory=list)
+    character_milestone_ids: list[str] = Field(default_factory=list)
+    try_fail_cycle_ids: list[str] = Field(default_factory=list)
+    try_fail_outcome: TryFailOutcome | None = None
 
 
 class PlotNodeReview(BaseModel):
@@ -160,13 +276,17 @@ class PlotNodeReview(BaseModel):
     novel: bool
     advances_ending: bool
     world_consistent: bool
+    craft_coverage: bool = True
+    consequence_persists: bool = True
+    try_fail_valid: bool = True
     issues: list[str] = Field(default_factory=list)
     revised: PlotNodeProposal | None = None
 
     @model_validator(mode="after")
     def acceptance_is_earned(self) -> "PlotNodeReview":
         checks = (self.causal, self.intentional, self.conflict_present, self.continuous,
-                  self.novel, self.advances_ending, self.world_consistent)
+                  self.novel, self.advances_ending, self.world_consistent,
+                  self.craft_coverage, self.consequence_persists, self.try_fail_valid)
         if self.accepted and not all(checks):
             raise ValueError("accepted CPN must pass every narrative check")
         return self
@@ -192,6 +312,64 @@ class DiagnosticAudit(BaseModel):
     continuity_issues: list[str] = Field(default_factory=list)
     template_like_passages: list[str] = Field(default_factory=list)
     revision_suggestions: list[str] = Field(default_factory=list)
+
+
+AuditVerdict = Literal["pass", "fail", "not_applicable"]
+
+
+class CraftAuditAnswer(BaseModel):
+    question_id: str = Field(min_length=1)
+    category: Literal["promise", "character", "try_fail", "global"]
+    subject_id: str = Field(min_length=1)
+    question: str = Field(min_length=1)
+    verdict: AuditVerdict
+    blocking: bool = True
+    evidence: str = Field(min_length=1)
+    issue: str = ""
+    revision_instruction: str = ""
+
+    @model_validator(mode="after")
+    def failures_are_actionable(self) -> "CraftAuditAnswer":
+        if self.verdict == "fail" and (not self.issue.strip() or not self.revision_instruction.strip()):
+            raise ValueError("failed audit answers require an issue and revision instruction")
+        return self
+
+
+class CraftAuditArtifact(BaseModel):
+    answers: list[CraftAuditAnswer] = Field(min_length=1)
+    summary: str = Field(min_length=1)
+
+    @computed_field(return_type=list[str])
+    @property
+    def failed_blocking_ids(self) -> list[str]:
+        return [answer.question_id for answer in self.answers
+                if answer.blocking and answer.verdict != "pass"]
+
+    @computed_field(return_type=bool)
+    @property
+    def passed(self) -> bool:
+        return not self.failed_blocking_ids
+
+    @computed_field(return_type=list[str])
+    @property
+    def revision_instructions(self) -> list[str]:
+        return [answer.revision_instruction for answer in self.answers
+                if answer.verdict == "fail" and answer.revision_instruction.strip()]
+
+
+class CraftRevisionAttempt(BaseModel):
+    attempt: int = Field(ge=0)
+    text_file: str
+    audit_file: str
+    passed: bool
+    failed_blocking_ids: list[str] = Field(default_factory=list)
+    failed_advisory_ids: list[str] = Field(default_factory=list)
+
+
+class CraftRevisionHistory(BaseModel):
+    selected_attempt: int = Field(ge=0)
+    exhausted: bool = False
+    attempts: list[CraftRevisionAttempt] = Field(min_length=1)
 
 
 class NarrativeEdge(BaseModel):

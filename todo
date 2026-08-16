@@ -33,5 +33,6 @@
 - [x] TODO: Usar un modelo de embeding para reconocimiento lexico del prompt del usuario para la taxonomia
   - Recuperación híbrida con embeddings Gemini cacheados y fallback léxico.
 - [ ] TODO: Ver si tiene sentido ver las situaciones dramaticas de polti para el gestor de drama
-- [x] TODO: Modificar Control de palabras por capítulo (±10 %) y global (±5 %).
+- [x] TODO: Modificar Control de palabras por capítulo (±10 %) y global (±5 %)
 - [x] TODO: Annadir versionado a todo
+- [ ] TODO: Revisar la implementacion completa del flujo de STORYTELLER

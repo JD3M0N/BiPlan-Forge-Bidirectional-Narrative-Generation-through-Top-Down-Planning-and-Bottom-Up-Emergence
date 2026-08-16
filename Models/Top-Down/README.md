@@ -18,10 +18,23 @@ run = StoryGenerator(provider, output_root).generate(prompt_or_request)
 print(run.story_path)
 ```
 
-Los artefactos v2 son `blueprint.json`, `retrieval_trace.json`, `outline.json`,
+Los artefactos v2 incluyen `blueprint.json`, `craft_contract.json`, `outline.json`,
 `chapter_anchors.json`, `storyline.json`, `nekg.json`, `node_reviews.json`,
-`chapters/*.md`, `diagnostic_audit.json` y `story.md`. El diagnóstico no asigna
-puntuaciones de calidad.
+`chapters/*.md`, `draft.md`, `craft_audit.json`, `craft_revision_history.json`,
+`diagnostic_audit.json` y `story.md`. El diagnóstico no asigna puntuaciones de
+calidad.
+
+El contrato de craft registra promesas con planteamiento, progreso y pago; los
+sliders de simpatía, competencia y proactividad de cada personaje principal; y
+los ciclos `yes_but`/`no_and`. Esos requisitos se enlazan a nodos aceptados,
+pero sus IDs y puntuaciones nunca se incluyen en la ficción.
+
+Después de guardar `draft.md`, un crítico responde una batería estructurada de
+preguntas con evidencia. Si quedan fallos bloqueantes, un reescritor dispone de
+hasta dos pasadas. Si no consigue aprobar, `story.md` contiene la versión con
+menos fallos y `craft_audit.json` conserva las advertencias restantes. Desde
+Python puede cambiarse el límite con `StoryGenerator(...,
+max_craft_revisions=N)`.
 
 ```powershell
 compare-story-runs Stories/Top-Down/anterior Stories/Top-Down/nueva --output comparacion.html
