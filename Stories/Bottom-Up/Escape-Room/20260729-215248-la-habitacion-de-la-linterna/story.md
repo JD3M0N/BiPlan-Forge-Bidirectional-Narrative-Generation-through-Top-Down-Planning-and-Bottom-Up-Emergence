@@ -1,5 +1,0 @@
-La aventura comenzó con un flujo constante de comunicación entre los agentes A y B, quienes no dejaron de compartir sus descubrimientos desde el primer instante. En medio de esta intensa colaboración, B localizó y recogió la linterna. 
-
-La exploración conjunta continuó mediante constantes intercambios de información hasta que A logró hacerse con la batería. Con ambos componentes en su poder, A y B unieron fuerzas para montar la linterna de manera exitosa. Inmediatamente después, A inspeccionó la pintura, lo que le permitió descubrir el código secreto del armario y compartirlo con su compañero. 
-
-B tomó el relevo en la siguiente fase de la cooperación y, valiéndose de la información recién obtenida, abrió el armario para recoger la palanca que se encontraba en su interior. Con la palanca y la placa de presión listas, ambos resolvieron el penúltimo obstáculo que desbloqueó la salida. Finalmente, la eficaz cooperación dio sus frutos: A cruzó el umbral y escapó, seguido de cerca por B, culminando con éxito la misión.
