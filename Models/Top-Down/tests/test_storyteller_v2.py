@@ -175,6 +175,131 @@ class InvalidNodeReviewProvider(V2Provider):
         )
 
 
+class SetupOnlyCPNProvider(V2Provider):
+    def __init__(self, *, invalid_proposals: int = 0, invalid_revisions: int = 0):
+        super().__init__()
+        self.invalid_proposals = invalid_proposals
+        self.invalid_revisions = invalid_revisions
+        self.proposal_calls = 0
+        self.review_calls = 0
+        self.review_prompts = []
+
+    @staticmethod
+    def proposal(*, craft_beat_ids=None, character_milestone_ids=None):
+        return PlotNodeProposal(
+            subject="Sari", verb="entrega", object="los planos",
+            purpose="Interrumpir la investigación rutinaria",
+            schema_beat_id="disruption",
+            preconditions=["Krox trabaja en el laboratorio"],
+            effects=["Krox conoce los planos"],
+            intention="Convencer a Krox de investigar el hallazgo",
+            conflict="La Academia rechaza las ideas subterráneas",
+            craft_beat_ids=craft_beat_ids or [],
+            character_milestone_ids=character_milestone_ids or [],
+        )
+
+    def generate_structured(self, *, system_instruction, prompt, schema):
+        if schema is PlotNodeProposal:
+            self.proposal_calls += 1
+            if self.proposal_calls <= self.invalid_proposals:
+                return self.proposal(craft_beat_ids=["setup-beat"])
+            return self.proposal()
+        if schema is PlotNodeReview:
+            self.review_calls += 1
+            self.review_prompts.append(prompt)
+            revised = None
+            if self.review_calls <= self.invalid_revisions:
+                revised = self.proposal(
+                    craft_beat_ids=["setup-beat"],
+                    character_milestone_ids=["start-milestone"],
+                )
+            return PlotNodeReview(
+                accepted=True, causal=True, intentional=True, conflict_present=True,
+                continuous=True, novel=True, advances_ending=True, world_consistent=True,
+                revised=revised,
+            )
+        return super().generate_structured(
+            system_instruction=system_instruction, prompt=prompt, schema=schema,
+        )
+
+
+def setup_only_planning_case():
+    outline = StoryOutlineArtifact(
+        premise="Unos planos alteran una investigación",
+        synopsis="Sari entrega los planos a Krox",
+        chapters=[ChapterPlan(
+            id="chap_1", order=1, title="Los planos", abstract="Sari visita a Krox",
+            target_words=300, freytag_phases=["exposition"],
+            craft_beats=[CraftBeat(
+                id="setup-beat", promise_id="plot", kind="setup",
+                description="Sari descubre los planos",
+            )],
+            character_milestones=[CharacterMilestone(
+                id="start-milestone", character_name="Krox", stage="start",
+                focus_slider="proactivity", demonstrated_value=3,
+                description="Krox se limita a investigar",
+            )],
+        )],
+    )
+    anchors = ChapterAnchorsArtifact(anchors=[ChapterAnchors(
+        chapter_id="chap_1", begin_subject="Krox", begin_verb="analiza",
+        begin_object="herramientas", end_subject="Krox", end_verb="acepta",
+        end_object="el desafío",
+    )])
+    return outline, anchors
+
+
+def test_setup_only_chapter_keeps_consumed_ids_out_of_its_single_cpn():
+    provider = SetupOnlyCPNProvider()
+    outline, anchors = setup_only_planning_case()
+
+    storyline, history = IncrementalPlotPlanner(provider).plan(outline, anchors, {})
+
+    assert [node.node_type for node in storyline.nodes] == ["CBN", "CPN", "CEN"]
+    assert storyline.nodes[0].craft_beat_ids == ["setup-beat"]
+    assert storyline.nodes[0].character_milestone_ids == ["start-milestone"]
+    assert storyline.nodes[1].craft_beat_ids == []
+    assert storyline.nodes[1].character_milestone_ids == []
+    assert history.rejected == []
+    assert '"available_craft_beat_ids": []' in provider.review_prompts[0]
+    assert '"available_character_milestone_ids": []' in provider.review_prompts[0]
+
+
+def test_invalid_proposal_ids_are_rejected_before_review_and_next_attempt_recovers():
+    provider = SetupOnlyCPNProvider(invalid_proposals=1)
+    outline, anchors = setup_only_planning_case()
+
+    storyline, history = IncrementalPlotPlanner(provider, max_retries=1).plan(outline, anchors, {})
+
+    assert len(storyline.nodes) == 3
+    assert provider.proposal_calls == 2
+    assert provider.review_calls == 1
+    rejection = history.rejected[0]
+    assert rejection["stage"] == "proposal_validation"
+    assert rejection["candidate_source"] == "proposal"
+    assert rejection["review"] is None
+    assert "allowed: none" in rejection["issues"][0]
+    assert not any("final slot" in issue.lower() for issue in rejection["issues"])
+
+
+def test_invalid_revised_ids_are_diagnosed_and_next_attempt_recovers():
+    provider = SetupOnlyCPNProvider(invalid_revisions=1)
+    outline, anchors = setup_only_planning_case()
+
+    storyline, history = IncrementalPlotPlanner(provider, max_retries=1).plan(outline, anchors, {})
+
+    assert len(storyline.nodes) == 3
+    assert provider.proposal_calls == 2
+    assert provider.review_calls == 2
+    rejection = history.rejected[0]
+    assert rejection["stage"] == "candidate_validation"
+    assert rejection["proposal"]["craft_beat_ids"] == []
+    assert rejection["candidate"]["craft_beat_ids"] == ["setup-beat"]
+    assert rejection["review"]["revised"]["character_milestone_ids"] == ["start-milestone"]
+    assert rejection["candidate_source"] == "review.revised"
+    assert rejection["craft_scope"]["available_craft_beat_ids"] == []
+
+
 def test_schema_database_is_reproducible_and_embedding_cache_is_reused(tmp_path):
     provider = V2Provider()
     repository = NarrativeSchemaRepository(tmp_path / "schemas.db", provider=provider)

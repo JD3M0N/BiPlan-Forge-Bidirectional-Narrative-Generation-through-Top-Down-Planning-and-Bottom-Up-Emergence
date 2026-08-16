@@ -28,7 +28,8 @@ Durante la construcción incremental, `planning_checkpoint/` conserva STORYLINE,
 NEKG y el historial de revisiones después de cada aceptación o rechazo. Una
 respuesta estructurada inválida se reintenta una vez; si una revisión CPN sigue
 siendo inválida o contradictoria, se registra como intento rechazado sin perder
-la ejecución completa.
+la ejecución completa. Cada rechazo distingue `proposal`, `review` y `candidate`,
+y conserva el `craft_scope` autoritativo usado para validar sus IDs.
 
 El contrato de craft registra promesas con planteamiento, progreso y pago; los
 sliders de simpatía, competencia y proactividad de cada personaje principal; y

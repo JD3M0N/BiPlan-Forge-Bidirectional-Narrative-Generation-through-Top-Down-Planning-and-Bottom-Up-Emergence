@@ -176,20 +176,43 @@ class IncrementalPlotPlanner:
             schema=PlotNodeProposal,
         )
 
-    def _review(self, proposal, chapter, end) -> PlotNodeReview:
+    def _review(self, proposal, chapter, end, *, remaining_beats,
+                remaining_milestones, remaining_cycles, remaining_slots: int) -> PlotNodeReview:
         related = self.nekg.related(proposal.subject, proposal.object)
+        craft_scope = self._craft_scope(
+            remaining_beats, remaining_milestones, remaining_cycles,
+            remaining_slots=remaining_slots,
+        )
         return self.provider.generate_structured(
             system_instruction=(
                 "Review one pseudo-CPN independently. Accept only if all seven checks pass: causal "
                 "support, character intention, active conflict, continuity, novelty, progress toward "
                 "the chapter ending, world consistency, honest craft coverage, a persistent consequence, "
                 "and a valid Yes-but/No-and result when applicable. If repairable, return a complete "
-                "revised proposal. Do not reward IDs or mere schema compliance."
+                "revised proposal. The supplied craft scope is authoritative: a final candidate may "
+                "claim only IDs listed as available, and an empty list means it must claim none. Never "
+                "restore setup/start IDs already assigned to the chapter begin or payoff/end IDs reserved "
+                "for the chapter end. The accepted flag and every review check must evaluate the final "
+                "candidate (the revised proposal when present, otherwise the submitted proposal). Do not "
+                "reward IDs or mere schema compliance."
             ),
             prompt=(f"PROPOSAL:\n{_json(proposal)}\nCHAPTER:\n{_json(chapter)}\nEND:\n{_json(end)}"
+                    f"\nAUTHORITATIVE CRAFT SCOPE:\n{_json(craft_scope)}"
                     f"\nRECENT:\n{_json(self.state.recent())}\nRELATED:\n{_json(related)}"),
             schema=PlotNodeReview,
         )
+
+    @staticmethod
+    def _craft_scope(beats, milestones, cycles, *, remaining_slots: int) -> dict:
+        return {
+            "remaining_slots": remaining_slots,
+            "available_craft_beat_ids": [item.id for item in beats],
+            "available_character_milestone_ids": [item.id for item in milestones],
+            "available_try_fail_cycle_ids": [item.id for item in cycles],
+            "remaining_craft_beats": [item.model_dump(mode="json") for item in beats],
+            "remaining_character_milestones": [item.model_dump(mode="json") for item in milestones],
+            "remaining_try_fail_cycles": [item.model_dump(mode="json") for item in cycles],
+        }
 
     @staticmethod
     def _proposal_craft_issues(proposal, beats, milestones, cycles, *, remaining_slots: int) -> list[str]:
@@ -203,12 +226,27 @@ class IncrementalPlotPlanner:
             issues.append("The proposal repeats a character milestone ID")
         if len(proposal.try_fail_cycle_ids) != len(set(proposal.try_fail_cycle_ids)):
             issues.append("The proposal repeats a try-fail cycle ID")
-        if not set(proposal.craft_beat_ids) <= beat_ids:
-            issues.append("The proposal claims an unavailable craft beat")
-        if not set(proposal.character_milestone_ids) <= milestone_ids:
-            issues.append("The proposal claims an unavailable character milestone")
-        if not set(proposal.try_fail_cycle_ids) <= set(cycle_by_id):
-            issues.append("The proposal claims an unavailable try-fail cycle")
+        unavailable_beats = set(proposal.craft_beat_ids) - beat_ids
+        if unavailable_beats:
+            issues.append(
+                "The proposal claims unavailable craft beat IDs: "
+                f"{', '.join(sorted(unavailable_beats))}; allowed: "
+                f"{', '.join(sorted(beat_ids)) or 'none'}"
+            )
+        unavailable_milestones = set(proposal.character_milestone_ids) - milestone_ids
+        if unavailable_milestones:
+            issues.append(
+                "The proposal claims unavailable character milestone IDs: "
+                f"{', '.join(sorted(unavailable_milestones))}; allowed: "
+                f"{', '.join(sorted(milestone_ids)) or 'none'}"
+            )
+        unavailable_cycles = set(proposal.try_fail_cycle_ids) - set(cycle_by_id)
+        if unavailable_cycles:
+            issues.append(
+                "The proposal claims unavailable try-fail cycle IDs: "
+                f"{', '.join(sorted(unavailable_cycles))}; allowed: "
+                f"{', '.join(sorted(cycle_by_id)) or 'none'}"
+            )
         if len(proposal.try_fail_cycle_ids) > 1:
             issues.append("One event may cover at most one try-fail cycle")
         if len(cycles) >= remaining_slots and len(proposal.try_fail_cycle_ids) != 1:
@@ -220,12 +258,21 @@ class IncrementalPlotPlanner:
         elif proposal.try_fail_outcome is not None:
             issues.append("A try-fail outcome requires a cycle reference")
         if remaining_slots == 1:
-            if set(proposal.craft_beat_ids) != beat_ids:
-                issues.append("The final slot must cover every remaining progress beat")
-            if set(proposal.character_milestone_ids) != milestone_ids:
-                issues.append("The final slot must cover every remaining transition milestone")
-            if set(proposal.try_fail_cycle_ids) != set(cycle_by_id):
-                issues.append("The final slot must cover every remaining try-fail cycle")
+            if beat_ids and set(proposal.craft_beat_ids) != beat_ids:
+                issues.append(
+                    "The final slot must cover remaining progress beat IDs: "
+                    f"{', '.join(sorted(beat_ids))}"
+                )
+            if milestone_ids and set(proposal.character_milestone_ids) != milestone_ids:
+                issues.append(
+                    "The final slot must cover remaining transition milestone IDs: "
+                    f"{', '.join(sorted(milestone_ids))}"
+                )
+            if cycle_by_id and set(proposal.try_fail_cycle_ids) != set(cycle_by_id):
+                issues.append(
+                    "The final slot must cover remaining try-fail cycle IDs: "
+                    f"{', '.join(sorted(cycle_by_id))}"
+                )
         return issues
 
     def plan(self, outline: StoryOutlineArtifact, anchors: ChapterAnchorsArtifact,
@@ -262,7 +309,12 @@ class IncrementalPlotPlanner:
             self._checkpoint(on_checkpoint)
             for slot in range(1, budget + 1):
                 revision = ""
+                remaining_slots = budget - slot + 1
                 for attempt in range(1, self.max_retries + 2):
+                    craft_scope = self._craft_scope(
+                        remaining_beats, remaining_milestones, remaining_cycles,
+                        remaining_slots=remaining_slots,
+                    )
                     try:
                         proposal = self._proposal(chapter, anchor, blueprint, revision, slot, budget,
                                                   remaining_beats, remaining_milestones,
@@ -272,28 +324,58 @@ class IncrementalPlotPlanner:
                         self.history.rejected.append({
                             "chapter_id": chapter.id, "slot": slot, "attempt": attempt,
                             "stage": "proposal", "proposal": None, "issues": [issue],
-                            "validation": validation,
+                            "review": None, "candidate": None, "candidate_source": None,
+                            "craft_scope": craft_scope, "validation": validation,
                         })
                         revision = issue
                         self._checkpoint(on_checkpoint)
                         continue
+                    proposal_issues = self._proposal_craft_issues(
+                        proposal, remaining_beats, remaining_milestones, remaining_cycles,
+                        remaining_slots=remaining_slots,
+                    )
+                    if proposal_issues:
+                        self.history.rejected.append({
+                            "chapter_id": chapter.id, "slot": slot, "attempt": attempt,
+                            "stage": "proposal_validation",
+                            "proposal": proposal.model_dump(mode="json"),
+                            "review": None,
+                            "candidate": proposal.model_dump(mode="json"),
+                            "candidate_source": "proposal",
+                            "craft_scope": craft_scope,
+                            "issues": proposal_issues,
+                        })
+                        revision = "; ".join(proposal_issues)
+                        self._checkpoint(on_checkpoint)
+                        continue
                     try:
-                        review = self._review(proposal, chapter, anchor)
+                        review = self._review(
+                            proposal, chapter, anchor,
+                            remaining_beats=remaining_beats,
+                            remaining_milestones=remaining_milestones,
+                            remaining_cycles=remaining_cycles,
+                            remaining_slots=remaining_slots,
+                        )
                     except StructuredResponseError as exc:
                         issue, validation = self._structured_rejection(exc, "review")
                         self.history.rejected.append({
                             "chapter_id": chapter.id, "slot": slot, "attempt": attempt,
                             "stage": "review",
                             "proposal": proposal.model_dump(mode="json"),
+                            "review": None,
+                            "candidate": proposal.model_dump(mode="json"),
+                            "candidate_source": "proposal",
+                            "craft_scope": craft_scope,
                             "issues": [issue], "validation": validation,
                         })
                         revision = issue
                         self._checkpoint(on_checkpoint)
                         continue
                     candidate = review.revised if review.revised is not None else proposal
+                    candidate_source = "review.revised" if review.revised is not None else "proposal"
                     craft_issues = self._proposal_craft_issues(
                         candidate, remaining_beats, remaining_milestones, remaining_cycles,
-                        remaining_slots=budget - slot + 1,
+                        remaining_slots=remaining_slots,
                     )
                     if review.accepted and not craft_issues:
                         node = self._node(candidate, chapter, "CPN", global_order, slot + 1, per_node_words)
@@ -312,9 +394,17 @@ class IncrementalPlotPlanner:
                         previous = node; global_order += 1
                         self._checkpoint(on_checkpoint)
                         break
-                    issues = [*review.issues, *craft_issues]
-                    self.history.rejected.append({"chapter_id": chapter.id, "slot": slot, "attempt": attempt,
-                                                  "proposal": proposal.model_dump(mode="json"), "issues": issues})
+                    issues = list(dict.fromkeys([*review.issues, *craft_issues]))
+                    self.history.rejected.append({
+                        "chapter_id": chapter.id, "slot": slot, "attempt": attempt,
+                        "stage": "candidate_validation" if craft_issues else "review",
+                        "proposal": proposal.model_dump(mode="json"),
+                        "review": review.model_dump(mode="json"),
+                        "candidate": candidate.model_dump(mode="json"),
+                        "candidate_source": candidate_source,
+                        "craft_scope": craft_scope,
+                        "issues": issues,
+                    })
                     revision = "; ".join(issues)
                     self._checkpoint(on_checkpoint)
                 else:
@@ -328,9 +418,14 @@ class IncrementalPlotPlanner:
                             "slot": slot,
                             "attempts": self.max_retries + 1,
                             "rejections": rejected,
+                            "craft_scope": self._craft_scope(
+                                remaining_beats, remaining_milestones, remaining_cycles,
+                                remaining_slots=remaining_slots,
+                            ),
                         },
                         recommendations=[
-                            "Revisa planning_checkpoint/node_reviews.json o usa un modelo más capaz."
+                            "Revisa proposal, review y candidate en "
+                            "planning_checkpoint/node_reviews.json; compara sus IDs con craft_scope."
                         ],
                     )
             if remaining_beats or remaining_milestones or remaining_cycles:

@@ -268,7 +268,9 @@ class PlotNodeProposal(BaseModel):
 
 
 class PlotNodeReview(BaseModel):
-    accepted: bool
+    """Review of the final candidate: ``revised`` when present, otherwise the proposal."""
+
+    accepted: bool = Field(description="Whether the final candidate passes every review check")
     causal: bool
     intentional: bool
     conflict_present: bool
@@ -280,7 +282,10 @@ class PlotNodeReview(BaseModel):
     consequence_persists: bool = True
     try_fail_valid: bool = True
     issues: list[str] = Field(default_factory=list)
-    revised: PlotNodeProposal | None = None
+    revised: PlotNodeProposal | None = Field(
+        default=None,
+        description="Complete replacement candidate evaluated by this review",
+    )
 
     @model_validator(mode="after")
     def acceptance_is_earned(self) -> "PlotNodeReview":

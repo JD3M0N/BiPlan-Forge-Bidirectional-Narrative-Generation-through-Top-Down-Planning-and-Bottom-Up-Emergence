@@ -2,6 +2,12 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [2.0.3] - 2026-08-16
+
+- Impedido que propuestas y revisiones CPN reclamen IDs de craft ya consumidos.
+- Incorporado el alcance autoritativo de craft al revisor y a los diagnósticos.
+- Diferenciadas en los checkpoints la propuesta original y la revisión evaluada.
+
 ## [2.0.2] - 2026-08-16
 
 - Normalizadas como rechazos recuperables las revisiones CPN contradictorias.
