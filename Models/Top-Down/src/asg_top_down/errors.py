@@ -48,6 +48,17 @@ class StructuredResponseError(ProviderError):
     code = "PROVIDER_INVALID_SCHEMA"
 
 
+class ArtifactValidationError(ASGError):
+    """A structured artifact remained inconsistent after repair attempts."""
+
+    code = "ARTIFACT_VALIDATION_FAILED"
+    stage = "planning"
+
+    def __init__(self, summary: str, *, stage: str = "planning", **kwargs) -> None:
+        super().__init__(summary, **kwargs)
+        self.stage = stage
+
+
 class StorylinePlanningError(ASGError):
     code = "STORYLINE_PLANNING_FAILED"
     stage = "director"

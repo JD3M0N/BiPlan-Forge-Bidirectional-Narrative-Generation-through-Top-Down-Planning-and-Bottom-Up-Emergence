@@ -128,6 +128,26 @@ def test_generation_edits_one_progress_message_until_complete(tmp_path):
     assert "100% — Historia terminada" in bot.edits[-1]["text"]
 
 
+def test_generation_notifies_quality_warning_and_still_starts_evaluation(tmp_path):
+    story = make_story(tmp_path)
+    (story / "metadata.json").write_text(
+        json.dumps({"warnings": ["Se entregó el mejor borrador disponible."]}),
+        encoding="utf-8",
+    )
+    handler = TelegramStoryBot(FakeGenerator(story))
+    bot = FakeBot()
+    context = SimpleNamespace(bot=bot, user_data={})
+    user = SimpleNamespace(id=12, username="ana", full_name="Ana")
+
+    asyncio.run(handler._generate_and_deliver(
+        context=context, chat_id=20, user=user, prompt="Una historia",
+    ))
+
+    assert any("mejor borrador" in message["text"] for message in bot.messages)
+    assert context.user_data["state"] == "evaluating"
+    assert bot.documents
+
+
 def test_generation_reports_actionable_safe_error() -> None:
     handler = TelegramStoryBot(FailingGenerator())
     bot = FakeBot()

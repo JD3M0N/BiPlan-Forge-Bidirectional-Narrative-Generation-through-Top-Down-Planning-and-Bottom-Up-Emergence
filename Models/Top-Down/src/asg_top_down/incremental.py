@@ -80,7 +80,8 @@ class IncrementalPlotPlanner:
 
     def outline(self, request: StoryRequest, plan: StoryPlanArtifact,
                 blueprint: NarrativeBlueprint, craft: CraftContractArtifact | None = None,
-                characters: CharactersArtifact | None = None) -> StoryOutlineArtifact:
+                characters: CharactersArtifact | None = None,
+                repair_feedback: str = "") -> StoryOutlineArtifact:
         craft_instruction = ""
         craft_context = ""
         if craft is not None and characters is not None:
@@ -101,15 +102,15 @@ class IncrementalPlotPlanner:
             ),
             prompt=(f"REQUEST:\n{_json(request)}\nPLAN:\n{_json(plan)}"
                     f"{craft_context}"
-                    f"\nRETRIEVED KNOWLEDGE:\n{_json(blueprint)}"),
+                    f"\nRETRIEVED KNOWLEDGE:\n{_json(blueprint)}"
+                    f"{repair_feedback}"),
             schema=StoryOutlineArtifact,
         )
-        if craft is not None and characters is not None:
-            validate_craft_outline(outline, craft, characters)
         return outline
 
     def anchors(self, outline: StoryOutlineArtifact, world: WorldArtifact,
-                characters: CharactersArtifact) -> ChapterAnchorsArtifact:
+                characters: CharactersArtifact,
+                repair_feedback: str = "") -> ChapterAnchorsArtifact:
         return self.provider.generate_structured(
             system_instruction=(
                 "Generate exactly one SVO begin anchor and one SVO end anchor for every chapter. "
@@ -118,7 +119,8 @@ class IncrementalPlotPlanner:
                 "the end event must embody payoff and end beats. Anchors describe observable events, "
                 "not scores, themes, IDs, or narration instructions."
             ),
-            prompt=f"OUTLINE:\n{_json(outline)}\nWORLD:\n{_json(world)}\nCHARACTERS:\n{_json(characters)}",
+            prompt=(f"OUTLINE:\n{_json(outline)}\nWORLD:\n{_json(world)}"
+                    f"\nCHARACTERS:\n{_json(characters)}{repair_feedback}"),
             schema=ChapterAnchorsArtifact,
         )
 
@@ -281,6 +283,14 @@ class IncrementalPlotPlanner:
              on_checkpoint=None) -> tuple[IncrementalStorylineArtifact, NodeReviewHistory]:
         self.state = StorylineState(outline.chapters)
         by_chapter = {x.chapter_id: x for x in anchors.anchors}
+        chapter_ids = [chapter.id for chapter in outline.chapters]
+        anchor_ids = [anchor.chapter_id for anchor in anchors.anchors]
+        if len(anchor_ids) != len(set(anchor_ids)) or set(anchor_ids) != set(chapter_ids):
+            raise StorylinePlanningError(
+                "Las anclas no corresponden exactamente con los capítulos del outline.",
+                details={"chapter_ids": chapter_ids, "anchor_ids": anchor_ids},
+                recommendations=["Regenera las anclas de capítulos."],
+            )
         global_order = 1
         previous: PlotNode | None = None
         for chapter in outline.chapters:
@@ -454,6 +464,13 @@ class IncrementalPlotPlanner:
             self._checkpoint(on_checkpoint)
         artifact = self.state.artifact()
         if craft is not None and characters is not None:
-            validate_craft_outline(outline, craft, characters)
-            validate_storyline_craft(artifact, outline)
+            try:
+                validate_craft_outline(outline, craft, characters)
+                validate_storyline_craft(artifact, outline)
+            except (KeyError, ValueError) as exc:
+                raise StorylinePlanningError(
+                    f"La STORYLINE final incumple el contrato narrativo: {exc}",
+                    details={"validation_error": str(exc)},
+                    recommendations=["Revisa los checkpoints y los IDs de craft aceptados."],
+                ) from exc
         return artifact, self.history

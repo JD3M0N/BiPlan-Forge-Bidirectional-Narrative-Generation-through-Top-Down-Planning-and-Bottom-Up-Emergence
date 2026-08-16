@@ -17,6 +17,10 @@ EXAMPLE_PROMPT = (
 
 
 def main() -> int:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="replace")
     print("Generador automático de historias — Top-Down")
     print("\nEjemplo de prompt ideal:\n")
     print(f"  {EXAMPLE_PROMPT}\n")
@@ -37,6 +41,7 @@ def main() -> int:
             provider, settings.output_root,
             default_target_words=settings.default_target_words,
             max_cpn_retries=settings.max_cpn_retries,
+            max_artifact_retries=settings.max_artifact_retries,
         )
         print(f"\nGenerando con {settings.model}...")
         output = orchestrator.run(

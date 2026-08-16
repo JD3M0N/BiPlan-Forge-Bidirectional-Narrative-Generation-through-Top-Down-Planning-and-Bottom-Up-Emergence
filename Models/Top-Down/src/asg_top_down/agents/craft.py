@@ -22,6 +22,7 @@ class CraftContractAgent(Agent[CraftContractArtifact]):
         plan: StoryPlanArtifact,
         world: WorldArtifact,
         characters: CharactersArtifact,
+        repair_feedback: str = "",
     ) -> CraftContractArtifact:
         target = try_fail_target(request.target_words)
         return self.provider.generate_structured(
@@ -35,7 +36,7 @@ class CraftContractAgent(Agent[CraftContractArtifact]):
             prompt=(
                 f"REQUEST:\n{json_text(request)}\n\nPLAN:\n{json_text(plan)}"
                 f"\n\nWORLD:\n{json_text(world)}\n\nCHARACTERS:\n{json_text(characters)}"
-                f"\n\nEXACT TRY-FAIL TARGET: {target}"
+                f"\n\nEXACT TRY-FAIL TARGET: {target}{repair_feedback}"
             ),
             schema=CraftContractArtifact,
         )
@@ -87,6 +88,7 @@ class CraftRewriterAgent(Agent[str]):
         storyline: IncrementalStorylineArtifact,
         draft: str,
         audit: CraftAuditArtifact,
+        length_instruction: str = "",
     ) -> str:
         failed = [answer for answer in audit.answers if answer.verdict == "fail"]
         failed.sort(key=lambda answer: not answer.blocking)
@@ -97,13 +99,15 @@ class CraftRewriterAgent(Agent[str]):
                 "outcomes, requested language, and approximate length. Show promises, character "
                 "slider movement, and try-fail consequences through action and choice. Never expose "
                 "scores, IDs, audit questions, or planning terminology. Return only the complete "
-                "revised story in Markdown."
+                "revised story in Markdown. Preserve every canonical Markdown chapter heading "
+                "exactly as supplied in the draft; never rename or duplicate a heading."
             ),
             prompt=(
                 f"REQUEST:\n{json_text(request)}\n\nCRAFT CONTRACT:\n{json_text(contract)}"
                 f"\n\nCHARACTERS:\n{json_text(characters)}\n\nOUTLINE:\n{json_text(outline)}"
                 f"\n\nSTORYLINE:\n{json_text(storyline)}\n\nFAILED AUDIT ANSWERS:\n"
                 f"{json.dumps([answer.model_dump(mode='json') for answer in failed], ensure_ascii=False, indent=2)}"
+                f"\n\nDETERMINISTIC LENGTH INSTRUCTION:\n{length_instruction or 'none'}"
                 f"\n\nDRAFT:\n{draft}"
             ),
         )

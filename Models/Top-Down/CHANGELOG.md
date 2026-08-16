@@ -2,6 +2,27 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [2.0.4] - 2026-08-16
+
+- Añadida reparación semántica auditable para plan, personajes, contrato,
+  outline y anclas; cada candidato inválido y su causa se conserva bajo
+  `artifact_attempts/` antes de solicitar un reemplazo completo.
+- Incorporado `ARTIFACT_VALIDATION_FAILED`, con etapa, cantidad de intentos y
+  reglas incumplidas, y `STORY_MAX_ARTIFACT_RETRIES` para configurar las
+  reparaciones sin cambiar los llamadores existentes.
+- Validadas la correspondencia exacta entre capítulos y anclas, la suma de
+  presupuestos, las referencias de craft y la STORYLINE final con diagnósticos
+  estructurados en lugar de `ValueError` o `KeyError` genéricos.
+- Restaurados los checkpoints de etapas, el progreso durante esperas de cuota y
+  `llm_usage.json`/`llm_usage_summary.json` en el generador v2.
+- Normalizados los títulos de capítulos y añadida una auditoría final de
+  longitud de −10 % a +20 %, eligiendo la versión válida más cercana al rango.
+- Conservada la mejor historia disponible cuando falla o se agota la auditoría
+  o reescritura final, mediante `quality_warning.json` y
+  `metadata.json.warnings` sin relajar la planificación CPN.
+- Configurada la salida UTF-8 del CLI de Windows para evitar fallos al imprimir
+  las barras Unicode de progreso.
+
 ## [2.0.3] - 2026-08-16
 
 - Impedido que propuestas y revisiones CPN reclamen IDs de craft ya consumidos.

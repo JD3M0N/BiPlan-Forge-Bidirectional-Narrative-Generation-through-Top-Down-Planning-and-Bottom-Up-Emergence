@@ -45,6 +45,7 @@ class TopDownGenerator:
             provider, settings.output_root,
             default_target_words=settings.default_target_words,
             max_cpn_retries=settings.max_cpn_retries,
+            max_artifact_retries=settings.max_artifact_retries,
         ).run(
             prompt, on_progress=on_progress, on_run_created=on_run_created,
         ).run_dir
@@ -63,6 +64,7 @@ class TopDownGenerator:
             provider, settings.output_root,
             default_target_words=settings.default_target_words,
             max_cpn_retries=settings.max_cpn_retries,
+            max_artifact_retries=settings.max_artifact_retries,
         ).resume(
             run_dir, on_progress=on_progress, on_run_created=on_run_created,
         ).run_dir

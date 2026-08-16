@@ -63,4 +63,10 @@ Las solicitudes de historias se guardan en `Stories/telegram_queue.sqlite3` y
 se procesan de una en una. El mensaje de progreso muestra la posición FIFO y
 una estimación basada en las últimas diez historias. `/cancel` retira una
 solicitud que aún esté esperando. Tras reiniciar el bot, los trabajos
-interrumpidos vuelven al frente de la cola y se reanudan desde sus artefactos.
+interrumpidos vuelven al frente de la cola. Una historia ya terminada se
+reutiliza; una ejecución parcial se reinicia desde su `request.json` en un
+directorio nuevo y conserva el intento anterior para auditoría.
+
+Si la historia pudo escribirse pero la auditoría o reescritura final falló, el
+bot entrega la mejor versión disponible y muestra la advertencia guardada en
+`metadata.json`. Los fallos de planificación no se degradan ni se entregan.

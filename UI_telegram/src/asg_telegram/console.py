@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import sys
 
 from asg_top_down.errors import ASGError
@@ -26,6 +27,16 @@ CATEGORY_COLORS = {
 }
 
 
+def _redact_diagnostic(value: str) -> str:
+    value = re.sub(r"AIza[0-9A-Za-z_-]{20,}", "[REDACTED]", value)
+    value = re.sub(
+        r"(?i)((?:api[_ -]?key|token|authorization)\s*[:=]\s*)\S+",
+        r"\1[REDACTED]",
+        value,
+    )
+    return value
+
+
 class ConsoleFormatter(logging.Formatter):
     """Presenta cada evento como un bloque corto fácil de escanear."""
 
@@ -46,12 +57,16 @@ class ConsoleFormatter(logging.Formatter):
         lines.append(f"Acción  : {record.getMessage()}")
         if record.exc_info:
             exception = record.exc_info[1]
-            detail = (
-                exception.public_message()
-                if isinstance(exception, ASGError)
-                else f"Error interno inesperado ({type(exception).__name__})."
-            )
+            if isinstance(exception, ASGError):
+                detail = exception.public_message()
+                lines.append(f"Etapa   : {exception.stage}")
+            else:
+                message = _redact_diagnostic(str(exception).strip()) or "sin mensaje"
+                detail = f"Error interno inesperado ({type(exception).__name__}): {message}"
             lines.append(f"Detalle : {detail}")
+            if not isinstance(exception, ASGError):
+                trace = _redact_diagnostic(self.formatException(record.exc_info))
+                lines.append(f"Traza   : {trace}")
         lines.append(f"{'─' * 62}{Style.RESET_ALL}")
         return "\n".join(lines)
 

@@ -2,6 +2,18 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [1.1.4] - 2026-08-16
+
+- Mostradas causas estructuradas y trazas locales redactadas para errores
+  inesperados de generación, incluyendo código, etapa y ejecución sin exponer
+  credenciales.
+- Añadidos avisos cuando se entrega una historia completada con advertencias de
+  calidad, manteniendo disponible su evaluación humana.
+- Conectado `STORY_MAX_ARTIFACT_RETRIES` tanto para generaciones nuevas como
+  para reinicios de trabajos interrumpidos.
+- Documentado que las ejecuciones parciales se reinician desde `request.json`
+  en un directorio nuevo y que solo las historias terminadas se reutilizan.
+
 ## [1.1.3] - 2026-08-16
 
 - Actualizada la dependencia mínima a ASG Top-Down 2.0.3 para impedir que las

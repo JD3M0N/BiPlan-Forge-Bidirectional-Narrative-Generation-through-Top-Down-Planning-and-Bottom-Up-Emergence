@@ -2,6 +2,11 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [1.1.4] - 2026-08-16
+
+- Actualizada la dependencia mínima a ASG Top-Down 2.0.4 para consumir la
+  generación reparable y los artefactos de diagnóstico nuevos.
+
 ## [1.1.3] - 2026-08-16
 
 - Actualizada la dependencia mínima a ASG Top-Down 2.0.3 para impedir que las

@@ -429,6 +429,29 @@ class TelegramStoryBot:
                     )
                 except (OSError, ValueError):
                     pass
+            metadata_path = Path(story_directory) / "metadata.json"
+            if metadata_path.is_file():
+                try:
+                    import json
+                    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                    warnings = metadata.get("warnings", [])
+                    if warnings:
+                        log_user_action(
+                            LOGGER,
+                            user_id=user.id,
+                            username=user.username or user.full_name,
+                            action="Historia completada con advertencias de calidad",
+                            category="advertencia",
+                            level=logging.WARNING,
+                        )
+                        await self._safe_notice(
+                            context, chat_id,
+                            "La historia se completó, pero la revisión automática dejó esta "
+                            f"advertencia: {warnings[0]}",
+                            user,
+                        )
+                except (OSError, ValueError, TypeError):
+                    LOGGER.warning("No se pudieron leer las advertencias de la ejecución")
             story_path = Path(story_directory) / "story.md"
             context.user_data["state"] = "delivering"
             log_user_action(

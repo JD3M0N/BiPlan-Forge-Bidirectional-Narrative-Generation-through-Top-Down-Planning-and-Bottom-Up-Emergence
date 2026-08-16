@@ -1,17 +1,20 @@
 import json
+from datetime import datetime, timezone
 
 import pytest
 
 from asg_top_down.generator import StoryGenerator
 from asg_top_down.compare import build_comparison
-from asg_top_down.errors import StorylinePlanningError, StructuredResponseError
+from asg_top_down.errors import (
+    ArtifactValidationError, StorylinePlanningError, StructuredResponseError,
+)
 from asg_top_down.incremental import IncrementalPlotPlanner
 from asg_top_down.narrative_db import NarrativeSchemaRepository
 from asg_top_down.schemas import (
     ArchetypeSelection, ChapterAnchors, ChapterAnchorsArtifact, ChapterPlan,
     Character, CharacterMilestone, CharacterSliderArc, CharactersArtifact,
     CraftAuditAnswer, CraftAuditArtifact, CraftBeat, CraftContractArtifact,
-    CraftPromise, PlotNodeProposal, PlotNodeReview, SliderRange,
+    CraftPromise, LLMUsageRecord, PlotNodeProposal, PlotNodeReview, SliderRange,
     StoryOutlineArtifact, StoryPlanArtifact, StoryRequest, TryFailCycle,
     WorldArtifact,
 )
@@ -112,7 +115,7 @@ class V2Provider:
         raise AssertionError(schema)
 
     def generate_text(self, **kwargs):
-        return "Ada descifró la señal porque necesitaba proteger a la tripulación. La censura respondió."
+        return " ".join(["Ada", *(["investiga"] * 449)])
 
 
 class RevisionProvider(V2Provider):
@@ -149,8 +152,42 @@ class RevisionProvider(V2Provider):
             self.rewrite_calls += 1
             if self.fail_rewriter:
                 raise RuntimeError("fallo simulado del reescritor")
-            return f"Revisión completa {self.rewrite_calls}."
+            return " ".join([f"Revisión-{self.rewrite_calls}", *(["completa"] * 449)])
         return super().generate_text(system_instruction=system_instruction, prompt=prompt)
+
+
+class CriticFailureProvider(V2Provider):
+    def generate_structured(self, *, system_instruction, prompt, schema):
+        if schema is CraftAuditArtifact:
+            raise RuntimeError("fallo simulado del crítico")
+        return super().generate_structured(
+            system_instruction=system_instruction, prompt=prompt, schema=schema,
+        )
+
+
+class TelemetryProvider(V2Provider):
+    def __init__(self):
+        super().__init__()
+        self.usage_records = []
+        self.usage_callback = None
+        self.wait_callback = None
+        self.recorded = False
+
+    def generate_structured(self, *, system_instruction, prompt, schema):
+        result = super().generate_structured(
+            system_instruction=system_instruction, prompt=prompt, schema=schema,
+        )
+        if schema is StoryPlanArtifact and not self.recorded:
+            self.recorded = True
+            self.wait_callback(3, "prueba")
+            record = LLMUsageRecord(
+                operation="structured:StoryPlanArtifact", model=self.model_name,
+                timestamp=datetime.now(timezone.utc), duration_seconds=.1,
+                total_tokens=7, wait_seconds=3,
+            )
+            self.usage_records.append(record)
+            self.usage_callback(record)
+        return result
 
 
 class InvalidNodeReviewProvider(V2Provider):
@@ -173,6 +210,45 @@ class InvalidNodeReviewProvider(V2Provider):
         return super().generate_structured(
             system_instruction=system_instruction, prompt=prompt, schema=schema,
         )
+
+
+class SemanticRepairProvider(V2Provider):
+    def __init__(self, artifact: str, *, always_invalid: bool = False):
+        super().__init__()
+        self.artifact = artifact
+        self.always_invalid = always_invalid
+        self.calls = 0
+
+    def generate_structured(self, *, system_instruction, prompt, schema):
+        names = {
+            StoryPlanArtifact: "story_plan",
+            CharactersArtifact: "characters",
+            CraftContractArtifact: "craft_contract",
+            StoryOutlineArtifact: "outline",
+            ChapterAnchorsArtifact: "chapter_anchors",
+        }
+        candidate = super().generate_structured(
+            system_instruction=system_instruction, prompt=prompt, schema=schema,
+        )
+        if names.get(schema) != self.artifact:
+            return candidate
+        self.calls += 1
+        if self.calls > 1 and not self.always_invalid:
+            assert "SEMANTIC REPAIR REQUIRED" in prompt
+            return candidate
+        candidate = candidate.model_copy(deep=True)
+        if schema is StoryPlanArtifact:
+            candidate.archetypes.primary = "unknown-archetype"
+        elif schema is CharactersArtifact:
+            candidate.characters[0].importance = "supporting"
+            candidate.characters[0].slider_arc = None
+        elif schema is CraftContractArtifact:
+            candidate.try_fail_target = 3
+        elif schema is StoryOutlineArtifact:
+            candidate.chapters[0].target_words = 449
+        elif schema is ChapterAnchorsArtifact:
+            candidate.anchors[0].chapter_id = "missing-chapter"
+        return candidate
 
 
 class SetupOnlyCPNProvider(V2Provider):
@@ -314,6 +390,54 @@ def test_schema_database_is_reproducible_and_embedding_cache_is_reused(tmp_path)
     assert provider.query_calls == 2
 
 
+@pytest.mark.parametrize(
+    "artifact",
+    ["story_plan", "characters", "craft_contract", "outline", "chapter_anchors"],
+)
+def test_semantically_invalid_artifacts_are_saved_and_repaired(tmp_path, artifact):
+    provider = SemanticRepairProvider(artifact)
+    schemas = NarrativeSchemaRepository(tmp_path / "schemas.db", provider=provider)
+    request = StoryRequest(
+        original_prompt="misterio", title="Señal", genre="detective",
+        tone="tenso", premise="Una señal oculta la verdad", target_words=450,
+    )
+
+    result = StoryGenerator(
+        provider, tmp_path / "stories", schema_repository=schemas,
+    ).generate(request)
+
+    attempt = result.run_dir / "artifact_attempts" / artifact / "attempt-001.json"
+    validation = attempt.with_name("attempt-001-validation.json")
+    assert attempt.is_file() and validation.is_file()
+    assert provider.calls == 2
+    assert json.loads(validation.read_text(encoding="utf-8"))["issue"]
+
+
+def test_semantic_repairs_exhaust_as_actionable_artifact_error(tmp_path):
+    provider = SemanticRepairProvider("outline", always_invalid=True)
+    schemas = NarrativeSchemaRepository(tmp_path / "schemas.db", provider=provider)
+    request = StoryRequest(
+        original_prompt="misterio", title="Señal", genre="detective",
+        tone="tenso", premise="Una señal oculta la verdad", target_words=450,
+    )
+    generator = StoryGenerator(
+        provider, tmp_path / "stories", schema_repository=schemas,
+        max_artifact_retries=1,
+    )
+
+    with pytest.raises(ArtifactValidationError) as captured:
+        generator.generate(request)
+
+    run_dir = next((tmp_path / "stories").iterdir())
+    error = json.loads((run_dir / "error_report.json").read_text(encoding="utf-8"))
+    assert captured.value.stage == "outline"
+    assert error["code"] == "ARTIFACT_VALIDATION_FAILED"
+    assert error["stage"] == "outline"
+    assert error["details"]["artifact"] == "outline"
+    assert error["details"]["attempts"] == 2
+    assert (run_dir / "artifact_attempts" / "outline" / "attempt-002.json").is_file()
+
+
 def test_retrieval_falls_back_to_fts_when_embeddings_are_offline(tmp_path):
     provider = V2Provider()
     provider.embed_documents = lambda texts: (_ for _ in ()).throw(ConnectionError("offline"))
@@ -335,7 +459,8 @@ def test_incremental_generator_updates_nekg_and_writes_new_artifacts(tmp_path):
     assert {"blueprint.json", "retrieval_trace.json", "outline.json", "chapter_anchors.json",
             "storyline.json", "nekg.json", "node_reviews.json", "craft_contract.json",
             "draft.md", "craft_audit.json", "craft_revision_history.json",
-            "diagnostic_audit.json", "story.md"} <= names
+            "diagnostic_audit.json", "length_audit.json", "llm_usage.json",
+            "llm_usage_summary.json", "story.md"} <= names
     assert (result.run_dir / "planning_checkpoint" / "storyline.json").is_file()
     graph = json.loads((result.run_dir / "storyline.json").read_text(encoding="utf-8"))
     assert [node["node_type"] for node in graph["nodes"]] == ["CBN", "CPN", "CPN", "CEN"]
@@ -350,6 +475,15 @@ def test_incremental_generator_updates_nekg_and_writes_new_artifacts(tmp_path):
     nekg = json.loads((result.run_dir / "nekg.json").read_text(encoding="utf-8"))
     ada = next(entity for entity in nekg["entities"] if entity["name"] == "Ada")
     assert ada["state"]["knowledge"] == "verdad de la señal"
+    story = (result.run_dir / "story.md").read_text(encoding="utf-8")
+    assert story.count("## Señal") == 1
+    length = json.loads((result.run_dir / "length_audit.json").read_text(encoding="utf-8"))
+    assert length["total"]["within_tolerance"] is True
+    metadata = json.loads((result.run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["status"] == "completed"
+    assert {"outline", "anchors", "storyline", "quality_review", "story"} <= set(
+        metadata["completed_stages"]
+    )
 
 
 def test_cpn_budget_prefers_fewer_developed_events():
@@ -379,18 +513,66 @@ def test_craft_revision_loop_selects_the_best_version(
     assert len(history["attempts"]) == expected_rewrites + 1
 
 
-def test_rewriter_failure_preserves_draft_and_audit(tmp_path):
+def test_rewriter_failure_delivers_best_draft_with_warning(tmp_path):
     provider = RevisionProvider(99, fail_rewriter=True)
     schemas = NarrativeSchemaRepository(tmp_path / "schemas.db", provider=provider)
     request = StoryRequest(original_prompt="misterio", title="Señal", genre="detective",
                            tone="tenso", premise="Una señal oculta la verdad", target_words=450)
-    with pytest.raises(RuntimeError, match="reescritor"):
-        StoryGenerator(provider, tmp_path / "stories", schema_repository=schemas).generate(request)
-    run_dir = next((tmp_path / "stories").iterdir())
+    result = StoryGenerator(
+        provider, tmp_path / "stories", schema_repository=schemas,
+    ).generate(request)
+    run_dir = result.run_dir
     assert (run_dir / "draft.md").is_file()
     assert (run_dir / "craft_revisions" / "attempt-0-audit.json").is_file()
+    assert (run_dir / "story.md").is_file()
+    assert (run_dir / "quality_warning.json").is_file()
     metadata = json.loads((run_dir / "metadata.json").read_text(encoding="utf-8"))
-    assert metadata["status"] == "failed"
+    assert metadata["status"] == "completed"
+    assert metadata["warnings"]
+
+
+def test_critic_failure_delivers_draft_with_synthetic_audit(tmp_path):
+    provider = CriticFailureProvider()
+    schemas = NarrativeSchemaRepository(tmp_path / "schemas.db", provider=provider)
+    request = StoryRequest(
+        original_prompt="misterio", title="Señal", genre="detective",
+        tone="tenso", premise="Una señal oculta la verdad", target_words=450,
+    )
+
+    result = StoryGenerator(
+        provider, tmp_path / "stories", schema_repository=schemas,
+    ).generate(request)
+
+    assert result.story_path.is_file()
+    audit = json.loads((result.run_dir / "craft_audit.json").read_text(encoding="utf-8"))
+    metadata = json.loads((result.run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert audit["passed"] is False
+    assert metadata["status"] == "completed"
+    assert "auditoría" in metadata["warnings"][0]
+
+
+def test_usage_and_quota_progress_are_restored_for_v2(tmp_path):
+    provider = TelemetryProvider()
+    schemas = NarrativeSchemaRepository(tmp_path / "schemas.db", provider=provider)
+    updates = []
+    request = StoryRequest(
+        original_prompt="misterio", title="Señal", genre="detective",
+        tone="tenso", premise="Una señal oculta la verdad", target_words=450,
+    )
+
+    result = StoryGenerator(
+        provider, tmp_path / "stories", schema_repository=schemas,
+    ).generate(request, on_progress=updates.append)
+
+    usage = json.loads(
+        (result.run_dir / "llm_usage_summary.json").read_text(encoding="utf-8")
+    )
+    assert usage["calls"] == 1
+    assert usage["total_tokens"] == 7
+    assert usage["total_wait_seconds"] == 3
+    assert any(update.stage == "rate_limit" for update in updates)
+    assert provider.usage_callback is None
+    assert provider.wait_callback is None
 
 
 def test_invalid_node_review_consumes_attempt_and_generation_recovers(tmp_path):

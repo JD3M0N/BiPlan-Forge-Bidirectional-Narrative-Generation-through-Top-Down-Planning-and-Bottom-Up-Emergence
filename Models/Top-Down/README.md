@@ -24,6 +24,12 @@ Los artefactos v2 incluyen `blueprint.json`, `craft_contract.json`, `outline.jso
 `diagnostic_audit.json` y `story.md`. El diagnóstico no asigna puntuaciones de
 calidad.
 
+Los artefactos estructurados con reglas cruzadas se validan antes de publicarse.
+Si el plan, los personajes, el contrato de craft, el outline o las anclas son
+inconsistentes, el modelo recibe el candidato y el error determinista para
+repararlo. Los candidatos rechazados quedan en `artifact_attempts/`; el número
+de reparaciones se configura con `STORY_MAX_ARTIFACT_RETRIES` (2 por defecto).
+
 Durante la construcción incremental, `planning_checkpoint/` conserva STORYLINE,
 NEKG y el historial de revisiones después de cada aceptación o rechazo. Una
 respuesta estructurada inválida se reintenta una vez; si una revisión CPN sigue
@@ -42,6 +48,18 @@ hasta dos pasadas. Si no consigue aprobar, `story.md` contiene la versión con
 menos fallos y `craft_audit.json` conserva las advertencias restantes. Desde
 Python puede cambiarse el límite con `StoryGenerator(...,
 max_craft_revisions=N)`.
+
+Si el crítico o el reescritor fallan después de existir un borrador completo,
+la ejecución entrega la mejor versión disponible y registra
+`quality_warning.json` y `metadata.json.warnings`. La planificación y la
+STORYLINE continúan siendo estrictas. `length_audit.json` comprueba una
+tolerancia final de −10 % a +20 %, y `llm_usage.json` conserva llamadas, tokens
+y esperas por cuota.
+
+`StoryGenerator.resume(run_dir)` devuelve inmediatamente una historia ya
+terminada. Para una ejecución parcial conserva el directorio fallido para
+auditoría y reinicia desde `request.json` en una ejecución nueva; todavía no
+reanuda etapas individuales dentro del mismo directorio.
 
 ```powershell
 compare-story-runs Stories/Top-Down/anterior Stories/Top-Down/nueva --output comparacion.html

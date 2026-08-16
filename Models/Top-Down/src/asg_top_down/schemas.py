@@ -577,3 +577,4 @@ class RunMetadata(BaseModel):
     error: str | None = None
     error_code: str | None = None
     error_stage: str | None = None
+    warnings: list[str] = Field(default_factory=list)

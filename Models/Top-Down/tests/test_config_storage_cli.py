@@ -30,6 +30,7 @@ def test_repository_never_serializes_an_api_key(tmp_path) -> None:
             "error",
             "error_code",
             "error_stage",
+            "warnings",
         }
 
 
@@ -47,6 +48,14 @@ def test_default_target_words_can_be_configured(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("GEMINI_API_KEY", "test")
     monkeypatch.setenv("STORY_DEFAULT_WORDS", "2400")
     assert load_settings(tmp_path).default_target_words == 2400
+
+
+def test_artifact_retries_can_be_configured(tmp_path, monkeypatch) -> None:
+    (tmp_path / "Models").mkdir()
+    (tmp_path / "Stories").mkdir()
+    monkeypatch.setenv("GEMINI_API_KEY", "test")
+    monkeypatch.setenv("STORY_MAX_ARTIFACT_RETRIES", "4")
+    assert load_settings(tmp_path).max_artifact_retries == 4
 
 
 @pytest.mark.parametrize("value", ["299", "20001", "no-es-entero"])

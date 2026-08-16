@@ -53,9 +53,10 @@ class ArtifactRepository:
         return instance
 
     def save_json(self, filename: str, value: BaseModel) -> None:
-        content = json.dumps(
-            value.model_dump(mode="json"), ensure_ascii=False, indent=2
-        )
+        self.save_data(filename, value.model_dump(mode="json"))
+
+    def save_data(self, filename: str, value) -> None:
+        content = json.dumps(value, ensure_ascii=False, indent=2)
         destination = self.run_dir / filename
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(content + "\n", encoding="utf-8")
@@ -73,6 +74,12 @@ class ArtifactRepository:
 
     def complete(self) -> None:
         self.metadata.status = "completed"
+        self.metadata.updated_at = datetime.now(timezone.utc)
+        self._write_metadata()
+
+    def add_warning(self, warning: str) -> None:
+        if warning not in self.metadata.warnings:
+            self.metadata.warnings.append(warning)
         self.metadata.updated_at = datetime.now(timezone.utc)
         self._write_metadata()
 
