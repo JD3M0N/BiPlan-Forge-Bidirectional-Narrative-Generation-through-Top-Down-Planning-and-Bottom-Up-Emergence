@@ -2,6 +2,11 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [1.1.5] - 2026-08-16
+
+- Actualizada la dependencia mínima a ASG Top-Down 2.0.5 para usar la
+  adjudicación determinista del scope de craft durante la planificación CPN.
+
 ## [1.1.4] - 2026-08-16
 
 - Actualizada la dependencia mínima a ASG Top-Down 2.0.4 para consumir la

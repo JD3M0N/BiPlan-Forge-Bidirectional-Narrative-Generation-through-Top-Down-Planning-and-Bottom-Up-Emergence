@@ -2,6 +2,11 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [1.1.5] - 2026-08-16
+
+- Actualizada la dependencia mínima a ASG Top-Down 2.0.5 para impedir falsos
+  rechazos CPN cuando los beats de cierre ya están reservados para el CEN.
+
 ## [1.1.4] - 2026-08-16
 
 - Mostradas causas estructuradas y trazas locales redactadas para errores

@@ -159,6 +159,7 @@ class IncrementalPlotPlanner:
     def _proposal(self, chapter, end, blueprint, revision, slot, budget,
                   remaining_beats, remaining_milestones, remaining_cycles) -> PlotNodeProposal:
         recent = self.state.recent()
+        chapter_context = self._chapter_narrative_context(chapter)
         return self.provider.generate_structured(
             system_instruction=(
                 "Generate one pseudo-CPN as a concrete SVO event. It must be caused or enabled by "
@@ -169,7 +170,8 @@ class IncrementalPlotPlanner:
                 "A try-fail event covers at most one cycle and must use its exact Yes-but or No-and "
                 "outcome; its consequence must persist in effects. Never expose craft terms in prose."
             ),
-            prompt=(f"CHAPTER:\n{_json(chapter)}\nEND ANCHOR:\n{_json(end)}\nSLOT: {slot}/{budget}\n"
+            prompt=(f"CHAPTER NARRATIVE:\n{_json(chapter_context)}\nEND ANCHOR:\n{_json(end)}\n"
+                    f"SLOT: {slot}/{budget}\n"
                     f"RECENT STORYLINE:\n{_json(recent)}\nRELATED NEKG:\n{_json(self.nekg.artifact())}\n"
                     f"REMAINING CRAFT BEATS:\n{_json(remaining_beats)}\n"
                     f"REMAINING CHARACTER MILESTONES:\n{_json(remaining_milestones)}\n"
@@ -181,6 +183,7 @@ class IncrementalPlotPlanner:
     def _review(self, proposal, chapter, end, *, remaining_beats,
                 remaining_milestones, remaining_cycles, remaining_slots: int) -> PlotNodeReview:
         related = self.nekg.related(proposal.subject, proposal.object)
+        chapter_context = self._chapter_narrative_context(chapter)
         craft_scope = self._craft_scope(
             remaining_beats, remaining_milestones, remaining_cycles,
             remaining_slots=remaining_slots,
@@ -196,12 +199,24 @@ class IncrementalPlotPlanner:
                 "restore setup/start IDs already assigned to the chapter begin or payoff/end IDs reserved "
                 "for the chapter end. The accepted flag and every review check must evaluate the final "
                 "candidate (the revised proposal when present, otherwise the submitted proposal). Do not "
-                "reward IDs or mere schema compliance."
+                "reward IDs or mere schema compliance. The chapter narrative intentionally omits craft "
+                "requirements reserved for its begin and end nodes. Never infer hidden or unassigned IDs "
+                "from it. When every available ID list is empty and the candidate claims none, craft "
+                "coverage passes."
             ),
-            prompt=(f"PROPOSAL:\n{_json(proposal)}\nCHAPTER:\n{_json(chapter)}\nEND:\n{_json(end)}"
+            prompt=(f"PROPOSAL:\n{_json(proposal)}\nCHAPTER NARRATIVE:\n{_json(chapter_context)}"
+                    f"\nEND:\n{_json(end)}"
                     f"\nAUTHORITATIVE CRAFT SCOPE:\n{_json(craft_scope)}"
                     f"\nRECENT:\n{_json(self.state.recent())}\nRELATED:\n{_json(related)}"),
             schema=PlotNodeReview,
+        )
+
+    @staticmethod
+    def _chapter_narrative_context(chapter: ChapterPlan) -> dict:
+        """Expose narrative context without craft IDs reserved for CBN/CEN nodes."""
+        return chapter.model_dump(
+            mode="json",
+            exclude={"craft_beats", "character_milestones", "try_fail_cycles"},
         )
 
     @staticmethod
@@ -276,6 +291,44 @@ class IncrementalPlotPlanner:
                     f"{', '.join(sorted(cycle_by_id))}"
                 )
         return issues
+
+    @staticmethod
+    def _adjudicate_craft_review(
+        review: PlotNodeReview, craft_issues: list[str],
+    ) -> PlotNodeReview:
+        """Make the deterministic ID validator authoritative over the LLM craft flag.
+
+        Gemini occasionally rejects an otherwise valid final candidate because it
+        counts setup/payoff IDs that are deliberately assigned to the CBN/CEN.  The
+        semantic review remains strict; only the redundant craft-coverage decision
+        is corrected here, and a rejection is promoted solely when every other
+        explicit semantic check already passed.
+        """
+        local_craft_coverage = not craft_issues
+        if review.craft_coverage == local_craft_coverage:
+            return review
+
+        review = review.model_copy(deep=True)
+        review.craft_coverage = local_craft_coverage
+        if not local_craft_coverage:
+            review.accepted = False
+            return review
+
+        semantic_checks = (
+            review.causal,
+            review.intentional,
+            review.conflict_present,
+            review.continuous,
+            review.novel,
+            review.advances_ending,
+            review.world_consistent,
+            review.consequence_persists,
+            review.try_fail_valid,
+        )
+        if all(semantic_checks):
+            review.accepted = True
+            review.issues = []
+        return review
 
     def plan(self, outline: StoryOutlineArtifact, anchors: ChapterAnchorsArtifact,
              blueprint: NarrativeBlueprint, craft: CraftContractArtifact | None = None,
@@ -387,6 +440,7 @@ class IncrementalPlotPlanner:
                         candidate, remaining_beats, remaining_milestones, remaining_cycles,
                         remaining_slots=remaining_slots,
                     )
+                    review = self._adjudicate_craft_review(review, craft_issues)
                     if review.accepted and not craft_issues:
                         node = self._node(candidate, chapter, "CPN", global_order, slot + 1, per_node_words)
                         link = NarrativeEdge(source=previous.id, target=node.id, relation="causes", strength=5,

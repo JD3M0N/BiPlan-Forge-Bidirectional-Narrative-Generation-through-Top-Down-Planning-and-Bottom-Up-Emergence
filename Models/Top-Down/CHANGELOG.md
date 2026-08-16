@@ -2,6 +2,18 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [2.0.5] - 2026-08-16
+
+- Separado el contexto narrativo del capítulo del scope autoritativo de craft
+  enviado al proponente y al revisor CPN, evitando que beats `setup` o `payoff`
+  reservados para CBN/CEN se interpreten como requisitos pendientes del CPN.
+- Convertida la cobertura de IDs de craft en una decisión determinista: Gemini
+  conserva la revisión causal y semántica, pero ya no puede rechazar un candidato
+  por contradecir el scope calculado localmente.
+- Añadida una prueba de regresión que reproduce el fallo real de `chap_4:1`, con
+  un revisor que inventa tres beats pendientes cuando el scope permitido está
+  vacío.
+
 ## [2.0.4] - 2026-08-16
 
 - Añadida reparación semántica auditable para plan, personajes, contrato,

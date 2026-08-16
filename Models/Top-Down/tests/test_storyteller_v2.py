@@ -299,6 +299,34 @@ class SetupOnlyCPNProvider(V2Provider):
         )
 
 
+class ContradictoryCraftReviewProvider(SetupOnlyCPNProvider):
+    """Reproduce the Gemini rejection captured for chap_4:1."""
+
+    def __init__(self):
+        super().__init__()
+        self.proposal_prompts = []
+
+    def generate_structured(self, *, system_instruction, prompt, schema):
+        if schema is PlotNodeProposal:
+            self.proposal_calls += 1
+            self.proposal_prompts.append(prompt)
+            return self.proposal()
+        if schema is PlotNodeReview:
+            self.review_calls += 1
+            self.review_prompts.append(prompt)
+            return PlotNodeReview(
+                accepted=False, causal=True, intentional=True, conflict_present=True,
+                continuous=True, novel=True, advances_ending=True, world_consistent=True,
+                craft_coverage=False, consequence_persists=True, try_fail_valid=True,
+                issues=[
+                    "The proposal claims no craft beats although the chapter has reserved payoff beats."
+                ],
+            )
+        return super().generate_structured(
+            system_instruction=system_instruction, prompt=prompt, schema=schema,
+        )
+
+
 def setup_only_planning_case():
     outline = StoryOutlineArtifact(
         premise="Unos planos alteran una investigación",
@@ -325,6 +353,16 @@ def setup_only_planning_case():
     return outline, anchors
 
 
+def payoff_only_planning_case():
+    outline, anchors = setup_only_planning_case()
+    outline.chapters[0].craft_beats = [CraftBeat(
+        id="payoff-beat", promise_id="plot", kind="payoff",
+        description="Krox accepts the underground evidence",
+    )]
+    outline.chapters[0].character_milestones = []
+    return outline, anchors
+
+
 def test_setup_only_chapter_keeps_consumed_ids_out_of_its_single_cpn():
     provider = SetupOnlyCPNProvider()
     outline, anchors = setup_only_planning_case()
@@ -339,6 +377,22 @@ def test_setup_only_chapter_keeps_consumed_ids_out_of_its_single_cpn():
     assert history.rejected == []
     assert '"available_craft_beat_ids": []' in provider.review_prompts[0]
     assert '"available_character_milestone_ids": []' in provider.review_prompts[0]
+
+
+def test_reserved_payoff_ids_cannot_trigger_a_false_cpn_rejection():
+    provider = ContradictoryCraftReviewProvider()
+    outline, anchors = payoff_only_planning_case()
+
+    storyline, history = IncrementalPlotPlanner(provider).plan(outline, anchors, {})
+
+    assert [node.node_type for node in storyline.nodes] == ["CBN", "CPN", "CEN"]
+    assert storyline.nodes[1].craft_beat_ids == []
+    assert storyline.nodes[2].craft_beat_ids == ["payoff-beat"]
+    assert history.rejected == []
+    assert history.records[0].review.accepted is True
+    assert history.records[0].review.craft_coverage is True
+    assert "payoff-beat" not in provider.proposal_prompts[0]
+    assert "payoff-beat" not in provider.review_prompts[0]
 
 
 def test_invalid_proposal_ids_are_rejected_before_review_and_next_attempt_recovers():
