@@ -1,99 +1,105 @@
-# ASG Top-Down STORYTELLER
+# ASG Top-Down 3.0
 
-La ruta de producción usa `StoryGenerator`, un planificador incremental fiel al
-bucle de STORYTELLER. Primero recupera conocimiento narrativo compositivo desde
-SQLite, crea capítulos y anclas CBN/CEN, y después genera y revisa cada CPN
-antes de incorporarlo a STORYLINE y NEKG. Un nodo rechazado se reintenta de
-forma aislada; los nodos posteriores consultan el estado ya aceptado.
+`StoryGenerator` es la única ruta de producción. Separa dos decisiones que no
+deben contaminarse entre sí:
 
-La base se reconstruye desde `schema_db/migrations/` y
-`schema_db/seeds/catalog.json` en `.cache/narrative-schemas.sqlite3`. Separa
-macrotramas, situaciones, arcos, beats, géneros y roles. La recuperación combina
-señales léxicas con embeddings de Gemini y cachea los vectores de documentos.
+1. STORYTELLER determina qué ocurre mediante una STORYLINE causal de eventos
+   SVO/SVS aceptados y un NEKG local.
+2. El módulo de craft determina cómo preparar expectativas, progresos, pagos,
+   arcos de personajes y ciclos try-fail, sin aceptar, rechazar ni modificar
+   nodos.
+
+Todas las instrucciones enviadas al modelo están en inglés. El analista conserva
+español como idioma predeterminado y el escritor usa siempre el idioma solicitado.
 
 ```python
 from asg_top_down import StoryGenerator
 
-run = StoryGenerator(provider, output_root).generate(prompt_or_request)
+generator = StoryGenerator(provider, output_root)
+run = generator.generate(prompt_or_request)
 print(run.story_path)
 ```
 
-Los artefactos v2 incluyen `blueprint.json`, `craft_contract.json`, `outline.json`,
-`chapter_anchors.json`, `storyline.json`, `nekg.json`, `node_reviews.json`,
-`chapters/*.md`, `draft.md`, `craft_audit.json`, `craft_revision_history.json`,
-`diagnostic_audit.json` y `story.md`. El diagnóstico no asigna puntuaciones de
-calidad.
+## Planificación STORYTELLER
 
-Los artefactos estructurados con reglas cruzadas se validan antes de publicarse.
-Si el plan, los personajes, el contrato de craft, el outline o las anclas son
-inconsistentes, el modelo recibe el candidato y el error determinista para
-repararlo. Los candidatos rechazados quedan en `artifact_attempts/`; el número
-de reparaciones se configura con `STORY_MAX_ARTIFACT_RETRIES` (2 por defecto).
+El catálogo SQLite reproducible recupera macrotramas, situaciones, arcos, beats,
+géneros y roles. El planificador crea premisa, sinopsis y capítulos; genera un
+CBN y un CEN por capítulo; y luego propone pseudo-CPN uno a uno. Cada revisión
+consulta los ocho eventos más recientes y hasta diez relaciones NEKG, priorizando
+el par dirigido sujeto→objeto y después las relaciones incidentes por recencia.
 
-Durante la construcción incremental, `planning_checkpoint/` conserva STORYLINE,
-NEKG y el historial de revisiones después de cada aceptación o rechazo. Una
-respuesta estructurada inválida se reintenta una vez; si una revisión CPN sigue
-siendo inválida o contradictoria, se registra como intento rechazado sin perder
-la ejecución completa. Cada rechazo distingue `proposal`, `review` y `candidate`,
-y conserva el `craft_scope` autoritativo usado para validar sus IDs.
+Los siete controles causales —causalidad, intención, conflicto, continuidad,
+novedad, avance hacia el final y consistencia del mundo— son bloqueantes. El
+capítulo termina cuando al menos un CPN aceptado conecta naturalmente con el CEN,
+con un techo de `max(1, min(10, ceil(target_words / 350)))`. Solo los eventos
+aceptados actualizan STORYLINE y NEKG. Cada aceptación y rechazo produce un
+checkpoint auditable.
 
-El contrato de craft registra promesas con planteamiento, progreso y pago; los
-sliders de simpatía, competencia y proactividad de cada personaje principal; y
-los ciclos `yes_but`/`no_and`. Esos requisitos se enlazan a nodos aceptados,
-pero sus IDs y puntuaciones nunca se incluyen en la ficción.
+## Craft independiente
 
-Después de guardar `draft.md`, un crítico responde una batería estructurada de
-preguntas con evidencia. Si quedan fallos bloqueantes, un reescritor dispone de
-hasta dos pasadas. Si no consigue aprobar, `story.md` contiene la versión con
-menos fallos y `craft_audit.json` conserva las advertencias restantes. Desde
-Python puede cambiarse el límite con `StoryGenerator(...,
-max_craft_revisions=N)`.
+Después de cerrar STORYLINE, una llamada produce exactamente `variant-1`,
+`variant-2` y `variant-3`, y otra selecciona la variante canónica. Cada plan
+contiene una línea PPP maestra, entre cero y dos sublíneas, una línea PPP local
+por capítulo, hitos observables del slider focal y la cantidad adaptativa de
+ciclos Yes-but/No-and. Los contratos no contienen IDs de nodos ni pueden usar
+los términos CBN, CPN o CEN.
 
-Si el crítico o el reescritor fallan después de existir un borrador completo,
-la ejecución entrega la mejor versión disponible y registra
-`quality_warning.json` y `metadata.json.warnings`. La planificación y la
-STORYLINE continúan siendo estrictas. `length_audit.json` comprueba una
-tolerancia final de −10 % a +20 %, y `llm_usage.json` conserva llamadas, tokens
-y esperas por cuota.
+Cada personaje principal empieza con exactamente dos sliders altos (7–10) y uno
+bajo (1–4). El bajo es el foco y debe terminar alto (7–10). El escritor recibe
+solo la variante seleccionada, el craft del capítulo actual y el capítulo
+anterior completo. El auditor convierte PPP, sliders, try-fail y cada constraint
+del usuario en preguntas bloqueantes; permite hasta dos reescrituras y conserva
+la mejor versión si una etapa tardía falla.
 
-`StoryGenerator.resume(run_dir)` devuelve inmediatamente una historia ya
-terminada. Para una ejecución parcial conserva el directorio fallido para
-auditoría y reinicia desde `request.json` en una ejecución nueva; todavía no
-reanuda etapas individuales dentro del mismo directorio.
+## Artefactos
 
-```powershell
-compare-story-runs Stories/Top-Down/anterior Stories/Top-Down/nueva --output comparacion.html
+`plan.json` es la fuente autoritativa de cada variante:
+
+```text
+craft/
+  selection.json
+  variants/
+    variant-N/
+      plan.json
+      global.json
+      chapters/chapter-XXX.json
+      chapters/chapter-XXX.md
+      draft.md
+      craft_audit.json
+      craft_revision_history.json
+      length_audit.json
+      llm_usage.json
+      story.md
 ```
 
-Pipeline modular que transforma requisitos en capítulos y nodos SVO de tipo
-CBN, CPN y CEN. La STORYLINE se acepta únicamente cuando todas sus dependencias
-forman un DAG, cada CPN pertenece a un camino CBN-CEN y los capítulos están
-conectados. Los CPN se pueden añadir, quitar o sustituir durante un máximo de
-cinco replanificaciones transaccionales.
+La variante seleccionada también se refleja en `story.md`, `draft.md`,
+`chapters/`, `craft_audit.json`, `craft_revision_history.json` y
+`length_audit.json` de la raíz para mantener compatibles el CLI, la consola y
+Telegram. Los directorios de variantes renderizadas pueden pasarse directamente
+a `compare-story-runs`.
 
-Los agentes viven en `src/asg_top_down/agents/`. Las taxonomías versionadas de
-24 arquetipos narrativos y 12 roles de personaje están en `Taxonomies/` en la
-raíz del repositorio. Cada ejecución guarda `storyline.json`, el grafo local de
-entidades `nekg.json`, el historial de replanificación, las verificaciones de
-Freytag y las vistas compatibles `narrative_graph.json`/`.md`. Los bloques de
-capítulo se guardan bajo `scenes/`.
+Una variante alternativa se redacta sin volver a llamar al analista, planificador,
+constructor de mundo, diseñador de personajes, planificador STORYTELLER ni
+selector de craft:
 
-La API pública continúa siendo
-`StoryOrchestrator(provider, output_root).run(prompt)`.
+```python
+alternate = generator.render_variant(run.run_dir, "variant-2")
+print(alternate.story_path)
+```
 
-`target_words` admite una tolerancia global de −10 % a +20 %. Las cuotas de
-capítulos y nodos son orientativas y nunca hacen fallar un capítulo por sí
-solas. Cada redacción y auditoría se conserva en `scenes/attempts/`, y el
-resumen acumulado se guarda en `chapter_compliance.json`.
+La operación es idempotente cuando ya existe su `story.md` y nunca cambia
+`craft/selection.json` ni la historia canónica. Los runs v2 terminados siguen
+siendo entregables; los parciales reinician desde `request.json`, y
+`render_variant` exige artefactos v3.
 
-Las ejecuciones fallidas incluyen `error_report.json` y los campos
-`error_code`/`error_stage` en `metadata.json`. Las interfaces muestran mensajes
-accionables para errores del proveedor, planificación, cobertura de capítulos,
-Freytag y longitud final sin exponer credenciales ni trazas internas.
+## Recuperación y límites
 
-El proveedor aplica una ventana móvil de solicitudes antes de llamar a Gemini,
-respeta `retryDelay` en respuestas 429 y registra `usageMetadata` en
-`llm_usage.json`. Los valores se configuran con `GEMINI_RPM_LIMIT`,
-`GEMINI_RPM_RESERVE`, `GEMINI_TPM_LIMIT`, `GEMINI_MAX_RETRIES` y
-`GEMINI_MAX_RETRY_DELAY`. `StoryOrchestrator.resume(run_dir)` reutiliza los
-checkpoints válidos y conserva el identificador de la ejecución.
+`planning_checkpoint/` conserva STORYLINE, NEKG y revisiones tras cada decisión.
+`resume()` devuelve inmediatamente un run terminado y reinicia un parcial en un
+nuevo directorio. La longitud final se audita con tolerancia −10 %/+20 %. Las
+llamadas, tokens, esperas y reintentos se conservan en `llm_usage.json`.
+
+```powershell
+compare-story-runs Stories/Top-Down/run/craft/variants/variant-1 `
+  Stories/Top-Down/run/craft/variants/variant-2 --output comparacion.html
+```

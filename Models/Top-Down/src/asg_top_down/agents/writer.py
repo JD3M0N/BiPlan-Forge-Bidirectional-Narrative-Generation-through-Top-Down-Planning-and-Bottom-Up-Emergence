@@ -1,49 +1,51 @@
 from .base import Agent, json_text
 from ..schemas import (
-    ChapterComplianceArtifact, ChapterPlan, CharactersArtifact,
-    StoryPlanArtifact, StoryRequest, StorylineArtifact, WorldArtifact,
+    ChapterPlan, CharactersArtifact, CraftVariant, IncrementalStorylineArtifact,
+    NarrativeEntityGraphArtifact, StoryPlanArtifact, StoryRequest, WorldArtifact,
 )
 
 
-class SceneWriterAgent(Agent[str]):
-    """Compatibility name; writes one STORYTELLER chapter text block."""
-    name = "chapters"
+class ChapterWriterAgent(Agent[str]):
+    name = "chapter_writer"
 
-    def run(self, request: StoryRequest, plan: StoryPlanArtifact, world: WorldArtifact,
-            characters: CharactersArtifact, graph: StorylineArtifact,
-            chapter: ChapterPlan, prior_summary: str, revision: str = "") -> str:
-        nodes = [x for x in graph.nodes if x.chapter_id == chapter.id]
-        dependencies = [x for x in graph.accepted_edges if x.source in {n.id for n in nodes} or x.target in {n.id for n in nodes}]
+    def run(
+        self,
+        request: StoryRequest,
+        plan: StoryPlanArtifact,
+        world: WorldArtifact,
+        characters: CharactersArtifact,
+        variant: CraftVariant,
+        storyline: IncrementalStorylineArtifact,
+        nekg: NarrativeEntityGraphArtifact,
+        chapter: ChapterPlan,
+        previous_chapter: str,
+    ) -> str:
+        nodes = [node for node in storyline.nodes if node.chapter_id == chapter.id]
+        node_ids = {node.id for node in nodes}
+        edges = [edge for edge in storyline.accepted_edges
+                 if edge.source in node_ids or edge.target in node_ids]
+        local_craft = next(item for item in variant.chapters if item.chapter_id == chapter.id)
+        milestones = [item for item in variant.character_milestones if item.chapter_id == chapter.id]
+        cycles = [item for item in variant.try_fail_cycles if item.chapter_id == chapter.id]
         return self.provider.generate_text(
             system_instruction=(
-                "Eres escritor de ficción. Redacta únicamente el capítulo solicitado en Markdown. "
-                "Realiza explícitamente todos los nodos en orden topológico, sus goals taxonómicos "
-                "y fases dramáticas sin mencionar el proceso. Respeta el presupuesto de palabras "
-                "y no contradigas el texto previo ni el NEKG. Adapta convenciones, voz y recursos "
-                "al género solicitado, incluidos subgéneros y combinaciones de géneros; no "
-                "asumas por defecto una ficción convencional."
+                "Write only the requested fiction chapter body in Markdown and in the requested "
+                "language. Do not add a title or heading. Dramatize every accepted event in order "
+                "while preserving intentions, causal effects, entity states, and the chapter ending. "
+                "Realize the supplied global and local promise-progress-payoff guidance, character "
+                "growth, and try-fail consequences through observable action and choice. Never expose "
+                "planning terms, IDs, slider names, or numeric values. Maintain style continuity with "
+                "the complete previous chapter and respect the approximate chapter word budget."
             ),
-            prompt=(f"REQUISITOS:\n{json_text(request)}\n\nPLAN:\n{json_text(plan)}\n\nMUNDO:\n{json_text(world)}"
-                    f"\n\nPERSONAJES:\n{json_text(characters)}\n\nCAPÍTULO:\n{json_text(chapter)}"
-                    f"\n\nNODOS:\n{json_text(nodes)}\n\nDEPENDENCIAS:\n{json_text(dependencies)}"
-                    f"\n\nCONTEXTO PREVIO:\n{prior_summary or 'Primer capítulo.'}"
-                    f"\n\nCORRECCIÓN SOLICITADA:\n{revision or 'ninguna'}"),
-        )
-
-
-class ChapterComplianceAgent(Agent[ChapterComplianceArtifact]):
-    name = "chapter_compliance"
-
-    def run(self, chapter: ChapterPlan, graph: StorylineArtifact, text: str) -> ChapterComplianceArtifact:
-        nodes = [x for x in graph.nodes if x.chapter_id == chapter.id]
-        return self.provider.generate_structured(
-            system_instruction=(
-                "Audita un capítulo. passed solo puede ser true cuando se realizan todos los nodos "
-                "SVO, todos sus goals, la continuidad y las fases dramáticas asignadas. Cuenta "
-                "las palabras como dato informativo, pero la longitud nunca decide passed. "
-                "Devuelve instrucciones concretas si falla. En covered_goals usa exactamente claves "
-                "con formato node_id:taxonomy_beat para cada goal realizado."
+            prompt=(
+                f"REQUEST:\n{json_text(request)}\n\nPLAN:\n{json_text(plan)}"
+                f"\n\nWORLD:\n{json_text(world)}\n\nCHARACTERS:\n{json_text(characters)}"
+                f"\n\nGLOBAL CRAFT:\n{json_text({'master': variant.master_line, 'subplots': variant.subplots})}"
+                f"\n\nCHAPTER CRAFT:\n{json_text(local_craft)}"
+                f"\n\nCHARACTER MILESTONES:\n{json_text(milestones)}"
+                f"\n\nTRY-FAIL CYCLES:\n{json_text(cycles)}"
+                f"\n\nCHAPTER:\n{json_text(chapter)}\n\nNODES:\n{json_text(nodes)}"
+                f"\n\nCAUSAL LINKS:\n{json_text(edges)}\n\nCURRENT NEKG:\n{json_text(nekg)}"
+                f"\n\nPREVIOUS CHAPTER:\n{previous_chapter or 'none'}"
             ),
-            prompt=f"CAPÍTULO:\n{json_text(chapter)}\n\nNODOS:\n{json_text(nodes)}\n\nTEXTO:\n{text}",
-            schema=ChapterComplianceArtifact,
         )

@@ -2,6 +2,7 @@
 
 import re
 import unicodedata
+from typing import Protocol
 
 from .schemas import EntityRelation, EntityStateChange, NarrativeEntity, NarrativeEntityGraphArtifact, PlotNode
 
@@ -11,7 +12,16 @@ def _key(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", normalized).strip("_") or "entity"
 
 
+class NarrativeGraphBackend(Protocol):
+    """Minimal backend boundary used by the incremental planner."""
+
+    def apply(self, node: PlotNode, state_changes: list[EntityStateChange] | None = None) -> None: ...
+    def related(self, subject: str, object_: str | None = None, limit: int = 10) -> list[EntityRelation]: ...
+    def artifact(self) -> NarrativeEntityGraphArtifact: ...
+
+
 class NarrativeEntityGraph:
+    """In-memory backend with a JSON-serializable artifact representation."""
     def __init__(self) -> None:
         self._entities: dict[str, NarrativeEntity] = {}
         self._relations: list[EntityRelation] = []
@@ -37,11 +47,26 @@ class NarrativeEntityGraph:
 
     def related(self, subject: str, object_: str | None = None, limit: int = 10) -> list[EntityRelation]:
         source, target = _key(subject), _key(object_ or subject)
-        matches = [r for r in self._relations if ({r.source, r.target} & {source, target})]
-        if object_:
-            exact = [r for r in matches if {r.source, r.target} == {source, target}]
-            matches = exact + [r for r in matches if r not in exact]
-        return sorted(matches, key=lambda r: r.timestamp, reverse=True)[:limit]
+        incident = [relation for relation in self._relations
+                    if relation.source in {source, target} or relation.target in {source, target}]
+        if not object_:
+            return sorted(incident, key=lambda relation: relation.timestamp, reverse=True)[:limit]
+
+        directed = [relation for relation in incident
+                    if relation.source == source and relation.target == target]
+        remainder = [relation for relation in incident if relation not in directed]
+        ordered = (
+            sorted(directed, key=lambda relation: relation.timestamp, reverse=True)
+            + sorted(remainder, key=lambda relation: relation.timestamp, reverse=True)
+        )
+        return ordered[:limit]
+
+    @classmethod
+    def from_artifact(cls, artifact: NarrativeEntityGraphArtifact) -> "NarrativeEntityGraph":
+        backend = cls()
+        backend._entities = {entity.id: entity.model_copy(deep=True) for entity in artifact.entities}
+        backend._relations = [relation.model_copy(deep=True) for relation in artifact.relations]
+        return backend
 
     def artifact(self) -> NarrativeEntityGraphArtifact:
         return NarrativeEntityGraphArtifact(entities=list(self._entities.values()), relations=self._relations)

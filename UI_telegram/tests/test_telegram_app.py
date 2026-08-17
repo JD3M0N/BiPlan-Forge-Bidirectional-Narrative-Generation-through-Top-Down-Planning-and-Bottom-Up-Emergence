@@ -8,7 +8,7 @@ from telegram.error import BadRequest, TimedOut
 from asg_telegram import app
 from asg_telegram.app import TelegramStoryBot, _evaluator_name, build_application
 from asg_top_down.progress import ProgressUpdate
-from asg_top_down.errors import ChapterComplianceError
+from asg_top_down.errors import ArtifactValidationError
 
 
 class FakeGenerator:
@@ -27,13 +27,14 @@ class FailingGenerator:
     display_name = "Fake"
 
     def generate(self, prompt: str):
-        error = ChapterComplianceError(
+        error = ArtifactValidationError(
             "No se pudo completar el capítulo 1 «El eco».",
             details={
                 "attempts": 3,
                 "missing_node_ids": ["node_2"],
                 "missing_goals": ["node_2:investigation"],
             },
+            recommendations=["Revisa los checkpoints de planificación."],
         )
         error.run_id = "run-seguro"
         raise error
@@ -160,12 +161,11 @@ def test_generation_reports_actionable_safe_error() -> None:
     ))
 
     notice = bot.messages[-1]["text"]
-    assert "CHAPTER_COMPLIANCE_FAILED" in notice
-    assert "node_2" in notice
-    assert "node_2:investigation" in notice
+    assert "ARTIFACT_VALIDATION_FAILED" in notice
+    assert "checkpoints" in notice
     assert "run-seguro" in notice
     assert "GEMINI_API_KEY" not in notice
-    assert "scenes:" in bot.edits[-1]["text"]
+    assert "planning:" in bot.edits[-1]["text"]
 
 
 def test_active_users_are_isolated(tmp_path):

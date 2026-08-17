@@ -8,11 +8,9 @@ class WorldBuilderAgent(Agent[WorldArtifact]):
     def run(self, request: StoryRequest, plan: StoryPlanArtifact) -> WorldArtifact:
         return self.provider.generate_structured(
             system_instruction=(
-                "Eres diseñador de mundos. Define reglas, lugares y una atmósfera "
-                "consistentes que sostengan el plan y afecten de forma concreta el conflicto, "
-                "las decisiones o la causalidad. Evita detalles decorativos sin consecuencias "
-                "narrativas."
+                "Build a compact story world. Every rule and location must constrain a decision, "
+                "create an opportunity, or cause a consequence. Avoid decorative lore."
             ),
-            prompt=f"REQUISITOS:\n{json_text(request)}\n\nPLAN:\n{json_text(plan)}",
+            prompt=f"REQUEST:\n{json_text(request)}\n\nPLAN:\n{json_text(plan)}",
             schema=WorldArtifact,
         )

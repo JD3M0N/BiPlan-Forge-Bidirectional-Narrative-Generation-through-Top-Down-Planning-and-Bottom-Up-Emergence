@@ -37,14 +37,14 @@ def main() -> int:
             max_retry_delay=settings.max_retry_delay,
             embedding_model=settings.embedding_model,
         )
-        orchestrator = StoryGenerator(
+        generator = StoryGenerator(
             provider, settings.output_root,
             default_target_words=settings.default_target_words,
             max_cpn_retries=settings.max_cpn_retries,
             max_artifact_retries=settings.max_artifact_retries,
         )
         print(f"\nGenerando con {settings.model}...")
-        output = orchestrator.run(
+        output = generator.run(
             prompt,
             on_progress=lambda update: print(
                 f"\r{format_progress(update)}", end="", flush=True

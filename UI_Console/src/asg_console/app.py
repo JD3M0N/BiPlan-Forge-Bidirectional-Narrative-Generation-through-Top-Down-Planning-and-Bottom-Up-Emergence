@@ -26,7 +26,7 @@ from asg_escape_room.narrative import (
 from asg_escape_room.storage import RunRepository
 from asg_prompt_crafter import CraftResult, PromptCrafterAgent
 from asg_top_down.config import load_settings as load_top_down_settings
-from asg_top_down import StoryGenerator as StoryOrchestrator
+from asg_top_down import StoryGenerator
 from asg_top_down.progress import format_progress
 from asg_top_down.provider import GeminiProvider
 
@@ -65,17 +65,17 @@ class TopDownMenu:
                 if prompt is None:
                     continue
             self.output(f"Generando con {settings.model}...")
-            orchestrator = StoryOrchestrator(
+            generator = StoryGenerator(
                 provider, settings.output_root,
                 default_target_words=settings.default_target_words,
             )
-            if "on_progress" in inspect.signature(orchestrator.run).parameters:
-                output = orchestrator.run(
+            if "on_progress" in inspect.signature(generator.run).parameters:
+                output = generator.run(
                     prompt,
                     on_progress=lambda update: self.output(format_progress(update)),
                 )
             else:
-                output = orchestrator.run(prompt)
+                output = generator.run(prompt)
             output_dir = output.run_dir if hasattr(output, "run_dir") else output
             self.output(f"Historia terminada: {output_dir / 'story.md'}")
 

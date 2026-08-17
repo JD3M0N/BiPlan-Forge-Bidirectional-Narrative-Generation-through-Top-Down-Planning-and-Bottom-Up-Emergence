@@ -19,7 +19,7 @@ Escribe tu clave en `.env`:
 
 ```dotenv
 GEMINI_API_KEY=tu_clave
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.5-flash-lite
 ```
 
 `.env` está ignorado por Git. Nunca añadas una clave real a `.env.example`.
@@ -41,17 +41,16 @@ protagonista, conflicto, ambientación, tono y extensión, por ejemplo:
 > con un final esperanzador.
 
 Cuando falten idioma o extensión se usarán español y unas 1500 palabras. Cada
-ejecución crea una carpeta independiente en `Stories/Top-Down` con la historia,
-las escenas, las taxonomías seleccionadas y los artefactos de revisión. La ruta
-Top-Down planifica promesas, progreso y pagos; sigue los sliders de simpatía,
-competencia y proactividad de los personajes principales; y exige que los
-intentos intermedios sean `yes_but` o `no_and`. Un crítico estructurado puede
-activar hasta dos reescrituras antes de seleccionar la mejor versión.
+ejecución crea una carpeta independiente en `Stories/Top-Down` con una
+STORYLINE incremental, un NEKG local y tres variantes de craft posteriores a la
+planificación. La variante seleccionada se entrega en `story.md`; las otras se
+pueden redactar después sin recalcular eventos mediante `render_variant()`.
 
-El pipeline Top-Down v2 selecciona un arquetipo principal y hasta dos
-secundarios desde `Taxonomies/`. Un agente Director organiza beats en escenas y
-un procesador CPC elimina las relaciones causales que formarían ciclos. El DAG
-resultante se guarda en JSON y como una visualización Mermaid.
+Top-Down 3.0 exige a cada protagonista dos sliders iniciales altos y uno bajo
+que progresa hasta alto. Promise–Progress–Payoff, los hitos de personaje y los
+ciclos `yes_but`/`no_and` están desacoplados de los nodos CBN/CPN/CEN. Un
+auditor estructurado trata cada constraint del prompt como bloqueante y puede
+activar hasta dos reescrituras.
 
 Toda historia terminada incluye además `evaluation.json`, una plantilla para
 evaluaciones humanas con puntuaciones de 1 a 10. Puede completarse manualmente

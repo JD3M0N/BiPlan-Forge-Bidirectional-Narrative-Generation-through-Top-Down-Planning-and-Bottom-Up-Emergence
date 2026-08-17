@@ -1,19 +1,23 @@
-"""Specialized agents used by the Top-Down v2 pipeline."""
+"""Production agents used by StoryGenerator."""
 
 from .analyst import AnalystAgent
 from .characters import CharacterDesignerAgent
-from .critic import CriticAgent
-from .director import DirectorAgent
-from .editor import EditorAgent
+from .craft import (
+    CraftCriticAgent, CraftRewriterAgent, CraftVariantPlannerAgent,
+    CraftVariantSelectorAgent,
+)
 from .planner import PlannerAgent
 from .world import WorldBuilderAgent
-from .writer import ChapterComplianceAgent, SceneWriterAgent
-from .drama import DramaAgent
-from .craft import CraftContractAgent, CraftCriticAgent, CraftRewriterAgent
+from .writer import ChapterWriterAgent
 
 __all__ = [
-    "AnalystAgent", "PlannerAgent", "WorldBuilderAgent", "CharacterDesignerAgent",
-    "DirectorAgent", "SceneWriterAgent", "ChapterComplianceAgent", "DramaAgent",
-    "CriticAgent", "EditorAgent",
-    "CraftContractAgent", "CraftCriticAgent", "CraftRewriterAgent",
+    "AnalystAgent",
+    "PlannerAgent",
+    "WorldBuilderAgent",
+    "CharacterDesignerAgent",
+    "CraftVariantPlannerAgent",
+    "CraftVariantSelectorAgent",
+    "CraftCriticAgent",
+    "CraftRewriterAgent",
+    "ChapterWriterAgent",
 ]

@@ -54,8 +54,8 @@ def load_settings(start: Path | None = None) -> Settings:
         )
     return Settings(
         api_key=api_key,
-        model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
-        or "gemini-2.5-flash",
+        model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
+        or "gemini-3.5-flash-lite",
         output_root=root / "Stories" / "Top-Down",
         rpm_limit=max(1, int(os.getenv("GEMINI_RPM_LIMIT", "15"))),
         rpm_reserve=max(0, int(os.getenv("GEMINI_RPM_RESERVE", "1"))),

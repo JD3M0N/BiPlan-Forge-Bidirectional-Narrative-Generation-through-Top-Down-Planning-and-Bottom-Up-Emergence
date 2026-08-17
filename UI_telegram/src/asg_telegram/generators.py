@@ -6,12 +6,12 @@ from pathlib import Path
 from typing import Callable, Protocol
 
 from asg_top_down.config import load_settings as load_top_down_settings
-from asg_top_down import StoryGenerator as IncrementalStoryGenerator
+from asg_top_down import StoryGenerator
 from asg_top_down.progress import ProgressCallback
 from asg_top_down.provider import GeminiProvider
 
 
-class StoryGenerator(Protocol):
+class StoryGeneratorAdapter(Protocol):
     @property
     def display_name(self) -> str: ...
 
@@ -41,7 +41,7 @@ class TopDownGenerator:
             max_retry_delay=settings.max_retry_delay,
             embedding_model=settings.embedding_model,
         )
-        return IncrementalStoryGenerator(
+        return StoryGenerator(
             provider, settings.output_root,
             default_target_words=settings.default_target_words,
             max_cpn_retries=settings.max_cpn_retries,
@@ -60,7 +60,7 @@ class TopDownGenerator:
             max_retry_delay=settings.max_retry_delay,
             embedding_model=settings.embedding_model,
         )
-        return IncrementalStoryGenerator(
+        return StoryGenerator(
             provider, settings.output_root,
             default_target_words=settings.default_target_words,
             max_cpn_retries=settings.max_cpn_retries,
@@ -70,7 +70,7 @@ class TopDownGenerator:
         ).run_dir
 
 
-GeneratorFactory = Callable[[], StoryGenerator]
+GeneratorFactory = Callable[[], StoryGeneratorAdapter]
 
 
 class GeneratorRegistry:
@@ -87,7 +87,7 @@ class GeneratorRegistry:
     def available(self) -> tuple[str, ...]:
         return tuple(sorted(self._factories))
 
-    def create(self, name: str) -> StoryGenerator:
+    def create(self, name: str) -> StoryGeneratorAdapter:
         normalized = name.strip().lower()
         try:
             return self._factories[normalized]()
@@ -104,5 +104,5 @@ DEFAULT_REGISTRY.register("top-down", TopDownGenerator)
 
 def create_generator(
     name: str, registry: GeneratorRegistry = DEFAULT_REGISTRY
-) -> StoryGenerator:
+) -> StoryGeneratorAdapter:
     return registry.create(name)

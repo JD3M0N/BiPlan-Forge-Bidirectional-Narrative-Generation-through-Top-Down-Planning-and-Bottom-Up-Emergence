@@ -75,7 +75,7 @@ def test_top_down_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
     )()
     monkeypatch.setattr(app, "load_top_down_settings", lambda: settings)
     monkeypatch.setattr(app, "GeminiProvider", Provider)
-    monkeypatch.setattr(app, "StoryOrchestrator", Orchestrator)
+    monkeypatch.setattr(app, "StoryGenerator", Orchestrator)
     menu = TopDownMenu(
         input_fn=input_sequence(["1", "2", "Una historia", "0"]),
         output=lambda message: None,
@@ -144,7 +144,7 @@ def test_top_down_assisted_prompt_uses_selected_alternative(
     monkeypatch.setattr(app, "load_top_down_settings", lambda: settings)
     monkeypatch.setattr(app, "GeminiProvider", Provider)
     monkeypatch.setattr(app, "PromptCrafterAgent", Crafter)
-    monkeypatch.setattr(app, "StoryOrchestrator", Orchestrator)
+    monkeypatch.setattr(app, "StoryGenerator", Orchestrator)
     messages = []
     menu = TopDownMenu(
         input_fn=input_sequence(["1", "1", "Idea breve", "x", "2", "0"]),
@@ -200,7 +200,7 @@ def test_top_down_can_cancel_assisted_selection(monkeypatch) -> None:
     monkeypatch.setattr(app, "load_top_down_settings", lambda: settings)
     monkeypatch.setattr(app, "GeminiProvider", Provider)
     monkeypatch.setattr(app, "PromptCrafterAgent", Crafter)
-    monkeypatch.setattr(app, "StoryOrchestrator", UnexpectedOrchestrator)
+    monkeypatch.setattr(app, "StoryGenerator", UnexpectedOrchestrator)
     menu = TopDownMenu(
         input_fn=input_sequence(["1", "1", "Idea", "0", "0"]),
         output=lambda message: None,

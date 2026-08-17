@@ -2,6 +2,43 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [3.0.0] - 2026-08-16
+
+- Eliminados `StoryOrchestrator`, el procesador DAG, los agentes y contratos del
+  pipeline legado, el paquete diagnóstico `Testing` y las taxonomías JSON ya
+  cubiertas por el catálogo SQLite.
+- Convertido `IncrementalPlotPlanner` en un núcleo STORYTELLER sin craft, con
+  CBN/CEN previos, CPN adaptativos, siete controles bloqueantes, conexión
+  explícita con CEN, checkpoints y consultas STORYLINE/NEKG acotadas.
+- Encapsulado NEKG detrás de una interfaz local en memoria y JSON, con prioridad
+  para relaciones dirigidas sujeto→objeto y exclusión de candidatos rechazados.
+- Movidos todos los prompts activos a agentes de producción y traducidas al
+  inglés las instrucciones, etiquetas y reparaciones enviadas al modelo.
+- Aplicada a protagonistas la regla de exactamente dos sliders altos y uno bajo,
+  siendo el bajo el foco ascendente hasta un valor alto.
+- Añadidas tres variantes independientes de craft posteriores a STORYLINE,
+  selección auditable, PPP global/local, hitos de sliders, ciclos try-fail y
+  constraints bloqueantes.
+- Añadido `StoryGenerator.render_variant()` para redactar alternativas de forma
+  idempotente sin replanificar ni reemplazar la selección o historia canónica.
+- Reorganizados los artefactos bajo `craft/variants/variant-N/` y conservadas
+  vistas raíz compatibles con CLI, consola, Telegram y comparación.
+- Cambiado el escritor para consumir únicamente el craft seleccionado del
+  capítulo actual y el capítulo anterior completo, manteniendo la ficción en el
+  idioma solicitado aunque las instrucciones internas estén en inglés.
+- Conservadas reparaciones estructuradas, cuotas, telemetría, recuperación
+  segura, tolerancia de longitud y entrega del mejor borrador disponible ante
+  fallos tardíos de auditoría o reescritura.
+- Migrados CLI, consola y Telegram a `StoryGenerator`; los runs terminados
+  anteriores siguen siendo entregables y las variantes v3 pueden compararse
+  directamente con `compare-story-runs`.
+- Incrementada la versión de `asg-top-down` a `3.0.0` y actualizado el modelo
+  predeterminado preservado a `gemini-3.5-flash-lite`.
+- Sustituidas las pruebas del pipeline eliminado por cobertura v3 de sliders,
+  límites y reemplazos CPN, checkpoints, recencia NEKG, craft desacoplado,
+  constraints bloqueantes, reescritura, variantes, idempotencia e interfaces.
+  La suite completa queda en 128 pruebas aprobadas.
+
 ## [2.0.5] - 2026-08-16
 
 - Separado el contexto narrativo del capítulo del scope autoritativo de craft

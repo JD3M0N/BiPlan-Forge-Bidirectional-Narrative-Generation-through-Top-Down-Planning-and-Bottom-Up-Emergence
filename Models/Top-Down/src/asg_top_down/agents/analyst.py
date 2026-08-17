@@ -14,11 +14,10 @@ class AnalystAgent(Agent[StoryRequest]):
     def run(self, prompt: str) -> StoryRequest:
         request = self.provider.generate_structured(
             system_instruction=(
-                "Eres analista de requisitos narrativos. Convierte la petición en una "
-                "especificación fiel. Si no indica idioma usa español; si no indica "
-                f"extensión usa {self.default_target_words} palabras. Una extensión "
-                "indicada explícitamente por el usuario siempre tiene prioridad. "
-                "No inventes restricciones."
+                "You are a narrative requirements analyst. Convert the user's request into a "
+                "faithful specification. Preserve every explicit constraint. If no language is "
+                f"given, use Spanish; if no length is given, use {self.default_target_words} words. "
+                "An explicitly requested length always takes priority. Do not invent constraints."
             ),
             prompt=prompt,
             schema=StoryRequest,
