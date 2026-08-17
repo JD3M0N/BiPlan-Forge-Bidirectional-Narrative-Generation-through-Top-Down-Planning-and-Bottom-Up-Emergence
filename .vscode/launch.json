@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Generar historia Top-Down",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "asg_top_down.cli",
+            "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+            "cwd": "${workspaceFolder}",
+            "envFile": "${workspaceFolder}\\.env",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        }
+    ]
+}

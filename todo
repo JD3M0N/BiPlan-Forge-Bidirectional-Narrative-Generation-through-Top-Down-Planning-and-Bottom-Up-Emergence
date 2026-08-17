@@ -39,3 +39,5 @@
 - [ ] TODO: Hacer que la consola de telegram te muestre la cola y lo que se esta haciendo
 - [ ] TODO: Validar los JSON que devuelve gemini para que no den error
 - [ ] TODO: Verificar que los personajes tengan dos stadisticas altas y una baja
+- [ ] TODO: Revisar si que el schema del analista este en espannol influye en algo
+- [ ] TODO: En algun lugar debe haber un chequeo de los constraints del usuario
