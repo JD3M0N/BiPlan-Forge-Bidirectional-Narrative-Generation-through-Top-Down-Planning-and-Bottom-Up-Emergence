@@ -1,1495 +1,839 @@
-# Cómo se crea una historia en ASG Top-Down
+# Cómo se crea una historia Top-Down
 
-> Actualización Top-Down 3.0.0 (16 de agosto de 2026). Esta sección describe la
-> ruta vigente. El análisis 2.0.5 se conserva íntegro más abajo como registro
-> histórico del diseño anterior; sus referencias a `StoryOrchestrator`, al DAG
-> legado, `craft_contract.json` y craft dentro de nodos ya no son ejecutables.
+Esta guía describe la ruta de producción **Top-Down 3.0** tal como está implementada
+en `Models/Top-Down/src/asg_top_down`. Su propósito es explicar no solo qué ejecuta
+el sistema, sino también qué decisión se toma en cada etapa, por qué se toma y dónde
+observarla con el depurador.
 
-## Flujo vigente en 3.0
+La entrada pública es `StoryGenerator`. No deben mezclarse con este recorrido clases
+o documentos de versiones anteriores: la implementación actual divide explícitamente
+la planificación de hechos y la planificación de craft.
 
-`StoryGenerator` es ahora la única ruta de producción:
+## 1. La idea central
+
+El sistema responde dos preguntas en momentos distintos:
+
+1. **¿Qué ocurre?** STORYTELLER construye una secuencia causal de eventos aceptados.
+2. **¿Cómo se cuenta?** El módulo de craft organiza promesas, progresos, pagos,
+   evolución de personajes y ciclos de intento-fracaso alrededor de esos hechos.
 
 ```text
-request → catálogo SQLite → plan → mundo → personajes
-        → premisa/sinopsis/capítulos → anclas CBN/CEN
-        → CPN incremental revisado → STORYLINE + NEKG
-        → tres variantes de craft → selección
-        → escritura por capítulos → auditoría/reescritura → story.md
+prompt
+  │
+  ▼
+requisitos ──► recuperación narrativa ──► plan ──► mundo ──► personajes
+                                                           │
+                                                           ▼
+                                    outline ──► anclas CBN/CEN
+                                                           │
+                                                           ▼
+                                  CPN propuesto ↔ CPN revisado
+                                         │ aceptado
+                                         ▼
+                                   STORYLINE + NEKG
+                                         │ inmutable
+                                         ▼
+                               3 variantes de craft ──► selección
+                                                           │
+                                                           ▼
+                                  capítulos ──► borrador ──► auditoría
+                                                           │
+                                             hasta 2 reescrituras
+                                                           │
+                                                           ▼
+                                                       story.md
 ```
 
-La separación principal es deliberada: STORYTELLER decide **qué sucede** y
-craft decide **cómo se prepara y dramatiza**. `ChapterPlan`, `PlotNode`,
-`PlotNodeProposal` y `PlotNodeReview` no contienen promesas, sliders, ciclos
-try-fail ni IDs de craft. Ninguna decisión PPP puede aceptar, rechazar o alterar
-un nodo.
+La separación es deliberada. Si el craft pudiera aceptar, rechazar o modificar
+eventos, una solución elegante de estilo podría romper la causalidad. Si STORYTELLER
+decidiera también promesas y pagos, la evaluación de hechos y la de presentación se
+contaminarían. Por eso el craft se crea solamente cuando `storyline.json` ya existe.
 
-### STORYTELLER y NEKG
+También hay una segunda separación importante:
 
-1. El outline crea premisa, sinopsis y todos los capítulos, con presupuestos que
-   suman exactamente la extensión solicitada.
-2. Una sola generación produce exactamente un CBN y un CEN SVO por capítulo,
-   considerando los abstracts adyacentes.
-3. El CBN se acepta y se incorpora de inmediato a STORYLINE y NEKG.
-4. Cada pseudo-CPN se propone desde CBN, CEN, CPN ya aceptados y conocimiento
-   recuperado.
-5. La revisión ve los ocho eventos recientes y hasta diez relaciones NEKG. Las
-   relaciones dirigidas sujeto→objeto aparecen primero; después se añaden las
-   incidentes, siempre por timestamp descendente dentro de cada grupo.
-6. Causalidad, intención, conflicto, continuidad, novedad, avance hacia CEN y
-   consistencia del mundo son bloqueantes. El revisor etiqueta además el foco de
-   trabajo como lógica, redundancia, emoción, tema, resolución, lenguaje o
-   misterio y puede devolver un reemplazo completo.
-7. Solo el candidato final validado actualiza STORYLINE y NEKG. Todo rechazo y
-   aceptación guarda `planning_checkpoint/storyline.json`, `nekg.json` y
-   `node_reviews.json`.
-8. El capítulo exige al menos un CPN y termina únicamente cuando el revisor
-   confirma una conexión natural con CEN. El techo es
-   `max(1, min(10, ceil(target_words / 350)))`; agotarlo produce
-   `STORYLINE_PLANNING_FAILED` con los intentos auditables.
-9. Finalmente se acepta CEN y se reparte el presupuesto entre CBN, CPN y CEN.
+- El modelo decide significado: propone conflictos, eventos, revisiones y prosa.
+- Python impone contratos: tipos, cantidades, IDs, orden, rangos, reintentos,
+  persistencia y condiciones de aceptación.
 
-El backend NEKG vigente es local, en memoria, reconstruible desde JSON y no
-necesita Neo4j. Conserva relaciones SVO y estados de ubicación, posesión,
-conocimiento, situación y relación. Los candidatos rechazados nunca aparecen.
+El modelo aporta flexibilidad narrativa; las validaciones locales evitan que una
+respuesta convincente pero estructuralmente incorrecta avance silenciosamente.
 
-### Personajes y craft posterior
+## 2. Punto de entrada y configuración
 
-Cada protagonista tiene exactamente dos sliders iniciales altos (7–10) y uno
-bajo (1–4) entre simpatía, competencia y proactividad. El bajo es siempre el
-foco y asciende hasta 7–10; los dos altos permanecen altos.
+La ejecución interactiva comienza en `asg_top_down.cli:main`:
 
-Después de cerrar STORYLINE, `CraftVariantPlannerAgent` produce en una llamada
-`variant-1`, `variant-2` y `variant-3`, con estrategias distintas. Cada una
-incluye:
+```powershell
+.\.venv\Scripts\python.exe -m asg_top_down.cli
+```
 
-- una línea PPP maestra desde el primer hasta el último capítulo;
-- cero, una o dos sublíneas globales completas;
+El CLI hace lo siguiente:
+
+1. configura `stdout` y `stderr` como UTF-8;
+2. solicita un prompt no vacío;
+3. llama a `load_settings()`;
+4. construye `GeminiProvider`;
+5. construye `StoryGenerator`;
+6. llama a `generator.run(prompt)` y muestra el progreso;
+7. imprime la ruta de `story.md` o un error público seguro.
+
+La configuración se lee del `.env` de la raíz. Las variables relevantes son:
+
+| Variable | Decisión que controla | Valor predeterminado |
+|---|---|---|
+| `GEMINI_API_KEY` | credencial obligatoria | ninguno |
+| `GEMINI_MODEL` | modelo de generación | `gemini-3.5-flash-lite` |
+| `GEMINI_EMBEDDING_MODEL` | modelo de recuperación semántica | `gemini-embedding-2` |
+| `GEMINI_RPM_LIMIT` | solicitudes por minuto disponibles | `15` |
+| `GEMINI_RPM_RESERVE` | margen que no usa el proceso | `1` |
+| `GEMINI_TPM_LIMIT` | límite de tokens por minuto; `0` lo desactiva | `0` |
+| `GEMINI_MAX_RETRIES` | reintentos de transporte/cuota temporal | `3` |
+| `GEMINI_MAX_RETRY_DELAY` | espera máxima entre reintentos | `120` s |
+| `STORY_DEFAULT_WORDS` | longitud si el usuario no da una | `1500` |
+| `STORY_MAX_CPN_RETRIES` | reparaciones de cada candidato CPN | `2` |
+| `STORY_MAX_ARTIFACT_RETRIES` | reparaciones semánticas de artefactos | `2` |
+
+`find_project_root()` busca un ancestro que contenga `Models/` y `Stories/`. Esta
+decisión permite iniciar el programa desde la raíz o desde una carpeta interna sin
+cambiar las rutas de `.env`, caché y salida.
+
+## 3. Recorrido completo, decisión por decisión
+
+### 3.1. Interpretar el prompt
+
+Si `StoryGenerator.generate()` recibe texto, `AnalystAgent.run()` lo convierte en
+un `StoryRequest` con:
+
+- prompt original;
+- título;
+- idioma;
+- género y tono;
+- premisa;
+- número objetivo de palabras;
+- restricciones explícitas.
+
+El idioma predeterminado es español y la extensión predeterminada procede de la
+configuración. Sin embargo, después de la respuesta del modelo se busca en el prompt
+una expresión como `1800 palabras` o `1800 words` y ese número se aplica de forma
+determinista.
+
+**Por qué:** la longitud explícita del usuario no debe depender de que el modelo la
+extraiga correctamente. El esquema vuelve a validar que esté entre 300 y 20 000.
+
+Después del análisis se crea el directorio de ejecución. No se crea antes porque el
+título normalizado forma parte de su nombre:
+
+```text
+Stories/Top-Down/YYYYMMDD-HHMMSS-titulo-de-la-historia/
+```
+
+`request.json` es el primer artefacto y `metadata.json` comienza con estado
+`running`.
+
+### 3.2. Recuperar conocimiento narrativo
+
+`NarrativeSchemaRepository.retrieve()` consulta el catálogo SQLite de macrotramas,
+situaciones, arcos de personaje, beats, géneros y roles.
+
+La consulta combina el prompt, la premisa, el género y el tono. Para cada entrada se
+calculan dos señales:
+
+- coincidencia léxica mediante FTS5/BM25 y una comparación local de términos;
+- similitud semántica mediante embeddings, cuando el proveedor está disponible.
+
+La puntuación fusionada es:
+
+```text
+0.4 × señal léxica + 0.6 × señal semántica
+```
+
+Se recuperan, por defecto, 2 macrotramas, 2 situaciones, 2 arcos, 8 beats, 2 géneros
+y 4 roles. Los resultados se ordenan de forma estable y se evita seleccionar
+variantes compatibles casi duplicadas cuando hay alternativas.
+
+**Por qué se recupera antes de planificar:** reduce el espacio de búsqueda y ofrece
+vocabulario narrativo reutilizable sin obligar al planificador a copiar plantillas.
+El catálogo orienta; no escribe la historia.
+
+**Por qué existe fallback léxico:** una caída del servicio de embeddings no debe
+impedir toda la generación. Si embeddings falla, la selección continúa con FTS y
+coincidencia local.
+
+Se guardan:
+
+- `blueprint.json`: selección completa;
+- `retrieval_trace.json`: consulta, puntuaciones, modelo de embedding y si realmente
+  se usaron embeddings.
+
+### 3.3. Diseñar el argumento causal
+
+`PlannerAgent.run()` recibe `StoryRequest` y `NarrativeBlueprint` y crea
+`StoryPlanArtifact`:
+
+- logline y tema;
+- conflicto central;
+- al menos tres pasos de progresión;
+- final previsto;
+- una macrotrama primaria y hasta dos secundarias.
+
+`StoryGenerator._validate_plan()` comprueba que los IDs seleccionados existan en las
+macrotramas, situaciones o arcos recuperados.
+
+**Por qué se validan los IDs:** el modelo puede inventar una etiqueta plausible que
+no pertenece al catálogo. Esa invención rompería la trazabilidad entre recuperación
+y planificación.
+
+Si la validación falla, `_validated_artifact()` guarda el candidato y el error bajo
+`artifact_attempts/story_plan/`, adjunta feedback con el artefacto anterior y exige
+un reemplazo completo. Se permiten `STORY_MAX_ARTIFACT_RETRIES + 1` intentos totales.
+
+### 3.4. Construir un mundo funcional
+
+`WorldBuilderAgent.run()` produce escenario, época, reglas, lugares y atmósfera.
+Su instrucción exige que cada regla o lugar limite una decisión, cree una oportunidad
+o produzca una consecuencia.
+
+**Por qué:** el worldbuilding decorativo aumenta contexto y costo sin ayudar a la
+causalidad. Un mundo funcional hace que las acciones posteriores tengan condiciones
+y consecuencias observables.
+
+Esta etapa tiene validación de esquema Pydantic, pero no una validación semántica
+cruzada adicional mediante `_validated_artifact()`. Es importante distinguir la
+intención del prompt de una garantía determinista.
+
+### 3.5. Diseñar personajes y su cambio observable
+
+`CharacterDesignerAgent.run()` crea un reparto compacto. Cada personaje tiene un
+objetivo, motivación, conflicto, arco, importancia y arquetipo. Debe existir al menos
+un personaje principal.
+
+Para cada principal se usan tres sliders:
+
+- simpatía;
+- competencia;
+- proactividad.
+
+El contrato `CharacterSliderArc` exige exactamente dos valores iniciales altos
+(7–10) y uno bajo (1–4). El bajo es el foco y debe terminar alto; los otros dos deben
+permanecer altos.
+
+**Por qué:** un personaje competente, simpático y proactivo desde el principio tiene
+poco espacio de transformación; uno bajo en los tres puede resultar pasivo o difícil
+de seguir. Dos fortalezas sostienen el interés y una debilidad focal crea un arco
+legible. La dirección ascendente convierte el cambio en una condición comprobable.
+
+Además del esquema, `validate_craft_characters()` comprueba que exista al menos un
+principal y que ninguno carezca de slider. Los candidatos inválidos entran en el
+mismo ciclo de guardar, explicar y regenerar.
+
+### 3.6. Crear outline y presupuestos
+
+`IncrementalPlotPlanner.outline()` crea antes que ningún nodo:
+
+- una premisa;
+- una sinopsis completa;
+- capítulos ordenados;
+- título y resumen de cada capítulo;
+- fases de Freytag;
+- presupuesto de palabras por capítulo.
+
+`_validate_outline()` impone tres invariantes:
+
+1. IDs de capítulo únicos;
+2. órdenes consecutivos desde 1;
+3. la suma de presupuestos coincide exactamente con `request.target_words`.
+
+**Por qué:** la estructura global debe fijarse antes de generar eventos locales. De
+lo contrario, cada capítulo podría ser razonable por separado y aun así dejar sin
+espacio el clímax o exceder la longitud total.
+
+Las fases de Freytag están restringidas por el tipo, pero el código actual no prueba
+que el conjunto global contenga todas las fases ni que aparezcan en un orden concreto.
+
+### 3.7. Fijar el comienzo y final de cada capítulo
+
+`IncrementalPlotPlanner.anchors()` genera exactamente dos eventos SVO por capítulo:
+
+- **CBN, Chapter-Begin Node:** estado/evento observable de entrada;
+- **CEN, Chapter-End Node:** resultado observable al que debe llegar el capítulo.
+
+Se generan todos los pares antes de los nodos internos. `_validate_anchors()` exige
+una correspondencia uno a uno con los capítulos del outline.
+
+**Por qué se fija el final primero:** un generador que solo conoce el pasado puede
+encadenar acciones interesantes que no llegan al destino del capítulo. Con un CEN
+predefinido, cada CPN se puede evaluar por su avance hacia un objetivo concreto.
+
+La validación local garantiza cardinalidad e IDs. Los contenidos semánticos de CBN y
+CEN proceden del modelo y no atraviesan los siete controles usados para los CPN.
+
+### 3.8. Construir la STORYLINE incremental
+
+`IncrementalPlotPlanner.plan()` reinicia `StorylineState`, NEKG e historial. Luego
+procesa cada capítulo en orden.
+
+#### Aceptar el CBN
+
+El ancla inicial se convierte en un `PlotNode` con ID global `n_XXXX`, orden local y
+metadatos causales. En el primer capítulo no tiene arista entrante; en los siguientes
+se conecta el CEN anterior al nuevo CBN mediante `enables`.
+
+El nodo se acepta inmediatamente, se aplica al NEKG y se guarda un checkpoint.
+
+#### Calcular el máximo de CPN
+
+Para un capítulo se permite como máximo:
+
+```python
+max(1, min(10, ceil(chapter.target_words / 350)))
+```
+
+**Por qué:** el techo crece con el espacio disponible, evita pedir demasiados eventos
+para un capítulo corto y evita un bucle sin fin para uno largo. Es un límite de
+seguridad, no una cantidad obligatoria: el capítulo termina antes si un CPN aceptado
+ya conecta naturalmente con el CEN.
+
+#### Proponer un CPN
+
+Para cada slot, `_proposal()` pide un único evento SVO con:
+
+- propósito y beat de referencia;
+- precondiciones y efectos;
+- intención del personaje;
+- conflicto activo;
+- cambios de estado opcionales.
+
+El proponente conoce el capítulo, CBN, CEN, CPN aceptados en ese capítulo, conocimiento
+recuperado, número de slot y feedback del intento anterior. En el último slot recibe
+una instrucción explícita de crear el puente inmediato al CEN.
+
+**Por qué se propone uno a uno:** el siguiente evento puede apoyarse en consecuencias
+ya aceptadas. Generar todos a la vez impediría incorporar rechazos y cambios de estado
+durante la planificación.
+
+#### Revisar el CPN
+
+`_review()` entrega al revisor:
+
+- la propuesta;
+- el capítulo y CEN objetivo;
+- los 8 nodos aceptados más recientes de toda la historia;
+- hasta 10 relaciones relevantes del NEKG.
+
+El candidato final es `review.revised` cuando el revisor devuelve un reemplazo
+completo; en otro caso es la propuesta original. Para ser aceptado debe superar los
+siete controles:
+
+1. soporte causal;
+2. intención de personaje;
+3. conflicto activo;
+4. continuidad;
+5. novedad;
+6. avance hacia el final;
+7. consistencia del mundo.
+
+El validador de `PlotNodeReview` cambia `accepted` a falso si cualquiera de esos
+booleanos falla. En el último slot también es obligatorio `aligns_with_cen`.
+
+**Por qué el revisor puede reemplazar:** algunos problemas se corrigen mejor
+reformulando el evento completo que devolviendo observaciones ambiguas. El sistema
+registra si se aceptó la propuesta o `review.revised`.
+
+#### Aceptación y rechazo
+
+Si se acepta:
+
+1. el candidato se convierte en CPN;
+2. se conecta desde el último nodo mediante una arista `causes`;
+3. se añade a `StorylineState`;
+4. se aplican evento y cambios de estado al NEKG;
+5. se registra `AcceptedNodeRecord`;
+6. se guarda un checkpoint.
+
+Si se rechaza, propuesta, review, candidato, procedencia e incidencias se añaden a
+`history.rejected`; STORYLINE y NEKG permanecen intactos. El texto de los problemas
+se usa como feedback del siguiente intento.
+
+**Por qué un rechazo no toca el estado:** permitir que un hecho descartado afecte el
+contexto contaminaría todas las decisiones posteriores y haría imposible auditar qué
+versión de la realidad narrativa se considera cierta.
+
+Si se agotan `max_retries + 1` intentos de un slot, se lanza
+`StorylinePlanningError`. Una respuesta estructurada inválida también se registra
+como rechazo y consume un intento.
+
+Cuando un CPN aceptado tiene `aligns_with_cen=True`, no se crean más slots para ese
+capítulo. Si se alcanza el techo sin alineación, la planificación falla.
+
+#### Cerrar con el CEN
+
+El CEN se materializa y se conecta con `causes` desde el último CPN. Después se
+reparte `chapter.target_words` entre CBN, CPN y CEN mediante división entera; el
+resto se añade al último nodo. El total del capítulo queda exacto.
+
+La STORYLINE actual es lineal aunque se represente mediante nodos y aristas. Su
+`topological_order` es el orden de aceptación.
+
+### 3.9. Mantener el NEKG
+
+NEKG significa **Narrative Entity Knowledge Graph**. Es un estado local y auditable,
+no otro agente.
+
+Al aplicar un nodo aceptado:
+
+1. sujeto y objeto se normalizan a IDs sin acentos ni puntuación;
+2. se crean las entidades que falten;
+3. se añade la relación `sujeto --verbo--> objeto` con nodo y timestamp;
+4. los cambios actualizan `location`, `possession`, `knowledge`, `situation` o
+   `relationship`;
+5. `last_event_id` se actualiza para las entidades afectadas.
+
+Para revisar una propuesta, `related(subject, object)` prioriza primero relaciones
+dirigidas exactamente de sujeto a objeto y luego relaciones incidentes recientes,
+hasta un máximo de diez.
+
+**Por qué:** el revisor no necesita recibir toda la historia para comprobar, por
+ejemplo, quién posee un objeto o qué sabe un personaje. El subconjunto local reduce
+ruido y costo. El NEKG aporta hechos, pero no ejecuta inferencias ni demuestra por sí
+solo la coherencia; esa decisión sigue siendo semántica.
+
+Limitaciones actuales:
+
+- el último valor de un atributo reemplaza al anterior;
+- no hay resolución de correferencias (`Ana`, `ella`, `la capitana`);
+- CBN y CEN no aportan cambios de estado explícitos;
+- el grafo no se vuelve a extraer de la prosa final.
+
+### 3.10. Crear tres variantes de craft
+
+Solo después de cerrar STORYLINE, `CraftVariantPlannerAgent.run()` genera exactamente
+`variant-1`, `variant-2` y `variant-3`. Cada una debe tener una estrategia distinta y:
+
+- una línea PPP maestra: promise, progress, payoff;
+- de cero a dos subtramas PPP completas;
 - una línea PPP local por capítulo;
-- hitos observables `start`, `transition` y `end` para cada protagonista;
-- la cantidad adaptativa vigente de ciclos Yes-but/No-and y consecuencias
-  persistentes.
+- hitos `start`, `transition` y `end` para el slider focal de cada principal;
+- una cantidad exacta de ciclos Yes-but/No-and con consecuencias persistentes.
 
-Los validadores rechazan IDs `n_####` y los términos CBN/CPN/CEN en el craft.
-`CraftVariantSelectorAgent` elige por constraints, ajuste causal, claridad de
-progresión y arcos. El escritor recibe solo esa variante, la línea del capítulo
-actual, los eventos aceptados y **el capítulo anterior completo**.
-
-El auditor crea preguntas bloqueantes para PPP global/local, hitos, try-fail y
-cada constraint explícito. Puede disparar hasta dos reescrituras. Si una etapa
-tardía falla o agota intentos, se entrega la versión con menos fallos
-bloqueantes y mejor ajuste de longitud, dejando warnings auditables.
-
-### Variantes y compatibilidad
-
-Cada plan autoritativo se guarda en:
-
-```text
-craft/selection.json
-craft/variants/variant-N/plan.json
-craft/variants/variant-N/global.json
-craft/variants/variant-N/chapters/chapter-XXX.json
-craft/variants/variant-N/chapters/chapter-XXX.md
-craft/variants/variant-N/{draft,story}.md
-craft/variants/variant-N/{craft_audit,craft_revision_history,length_audit,llm_usage}.json
-```
-
-La variante elegida se refleja también en los artefactos raíz compatibles. Para
-redactar otra sin replanificar:
-
-```python
-alternate = generator.render_variant(run.run_dir, "variant-2")
-```
-
-Si ya existe su `story.md`, la operación no llama al modelo. Nunca modifica
-`craft/selection.json` ni `run/story.md`. Los directorios de variante se pueden
-comparar directamente con `compare-story-runs`.
-
-Todos los system prompts, encabezados de contexto y feedback de reparación del
-Top-Down activo están en inglés; UI, errores y ficción conservan el idioma del
-usuario. `agents/__init__.py` exporta solo agentes activos. Los runs v2 completos
-siguen entregándose, mientras que los parciales reinician desde `request.json`.
-
----
-
-## Archivo histórico: implementación 2.0.5 (no vigente)
-
-> Guía técnica, paso a paso, de la implementación actual (`asg-top-down` 2.0.5).
-> Describe el flujo que ejecuta hoy `StoryGenerator`, las mejoras de personajes y
-> de *promise–progress–payoff*, la construcción del NEKG, todos los agentes del
-> paquete y los artefactos que quedan guardados.
-
-## 1. Alcance y versión que describe este documento
-
-Esta guía se basa en el estado actual de `main`, versión `2.0.5`, cuyo `HEAD` es
-`6fbbcef` (16 de agosto de 2026). El punto de entrada del CLI es
-`asg_top_down.cli:main`, y este crea un `StoryGenerator`. Por tanto, el flujo de
-producción vigente es el definido en:
-
-- `Models/Top-Down/src/asg_top_down/cli.py`
-- `Models/Top-Down/src/asg_top_down/generator.py`
-- `Models/Top-Down/src/asg_top_down/incremental.py`
-
-El repositorio conserva además `StoryOrchestrator`, la implementación anterior.
-Sigue siendo API pública por compatibilidad, pero **no es la ruta usada por el
-comando `generate-story`**. Más adelante se separan con claridad los agentes
-activos de los agentes que pertenecen principalmente a ese flujo legado.
-
-## 2. Modelo mental: no hay un solo grafo
-
-El sistema crea tres representaciones diferentes y complementarias:
-
-| Representación | Archivo | Qué contiene | Para qué se usa |
-|---|---|---|---|
-| Outline | `outline.json` | Premisa, sinopsis, capítulos, presupuesto de palabras, fases de Freytag, beats de craft, hitos de personajes y ciclos try-fail | Define lo que debe ocurrir a alto nivel |
-| STORYLINE | `storyline.json` | Eventos SVO CBN/CPN/CEN y enlaces causales entre eventos | Define el orden causal aceptado de los acontecimientos |
-| NEKG | `nekg.json` | Entidades, relaciones SVO y último estado conocido de cada entidad | Mantiene continuidad factual mientras se planifican nuevos eventos |
-
-Un CBN es el nodo de comienzo de capítulo (*Chapter Begin Node*), un CPN es un
-nodo de progreso (*Chapter Progress Node*) y un CEN es el nodo de cierre
-(*Chapter End Node*).
-
-```mermaid
-flowchart TD
-    P[Prompt del usuario] --> A[StoryRequest]
-    A --> R[Recuperación narrativa SQLite]
-    R --> B[Blueprint]
-    A --> SP[Story plan]
-    B --> SP
-    SP --> W[Mundo]
-    W --> C[Personajes + sliders]
-    C --> CC[Contrato de craft]
-    CC --> O[Outline]
-    O --> AN[Anclas CBN/CEN]
-    AN --> IP[Planificación incremental de CPN]
-    IP --> SL[STORYLINE]
-    IP --> NK[NEKG]
-    SL --> CH[Redacción por capítulos]
-    NK --> CH
-    CH --> D[Draft]
-    D --> CR[Crítico de craft]
-    CR -->|fallos| RW[Reescritor]
-    RW --> CR
-    CR --> S[Story final + auditorías]
-```
-
-## 3. Cómo se inicia una generación
-
-### 3.1. Desde el CLI
-
-El script instalado es:
-
-```toml
-generate-story = "asg_top_down.cli:main"
-```
-
-`cli.main()` hace lo siguiente:
-
-1. Reconfigura `stdout` y `stderr` como UTF-8 en Windows.
-2. Pide un prompt no vacío.
-3. Ejecuta `load_settings()`.
-4. Construye `GeminiProvider` con modelo, límites de cuota y modelo de embeddings.
-5. Construye `StoryGenerator` con las rutas y límites de reintentos.
-6. Llama `StoryGenerator.run(prompt, on_progress=...)`.
-7. Imprime la ruta de `story.md` o un error público sanitizado.
-
-### 3.2. Desde Python
-
-```python
-from pathlib import Path
-from asg_top_down import StoryGenerator
-from asg_top_down.provider import GeminiProvider
-
-provider = GeminiProvider(
-    api_key="...",
-    model_name="gemini-2.5-flash",
-)
-generator = StoryGenerator(provider, Path("Stories/Top-Down"))
-run = generator.generate("Escribe una historia de misterio de 1800 palabras...")
-print(run.story_path)
-```
-
-`run()` es solamente un alias de compatibilidad de `generate()`. Ambos ejecutan
-el mismo flujo.
-
-### 3.3. Configuración que cambia el comportamiento
-
-| Variable | Valor por defecto | Efecto |
-|---|---:|---|
-| `GEMINI_API_KEY` | obligatorio | Credencial del proveedor |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | Modelo de generación |
-| `GEMINI_EMBEDDING_MODEL` | `gemini-embedding-2` | Modelo de recuperación semántica |
-| `STORY_DEFAULT_WORDS` | `1500` | Extensión usada si el prompt no dice otra |
-| `STORY_MAX_CPN_RETRIES` | `2` | Reintentos adicionales por CPN; hay 3 intentos totales por defecto |
-| `STORY_MAX_ARTIFACT_RETRIES` | `2` | Reparaciones adicionales de artefactos; hay 3 intentos totales por defecto |
-| `GEMINI_RPM_LIMIT` | `15` | Solicitudes por minuto |
-| `GEMINI_RPM_RESERVE` | `1` | Margen que se resta al límite RPM |
-| `GEMINI_TPM_LIMIT` | `0` | Límite de tokens por minuto; `0` lo desactiva |
-| `GEMINI_MAX_RETRIES` | `3` | Reintentos de transporte/cuota después de la petición inicial |
-| `GEMINI_MAX_RETRY_DELAY` | `120` | Máxima espera aceptada para un reintento |
-
-`StoryGenerator` también acepta `max_craft_revisions`, cuyo valor por defecto es
-`2`. No existe una variable de entorno para este valor en el CLI actual; se
-cambia desde Python.
-
-## 4. Flujo completo, paso a paso
-
-### Paso 1. Convertir el prompt en requisitos estructurados
-
-**Responsable:** `AnalystAgent.run()`.
-
-Si `generate()` recibe texto, el analista pide a Gemini un `StoryRequest` con:
-
-- `original_prompt`
-- `title`
-- `language`
-- `genre`
-- `tone`
-- `target_words`
-- `premise`
-- `constraints`
-
-Después de la respuesta del modelo, el código vuelve a buscar localmente una
-cantidad explícita mediante la expresión regular
-`número + palabras|palabra|words|word`. Si existe, reemplaza el valor sugerido
-por Gemini. Si no existe, fuerza `default_target_words`. Así la longitud no queda
-a interpretación del modelo.
-
-Pydantic exige entre 300 y 20 000 palabras. El progreso comienza en 0 % con la
-etapa `analysis`.
-
-### Paso 2. Crear el directorio auditable de la ejecución
-
-**Responsable:** `ArtifactRepository.__init__()`.
-
-El nombre sigue esta forma:
-
-```text
-Stories/Top-Down/YYYYMMDD-HHMMSS-titulo-normalizado/
-```
-
-`slugify()` elimina diacríticos, pasa a minúsculas, sustituye caracteres no
-alfanuméricos por guiones y limita el título a 60 caracteres. Si ya existe una
-ruta igual, agrega `-2`, `-3`, etc.
-
-En este momento se crea `metadata.json` con estado `running`, modelo, fechas,
-ID de ejecución, etapas completadas, errores y advertencias. También se guarda
-`request.json`.
-
-### Paso 3. Reconstruir y consultar el catálogo narrativo
-
-**Responsable:** `NarrativeSchemaRepository`.
-
-#### 3.1. Inicialización de SQLite
-
-La base por defecto es `.cache/narrative-schemas.sqlite3`. `_initialize()`:
-
-1. Crea `schema_migration` si no existe.
-2. Ordena los `.sql` de `schema_db/migrations/`.
-3. Ejecuta cada migración todavía no registrada.
-4. Carga `schema_db/seeds/catalog.json` mediante `_seed()`.
-
-Las tablas son:
-
-- `catalog_entry`: macrotramas, situaciones, arcos, beats, géneros y roles.
-- `beat`: datos estructurados del beat —función, participantes, precondiciones,
-  efectos, cambio emocional, tensión, variantes y transiciones—.
-- `embedding_cache`: vectores por hash de modelo y contenido.
-- `catalog_fts`: índice virtual FTS5 para búsqueda textual/BM25.
-
-La semilla se inserta con *upsert*, por lo que la base es reproducible y los
-cambios del catálogo actualizan registros existentes.
-
-#### 3.2. Construcción de la consulta
-
-`retrieve()` concatena:
-
-```text
-original_prompt + premise + genre + tone
-```
-
-#### 3.3. Puntuación léxica
-
-Se usan dos señales:
-
-1. `_lexical()`: proporción acotada de tokens del prompt presentes en el texto
-   de recuperación del registro.
-2. `_fts_scores()`: consulta FTS5 con los tokens unidos por `OR`; convierte la
-   puntuación BM25 negativa de SQLite a una fuerza normalizada entre 0 y 1.
-
-Para cada entrada se conserva el máximo de ambas señales.
-
-#### 3.4. Puntuación semántica
-
-`_document_vectors()` calcula un SHA-256 de:
-
-```text
-modelo_de_embedding + NUL + texto_del_documento
-```
-
-Si el hash está en `embedding_cache`, reutiliza el vector. Si falta, llama
-`provider.embed_documents()`. La consulta se vectoriza con
-`provider.embed_query()`. La similitud es coseno, acotada a valores no negativos.
-
-La fusión final es:
-
-```text
-score = 0.4 * lexical + 0.6 * semantic
-```
-
-Si embeddings falla, el sistema no aborta: continúa con FTS/BM25 y marca
-`used_embeddings = false`.
-
-#### 3.5. Selección diversificada
-
-Por defecto recupera:
-
-- 2 macrotramas
-- 2 situaciones
-- 2 arcos de personaje
-- 8 beats
-- 2 géneros
-- 4 roles
-
-Ordena por score descendente y luego por ID para desempatar. Evita seleccionar
-variantes compatibles casi duplicadas cuando hay suficientes candidatos.
-
-Los resultados forman `NarrativeBlueprint`, guardado en `blueprint.json`; la
-consulta, modelo, uso de embeddings y selecciones quedan también en
-`retrieval_trace.json`.
-
-### Paso 4. Crear el plan causal de la historia
-
-**Responsable lógico:** `StoryGenerator._plan()`.
-
-Aunque existe un `PlannerAgent` legado, el generador actual llama directamente
-`provider.generate_structured(..., schema=StoryPlanArtifact)`.
-
-El prompt exige que objetivo, creencia equivocada o convicción, oposición
-activa, elecciones irreversibles, clímax y final constituyan un solo argumento
-causal. El resultado contiene:
-
-- `logline`
-- `theme`
-- `central_conflict`
-- `progression`, con al menos tres elementos
-- `intended_ending`
-- `archetypes`: uno primario y hasta dos secundarios
-
-`_validate_plan()` comprueba que todos los IDs elegidos procedan exactamente de
-las macrotramas, situaciones o arcos recuperados. No permite IDs inventados.
-
-Si falla esta regla, `_validated_artifact()` guarda el candidato y el error en:
-
-```text
-artifact_attempts/story_plan/attempt-NNN.json
-artifact_attempts/story_plan/attempt-NNN-validation.json
-```
-
-Luego vuelve a llamar al modelo con el candidato completo y el error, pidiendo
-un reemplazo completo, no un parche. Al agotar los intentos produce
-`ARTIFACT_VALIDATION_FAILED`.
-
-### Paso 5. Construir un mundo funcional
-
-**Responsable lógico:** `StoryGenerator._world()`.
-
-Gemini devuelve un `WorldArtifact`:
-
-- `setting`
-- `time_period`
-- `rules`
-- `locations`
-- `atmosphere`
-
-La instrucción central es que cada regla y lugar debe limitar una decisión,
-crear una oportunidad o causar una consecuencia. El sistema intenta evitar
-*lore* puramente decorativo. Se guarda como `world.json`.
-
-Esta etapa tiene validación de esquema, pero en el flujo actual no pasa por la
-reparación semántica cruzada de `_validated_artifact()`.
-
-### Paso 6. Diseñar los personajes y sus sliders
-
-**Responsable lógico:** `StoryGenerator._characters()`.
-
-El modelo recibe requisitos, plan, mundo y roles recuperados. Debe producir un
-reparto compacto donde:
-
-- cada acción importante se explique por una intención;
-- la oposición tenga un objetivo activo e incompatible;
-- `jungian_archetype` use un ID de rol recuperado;
-- exista al menos un personaje `main`;
-- cada personaje principal tenga un `slider_arc` completo.
-
-Cada `Character` posee nombre, rol narrativo, arquetipo, objetivo, motivación,
-conflicto, descripción del arco, importancia y slider opcional.
-
-Para un personaje principal, `CharacterSliderArc` contiene tres escalas de 1 a
-10:
-
-- `sympathy`: simpatía percibida por el lector;
-- `competence`: competencia demostrada;
-- `proactivity`: capacidad de tomar iniciativa.
-
-Cada escala tiene `start`, `target` y `rationale`. Además se elige:
-
-- `focus`: la escala que realmente cambia;
-- `direction`: `ascending` o `descending`;
-- `justification`: por qué ese cambio forma un arco.
-
-El validador Pydantic `focus_matches_direction()` exige que el slider focal sí
-cambie y que la dirección coincida con los números. Por ejemplo, un arco
-ascendente de proactividad no puede pasar de 8 a 3.
-
-La instrucción pide IDs de rol recuperados, pero en esta ruta la validación
-determinista posterior comprueba sliders y presencia del reparto principal, no
-vuelve a contrastar `jungian_archetype` contra `blueprint.roles`. Esa
-comprobación explícita sí existe en el `CharacterDesignerAgent` legado.
-
-`validate_craft_characters()` añade dos reglas de producción:
-
-1. debe existir al menos un personaje principal;
-2. todos los principales deben tener `slider_arc`.
-
-Los candidatos inválidos entran en el mismo ciclo de reparación auditable que
-el plan. El resultado válido se guarda en `characters.json`.
-
-### Paso 7. Crear el contrato de craft
-
-**Responsable:** `CraftContractAgent.run()`.
-
-El contrato se crea **antes** del outline para que la estructura no pueda
-inventar retrospectivamente sus promesas. Debe contener:
-
-1. exactamente una promesa de tono;
-2. exactamente una promesa de trama principal;
-3. exactamente una promesa por cada personaje principal.
-
-Cada `CraftPromise` tiene:
-
-- `id`
-- `kind`: `tone`, `plot` o `character`
-- `character_name`, solo para promesas de personaje
-- `statement`: qué se promete
-- `setup`: cómo se plantea
-- `progress_signals`: una o más señales observables de avance
-- `payoff`: pago concreto
-
-El contrato incluye `try_fail_target`, calculado localmente mediante:
+La cantidad de ciclos es:
 
 ```python
 max(2, min(7, ceil(target_words / 2000)))
 ```
 
-Consecuencias de la fórmula:
+La promesa maestra debe comenzar en el primer capítulo y su pago debe ocurrir en el
+último. Todos los puntos deben estar ordenados, cada capítulo debe avanzar líneas
+globales conocidas y cada personaje principal debe tener exactamente sus tres hitos.
 
-| Palabras | Ciclos exigidos |
-|---:|---:|
-| 300 | 2 |
-| 4 000 | 2 |
-| 4 001 | 3 |
-| 20 000 | 7 |
+El craft no puede contener IDs `n_XXXX` ni las palabras CBN, CPN o CEN.
 
-`validate_craft_contract()` verifica que el número sea exacto, que no se repita
-un personaje y que el conjunto de promesas de personaje coincida exactamente
-con el reparto principal. El artefacto válido es `craft_contract.json`.
+**Por qué se prohíben referencias a nodos:** el craft debe describir efectos para el
+lector y comportamientos observables, no acoplarse a detalles internos de la
+STORYLINE. Así una variante puede redactarse después sin replanificar hechos.
 
-### Paso 8. Construir el outline con promise–progress–payoff
+**Por qué se crean tres variantes:** la misma cadena causal puede sostener distintas
+estrategias de expectativa, énfasis y arco. Compararlas antes de redactar es más
+barato que escribir tres historias completas desde el inicio.
 
-**Responsable:** `IncrementalPlotPlanner.outline()`.
+Cada variante válida se guarda de inmediato en:
 
-El modelo recibe request, plan, blueprint, personajes y contrato. Produce una
-premisa, una sinopsis y una lista ordenada de `ChapterPlan`.
-
-Cada capítulo contiene:
-
-- ID, orden, título y resumen;
-- `target_words`;
-- fases de Freytag;
-- `craft_beats`;
-- `character_milestones`;
-- `try_fail_cycles`.
-
-#### 8.1. Beats de promesa
-
-Por cada promesa debe haber:
-
-- exactamente un `CraftBeat(kind="setup")`;
-- uno o más `CraftBeat(kind="progress")`;
-- exactamente un `CraftBeat(kind="payoff")`.
-
-Cada beat tiene ID único, `promise_id` y descripción. La validación comprueba:
-
-1. IDs globalmente únicos.
-2. Referencias a promesas existentes.
-3. Un solo setup y payoff, y al menos un progreso.
-4. Orden de capítulos `setup <= progress <= payoff`.
-5. Las promesas de tono y trama se plantean en el primer capítulo.
-
-En este nivel se permite que setup, progreso y payoff compartan capítulo. La
-validación posterior de STORYLINE exige que sus **nodos** sí estén en orden
-estricto.
-
-#### 8.2. Hitos del arco de personaje
-
-Cada personaje principal debe tener exactamente:
-
-- un hito `start`;
-- un hito `transition`;
-- un hito `end`.
-
-Todos usan el `focus_slider` declarado por el personaje. El valor de `start`
-debe ser idéntico al inicio del slider y el de `end` a su objetivo. Sus capítulos
-deben mantener el orden start–transition–end. Personajes secundarios no pueden
-recibir estos hitos.
-
-#### 8.3. Ciclos Yes-but / No-and
-
-El outline debe contener exactamente `try_fail_target` ciclos. Cada uno define:
-
-- `action`: intento concreto;
-- `outcome`: `yes_but` o `no_and`;
-- `consequence`: coste persistente;
-- `promise_id`: promesa que hace avanzar.
-
-No basta con que el modelo entregue la cantidad: el planificador incremental
-obliga a que los CPN los consuman y la STORYLINE comprueba que la consecuencia
-aparezca como efecto y tenga un nodo causal posterior.
-
-#### 8.4. Presupuesto de palabras
-
-La suma exacta de `chapter.target_words` debe ser igual a
-`request.target_words`. Si cualquier regla falla, se conserva el candidato y se
-solicita una reparación completa. El resultado es `outline.json`.
-
-### Paso 9. Crear las anclas de los capítulos
-
-**Responsable:** `IncrementalPlotPlanner.anchors()`.
-
-El modelo crea exactamente un evento inicial y uno final por capítulo, ambos en
-forma sujeto–verbo–objeto:
-
-```json
-{
-  "chapter_id": "chap_1",
-  "begin_subject": "Ada",
-  "begin_verb": "descubre",
-  "begin_object": "la señal",
-  "end_subject": "Ada",
-  "end_verb": "oculta",
-  "end_object": "la copia"
-}
+```text
+craft/variants/variant-N/plan.json
+craft/variants/variant-N/global.json
+craft/variants/variant-N/chapters/<chapter-id>.json
 ```
 
-El inicio debe materializar beats `setup` e hitos `start`; el final, beats
-`payoff` e hitos `end`. `_validate_anchors()` comprueba IDs únicos y
-correspondencia exacta, uno a uno, con los capítulos del outline.
+### 3.11. Seleccionar la variante canónica
 
-El artefacto queda en `chapter_anchors.json`.
+`CraftVariantSelectorAgent.run()` elige una variante según:
 
-### Paso 10. Inicializar la planificación incremental
+- fidelidad a las restricciones del usuario;
+- ajuste causal a la STORYLINE;
+- progresión global y por capítulo;
+- pagos preparados;
+- cambio observable del slider focal.
 
-**Responsable:** `IncrementalPlotPlanner.plan()`.
+Python comprueba que el ID elegido exista. La selección y su justificación se guardan
+en `craft/selection.json`.
 
-Se crean tres estados vacíos:
+**Por qué el selector no puntúa:** una puntuación única escondería compensaciones
+entre criterios. La decisión conserva una justificación textual y las alternativas no
+se destruyen.
 
-- `StorylineState`: capítulos, nodos aceptados y enlaces causales.
-- `NarrativeEntityGraph`: entidades y relaciones aceptadas.
-- `NodeReviewHistory`: nodos aceptados y todos los rechazos.
+### 3.12. Redactar capítulos
 
-Los nodos se numeran globalmente `n_0001`, `n_0002`, etc. `global_order` empieza
-en 1 y `timestamp` en 0.
+`_render_to_prefix()` recorre los capítulos del outline. Antes de escribir cada uno,
+reconstruye un NEKG de escritura aplicando los nodos y cambios aceptados hasta ese
+capítulo.
 
-Para cada capítulo se calcula el presupuesto de CPN:
+`ChapterWriterAgent.run()` recibe:
+
+- solicitud, plan, mundo y personajes;
+- craft global de la variante y craft local del capítulo;
+- hitos de personaje y ciclos try-fail correspondientes;
+- nodos del capítulo y aristas que los tocan;
+- estado NEKG acumulado;
+- el capítulo anterior completo, o `none` para el primero;
+- presupuesto aproximado del capítulo.
+
+**Por qué solo se incluye el capítulo anterior completo:** ofrece continuidad de voz
+y detalles inmediatos sin hacer crecer el contexto con todo el manuscrito.
+
+El escritor devuelve solo el cuerpo. `_canonical_chapter()` elimina un encabezado que
+el modelo haya añadido y coloca exactamente `## <título>`. Cada capítulo se guarda al
+terminar y todos se unen en `draft.md`.
+
+### 3.13. Auditar y reescribir
+
+`CraftCriticAgent` no asigna una nota general. `audit_questions()` construye preguntas
+con IDs estables para verificar:
+
+- promesa, progreso y pago de cada línea PPP global;
+- promesa, progreso y pago de cada capítulo;
+- comienzo, transición, decisión y final del arco focal de cada principal;
+- resultado y persistencia de cada ciclo try-fail;
+- cada restricción del usuario;
+- preservación de causalidad;
+- ausencia de terminología de planificación.
+
+La mayoría son bloqueantes. Son consultivas `earned` de cada pago global y la ausencia
+de andamiaje. Si el crítico omite una pregunta, `normalize_audit()` la convierte en un
+fallo explícito; no se interpreta el silencio como aprobación.
+
+También se comprueba la longitud total con tolerancia:
+
+```text
+mínimo = ceil(objetivo × 0.90)
+máximo = floor(objetivo × 1.20)
+```
+
+Si hay fallos bloqueantes o la longitud está fuera del rango, el reescritor recibe la
+historia completa, las instrucciones de todos los fallos y, cuando corresponde, una
+instrucción determinista de longitud. Puede haber hasta dos reescrituras, por lo que
+se auditan como máximo tres versiones: intento 0, 1 y 2.
+
+**Por qué se reescribe la historia completa:** un pago o una consecuencia modificada
+al final suele requerir preparación en capítulos anteriores. Un parche local podría
+resolver la frase señalada y romper continuidad o causalidad en otro lugar.
+
+La versión entregada se elige en este orden:
+
+1. menor cantidad de fallos bloqueantes;
+2. menor distancia al rango de longitud;
+3. menor cantidad de fallos consultivos;
+4. en empate, versión más reciente.
+
+**Por qué se conserva la mejor versión:** si una auditoría o reescritura tardía falla,
+ya existe ficción utilizable. El sistema emite `quality_warning.json` en vez de perder
+todo el trabajo.
+
+Una distinción importante: `draft.md` y `chapters/*.md` conservan la primera redacción
+por capítulos, mientras `story.md` puede ser una reescritura completa posterior. La
+auditoría total de longitud corresponde a `story.md`; las entradas de longitud por
+capítulo se calculan sobre los capítulos iniciales.
+
+## 4. Reintentos: cuatro capas diferentes
+
+No todos los reintentos significan lo mismo:
+
+| Capa | Qué repara | Límite normal |
+|---|---|---|
+| `GeminiProvider._generate()` | red, 408, 429 y 5xx temporales | `GEMINI_MAX_RETRIES` |
+| `generate_structured()` | JSON que no satisface el esquema Pydantic | 1 reparación adicional |
+| `_validated_artifact()` | contrato semántico cruzado de plan, personajes, outline, anclas, variantes y selección | `STORY_MAX_ARTIFACT_RETRIES + 1` intentos totales |
+| bucle de CPN | causalidad y siete controles semánticos de un evento | `STORY_MAX_CPN_RETRIES + 1` intentos por slot |
+
+Separarlas permite diagnosticar si el problema fue transporte, forma JSON, coherencia
+de un artefacto completo o calidad de un evento concreto.
+
+Todas las llamadas registran duración, tokens, esperas y reintentos en
+`llm_usage.json`. La API key y los prompts no se copian a reportes públicos.
+
+## 5. Persistencia y artefactos
+
+Una ejecución completa tiene esta forma:
+
+```text
+run/
+├── metadata.json
+├── request.json
+├── blueprint.json
+├── retrieval_trace.json
+├── story_plan.json
+├── world.json
+├── characters.json
+├── outline.json
+├── chapter_anchors.json
+├── planning_checkpoint/
+│   ├── storyline.json
+│   ├── nekg.json
+│   └── node_reviews.json
+├── storyline.json
+├── nekg.json
+├── node_reviews.json
+├── craft/
+│   ├── selection.json
+│   ├── variants.json
+│   └── variants/
+│       ├── variant-1/
+│       │   ├── plan.json
+│       │   ├── global.json
+│       │   ├── chapters/<chapter-id>.json
+│       │   └── archivos de redacción si fue renderizada
+│       ├── variant-2/
+│       └── variant-3/
+├── chapters/chapter-XXX.md
+├── draft.md
+├── craft_revisions/
+├── craft_audit.json
+├── diagnostic_audit.json
+├── craft_revision_history.json
+├── length_audit.json
+├── llm_usage.json
+├── quality_warning.json        # solo si hubo advertencias
+├── error_report.json           # solo si la ejecución falló
+└── story.md
+```
+
+La variante seleccionada contiene bajo su propia carpeta `chapters/chapter-XXX.md`,
+`draft.md`, `craft_revisions/`, auditorías, historial, uso y `story.md`. Esos resultados
+se reflejan además en la raíz para que CLI, consola y Telegram encuentren una salida
+canónica estable.
+
+Los checkpoints se sobrescriben después de cada CBN, aceptación, rechazo y CEN; por
+eso contienen el estado parcial más reciente. El historial de revisiones conserva el
+detalle de intentos anteriores.
+
+## 6. Fallos, `resume()` y variantes alternativas
+
+Si una etapa temprana falla, `ArtifactRepository.fail()` cambia `metadata.json` a
+`failed` y escribe un `error_report.json` seguro. Los artefactos previos no se borran.
+
+`resume(run_id)` tiene una semántica concreta:
+
+- si ya existe `story.md`, devuelve esa ejecución sin hacer llamadas;
+- si no existe, lee `request.json` y comienza una ejecución nueva en otro directorio.
+
+No continúa todavía desde `planning_checkpoint/` dentro del mismo directorio. El
+nombre `resume` significa “recuperar el pedido y volver a ejecutar”, no “reanudar en
+la instrucción exacta donde falló”.
+
+`render_variant(run_id, "variant-2")` sí reutiliza la planificación de un run 3.0:
+
+1. valida que existan los artefactos obligatorios;
+2. valida otra vez el plan de craft elegido;
+3. redacta y audita esa variante sin llamar a análisis, recuperación, mundo,
+   personajes, outline, anclas, CPN ni selector;
+4. devuelve la carpeta de la variante y no cambia `craft/selection.json` ni
+   `story.md` de la raíz.
+
+Si la variante ya tiene `story.md`, la operación es idempotente y retorna de inmediato.
+
+## 7. Configuración de depuración en VS Code
+
+El archivo `.vscode/launch.json` contiene un único recorrido llamado **Crear historia
+Top-Down paso a paso (Gemini)**. Es la ruta real e interactiva: carga `.env`, utiliza
+el intérprete del entorno virtual, ejecuta `asg_top_down.cli`, llama a Gemini y guarda
+la historia bajo `Stories/Top-Down/`.
+
+`stopOnEntry` está activado para que el depurador se detenga antes de ejecutar el CLI.
+Desde ahí se puede recorrer el programa con `F10` y entrar en las funciones propias
+del proyecto con `F11`. `justMyCode` permanece activo para no entrar accidentalmente
+en miles de líneas internas de `debugpy`, Pydantic o el SDK de Google; las llamadas a
+Gemini sí se observan dentro de `GeminiProvider`.
+
+En VS Code:
+
+1. abre “Run and Debug” con `Ctrl+Shift+D`;
+2. selecciona **Crear historia Top-Down paso a paso (Gemini)**;
+3. coloca los breakpoints indicados en la sección siguiente;
+4. pulsa `F5`;
+5. usa `F10` para avanzar sin entrar y `F11` para entrar en una llamada.
+
+La consola integrada es obligatoria porque el CLI solicita el prompt con `input()`.
+Cuando la ejecución llegue a esa línea, escribe allí la descripción de la historia y
+presiona `Enter`.
+
+## 8. Breakpoints principales
+
+No hace falta detenerse en cada setter de Pydantic. Este recorrido muestra las
+decisiones que cambian el estado narrativo.
+
+| Orden | Archivo y función | Qué observar |
+|---:|---|---|
+| 1 | `cli.py` → `main()` | prompt, `settings`, proveedor y llamada pública `generator.run()` |
+| 2 | `generator.py` → `StoryGenerator.generate()` | creación del run y orden completo de etapas |
+| 3 | `generator.py` → `_validated_artifact()` | `candidate`, `validate`, `feedback`, `issues` y reintentos semánticos |
+| 4 | `narrative_db.py` → `retrieve()` | `query`, `fts_scores`, `vectors`, `ranked` y `selections` |
+| 5 | `incremental.py` → `IncrementalPlotPlanner.plan()` | `chapter`, `slot`, `attempt`, `proposal`, `review`, `candidate` y `aligned` |
+| 6 | `incremental.py` → `StorylineState.accept()` | invariantes antes de añadir un nodo y sus aristas |
+| 7 | `nekg.py` → `NarrativeEntityGraph.apply()` | cómo solo un nodo aceptado cambia entidades, relaciones y estado |
+| 8 | `generator.py` → `_save_variant_plan()` y `_validate_selection()` | las tres alternativas y la elección canónica |
+| 9 | `generator.py` → `_render_to_prefix()` | reconstrucción del NEKG y contexto enviado por capítulo |
+| 10 | `agents/writer.py` → `ChapterWriterAgent.run()` | filtros de nodos, aristas, craft, hitos y capítulo anterior |
+| 11 | `generator.py` → `_review_draft()` | auditoría, condición de reescritura y selección de la mejor versión |
+| 12 | `storage.py` → `save_data()` o `save_text()` | qué artefacto se persiste y en qué momento |
+
+Para estudiar el núcleo incremental con menos interrupciones, coloca dos breakpoints
+condicionales dentro de `IncrementalPlotPlanner.plan()`:
+
+- en el bloque de aceptación: `review.accepted and not final_without_alignment`;
+- en el bloque de rechazo: `not review.accepted or final_without_alignment`.
+
+Expresiones útiles en “Watch”:
 
 ```python
-max(1, min(6, ceil(chapter.target_words / 450)))
+repository.run_dir
+request.target_words
+[c.id for c in outline.chapters]
+(chapter.id, slot, attempt, maximum)
+candidate.model_dump()
+review.model_dump()
+[n.id for n in self.state.nodes]
+self.nekg.artifact().model_dump()
+selection.selected_variant_id
+audit.failed_blocking_ids
+[(i, len(a.failed_blocking_ids), ok) for i, _, a, ok in versions]
 ```
 
-Luego se eleva, si hace falta, hasta el número de ciclos try-fail del capítulo.
-Así un capítulo de 1 500 palabras normalmente recibe cuatro CPN, y nunca más de
-seis salvo que la cantidad de ciclos del propio outline obligue a ello.
+Entrar con `F11` en `GeminiProvider._generate()` permite distinguir espera de cuota,
+llamada remota y validación. Cada continuación puede efectuar una llamada real y
+consumir cuota; conviene inspeccionar primero `system_instruction`, `prompt` y
+`operation`, y después continuar.
 
-La cuota orientativa por nodo es:
+## 9. Recorrido de depuración recomendado
 
-```text
-chapter.target_words // (cantidad_de_CPN + 2)
+### Primera pasada: arquitectura
+
+Usa la configuración de Gemini y detente solo en:
+
+1. `StoryGenerator.generate()`;
+2. `IncrementalPlotPlanner.plan()`;
+3. `_render_to_prefix()`;
+4. `_review_draft()`.
+
+Avanza con `F10`. El objetivo es ver cuándo nacen `request`, `storyline`, `variants`,
+`draft` y `story`.
+
+### Segunda pasada: aceptación causal
+
+Reinicia la generación y usa los breakpoints condicionales de aceptación/rechazo.
+Compara:
+
+- `proposal` frente a `review.revised`;
+- `history.rejected` antes y después;
+- `self.state.nodes` y `self.nekg.artifact()`.
+
+El punto esencial es comprobar que un rechazo aumenta el historial, pero no el grafo;
+una aceptación actualiza ambos.
+
+### Tercera pasada: craft y calidad
+
+Detente en `_save_variant_plan()`, `ChapterWriterAgent.run()` y `_review_draft()`.
+Comprueba que:
+
+- las tres variantes comparten STORYLINE pero no estrategia;
+- el escritor recibe solamente el craft seleccionado;
+- una primera auditoría con fallo genera una reescritura;
+- `selected_attempt` identifica la versión final, que no tiene que ser la última.
+
+### Cuarta pasada: llamadas al proveedor
+
+Introduce un prompt corto y revisa:
+
+- `AnalystAgent.run()` para requisitos;
+- `GeminiProvider.generate_structured()` para contratos JSON;
+- `_validated_artifact()` para reparaciones semánticas;
+- `llm_usage.json` para costo, espera y reintentos.
+
+## 10. Pruebas rápidas independientes del depurador
+
+La configuración de VS Code genera una historia real con Gemini. Si se desea validar
+el flujo sin consumir API, esta prueba independiente usa un proveedor falso:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q -s `
+  Models\Top-Down\tests\test_top_down_v3.py::test_generator_builds_variants_rewrites_blocking_failure_and_renders_without_replanning
 ```
 
-El `+2` representa CBN y CEN. El resto de la división se asigna al CEN.
+Todas las pruebas del paquete:
 
-### Paso 11. Crear y aceptar el CBN
-
-El CBN se construye localmente a partir del ancla inicial; no pasa por la
-revisión de CPN. Recibe:
-
-- todos los beats `setup` de ese capítulo;
-- todos los hitos `start` de ese capítulo;
-- ningún ciclo try-fail.
-
-Si no es el primer capítulo, se crea un enlace `enables` desde el último nodo
-del capítulo anterior. `StorylineState.accept()` exige que el ID sea nuevo y
-que cada enlace nuevo vaya desde historia conocida hacia el nodo recién
-aceptado.
-
-Después se llama `nekg.apply(begin)` y se guarda un checkpoint.
-
-### Paso 12. Proponer, revisar y aceptar cada CPN
-
-Este es el bucle central de STORYTELLER.
-
-#### 12.1. Separar requisitos ya consumidos
-
-Antes del primer CPN quedan como pendientes solamente:
-
-- beats `progress`;
-- hitos `transition`;
-- ciclos try-fail.
-
-Setup/start ya pertenecen al CBN. Payoff/end están reservados para el CEN. Esta
-separación es esencial para la mejora 2.0.5.
-
-#### 12.2. Crear el scope autoritativo de craft
-
-`_craft_scope()` genera:
-
-```json
-{
-  "remaining_slots": 2,
-  "available_craft_beat_ids": ["plot-progress-2"],
-  "available_character_milestone_ids": ["ada-transition"],
-  "available_try_fail_cycle_ids": ["tf-2"],
-  "remaining_craft_beats": [],
-  "remaining_character_milestones": [],
-  "remaining_try_fail_cycles": []
-}
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q Models\Top-Down\tests
 ```
 
-Las tres listas de objetos completas sí llevan sus valores reales; se han
-abreviado aquí para destacar la forma. Este scope, calculado por Python, es la
-autoridad sobre qué IDs puede reclamar el siguiente candidato.
+Estas pruebas usan proveedores falsos donde corresponde; no necesitan la API para
+validar el flujo principal.
 
-#### 12.3. Generar una propuesta
+## 11. Índice del código
 
-`_proposal()` pide un único `PlotNodeProposal` SVO. El prompt incluye:
-
-- contexto narrativo del capítulo sin listas de craft reservadas;
-- ancla final;
-- número de slot y presupuesto;
-- últimos ocho nodos aceptados;
-- NEKG completo actual;
-- requisitos de craft todavía disponibles;
-- blueprint recuperado;
-- feedback del intento anterior.
-
-La propuesta debe tener causalidad, intención, oposición, cambio de estado y
-avance hacia el final sin alcanzarlo prematuramente. Sus campos son:
-
-- sujeto, verbo y objeto;
-- propósito y beat de esquema;
-- precondiciones y efectos;
-- intención y conflicto;
-- si alcanza el final;
-- `state_changes`;
-- IDs de beats, hitos y ciclos que afirma realizar;
-- resultado try-fail opcional.
-
-#### 12.4. Validación local previa a la crítica
-
-`_proposal_craft_issues()` rechaza antes de llamar al revisor si:
-
-- repite IDs;
-- usa IDs no disponibles o ya consumidos;
-- reclama más de un ciclo try-fail;
-- quedan tantos ciclos como slots y el slot no consume uno;
-- el resultado no coincide con `yes_but`/`no_and` planeado;
-- da un resultado try-fail sin referenciar un ciclo;
-- en el último slot no consume todos los requisitos restantes.
-
-Si falla, el intento se guarda con etapa `proposal_validation`; no se desperdicia
-una llamada de revisión.
-
-#### 12.5. Revisión semántica del candidato
-
-`_review()` envía la propuesta, el contexto narrativo, el final, el scope de
-craft, los nodos recientes y las relaciones NEKG relacionadas con sujeto/objeto.
-
-Aunque el texto del prompt dice “seven checks”, el esquema actual contiene diez
-booleanos y la aceptación efectiva exige los diez:
-
-1. `causal`
-2. `intentional`
-3. `conflict_present`
-4. `continuous`
-5. `novel`
-6. `advances_ending`
-7. `world_consistent`
-8. `craft_coverage`
-9. `consequence_persists`
-10. `try_fail_valid`
-
-El revisor puede entregar `revised`, un reemplazo completo de la propuesta. Si
-existe, ese reemplazo —no la propuesta original— es el candidato final.
-
-El validador `PlotNodeReview.acceptance_is_earned()` corrige una contradicción
-en la que `accepted=true` pero algún check es falso: cambia `accepted` a falso y
-registra los checks fallidos.
-
-#### 12.6. Adjudicación determinista de cobertura
-
-Después de la opinión de Gemini, Python vuelve a validar los IDs del candidato
-final. `_adjudicate_craft_review()` hace que esa decisión local sea autoritativa:
-
-- si Python encuentra IDs inválidos, fuerza `craft_coverage=false` y
-  `accepted=false`;
-- si Python demuestra que la cobertura es válida pero Gemini dijo que no, cambia
-  `craft_coverage=true`;
-- solo promueve a aceptado cuando **todos los demás nueve checks semánticos ya
-  eran verdaderos**.
-
-Así Gemini sigue juzgando causalidad, intención, conflicto, continuidad,
-novedad, progreso, mundo y consecuencias, pero no puede inventar IDs pendientes
-que el scope local declara inexistentes.
-
-#### 12.7. Aceptación transaccional
-
-Si la revisión es aceptada y no hay problemas locales:
-
-1. `_node()` convierte la propuesta en `PlotNode`.
-2. Agrega como `effects` la consecuencia exacta de cada ciclo try-fail.
-3. Crea un enlace `causes` desde el nodo anterior.
-4. `StorylineState.accept()` agrega nodo y enlace.
-5. `nekg.apply(node, candidate.state_changes)` actualiza relaciones y estados.
-6. Se registra `AcceptedNodeRecord` con nodo, cambios, revisión e intento.
-7. Se eliminan de las listas pendientes los IDs reclamados.
-8. Se guarda un checkpoint.
-
-La aceptación es transaccional en el sentido de que el estado STORYLINE/NEKG no
-cambia hasta que propuesta, revisión y reglas deterministas pasan.
-
-#### 12.8. Rechazo y reintento aislado
-
-Un rechazo conserva:
-
-- capítulo, slot e intento;
-- etapa: `proposal`, `proposal_validation`, `review` o `candidate_validation`;
-- propuesta original;
-- revisión;
-- candidato final y si vino de `proposal` o `review.revised`;
-- scope autoritativo;
-- problemas y errores de esquema sanitizados.
-
-El texto de los problemas se usa como `revision feedback` del siguiente intento.
-Solo se reintenta ese CPN; los nodos anteriores permanecen aceptados.
-
-Con `max_cpn_retries=2` hay tres intentos totales. Si se agotan, se lanza
-`STORYLINE_PLANNING_FAILED` y los checkpoints permiten inspeccionar exactamente
-qué pasó.
-
-### Paso 13. Crear y aceptar el CEN
-
-Cuando todos los CPN del capítulo han sido aceptados, el código comprueba que no
-quede ningún progreso, transición o ciclo pendiente. Si queda uno, aborta la
-planificación: no lo oculta ni lo asigna artificialmente al final.
-
-El CEN se construye desde el ancla final y recibe:
-
-- todos los beats `payoff` del capítulo;
-- todos los hitos `end` del capítulo;
-- ningún ciclo try-fail.
-
-Se enlaza mediante `causes` desde el último CPN, se aplica al NEKG y se guarda
-otro checkpoint.
-
-### Paso 14. Validar la STORYLINE completa
-
-Al terminar todos los capítulos, `validate_storyline_craft()` comprueba:
-
-1. Que cada beat, hito y ciclo conocido aparezca exactamente una vez.
-2. Que no aparezcan IDs desconocidos.
-3. Que, para cada promesa, todos los nodos de progreso estén estrictamente entre
-   el nodo de setup y el nodo de payoff.
-4. Que cada ciclo use el resultado planeado.
-5. Que su consecuencia exacta esté en `node.effects`.
-6. Que el nodo del ciclo tenga una arista causal saliente, demostrando que la
-   consecuencia afecta un evento posterior.
-
-El resultado se guarda en `storyline.json`, `nekg.json` y `node_reviews.json`.
-Durante el proceso, las versiones parciales viven en:
-
-```text
-planning_checkpoint/storyline.json
-planning_checkpoint/nekg.json
-planning_checkpoint/node_reviews.json
-```
-
-### Paso 15. Redactar cada capítulo
-
-**Responsable lógico:** `StoryGenerator._write_chapter()`.
-
-Para cada capítulo, el generador reconstruye un `writing_nekg` local y le aplica
-los nodos aceptados de ese capítulo junto con los `state_changes` guardados en
-las revisiones. Después envía a Gemini:
-
-- request, plan, mundo, personajes y contrato;
-- capítulo;
-- nodos del capítulo;
-- enlaces cuyo origen o destino toca esos nodos;
-- NEKG acumulado;
-- los últimos 6 000 caracteres del texto anterior.
-
-La instrucción exige dramatizar todos los eventos aceptados, promesas, hitos y
-consecuencias mediante acciones observables, sin revelar IDs, nombres de sliders
-ni puntuaciones.
-
-Detalle importante de implementación: como la llamada genera un capítulo
-completo, el código aplica al `writing_nekg` todos los nodos de ese capítulo
-**antes** de redactarlo. Por ello el contexto incluye el estado final conocido
-del capítulo, no una actualización frase a frase dentro de la generación.
-
-Gemini devuelve solo el cuerpo. `_canonical_chapter()` elimina un posible
-encabezado inicial que el modelo haya añadido y antepone exactamente:
-
-```markdown
-## Título canónico
-```
-
-Cada texto va a `chapters/chapter-NNN.md`. Al unirlos se crea `draft.md`.
-
-### Paso 16. Auditar el borrador con preguntas concretas
-
-**Responsable:** `CraftCriticAgent.run()`.
-
-`audit_questions()` genera una batería determinista; el modelo no decide qué
-preguntas evaluar.
-
-Por cada promesa pregunta:
-
-- si está planteada;
-- si progresa visiblemente;
-- si tiene pago;
-- si el pago es sorprendente pero merecido —esta última es consultiva—.
-
-Por cada personaje principal pregunta:
-
-- si la conducta establece el estado inicial;
-- si existe transición observable;
-- si el cambio afecta decisiones importantes;
-- si la conducta final demuestra el estado objetivo sin explicar números.
-
-Por cada ciclo try-fail pregunta:
-
-- si el intento se dramatiza;
-- si produce el Yes-but o No-and planeado;
-- si el coste persiste y escala eventos posteriores.
-
-También pregunta por causalidad global, progreso del medio y ausencia de
-andamiaje de planificación en la ficción.
-
-Cada respuesta tiene veredicto, evidencia, problema e instrucción de revisión.
-Un fallo debe ser accionable. `normalize_audit()` restaura los metadatos
-autoritativos de cada pregunta y convierte toda respuesta omitida en fallo
-bloqueante; Gemini no puede aprobar el texto omitiendo preguntas difíciles.
-
-### Paso 17. Reescribir y elegir la mejor versión
-
-**Responsable:** `CraftRewriterAgent.run()` y
-`StoryGenerator._review_draft()`.
-
-El intento 0 es el draft. Si la auditoría tiene fallos bloqueantes o está fuera
-del rango de longitud, el reescritor recibe solo las respuestas fallidas,
-ordenando primero las bloqueantes. Debe:
-
-- reescribir la historia completa;
-- conservar hechos y dependencias causales;
-- mostrar los cambios mediante acción y elección;
-- ocultar IDs y terminología de planificación;
-- preservar exactamente los encabezados canónicos;
-- obedecer una corrección de longitud si hace falta.
-
-La preservación de encabezados se exige en el prompt, pero la versión reescrita
-no pasa por un comparador local de títulos ni por `_canonical_chapter()` otra
-vez. Si el modelo desobedeciera esa instrucción, la auditoría de craft podría
-detectarlo indirectamente, pero no existe hoy una validación determinista
-específica para los headings después de una reescritura.
-
-Hay hasta dos reescrituras por defecto, por lo que pueden existir los intentos
-0, 1 y 2. Cada texto y auditoría se guarda bajo `craft_revisions/`.
-
-La versión elegida minimiza, en este orden:
-
-1. número de fallos bloqueantes;
-2. distancia al rango de longitud;
-3. cantidad de fallos consultivos;
-4. en empate, prefiere el intento más reciente.
-
-Esto significa que el último texto no se acepta automáticamente: se selecciona
-la mejor versión auditada.
-
-Si el crítico o reescritor falla después de existir un draft, se entrega la
-mejor versión disponible, se crea `quality_warning.json` y la advertencia entra
-en `metadata.json`. La planificación estricta no se relaja.
-
-### Paso 18. Auditoría de longitud y cierre
-
-La tolerancia final es:
-
-```text
-mínimo = ceil(target_words * 0.90)
-máximo = floor(target_words * 1.20)
-```
-
-`length_audit.json` registra objetivo, límites, total real y cumplimiento. En el
-generador actual la lista de auditorías por capítulo queda vacía; se audita el
-total final. `_word_count()` usa `text.split()`, por lo que cuenta tokens
-separados por espacios e incluye los marcadores/títulos Markdown presentes.
-
-También se crean:
-
-- `craft_revision_history.json`
-- `craft_audit.json`
-- `diagnostic_audit.json`, una vista sin puntuaciones numéricas
-- plantilla de evaluación de `asg_evaluation`
-- `llm_usage.json` y `llm_usage_summary.json`
-- `story.md`
-
-Finalmente se marcan `quality_review` y `story` como completadas, el metadata
-pasa a `completed` y el progreso llega a 100 %.
-
-## 5. Cómo se implementó la mejora de personajes
-
-La mejora no consiste solamente en agregar más descripción al prompt. Está
-implementada en cuatro niveles que se comprueban entre sí.
-
-### Nivel 1. Esquema rígido
-
-`CharacterSliderArc` obliga a declarar las tres dimensiones, un foco, dirección
-y justificación. Los valores son enteros de 1 a 10 y el foco debe cambiar en la
-dirección declarada.
-
-### Nivel 2. Correspondencia con el contrato
-
-`validate_craft_contract()` exige exactamente una promesa de personaje para
-cada personaje principal, sin faltantes, extras ni duplicados.
-
-### Nivel 3. Movimiento planificado y enlazado a eventos
-
-El outline exige tres hitos por principal. Durante la STORYLINE:
-
-- `start` se asigna al CBN;
-- `transition` se debe consumir en un CPN;
-- `end` se asigna al CEN.
-
-Cada hito queda enlazado a un `PlotNode.character_milestone_ids`. No es una nota
-flotante: tiene una ubicación causal concreta.
-
-### Nivel 4. Comprobación en la prosa
-
-El escritor recibe los hitos y debe dramatizarlos sin decir “proactividad 3” o
-“slider de competencia”. El crítico revisa conducta inicial, transición,
-decisiones consecuenciales y conducta final. El reescritor recibe instrucciones
-específicas si alguno falla.
-
-### Qué garantiza y qué no garantiza
-
-El sistema garantiza estructuralmente que el arco esté planeado, ordenado,
-asignado exactamente una vez y auditado. La calidad literaria de la
-dramatización sigue dependiendo del modelo y de la auditoría semántica; los
-números no miden psicológicamente al personaje ni se muestran al lector.
-
-De forma parecida, `progress_signals` describe qué debería contar como progreso,
-pero Python no compara lingüísticamente cada descripción de `CraftBeat` con esas
-frases. Garantiza referencia, cardinalidad y orden; la correspondencia de
-significado la juzgan el modelo planificador y el crítico final sobre la prosa.
-
-## 6. Cómo se implementó promise–progress–payoff
-
-La cadena completa es:
-
-```text
-CraftPromise
-  -> CraftBeat setup/progress/payoff en el outline
-  -> ID asignado a un CBN/CPN/CEN
-  -> dramatización en el capítulo
-  -> pregunta con evidencia en craft_audit.json
-  -> posible instrucción de reescritura
-```
-
-### Reglas deterministas principales
-
-1. Hay una promesa de tono, una de trama y una por protagonista.
-2. Toda promesa tiene exactamente un setup, al menos un progreso y un payoff.
-3. Tono y trama se plantean en el primer capítulo.
-4. Setup y start se reservan al CBN.
-5. Progreso, transición y try-fail se reservan a CPN.
-6. Payoff y end se reservan al CEN.
-7. Cada ID aparece una sola vez en la STORYLINE.
-8. Los nodos de progreso están estrictamente entre setup y payoff.
-9. Cada intento fallido deja una consecuencia persistente y un enlace futuro.
-10. La prosa debe demostrar la promesa; poseer el ID no basta para aprobar la
-    auditoría final.
-
-### Últimas actualizaciones, versión por versión
-
-#### 2.0.1 — contrato Sanderson y ciclo crítico–reescritor
-
-- Se añadieron `CraftPromise`, `CraftContractArtifact`, `CraftBeat`,
-  `CharacterMilestone`, `TryFailCycle` y los campos correspondientes en nodos.
-- Se incorporaron sliders de simpatía, competencia y proactividad.
-- Se añadió el objetivo try-fail proporcional a la longitud.
-- Se crearon `CraftContractAgent`, `CraftCriticAgent` y
-  `CraftRewriterAgent`.
-- Se añadió la selección de la mejor versión después de hasta dos reescrituras.
-
-#### 2.0.2 — respuestas contradictorias e inválidas recuperables
-
-- Una revisión estructurada inválida consume un intento de CPN, no destruye la
-  ejecución completa inmediatamente.
-- El proveedor reintenta una vez las respuestas incompatibles con Pydantic y
-  devuelve errores sanitizados de ubicación/tipo.
-- `PlotNodeReview` normaliza `accepted=true` cuando hay checks falsos.
-
-#### 2.0.3 — los IDs consumidos dejan de estar disponibles
-
-- Después de aceptar un CPN, sus beats, hitos y ciclos se eliminan de las listas
-  restantes.
-- Propuesta y revisión reciben el scope autoritativo.
-- Los rechazos distinguen propuesta original, revisión y candidato revisado.
-
-#### 2.0.4 — reparación semántica y resiliencia de artefactos
-
-- Plan, personajes, contrato, outline y anclas se reparan con errores cruzados
-  deterministas.
-- Cada candidato inválido queda en `artifact_attempts/`.
-- Se restauraron checkpoints, telemetría, auditoría de longitud y entrega de la
-  mejor historia cuando falla la revisión final.
-
-#### 2.0.5 — adjudicación determinista del scope de craft
-
-- `_chapter_narrative_context()` excluye `craft_beats`,
-  `character_milestones` y `try_fail_cycles` al presentar el contexto general
-  del capítulo al proponente/revisor.
-- Setup/start ya consumidos y payoff/end reservados no aparecen como pendientes
-  de un CPN.
-- `_craft_scope()` presenta exclusivamente IDs disponibles.
-- `_proposal_craft_issues()` decide localmente la validez de esos IDs.
-- `_adjudicate_craft_review()` corrige únicamente el flag redundante de
-  cobertura de Gemini; no sustituye sus comprobaciones semánticas.
-- La prueba de regresión reproduce un revisor que inventa beats pendientes con
-  scope vacío y comprueba que un CPN válido no sea rechazado.
-
-## 7. Cómo se crea el NEKG, sin omitir pasos
-
-NEKG significa **Narrative Entity Knowledge Graph**. Su implementación está en
-`nekg.py` y es deliberadamente local, pequeña y auditable.
-
-### 7.1. Estructuras almacenadas
-
-`NarrativeEntity`:
-
-```json
-{
-  "id": "ada",
-  "name": "Ada",
-  "kinds": [],
-  "state": {
-    "knowledge": "conoce la verdad",
-    "location": "observatorio"
-  },
-  "last_event_id": "n_0004"
-}
-```
-
-`EntityRelation`:
-
-```json
-{
-  "source": "ada",
-  "verb": "descubre",
-  "target": "la_senal",
-  "plot_node_id": "n_0002",
-  "timestamp": 1
-}
-```
-
-El artefacto final contiene dos listas: `entities` y `relations`.
-
-### 7.2. Normalización de claves con `_key()`
-
-Para convertir un nombre narrativo en ID:
-
-1. `casefold()` hace comparación de mayúsculas/minúsculas robusta.
-2. Unicode NFKD separa letras y diacríticos.
-3. La codificación ASCII elimina diacríticos.
-4. Todo grupo no alfanumérico se convierte en `_`.
-5. Se quitan `_` iniciales/finales.
-6. Si queda vacío, se usa `entity`.
-
-Ejemplos:
-
-```text
-"Áda Vélez"       -> "ada_velez"
-"La señal orbital" -> "la_senal_orbital"
-```
-
-Esto puede fusionar nombres que solo se distinguen por acentos o puntuación; es
-una decisión de la implementación actual.
-
-### 7.3. Agregar una relación con `add_node()`
-
-Dado un `PlotNode`:
-
-1. Normaliza `node.subject` y `node.object`.
-2. Crea la entidad origen si no existe.
-3. Crea la entidad destino si no existe.
-4. Construye la relación SVO con verbo, ID de nodo y timestamp.
-5. Solo la agrega si una relación completamente igual no está ya en la lista.
-
-Si el objeto del nodo venía vacío, `PlotNode.normalize_sv()` lo sustituye por el
-sujeto antes de llegar al NEKG.
-
-### 7.4. Aplicar estados con `apply()`
-
-`apply(node, state_changes)` llama primero `add_node()`. Después, por cada
-`EntityStateChange`:
-
-1. normaliza el nombre de la entidad;
-2. la crea si todavía no existe;
-3. escribe `entity.state[attribute] = value`;
-4. actualiza `last_event_id` al nodo actual.
-
-Los únicos atributos permitidos son:
-
-- `location`
-- `possession`
-- `knowledge`
-- `status`
-- `relationship`
-
-La escritura es “último valor gana”: un cambio posterior del mismo atributo
-reemplaza el valor anterior. No hay historial de estados dentro de la entidad;
-el historial reconstruible está en nodos/revisiones y relaciones.
-
-Al final también actualiza `last_event_id` para sujeto y objeto, aunque no hayan
-tenido un `state_change` explícito.
-
-### 7.5. Cuándo se actualiza durante la planificación
-
-- Al aceptar CBN: `nekg.apply(begin)`; agrega la relación, sin cambios de estado.
-- Al aceptar CPN: `nekg.apply(node, candidate.state_changes)`; agrega relación y
-  estados explícitos.
-- Al aceptar CEN: `nekg.apply(end)`; agrega la relación, sin cambios de estado.
-- Al rechazar un candidato: no se toca el NEKG.
-
-Por eso el grafo representa solo hechos aceptados.
-
-### 7.6. Cómo influye en el siguiente CPN
-
-El proponente recibe `self.nekg.artifact()` completo. El revisor recibe
-`nekg.related(subject, object)`:
-
-1. busca relaciones que toquen al sujeto o al objeto;
-2. si hay objeto, pone primero las relaciones exactas entre ese par;
-3. ordena por timestamp descendente;
-4. devuelve como máximo diez.
-
-Esto permite detectar contradicciones como que alguien use un objeto perdido,
-desconozca información ya aprendida o aparezca en un lugar incompatible. La
-decisión de continuidad sigue siendo semántica del revisor; el NEKG aporta los
-hechos, pero no ejecuta un motor lógico de precondiciones.
-
-### 7.7. Ejemplo completo
-
-Propuesta aceptada:
-
-```json
-{
-  "subject": "Ada",
-  "verb": "copia",
-  "object": "la señal",
-  "state_changes": [
-    {"entity": "Ada", "attribute": "knowledge", "value": "verdad de la señal"},
-    {"entity": "Ada", "attribute": "possession", "value": "copia cifrada"}
-  ]
-}
-```
-
-Resultado conceptual:
-
-```text
-(ada)-[copia, n_0003, t=2]->(la_senal)
-ada.state.knowledge = "verdad de la señal"
-ada.state.possession = "copia cifrada"
-ada.last_event_id = "n_0003"
-la_senal.last_event_id = "n_0003"
-```
-
-En el próximo CPN, propuesta y revisión conocen esos valores.
-
-### 7.8. Limitaciones actuales del NEKG
-
-- `kinds` existe en el esquema, pero `add_node()` no lo llena.
-- No hay borrado ni valores múltiples para un mismo atributo.
-- No hay inferencia automática ni ejecución determinista de precondiciones.
-- No resuelve correferencias como “Ada”, “ella” y “la cartógrafa”.
-- `relationship` es un valor de estado textual, distinto de las relaciones SVO.
-- El flujo v2 guarda `nekg.json`, pero no genera una vista Mermaid específica
-  del NEKG.
-- CBN y CEN no llevan cambios de estado generados por el modelo en la
-  implementación actual; solo los CPN aportan `state_changes` explícitos.
-- `nekg.json` se cierra después de planificar la STORYLINE; no se vuelve a
-  extraer información de la prosa ni se modifica a partir de `draft.md`.
-- Pydantic limita el nombre del atributo de estado, pero no demuestra que el
-  valor propuesto sea consecuencia lógica de `preconditions` y `effects`; esa
-  coherencia pertenece a la revisión semántica.
-
-## 8. Qué hace cada agente
-
-### 8.1. Infraestructura común
-
-`Agent[T]` es una clase abstracta genérica. Guarda `provider` y exige un método
-`run()`. `json_text()` convierte modelos Pydantic o listas a JSON UTF-8 legible.
-
-No todos los roles actuales son subclases de `Agent`: varias etapas viven como
-métodos de `StoryGenerator` o `IncrementalPlotPlanner`.
-
-### 8.2. Agentes activos en `StoryGenerator`
-
-| Agente/rol | Implementación | Entrada | Salida | Función |
-|---|---|---|---|---|
-| Analista | `AnalystAgent.run()` | Prompt libre | `StoryRequest` | Extrae requisitos y fija extensión explícita |
-| Planificador causal | `StoryGenerator._plan()` | Request + blueprint | `StoryPlanArtifact` | Diseña conflicto, progresión, final y composición de arquetipos |
-| Constructor de mundo | `StoryGenerator._world()` | Request + plan | `WorldArtifact` | Crea reglas y lugares con consecuencias |
-| Diseñador de personajes | `StoryGenerator._characters()` | Request + plan + mundo + roles | `CharactersArtifact` | Crea reparto, objetivos, oposición y sliders |
-| Diseñador de craft | `CraftContractAgent.run()` | Request + plan + mundo + personajes | `CraftContractArtifact` | Define promesas y objetivo try-fail |
-| Diseñador de outline | `IncrementalPlotPlanner.outline()` | Request + plan + blueprint + craft + personajes | `StoryOutlineArtifact` | Distribuye capítulos, beats, hitos y ciclos |
-| Diseñador de anclas | `IncrementalPlotPlanner.anchors()` | Outline + mundo + personajes | `ChapterAnchorsArtifact` | Define CBN/CEN SVO |
-| Proponente CPN | `IncrementalPlotPlanner._proposal()` | Estado aceptado + NEKG + scope | `PlotNodeProposal` | Propone un evento causal aislado |
-| Revisor CPN | `IncrementalPlotPlanner._review()` | Propuesta + contexto + hechos | `PlotNodeReview` | Evalúa diez condiciones y puede reemplazar la propuesta |
-| Adjudicador local | `_proposal_craft_issues()` + `_adjudicate_craft_review()` | Candidato + scope + revisión | Decisión corregida | Impone IDs y cobertura de forma determinista |
-| Escritor de capítulo | `StoryGenerator._write_chapter()` | Todos los artefactos narrativos | Markdown | Dramatiza los eventos sin mostrar andamiaje |
-| Crítico de craft | `CraftCriticAgent.run()` | Draft + preguntas + planificación | `CraftAuditArtifact` | Busca evidencia real en la ficción |
-| Reescritor | `CraftRewriterAgent.run()` | Historia + fallos | Historia completa revisada | Repara fallos sin cambiar hechos ni encabezados |
-
-### 8.3. Agentes conservados para `StoryOrchestrator` legado
-
-| Clase | Qué hace | Diferencia frente al flujo actual |
-|---|---|---|
-| `PlannerAgent` | Recupera taxonomías JSON antiguas y crea el plan | V2 actual usa SQLite/blueprint y `_plan()` |
-| `WorldBuilderAgent` | Crea el mundo | Función equivalente trasladada a `_world()` |
-| `CharacterDesignerAgent` | Crea personajes y valida roles del catálogo | No incorpora por sí solo el contrato de sliders de producción actual |
-| `DirectorAgent` | Genera de una vez capítulos, nodos y aristas candidatas | V2 propone y revisa cada CPN incrementalmente |
-| `DramaAgent` | Audita cinco fases de Freytag en grafo o texto | El generador actual conserva fases en el outline, pero no llama este agente |
-| `SceneWriterAgent` | Escribe un capítulo desde un `StorylineArtifact` | V2 usa `_write_chapter()` con craft y NEKG v2 |
-| `ChapterComplianceAgent` | Verifica nodos y goals de un capítulo | No participa en la ruta `StoryGenerator` actual |
-| `CriticAgent` | Da puntuaciones numéricas de coherencia, estilo, etc. | V2 reemplazó puntuaciones por preguntas diagnósticas de craft |
-| `EditorAgent` | Reescribe una vez desde una crítica general | V2 usa hasta dos pasadas de `CraftRewriterAgent` y elige la mejor |
-
-`StoryOrchestrator` instancia y usa esos agentes, mantiene un procesador DAG
-`StorylineGraphProcessor`, hasta cinco replanificaciones globales, auditorías de
-Freytag y compliance de capítulos. Es importante no atribuir ese comportamiento
-al `StoryGenerator`: son dos rutas distintas que coexisten por compatibilidad.
-
-## 9. Funciones deterministas más importantes
-
-| Función | Responsabilidad |
-|---|---|
-| `StoryGenerator._validated_artifact()` | Ejecutar generación, validación cruzada, persistencia del fallo y reparación completa |
-| `validate_craft_characters()` | Exigir principales y sliders |
-| `validate_craft_contract()` | Exigir objetivo try-fail y promesas exactas por reparto |
-| `validate_craft_outline()` | Validar beats, orden, hitos, valores y ciclos |
-| `validate_storyline_craft()` | Verificar cobertura única, orden causal y persistencia |
-| `IncrementalPlotPlanner.cpn_budget()` | Decidir cantidad base de CPN por extensión |
-| `StorylineState.accept()` | Agregar solo un nodo nuevo enlazado desde historia conocida |
-| `_proposal_craft_issues()` | Validar localmente IDs y reglas de slot |
-| `_adjudicate_craft_review()` | Hacer autoritativa la cobertura local sin anular semántica |
-| `NarrativeEntityGraph.add_node()` | Agregar entidades y relación SVO |
-| `NarrativeEntityGraph.apply()` | Aplicar relación y cambios de estado |
-| `NarrativeEntityGraph.related()` | Recuperar relaciones recientes relevantes |
-| `audit_questions()` | Crear la batería exacta de preguntas finales |
-| `normalize_audit()` | Impedir omisiones y restaurar campos autoritativos |
-| `diagnostic_from_craft()` | Convertir fallos a diagnóstico no numérico |
-| `_length_bounds()` | Calcular rango final de −10 %/+20 % |
-| `_canonical_chapter()` | Normalizar un único encabezado por capítulo |
-
-## 10. Proveedor, esquemas y reintentos
-
-`GeminiProvider.generate_structured()` solicita `application/json` y entrega el
-schema Pydantic a Gemini. Aun así, valida de nuevo localmente.
-
-Si Pydantic falla:
-
-1. extrae solo ubicación y tipo de error, sin incluir contenido sensible;
-2. agrega una instrucción de corrección al prompt original;
-3. pide un reemplazo completo;
-4. por defecto lo intenta una vez más;
-5. si vuelve a fallar, lanza `StructuredResponseError`.
-
-Esto es distinto de los reintentos semánticos de `_validated_artifact()` y de
-los reintentos por CPN. Una sola tentativa semántica puede contener hasta dos
-llamadas estructuradas por errores de schema.
-
-Para errores 408, 429 o 5xx, `_generate()` respeta la espera sugerida y reintenta
-hasta el límite configurado. Las cuotas permanentes diarias/de facturación se
-clasifican por separado. Nunca se exponen la API key ni el prompt dentro del
-error público.
-
-Cada respuesta registra operación, modelo, tiempo, tokens de prompt, candidatos,
-razonamiento, caché, total, reintentos y segundos de espera.
-
-## 11. Artefactos de una ejecución completa
-
-| Ruta | Contenido |
-|---|---|
-| `metadata.json` | Estado, modelo, etapas, errores y warnings |
-| `request.json` | Requisitos normalizados |
-| `blueprint.json` | Conocimiento narrativo recuperado |
-| `retrieval_trace.json` | Consulta, scores y modo de recuperación |
-| `story_plan.json` | Plan causal |
-| `world.json` | Mundo funcional |
-| `characters.json` | Reparto y sliders |
-| `craft_contract.json` | Promesas y objetivo try-fail |
-| `outline.json` | Capítulos y asignaciones de craft |
-| `chapter_anchors.json` | Anclas SVO de inicio/final |
-| `planning_checkpoint/*` | Estado parcial después de cada aceptación/rechazo |
-| `storyline.json` | Nodos y aristas aceptadas |
-| `nekg.json` | Entidades, estados y relaciones |
-| `node_reviews.json` | Historial completo de CPN |
-| `chapters/*.md` | Capítulos iniciales |
-| `draft.md` | Unión de capítulos |
-| `craft_revisions/*` | Cada versión y su auditoría |
-| `craft_revision_history.json` | Intentos y versión seleccionada |
-| `craft_audit.json` | Auditoría de la versión elegida |
-| `diagnostic_audit.json` | Diagnóstico agregado sin notas |
-| `length_audit.json` | Extensión final y tolerancia |
-| `quality_warning.json` | Fallos no bloqueantes de entrega, si existen |
-| `llm_usage*.json` | Telemetría de llamadas |
-| `error_report.json` | Error seguro y accionable, solo si falla |
-| `story.md` | Historia final entregada |
-
-Los artefactos se escriben inmediatamente después de cada etapa; un fallo no
-borra el trabajo previo.
-
-## 12. Errores y recuperación
-
-### Artefacto estructural inválido
-
-Se guarda en `artifact_attempts/`, se pide reemplazo y, si se agota el límite,
-se genera `ARTIFACT_VALIDATION_FAILED` con etapa y reglas incumplidas.
-
-### CPN inválido
-
-Se registra el intento, se mantiene intacto el estado aceptado y se reintenta el
-slot. Al agotarse: `STORYLINE_PLANNING_FAILED`.
-
-### Fallo del crítico o reescritor final
-
-Como ya existe una historia completa, el sistema termina con la mejor versión y
-una advertencia. No convierte un problema de auditoría tardía en pérdida total.
-
-### `resume()`
-
-Si existe `story.md`, devuelve inmediatamente esa ejecución. Si la ejecución es
-parcial, lee `request.json` y crea una ejecución nueva. Los checkpoints de la
-ejecución fallida quedan para auditoría, pero el generador v2 todavía no retoma
-una etapa intermedia dentro del mismo directorio.
-
-## 13. Pruebas que respaldan estas reglas
-
-Las pruebas relevantes están en:
-
-- `Models/Top-Down/tests/test_craft.py`
-- `Models/Top-Down/tests/test_storyteller_v2.py`
-- `Models/Top-Down/tests/test_nekg.py`
-
-Cubren, entre otros casos:
-
-- dirección y cambio obligatorio del slider focal;
-- personaje principal sin slider;
-- promesa faltante de un principal;
-- referencia a promesa desconocida;
-- respuesta omitida por el crítico convertida en fallo;
-- review contradictoria normalizada;
-- IDs setup/payoff fuera del scope de CPN;
-- propuesta o revisión que intenta reutilizar IDs consumidos;
-- reparación de plan, personajes, contrato, outline y anclas;
-- fallback a FTS cuando embeddings está fuera de línea;
-- actualización de conocimiento en NEKG;
-- consecuencias try-fail presentes y con salida causal;
-- selección de la mejor versión después de 0, 1 o 2 reescrituras;
-- entrega con warning si crítico o reescritor falla;
-- checkpoints y error accionable al agotar revisiones CPN.
-
-## 14. Índice rápido del código fuente
-
-- [Flujo principal](../Models/Top-Down/src/asg_top_down/generator.py)
+- [CLI](../Models/Top-Down/src/asg_top_down/cli.py)
+- [Orquestador de producción](../Models/Top-Down/src/asg_top_down/generator.py)
 - [Planificación incremental](../Models/Top-Down/src/asg_top_down/incremental.py)
+- [Recuperación narrativa](../Models/Top-Down/src/asg_top_down/narrative_db.py)
+- [Grafo NEKG](../Models/Top-Down/src/asg_top_down/nekg.py)
 - [Reglas de craft](../Models/Top-Down/src/asg_top_down/craft.py)
-- [Esquemas Pydantic](../Models/Top-Down/src/asg_top_down/schemas.py)
-- [NEKG](../Models/Top-Down/src/asg_top_down/nekg.py)
-- [Recuperación SQLite](../Models/Top-Down/src/asg_top_down/narrative_db.py)
 - [Agentes](../Models/Top-Down/src/asg_top_down/agents/)
+- [Esquemas y validadores Pydantic](../Models/Top-Down/src/asg_top_down/schemas.py)
 - [Proveedor Gemini](../Models/Top-Down/src/asg_top_down/provider.py)
 - [Persistencia](../Models/Top-Down/src/asg_top_down/storage.py)
-- [Errores públicos](../Models/Top-Down/src/asg_top_down/errors.py)
 - [Configuración](../Models/Top-Down/src/asg_top_down/config.py)
-- [Flujo legado](../Models/Top-Down/src/asg_top_down/orchestrator.py)
-- [DAG legado y Mermaid](../Models/Top-Down/src/asg_top_down/graph.py)
-- [Migraciones y semillas](../Models/Top-Down/schema_db/)
+- [Prueba integral v3](../Models/Top-Down/tests/test_top_down_v3.py)
 
-## 15. Resumen operativo en pseudocódigo
+## 12. Resumen en pseudocódigo
 
 ```python
 request = analyze(prompt)
 repo = create_run(request.title)
 
-blueprint = narrative_db.retrieve(request)
-plan = generate_validate_repair_plan(request, blueprint)
-world = generate_world(request, plan)
-characters = generate_validate_repair_characters(request, plan, world, blueprint)
-craft = generate_validate_repair_contract(request, plan, world, characters)
-outline = generate_validate_repair_outline(request, plan, blueprint, craft, characters)
-anchors = generate_validate_repair_anchors(outline, world, characters)
+blueprint = retrieve_catalog(request)       # embeddings + léxico; fallback local
+plan = validate_or_regenerate(plan_story(request, blueprint))
+world = build_functional_world(request, plan)
+characters = validate_or_regenerate(design_characters(request, plan, world))
+outline = validate_or_regenerate(create_outline(request, plan, blueprint))
+anchors = validate_or_regenerate(create_all_CBN_and_CEN(outline, world, characters))
 
-storyline = empty_storyline(outline.chapters)
-nekg = empty_nekg()
+storyline = empty_storyline()
+nekg = empty_graph()
 
-for chapter in outline.chapters:
-    begin = make_CBN(chapter.anchor.begin, chapter.setup_beats, chapter.start_milestones)
-    accept(storyline, begin)
-    nekg.apply(begin)
+for chapter in outline:
+    accept(CBN)
+    nekg.apply(CBN)
+    checkpoint()
 
-    for slot in chapter.cpn_budget:
-        remaining = deterministic_craft_scope(chapter, accepted_nodes)
+    for slot in adaptive_ceiling(chapter):
         for attempt in allowed_attempts:
-            proposal = propose_CPN(storyline.recent, nekg, remaining)
-            reject_if_ids_are_invalid(proposal, remaining)
-            review = review_final_candidate(proposal, storyline.recent, nekg, remaining)
+            proposal = propose_one_CPN(accepted_history, CEN_target)
+            review = review_seven_checks(proposal, recent_storyline, related_nekg)
             candidate = review.revised or proposal
-            review = adjudicate_local_craft_coverage(review, candidate, remaining)
-            if review.accepted:
-                accept(storyline, candidate)
+
+            if review.accepted and (not_final_slot or review.aligns_with_cen):
+                accept(candidate)
                 nekg.apply(candidate, candidate.state_changes)
-                consume_claimed_ids(remaining, candidate)
                 checkpoint()
                 break
+
+            record_rejection_without_changing_story_state()
+            checkpoint()
         else:
-            fail_storyline()
+            fail_planning()
 
-    require_no_remaining_progress_milestones_or_cycles()
-    end = make_CEN(chapter.anchor.end, chapter.payoff_beats, chapter.end_milestones)
-    accept(storyline, end)
-    nekg.apply(end)
+        if review.aligns_with_cen:
+            break
 
-validate_every_craft_id_once_and_in_order(storyline, outline)
+    require_alignment_with_CEN()
+    accept(CEN)
+    nekg.apply(CEN)
+    allocate_chapter_words_exactly()
+    checkpoint()
 
-draft = join(write_each_chapter(storyline, nekg, craft, characters))
+variants = validate_or_regenerate(create_three_craft_variants(frozen_storyline))
+selection = validate_or_regenerate(select_one_variant(variants))
+draft = write_chapters(selection, storyline, nekg, previous_chapter_only=True)
 versions = audit_and_rewrite_up_to_two_times(draft)
-story = choose_fewest_blocking_failures_then_best_length(versions)
-save_all_artifacts_and_complete(story)
+story = choose_best(versions, blocking_failures_then_length_then_advisories)
+persist_and_complete(story)
 ```
 
-La propiedad central del diseño es esta: **el modelo propone y evalúa significado,
-pero Python decide estructura, IDs, orden, cardinalidad, consumo, persistencia y
-trazabilidad**. Esa separación es lo que evita que una respuesta aparentemente
-convincente rompa silenciosamente el contrato narrativo.
+La regla que permite entender todo el proyecto es: **ningún hecho se vuelve verdad
+narrativa hasta que el revisor lo acepta; ningún recurso de craft puede cambiar esa
+verdad después**.

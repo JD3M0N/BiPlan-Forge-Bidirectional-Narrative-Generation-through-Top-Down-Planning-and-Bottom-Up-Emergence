@@ -2,15 +2,20 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Generar historia Top-Down",
+            "name": "Crear historia Top-Down paso a paso (Gemini)",
             "type": "debugpy",
             "request": "launch",
             "module": "asg_top_down.cli",
             "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
             "cwd": "${workspaceFolder}",
             "envFile": "${workspaceFolder}\\.env",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}\\Models\\Top-Down\\src;${workspaceFolder}\\Models\\Evaluation\\src"
+            },
             "console": "integratedTerminal",
-            "justMyCode": true
+            "stopOnEntry": true,
+            "justMyCode": true,
+            "subProcess": false
         }
     ]
 }
