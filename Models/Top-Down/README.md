@@ -1,4 +1,4 @@
-# ASG Top-Down 3.1
+# ASG Top-Down 3.2
 
 `StoryGenerator` es la única ruta de producción. Separa tres decisiones que no
 deben contaminarse entre sí:
@@ -11,8 +11,11 @@ deben contaminarse entre sí:
    arcos de personajes y ciclos try-fail, sin aceptar, rechazar ni modificar
    nodos.
 
-Todas las instrucciones enviadas al modelo están en inglés. El analista conserva
-español como idioma predeterminado y el escritor usa siempre el idioma solicitado.
+Todas las instrucciones enviadas al modelo están en inglés. El analista conserva el
+prompt original, crea una versión inglesa enriquecida y usa el idioma de salida pedido;
+si no se especifica, usa el idioma dominante del prompt y recurre a español únicamente
+cuando no puede determinarlo. El escritor y el auditor aplican ese idioma también a
+los títulos de capítulos.
 
 ## Taxonomías flexibles
 

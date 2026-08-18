@@ -104,6 +104,7 @@ Si `StoryGenerator.generate()` recibe texto, `AnalystAgent.run()` lo convierte e
 un `StoryRequest` con:
 
 - prompt original;
+- prompt enriquecido y autocontenido en inglés;
 - título;
 - idioma;
 - género y tono;
@@ -111,9 +112,13 @@ un `StoryRequest` con:
 - número objetivo de palabras;
 - restricciones explícitas.
 
-El idioma predeterminado es español y la extensión predeterminada procede de la
-configuración. Sin embargo, después de la respuesta del modelo se busca en el prompt
-una expresión como `1800 palabras` o `1800 words` y ese número se aplica de forma
+El analista traduce las instrucciones explícitas al inglés y completa de forma
+coherente los detalles narrativos útiles que falten. Estas decisiones creativas no se
+registran como restricciones explícitas del usuario. Si el prompt pide un idioma de
+salida, ese pedido prevalece; en caso contrario se utiliza el idioma dominante del
+texto y, si resulta indeterminado, español. La extensión predeterminada procede de la
+configuración. Después de la respuesta del modelo se busca además en el prompt una
+expresión como `1800 palabras` o `1800 words` y ese número se aplica de forma
 determinista.
 
 **Por qué:** la longitud explícita del usuario no debe depender de que el modelo la

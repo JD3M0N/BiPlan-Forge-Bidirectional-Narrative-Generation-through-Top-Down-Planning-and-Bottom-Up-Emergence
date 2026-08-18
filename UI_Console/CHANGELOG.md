@@ -2,6 +2,12 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [1.2.0] - 2026-08-18
+
+- Eliminado el modo de tres alternativas y la dependencia de Prompt-crafter.
+- Simplificada la generación Top-Down a un único prompt, enriquecido internamente
+  por ASG Top-Down 3.2.
+
 ## [1.1.6] - 2026-08-18
 
 - Actualizada la dependencia mínima a ASG Top-Down 3.1.0 para usar las nuevas

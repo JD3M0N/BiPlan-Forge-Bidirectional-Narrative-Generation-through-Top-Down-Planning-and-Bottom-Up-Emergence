@@ -11,9 +11,9 @@
   - Terminado cuando: el usuario puede proporcionar por voz la solicitud de una
     historia y el sistema la utiliza como entrada del pipeline.
 
-- [x] TODO: Crear un módulo agente que modifique prompts.
-  - Terminado cuando: el agente puede revisar y mejorar un prompt antes de
-    enviarlo al modelo encargado de generar la historia.
+- [x] TODO: Integrar la mejora automática de prompts en el analista Top-Down.
+  - El analista conserva el original y produce una especificación enriquecida
+    en inglés antes de planificar la historia.
 
 - [x] TODO: Crear un bot de Telegram.
   - Terminado cuando: el bot recibe solicitudes, ejecuta la generación de
@@ -39,5 +39,8 @@
 - [ ] TODO: Hacer que la consola de telegram te muestre la cola y lo que se esta haciendo
 - [ ] TODO: Validar los JSON que devuelve gemini para que no den error
 - [ ] TODO: Verificar que los personajes tengan dos stadisticas altas y una baja
-- [ ] TODO: Revisar si que el schema del analista este en espannol influye en algo
-- [ ] TODO: En algun lugar debe haber un chequeo de los constraints del usuario
+- [x] TODO: Revisar si que el schema del analista este en espannol influye en algo
+  - Los campos procesados y los artefactos internos están en inglés; el idioma
+    final de la ficción se conserva por separado.
+- [x] TODO: En algun lugar debe haber un chequeo de los constraints del usuario
+  - Cada constraint explícito genera una pregunta bloqueante en la auditoría.

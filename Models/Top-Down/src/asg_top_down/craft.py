@@ -175,6 +175,10 @@ def audit_questions(
     for index, constraint in enumerate(request.constraints, 1):
         add(f"constraint:{index}", "constraint", str(index),
             f"Does the complete fiction satisfy this user constraint: {constraint}")
+    add(
+        "language:output", "language", request.language,
+        f"Is all reader-visible fiction, including chapter headings, written in {request.language}?",
+    )
     if taxonomy_brief:
         for index, promise in enumerate(taxonomy_brief.reader_promises, 1):
             add(

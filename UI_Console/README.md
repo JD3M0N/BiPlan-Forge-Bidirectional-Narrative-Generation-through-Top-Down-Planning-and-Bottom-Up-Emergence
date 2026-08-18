@@ -11,6 +11,6 @@ agregar una evaluación humana a su `evaluation.json`.
 asg-console
 ```
 
-Al crear una historia Top-Down se puede escribir el prompt manualmente o usar
-el modo asistido. Este último enriquece una idea inicial, muestra tres enfoques
-creativos y permite seleccionar cuál se enviará al pipeline Top-Down.
+Al crear una historia Top-Down se escribe un único prompt. El analista conserva la
+solicitud original, la traduce y enriquece internamente en inglés y mantiene el idioma
+final pedido por el usuario o, si no se indica, el idioma dominante del prompt.

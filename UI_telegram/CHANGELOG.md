@@ -2,6 +2,11 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [1.1.7] - 2026-08-18
+
+- Actualizada la dependencia mínima a ASG Top-Down 3.2.0 para enriquecer prompts
+  en inglés y conservar el idioma final pedido o detectado.
+
 ## [1.1.6] - 2026-08-18
 
 - Actualizada la dependencia mínima a ASG Top-Down 3.1.0 para generar historias

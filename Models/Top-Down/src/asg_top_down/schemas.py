@@ -10,8 +10,15 @@ from pydantic import BaseModel, Field, model_validator
 
 class StoryRequest(BaseModel):
     original_prompt: str
+    processed_prompt: str = Field(
+        default="",
+        description="Self-contained English enrichment of the user's request",
+    )
     title: str = Field(description="Short proposed story title")
-    language: str = "español"
+    language: str = Field(
+        default="Spanish",
+        description="English name of the required fiction output language",
+    )
     genre: str
     tone: str
     target_words: int = Field(default=1500, ge=300, le=20_000)
@@ -444,7 +451,8 @@ AuditVerdict = Literal["pass", "fail", "not_applicable"]
 class CraftAuditAnswer(BaseModel):
     question_id: str
     category: Literal[
-        "global_ppp", "chapter_ppp", "character", "try_fail", "constraint", "taxonomy", "global",
+        "global_ppp", "chapter_ppp", "character", "try_fail", "constraint", "taxonomy",
+        "language", "global",
     ]
     subject_id: str
     question: str

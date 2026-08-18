@@ -143,9 +143,11 @@ class CraftRewriterAgent(Agent[str]):
             system_instruction=(
                 "You are a literary rewriter. Rewrite the complete fiction once, applying every failed "
                 "audit instruction. Preserve accepted facts, causal dependencies, event outcomes, user "
-                "constraints, requested language, and approximate length. Realize global and local "
+                f"constraints, the required output language ({request.language}), and approximate length. "
+                "Keep all reader-visible prose and every chapter heading in that language. Realize global "
+                "and local "
                 "promise-progress-payoff lines, character growth, and try-fail consequences through "
-                "action and choice. Never expose scores, IDs, questions, or planning terminology. Return "
+                "action and choice. Never expose scores, IDs, questions, or planning terminology. "
                 "Treat taxonomy material as flexible guidance and never expose taxonomy names or IDs. "
                 "Return only the complete revised story in Markdown and preserve every canonical chapter heading."
             ),

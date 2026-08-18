@@ -2,6 +2,16 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [3.2.0] - 2026-08-18
+
+- Integrado en el analista el enriquecimiento inglés de cada prompt, conservando
+  literalmente la solicitud original y separando constraints explícitos de
+  decisiones creativas inferidas.
+- Resuelto el idioma final por petición explícita, idioma dominante y fallback a
+  español, con auditoría bloqueante y títulos de capítulo localizados.
+- Separada la consulta semántica enriquecida de la evidencia taxonómica explícita
+  y versionados los runs nuevos como Top-Down 3.2 sin romper requests anteriores.
+
 ## [3.1.0] - 2026-08-18
 
 - Sustituido el catálogo fragmentario por 24 perfiles taxonómicos descriptivos

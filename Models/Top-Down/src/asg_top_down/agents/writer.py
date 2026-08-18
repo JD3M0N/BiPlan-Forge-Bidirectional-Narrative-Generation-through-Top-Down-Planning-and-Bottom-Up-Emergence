@@ -34,8 +34,9 @@ class ChapterWriterAgent(Agent[str]):
         )
         return self.provider.generate_text(
             system_instruction=(
-                "Write only the requested fiction chapter body in Markdown and in the requested "
-                "language. Do not add a title or heading. Dramatize every accepted event in order "
+                f"Write only the requested fiction chapter body in Markdown and in {request.language}. "
+                "Every reader-visible word must use that output language, except proper nouns that must "
+                "remain unchanged. Do not add a title or heading. Dramatize every accepted event in order "
                 "while preserving intentions, causal effects, entity states, and the chapter ending. "
                 "Realize the supplied global and local promise-progress-payoff guidance, character "
                 "growth, and try-fail consequences through observable action and choice. Never expose "

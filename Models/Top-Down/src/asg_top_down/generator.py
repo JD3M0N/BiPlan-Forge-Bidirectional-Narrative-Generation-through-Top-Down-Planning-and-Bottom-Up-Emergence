@@ -1,4 +1,4 @@
-"""Top-Down 3.1 production orchestration with flexible narrative taxonomies."""
+"""Top-Down 3.2 production orchestration with enriched English requests."""
 
 from __future__ import annotations
 
@@ -91,7 +91,7 @@ def _canonical_chapter(title: str, text: str) -> str:
 
 
 class StoryGenerator:
-    """The only production entry point for the Top-Down 3.1 pipeline."""
+    """The only production entry point for the Top-Down 3.2 pipeline."""
 
     def __init__(
         self,

@@ -40,13 +40,16 @@ protagonista, conflicto, ambientación, tono y extensión, por ejemplo:
 > mensaje. Tono melancólico, ambientado en una estación orbital decadente y
 > con un final esperanzador.
 
-Cuando falten idioma o extensión se usarán español y unas 1500 palabras. Cada
-ejecución crea una carpeta independiente en `Stories/Top-Down` con una
+Cuando falte el idioma se usará el idioma dominante del prompt y, si no puede
+determinarse, español. Si falta la extensión se usarán unas 1500 palabras. El
+analista conserva la solicitud original y genera una versión enriquecida en inglés
+para el resto del pipeline. Cada ejecución crea una carpeta independiente en
+`Stories/Top-Down` con una
 STORYLINE incremental, un NEKG local y tres variantes de craft posteriores a la
 planificación. La variante seleccionada se entrega en `story.md`; las otras se
 pueden redactar después sin recalcular eventos mediante `render_variant()`.
 
-Top-Down 3.1 usa taxonomías inglesas flexibles y exige a cada protagonista dos sliders iniciales altos y uno bajo
+Top-Down 3.2 usa taxonomías inglesas flexibles y exige a cada protagonista dos sliders iniciales altos y uno bajo
 que progresa hasta alto. Promise–Progress–Payoff, los hitos de personaje y los
 ciclos `yes_but`/`no_and` están desacoplados de los nodos CBN/CPN/CEN. Un
 auditor estructurado trata cada constraint del prompt como bloqueante y puede
@@ -65,27 +68,6 @@ python -m pytest Models/Top-Down/tests
 
 El proveedor de lenguaje está definido mediante un protocolo. Los tests usan
 un proveedor simulado y no consumen la API de Gemini.
-
-## Prompt-crafter
-
-El módulo independiente `Models/Prompt-crafter` convierte una idea narrativa
-breve en tres prompts enriquecidos, sustancialmente diferentes y listos para
-usar con un generador como Top-Down. También recomienda la alternativa con
-mayor potencial narrativo, pero no genera ni guarda una historia.
-
-```powershell
-craft-prompt
-```
-
-Puede utilizarse desde Python mediante `PromptCrafterAgent.craft(prompt)`. El
-resultado conserva el prompt original e incluye las tres alternativas y la
-justificación de la recomendación. Consulta
-[`Models/Prompt-crafter/README.md`](Models/Prompt-crafter/README.md) para ver la
-API completa.
-
-```powershell
-python -m pytest Models/Prompt-crafter/tests
-```
 
 ## Escape Room Bottom-Up
 
@@ -159,7 +141,7 @@ asg-console
 
 El menú ofrece:
 
-- Top-Down → `Generate story`, con prompt manual o tres alternativas asistidas.
+- Top-Down → `Generate story`, con un único prompt enriquecido por el analista.
 - Bottom-Up → ejecución normal, experimento batch y Escape Room Visual.
 - Evaluar historia → selecciona un relato y agrega una evaluación humana.
 

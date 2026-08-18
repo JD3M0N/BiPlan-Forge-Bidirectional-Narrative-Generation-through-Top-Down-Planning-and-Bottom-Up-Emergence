@@ -33,7 +33,7 @@ def test_repository_never_serializes_an_api_key(tmp_path) -> None:
             "warnings",
             "pipeline_version",
         }
-    assert data["pipeline_version"] == "3.1"
+    assert data["pipeline_version"] == "3.2"
 
 
 def test_settings_require_api_key(tmp_path, monkeypatch) -> None:
@@ -79,6 +79,15 @@ def test_story_request_rejects_word_limits(target) -> None:
             original_prompt="Historia", title="Historia", genre="drama",
             tone="serio", premise="Una prueba", target_words=target,
         )
+
+
+def test_story_request_reads_legacy_json_without_processed_prompt() -> None:
+    request = StoryRequest.model_validate_json(json.dumps({
+        "original_prompt": "Historia", "title": "Historia", "language": "español",
+        "genre": "drama", "tone": "serio", "premise": "Una prueba",
+    }))
+    assert request.original_prompt == "Historia"
+    assert request.processed_prompt == ""
 
 
 def test_repository_saves_incremental_nested_artifacts(tmp_path) -> None:

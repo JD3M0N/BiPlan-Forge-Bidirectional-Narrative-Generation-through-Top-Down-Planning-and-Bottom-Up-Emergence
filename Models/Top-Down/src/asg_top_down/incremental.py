@@ -108,7 +108,8 @@ class IncrementalPlotPlanner:
                 "premise, a complete synopsis, and all ordered chapter titles and abstracts. Allocate "
                 "exactly the requested total words. Use retrieved knowledge as flexible guidance rather "
                 "than literal prose. Ensure escalation, a consequential climax, and enough aftermath. "
-                "Return all artifact text in English regardless of the requested fiction language."
+                "Write premise, synopsis, and chapter abstracts in English. Write each chapter title "
+                "in the requested fiction language because it will appear verbatim in the final story."
             ),
             prompt=(f"REQUEST:\n{_json(request)}\n\nPLAN:\n{_json(plan)}"
                     f"\n\nRETRIEVED KNOWLEDGE:\n{_json(blueprint.model_context())}"

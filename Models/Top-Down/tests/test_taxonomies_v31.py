@@ -73,13 +73,27 @@ def test_catalog_contains_24_rich_english_profiles_and_sources(tmp_path: Path) -
 def test_spanish_recognition_is_separate_and_heist_romance_is_explicit(tmp_path: Path) -> None:
     repository = NarrativeSchemaRepository(db_path=tmp_path / "taxonomy.sqlite3")
     blueprint = repository.retrieve(request(
-        "atraco con romance", "Una banda prepara un atraco y dos miembros se enamoran.",
+        "atraco con romance", "Una banda prepara un atraco y surge un romance entre dos miembros.",
     ))
     assert [item.profile.id for item in blueprint.candidates[:2]] == ["heist-caper", "romance"]
     assert all(item.explicit_match for item in blueprint.candidates[:2])
     heist = blueprint.candidates[0].profile
     assert "atraco" not in json.dumps(heist.model_dump(mode="json"), ensure_ascii=False).casefold()
     assert "atraco" not in json.dumps(blueprint.model_context(), ensure_ascii=False).casefold()
+
+
+def test_enriched_prompt_improves_ranking_without_becoming_explicit_evidence(tmp_path: Path) -> None:
+    repository = NarrativeSchemaRepository(db_path=tmp_path / "taxonomy.sqlite3")
+    enriched = request("heist", "A crew prepares a difficult vault theft.").model_copy(update={
+        "processed_prompt": (
+            "Write a heist in which a central romance complicates trust inside the crew."
+        ),
+    })
+    blueprint = repository.retrieve(enriched)
+    romance = next(item for item in blueprint.candidates if item.profile.id == "romance")
+    assert romance.explicit_match is False
+    assert "romance" not in romance.matched_terms
+    assert "central romance" in blueprint.trace.query
 
 
 def test_application_is_flexible_compiles_an_english_brief_and_adds_audits(tmp_path: Path) -> None:
@@ -119,8 +133,10 @@ def test_application_is_flexible_compiles_an_english_brief_and_adds_audits(tmp_p
     )
     promise = next(item for item in questions if item["question_id"] == "taxonomy:promise:1")
     quality = next(item for item in questions if item["question_id"] == "taxonomy:quality:1")
+    language = next(item for item in questions if item["question_id"] == "language:output")
     assert promise["blocking"] is True
     assert quality["blocking"] is False
+    assert language["blocking"] is True
 
 
 def test_accent_requires_explicit_evidence(tmp_path: Path) -> None:

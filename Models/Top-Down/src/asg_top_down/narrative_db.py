@@ -368,11 +368,16 @@ class NarrativeSchemaRepository:
         return model, vectors
 
     @staticmethod
-    def _lexical(query: str, profile: TaxonomyProfile, recognition: list[str]) -> tuple[float, list[str], bool]:
+    def _lexical(
+        query: str,
+        evidence_query: str,
+        profile: TaxonomyProfile,
+        recognition: list[str],
+    ) -> tuple[float, list[str], bool]:
         normalized = _normalize(query)
-        padded = f" {normalized} "
+        evidence = f" {_normalize(evidence_query)} "
         phrases = [_normalize(profile.name), *(_normalize(value) for value in profile.aliases), *recognition]
-        matched = sorted({phrase for phrase in phrases if phrase and f" {phrase} " in padded})
+        matched = sorted({phrase for phrase in phrases if phrase and f" {phrase} " in evidence})
         explicit = bool(matched)
         query_tokens = {token for token in normalized.split() if len(token) > 2}
         document = _normalize(profile.retrieval_text())
@@ -404,10 +409,11 @@ class NarrativeSchemaRepository:
 
     def retrieve(self, story_request: StoryRequest, limits: dict[str, int] | None = None) -> NarrativeBlueprint:
         del limits  # v3 compatibility; v3.1 returns a shortlist of at most three profiles.
-        query = " ".join((
-            story_request.genre, story_request.original_prompt,
+        query = " ".join(filter(None, (
+            story_request.processed_prompt, story_request.genre,
             story_request.premise, story_request.tone,
-        ))
+        )))
+        evidence_query = story_request.original_prompt
         profiles = self.profiles()
         if not profiles:
             return self._retrieve_legacy(story_request)
@@ -425,7 +431,9 @@ class NarrativeSchemaRepository:
                 vectors = {}
         ranked: list[_Ranked] = []
         for profile in profiles:
-            lexical, matched, explicit = self._lexical(query, profile, lexicon.get(profile.id, []))
+            lexical, matched, explicit = self._lexical(
+                query, evidence_query, profile, lexicon.get(profile.id, []),
+            )
             lexical = max(lexical, fts_scores.get(profile.id, 0.0))
             ranked.append(_Ranked(
                 profile, lexical, _cosine(query_vector, vectors.get(profile.id, [])),
@@ -444,8 +452,10 @@ class NarrativeSchemaRepository:
 
     def _retrieve_legacy(self, story_request: StoryRequest) -> NarrativeBlueprint:
         entries = self.entries()
-        query = " ".join((story_request.original_prompt, story_request.premise,
-                          story_request.genre, story_request.tone))
+        query = " ".join(filter(None, (
+            story_request.processed_prompt, story_request.premise,
+            story_request.genre, story_request.tone,
+        )))
         selections: dict[str, list[CatalogEntry]] = {}
         for kind in KINDS:
             candidates = [entry for entry in entries if entry.kind == kind]

@@ -50,7 +50,11 @@ class StaticRepository:
 def request() -> StoryRequest:
     return StoryRequest(
         original_prompt="Escribe en español y conserva una llave roja.",
-        title="La llave", language="español", genre="fantasía", tone="tenso",
+        processed_prompt=(
+            "Write a tense fantasy story in which Lía must preserve a red key while "
+            "finding a sealed door before dawn."
+        ),
+        title="The Key", language="Spanish", genre="fantasy", tone="tense",
         target_words=700, premise="Lía busca una puerta antes del amanecer.",
         constraints=["La llave roja debe permanecer intacta."],
     )
@@ -235,7 +239,17 @@ def test_main_character_requires_two_high_one_low_and_ascending_focus():
         )
 
 
-def test_analyst_instruction_is_english_and_keeps_spanish_as_default_language():
+@pytest.mark.parametrize(
+    ("prompt", "language"),
+    [
+        ("Escribe una historia sobre un faro.", "Spanish"),
+        ("Write a story about a lighthouse.", "English"),
+        ("Escribe una historia sobre un faro, pero en inglés.", "English"),
+        ("Write una historia about a lighthouse con una guardiana.", "English"),
+        ("Create 物語", "Spanish"),
+    ],
+)
+def test_analyst_preserves_and_enriches_prompt_with_language_precedence(prompt, language):
     class AnalystProvider:
         def __init__(self):
             self.system_instruction = ""
@@ -243,16 +257,51 @@ def test_analyst_instruction_is_english_and_keeps_spanish_as_default_language():
         def generate_structured(self, *, system_instruction, prompt, schema):
             self.system_instruction = system_instruction
             return StoryRequest(
-                original_prompt=prompt, title="Historia", language="español",
-                genre="misterio", tone="tenso", premise="Una pista desaparece",
+                original_prompt="modified by provider",
+                processed_prompt=(
+                    "Write a tense lighthouse mystery about a keeper whose urgent choice "
+                    "places the surrounding community at risk."
+                ),
+                title="The Lighthouse", language=language,
+                genre="mystery", tone="tense",
+                premise="A lighthouse keeper must resolve a dangerous mystery.",
+                constraints=[],
             )
 
     provider = AnalystProvider()
-    result = AnalystAgent(provider, default_target_words=900).run("Escribe un misterio")
-    assert result.language == "español"
+    result = AnalystAgent(provider, default_target_words=900).run(prompt)
+    assert result.original_prompt == prompt
+    assert result.processed_prompt.startswith("Write a tense lighthouse mystery")
+    assert result.constraints == []
+    assert result.language == language
     assert result.target_words == 900
-    assert "narrative requirements analyst" in provider.system_instruction
+    assert "narrative requirements analyst and prompt enricher" in provider.system_instruction
+    assert "explicit output-language request takes priority" in provider.system_instruction
+    assert "dominant language of the original request" in provider.system_instruction
+    assert "constraints list must contain only constraints the user actually stated" in provider.system_instruction
     assert "Eres " not in provider.system_instruction
+
+
+def test_analyst_enforces_recognized_explicit_length_and_keeps_other_parsed_lengths():
+    class AnalystProvider:
+        def __init__(self, target_words):
+            self.target_words = target_words
+
+        def generate_structured(self, *, system_instruction, prompt, schema):
+            return StoryRequest(
+                original_prompt=prompt, processed_prompt="Write a complete dramatic story.",
+                title="Story", language="English", genre="drama", tone="serious",
+                premise="A choice has lasting consequences.", target_words=self.target_words,
+            )
+
+    explicit = AnalystAgent(AnalystProvider(1500), default_target_words=900).run(
+        "Write a story of 1,234 words."
+    )
+    other_language = AnalystAgent(AnalystProvider(1200), default_target_words=900).run(
+        "Écrivez une histoire de 1200 mots."
+    )
+    assert explicit.target_words == 1234
+    assert other_language.target_words == 1200
 
 
 def test_node_contracts_contain_no_craft_fields():
@@ -276,8 +325,11 @@ def test_three_variants_are_distinct_complete_and_reject_node_references():
 def test_every_user_constraint_is_a_blocking_audit_question():
     questions = audit_questions(request(), variant("variant-1"), characters())
     constraint = next(item for item in questions if item["question_id"] == "constraint:1")
+    language = next(item for item in questions if item["question_id"] == "language:output")
     assert constraint["blocking"] is True
     assert "llave roja" in constraint["question"].casefold()
+    assert language["blocking"] is True
+    assert "Spanish" in language["question"]
 
 
 def test_nekg_prioritizes_directed_pair_then_recent_incident_relations():
@@ -346,6 +398,12 @@ def test_generator_builds_variants_rewrites_blocking_failure_and_renders_without
     # Active model-facing system instructions remain English while prose remains Spanish.
     systems = [system for _, system, _ in provider.calls]
     assert all("Eres " not in system and "Genera " not in system for system in systems)
+    outline_system = next(system for name, system, _ in provider.calls
+                          if name == "StoryOutlineArtifact")
+    writer_systems = [system for name, system, _ in provider.calls if name == "text"
+                      and system.startswith("Write only the requested fiction chapter body")]
+    assert "chapter title" in outline_system and "requested fiction language" in outline_system
+    assert writer_systems and all("in Spanish" in system for system in writer_systems)
     storyline_systems = [system.casefold() for name, system, _ in provider.calls
                          if name in {"StoryOutlineArtifact", "PlotNodeProposal", "PlotNodeReview"}]
     assert all(not any(term in system for term in ("promise", "payoff", "slider", "try-fail"))
