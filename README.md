@@ -46,7 +46,7 @@ STORYLINE incremental, un NEKG local y tres variantes de craft posteriores a la
 planificación. La variante seleccionada se entrega en `story.md`; las otras se
 pueden redactar después sin recalcular eventos mediante `render_variant()`.
 
-Top-Down 3.0 exige a cada protagonista dos sliders iniciales altos y uno bajo
+Top-Down 3.1 usa taxonomías inglesas flexibles y exige a cada protagonista dos sliders iniciales altos y uno bajo
 que progresa hasta alto. Promise–Progress–Payoff, los hitos de personaje y los
 ciclos `yes_but`/`no_and` están desacoplados de los nodos CBN/CPN/CEN. Un
 auditor estructurado trata cada constraint del prompt como bloqueante y puede

@@ -9,7 +9,7 @@ import re
 from .schemas import (
     Character, CharactersArtifact, CraftAuditAnswer, CraftAuditArtifact,
     CraftVariant, CraftVariantsArtifact, DiagnosticAudit, StoryOutlineArtifact,
-    StoryRequest,
+    StoryRequest, TaxonomyBrief,
 )
 
 
@@ -124,6 +124,7 @@ def audit_questions(
     request: StoryRequest,
     variant: CraftVariant,
     characters: CharactersArtifact,
+    taxonomy_brief: TaxonomyBrief | None = None,
 ) -> list[dict[str, object]]:
     questions: list[dict[str, object]] = []
 
@@ -174,6 +175,23 @@ def audit_questions(
     for index, constraint in enumerate(request.constraints, 1):
         add(f"constraint:{index}", "constraint", str(index),
             f"Does the complete fiction satisfy this user constraint: {constraint}")
+    if taxonomy_brief:
+        for index, promise in enumerate(taxonomy_brief.reader_promises, 1):
+            add(
+                f"taxonomy:promise:{index}", "taxonomy", taxonomy_brief.primary_taxonomy,
+                f"Does the complete fiction fulfill this selected reader promise: {promise}", True,
+            )
+        for index, check in enumerate(taxonomy_brief.quality_checks, 1):
+            add(
+                f"taxonomy:quality:{index}", "taxonomy", taxonomy_brief.primary_taxonomy,
+                f"Does the fiction satisfy this taxonomy quality check: {check}", False,
+            )
+        if taxonomy_brief.avoid:
+            add(
+                "taxonomy:anti-formula", "taxonomy", taxonomy_brief.primary_taxonomy,
+                "Does the fiction avoid the listed formulaic shortcuts while remaining recognizable? "
+                + "; ".join(taxonomy_brief.avoid), False,
+            )
     add("global:causality", "global", "story",
         "Does the revision preserve accepted causal facts and event outcomes?")
     add("global:scaffolding", "global", "story",
@@ -212,7 +230,9 @@ def diagnostic_from_craft(audit: CraftAuditArtifact) -> DiagnosticAudit:
         causal_issues=[answer.issue for answer in failed if answer.question_id == "global:causality"],
         intentionality_issues=[answer.issue for answer in failed if answer.category == "character"],
         continuity_issues=[answer.issue for answer in failed
-                           if answer.category in {"global_ppp", "chapter_ppp", "try_fail", "constraint"}],
+                           if answer.category in {
+                               "global_ppp", "chapter_ppp", "try_fail", "constraint", "taxonomy",
+                           }],
         template_like_passages=[answer.issue for answer in failed
                                 if answer.question_id == "global:scaffolding"],
         revision_suggestions=audit.revision_instructions,

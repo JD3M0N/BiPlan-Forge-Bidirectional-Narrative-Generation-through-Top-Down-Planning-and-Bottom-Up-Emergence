@@ -1,16 +1,34 @@
-# ASG Top-Down 3.0
+# ASG Top-Down 3.1
 
-`StoryGenerator` es la única ruta de producción. Separa dos decisiones que no
+`StoryGenerator` es la única ruta de producción. Separa tres decisiones que no
 deben contaminarse entre sí:
 
-1. STORYTELLER determina qué ocurre mediante una STORYLINE causal de eventos
+1. El sistema de taxonomías recupera una paleta de género y el planificador
+   selecciona solo las promesas y posibilidades útiles para esta historia.
+2. STORYTELLER determina qué ocurre mediante una STORYLINE causal de eventos
    SVO/SVS aceptados y un NEKG local.
-2. El módulo de craft determina cómo preparar expectativas, progresos, pagos,
+3. El módulo de craft determina cómo preparar expectativas, progresos, pagos,
    arcos de personajes y ciclos try-fail, sin aceptar, rechazar ni modificar
    nodos.
 
 Todas las instrucciones enviadas al modelo están en inglés. El analista conserva
 español como idioma predeterminado y el escritor usa siempre el idioma solicitado.
+
+## Taxonomías flexibles
+
+El catálogo SQLite contiene 24 perfiles ingleses de géneros y story engines,
+desde `heist-caper` y `whodunit-mystery` hasta `first-contact`,
+`family-domestic-drama` y `sports-underdog`. Cada perfil ofrece promesas al
+lector, señales de identificación, roles con variaciones, movimientos `core`,
+`common` u `optional`, complicaciones, giros opcionales, conclusiones,
+subversiones y controles de calidad. No es una plantilla de beats.
+
+La recuperación híbrida devuelve hasta tres candidatos. El plan nuevo usa una
+taxonomía primaria y, solo cuando el prompt lo pide explícitamente, un accent.
+`taxonomy_application.json` registra las opciones elegidas y
+`taxonomy_brief.json` compila descripciones inglesas para los agentes. El
+escritor puede fusionar, reordenar u omitir convenciones no esenciales y nunca
+expone nombres ni IDs taxonómicos en la ficción.
 
 ```python
 from asg_top_down import StoryGenerator
@@ -22,8 +40,9 @@ print(run.story_path)
 
 ## Planificación STORYTELLER
 
-El catálogo SQLite reproducible recupera macrotramas, situaciones, arcos, beats,
-géneros y roles. El planificador crea premisa, sinopsis y capítulos; genera un
+El catálogo SQLite reproducible recupera perfiles taxonómicos completos mediante
+aliases, señales, FTS y embeddings con fallback local. El planificador crea
+premisa, sinopsis y capítulos; genera un
 CBN y un CEN por capítulo; y luego propone pseudo-CPN uno a uno. Cada revisión
 consulta los ocho eventos más recientes y hasta diez relaciones NEKG, priorizando
 el par dirigido sujeto→objeto y después las relaciones incidentes por recencia.

@@ -2,6 +2,11 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [1.1.6] - 2026-08-18
+
+- Actualizada la dependencia mínima a ASG Top-Down 3.1.0 para usar las nuevas
+  taxonomías narrativas flexibles y sus artefactos de planificación auditables.
+
 ## [1.1.5] - 2026-08-16
 
 - Actualizada la dependencia mínima a ASG Top-Down 2.0.5 para usar la

@@ -34,13 +34,83 @@ class ArchetypeSelection(BaseModel):
         return self
 
 
+class TaxonomyOptionReference(BaseModel):
+    """Reference to one option owned by a retrieved taxonomy profile."""
+
+    taxonomy_id: str = Field(min_length=1)
+    option_id: str = Field(min_length=1)
+
+
+class TaxonomyApplication(BaseModel):
+    """Story-specific, deliberately partial use of the taxonomy palette."""
+
+    primary_taxonomy_id: str = Field(min_length=1)
+    accent_taxonomy_id: str | None = None
+    selected_promises: list[TaxonomyOptionReference] = Field(min_length=1, max_length=3)
+    selected_roles: list[TaxonomyOptionReference] = Field(default_factory=list, max_length=6)
+    selected_movements: list[TaxonomyOptionReference] = Field(min_length=2, max_length=7)
+    selected_complications: list[TaxonomyOptionReference] = Field(default_factory=list, max_length=2)
+    selected_twist: TaxonomyOptionReference | None = None
+    selected_conclusion: TaxonomyOptionReference
+    omitted_conventions: list[TaxonomyOptionReference] = Field(default_factory=list, max_length=8)
+    freshness_choices: list[str] = Field(default_factory=list, min_length=1, max_length=4)
+    prompt_evidence: list[str] = Field(default_factory=list, min_length=1)
+    rationale: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def primary_and_accent_are_distinct(self) -> "TaxonomyApplication":
+        if self.accent_taxonomy_id == self.primary_taxonomy_id:
+            raise ValueError("accent taxonomy must differ from the primary taxonomy")
+        allowed = {self.primary_taxonomy_id}
+        if self.accent_taxonomy_id:
+            allowed.add(self.accent_taxonomy_id)
+        references = [
+            *self.selected_promises, *self.selected_roles, *self.selected_movements,
+            *self.selected_complications, self.selected_conclusion,
+            *self.omitted_conventions,
+        ]
+        if self.selected_twist:
+            references.append(self.selected_twist)
+        unknown = {item.taxonomy_id for item in references} - allowed
+        if unknown:
+            raise ValueError("taxonomy options may only come from the primary or accent taxonomy")
+        return self
+
+
+class TaxonomyBrief(BaseModel):
+    """Compact English guidance compiled from a validated taxonomy application."""
+
+    primary_taxonomy: str
+    accent_taxonomy: str | None = None
+    reader_promises: list[str] = Field(default_factory=list)
+    roles: list[str] = Field(default_factory=list)
+    movements: list[str] = Field(default_factory=list)
+    complications: list[str] = Field(default_factory=list)
+    twist: str | None = None
+    conclusion: str | None = None
+    freshness_choices: list[str] = Field(default_factory=list)
+    quality_checks: list[str] = Field(default_factory=list)
+    avoid: list[str] = Field(default_factory=list)
+    usage_rule: str = (
+        "Use this material as a flexible palette. Preserve the reader promises selected for this "
+        "story, but freely merge, omit, reorder, or reinterpret non-core conventions."
+    )
+
+
 class StoryPlanArtifact(BaseModel):
     logline: str
     theme: str
     central_conflict: str
     progression: list[str] = Field(min_length=3)
     intended_ending: str
-    archetypes: ArchetypeSelection
+    taxonomy_application: TaxonomyApplication | None = None
+    archetypes: ArchetypeSelection | None = None
+
+    @model_validator(mode="after")
+    def has_planning_framework(self) -> "StoryPlanArtifact":
+        if self.taxonomy_application is None and self.archetypes is None:
+            raise ValueError("story plan requires taxonomy_application")
+        return self
 
 
 class WorldArtifact(BaseModel):
@@ -124,8 +194,10 @@ ReviewFocus = Literal[
 
 class NodeGoal(BaseModel):
     purpose: str
-    archetype_id: str
-    schema_beat_id: str
+    taxonomy_id: str | None = None
+    taxonomy_movement_id: str | None = None
+    archetype_id: str | None = None
+    schema_beat_id: str | None = None
     success_criteria: list[str] = Field(min_length=1)
 
 
@@ -195,7 +267,9 @@ class PlotNodeProposal(BaseModel):
     verb: str = Field(min_length=1)
     object: str = ""
     purpose: str = Field(min_length=1)
-    schema_beat_id: str = Field(min_length=1)
+    taxonomy_id: str | None = None
+    taxonomy_movement_id: str | None = None
+    schema_beat_id: str | None = None
     preconditions: list[str] = Field(min_length=1)
     effects: list[str] = Field(min_length=1)
     intention: str = Field(min_length=1)
@@ -369,7 +443,9 @@ AuditVerdict = Literal["pass", "fail", "not_applicable"]
 
 class CraftAuditAnswer(BaseModel):
     question_id: str
-    category: Literal["global_ppp", "chapter_ppp", "character", "try_fail", "constraint", "global"]
+    category: Literal[
+        "global_ppp", "chapter_ppp", "character", "try_fail", "constraint", "taxonomy", "global",
+    ]
     subject_id: str
     question: str
     blocking: bool = True
@@ -471,3 +547,4 @@ class RunMetadata(BaseModel):
     error_code: str | None = None
     error_stage: str | None = None
     warnings: list[str] = Field(default_factory=list)
+    pipeline_version: str = "3.0"

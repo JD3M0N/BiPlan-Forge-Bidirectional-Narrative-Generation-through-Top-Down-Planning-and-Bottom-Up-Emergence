@@ -12,12 +12,16 @@ class PlannerAgent(Agent[StoryPlanArtifact]):
     ) -> StoryPlanArtifact:
         return self.provider.generate_structured(
             system_instruction=(
-                "Design a causal story plan from the request and retrieved narrative knowledge. "
-                "Choose a small compatible composition rather than stacking labels. The protagonist's "
+                "Design a causal story plan and a complete TaxonomyApplication in English from the "
+                "request and retrieved taxonomy candidates. Select one primary taxonomy. Select at "
+                "most one accent only when the candidate has explicit prompt evidence. Choose a small "
+                "subset of option IDs: preserve selected reader promises, but treat roles, movements, "
+                "complications, twists, and conclusions as a flexible palette that may be merged, "
+                "reordered, reinterpreted, or omitted. A twist is never mandatory. The protagonist's "
                 "goal, mistaken belief or conviction, active opposition, irreversible choices, climax, "
-                "and ending must form one causal argument. Use catalog IDs only in archetype fields."
+                "and ending must form one causal argument. All planning text must be English."
             ),
-            prompt=(f"REQUEST:\n{json_text(request)}\n\nBLUEPRINT:\n{json_text(blueprint)}"
+            prompt=(f"REQUEST:\n{json_text(request)}\n\nBLUEPRINT:\n{json_text(blueprint.model_context())}"
                     f"{repair_feedback}"),
             schema=StoryPlanArtifact,
         )

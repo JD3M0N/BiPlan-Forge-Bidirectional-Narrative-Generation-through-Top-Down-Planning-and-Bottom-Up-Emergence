@@ -9,7 +9,7 @@ from ..craft import audit_questions, normalize_audit, try_fail_target
 from ..schemas import (
     CharactersArtifact, CraftAuditArtifact, CraftSelectionArtifact, CraftVariant,
     CraftVariantsArtifact, IncrementalStorylineArtifact, StoryOutlineArtifact,
-    StoryPlanArtifact, StoryRequest, WorldArtifact,
+    StoryPlanArtifact, StoryRequest, TaxonomyBrief, WorldArtifact,
 )
 
 
@@ -25,6 +25,7 @@ class CraftVariantPlannerAgent(Agent[CraftVariantsArtifact]):
         outline: StoryOutlineArtifact,
         storyline: IncrementalStorylineArtifact,
         repair_feedback: str = "",
+        taxonomy_brief: TaxonomyBrief | None = None,
     ) -> CraftVariantsArtifact:
         cycles = try_fail_target(request.target_words)
         return self.provider.generate_structured(
@@ -39,12 +40,14 @@ class CraftVariantPlannerAgent(Agent[CraftVariantsArtifact]):
                 "cycles with persistent consequences. Fit all guidance to accepted events without "
                 "changing causal facts. Refer only to chapter IDs and natural-language events: never "
                 "include plot-node IDs or the terms CBN, CPN, or CEN. Promise means reader expectation; "
-                "progress means meaningful signposting; payoff must be surprising but prepared."
+                "progress means meaningful signposting; payoff must be surprising but prepared. Return "
+                "all artifact text in English regardless of the requested fiction language."
             ),
             prompt=(
                 f"REQUEST:\n{json_text(request)}\n\nPLAN:\n{json_text(plan)}"
                 f"\n\nWORLD:\n{json_text(world)}\n\nCHARACTERS:\n{json_text(characters)}"
                 f"\n\nOUTLINE:\n{json_text(outline)}\n\nACCEPTED STORYLINE:\n{json_text(storyline)}"
+                f"\n\nTAXONOMY BRIEF:\n{json_text(taxonomy_brief) if taxonomy_brief else 'none'}"
                 f"\n\nEXACT TRY-FAIL COUNT PER VARIANT: {cycles}{repair_feedback}"
             ),
             schema=CraftVariantsArtifact,
@@ -61,17 +64,19 @@ class CraftVariantSelectorAgent(Agent[CraftSelectionArtifact]):
         storyline: IncrementalStorylineArtifact,
         variants: CraftVariantsArtifact,
         repair_feedback: str = "",
+        taxonomy_brief: TaxonomyBrief | None = None,
     ) -> CraftSelectionArtifact:
         return self.provider.generate_structured(
             system_instruction=(
                 "Select exactly one supplied craft variant. Prefer faithful user-constraint coverage, "
                 "causal fit with the accepted storyline, clear global and chapter-level progression, "
                 "earned payoffs, and observable low-to-high main-character growth. Return only a valid "
-                "variant ID and a concise rationale. Do not assign numeric quality scores."
+                "variant ID and a concise English rationale. Do not assign numeric quality scores."
             ),
             prompt=(
                 f"REQUEST:\n{json_text(request)}\n\nCHARACTERS:\n{json_text(characters)}"
                 f"\n\nACCEPTED STORYLINE:\n{json_text(storyline)}"
+                f"\n\nTAXONOMY BRIEF:\n{json_text(taxonomy_brief) if taxonomy_brief else 'none'}"
                 f"\n\nCRAFT VARIANTS:\n{json_text(variants)}{repair_feedback}"
             ),
             schema=CraftSelectionArtifact,
@@ -89,20 +94,23 @@ class CraftCriticAgent(Agent[CraftAuditArtifact]):
         outline: StoryOutlineArtifact,
         storyline: IncrementalStorylineArtifact,
         draft: str,
+        taxonomy_brief: TaxonomyBrief | None = None,
     ) -> CraftAuditArtifact:
-        questions = audit_questions(request, variant, characters)
+        questions = audit_questions(request, variant, characters, taxonomy_brief)
         raw = self.provider.generate_structured(
             system_instruction=(
                 "You are a demanding story-craft critic. Answer every supplied question exactly once "
                 "using its exact question_id, category, subject_id, question, and blocking value. Judge "
                 "the fiction rather than planning labels and cite concise location-specific evidence. "
                 "A failure must include an actionable issue and revision instruction. Use not_applicable "
-                "only for non-blocking questions. Do not assign scores or invent questions."
+                "only for non-blocking questions. Write all audit analysis in English; concise evidence "
+                "may quote the fiction's requested language. Do not assign scores or invent questions."
             ),
             prompt=(
                 f"REQUEST:\n{json_text(request)}\n\nCRAFT VARIANT:\n{json_text(variant)}"
                 f"\n\nCHARACTERS:\n{json_text(characters)}\n\nOUTLINE:\n{json_text(outline)}"
                 f"\n\nSTORYLINE:\n{json_text(storyline)}"
+                f"\n\nTAXONOMY BRIEF:\n{json_text(taxonomy_brief) if taxonomy_brief else 'none'}"
                 f"\n\nQUESTIONS:\n{json.dumps(questions, ensure_ascii=False, indent=2)}"
                 f"\n\nFICTION:\n{draft}"
             ),
@@ -124,9 +132,13 @@ class CraftRewriterAgent(Agent[str]):
         draft: str,
         audit: CraftAuditArtifact,
         length_instruction: str = "",
+        taxonomy_brief: TaxonomyBrief | None = None,
     ) -> str:
         failed = [answer for answer in audit.answers if answer.verdict == "fail"]
         failed.sort(key=lambda answer: not answer.blocking)
+        taxonomy_context = (
+            "none" if taxonomy_brief is None else json_text(taxonomy_brief)
+        )
         return self.provider.generate_text(
             system_instruction=(
                 "You are a literary rewriter. Rewrite the complete fiction once, applying every failed "
@@ -134,12 +146,14 @@ class CraftRewriterAgent(Agent[str]):
                 "constraints, requested language, and approximate length. Realize global and local "
                 "promise-progress-payoff lines, character growth, and try-fail consequences through "
                 "action and choice. Never expose scores, IDs, questions, or planning terminology. Return "
-                "only the complete revised story in Markdown and preserve every canonical chapter heading."
+                "Treat taxonomy material as flexible guidance and never expose taxonomy names or IDs. "
+                "Return only the complete revised story in Markdown and preserve every canonical chapter heading."
             ),
             prompt=(
                 f"REQUEST:\n{json_text(request)}\n\nCRAFT VARIANT:\n{json_text(variant)}"
                 f"\n\nCHARACTERS:\n{json_text(characters)}\n\nOUTLINE:\n{json_text(outline)}"
-                f"\n\nSTORYLINE:\n{json_text(storyline)}\n\nFAILED AUDIT ANSWERS:\n"
+                f"\n\nSTORYLINE:\n{json_text(storyline)}"
+                f"\n\nTAXONOMY BRIEF:\n{taxonomy_context}\n\nFAILED AUDIT ANSWERS:\n"
                 f"{json.dumps([answer.model_dump(mode='json') for answer in failed], ensure_ascii=False, indent=2)}"
                 f"\n\nDETERMINISTIC LENGTH INSTRUCTION:\n{length_instruction or 'none'}"
                 f"\n\nDRAFT:\n{draft}"

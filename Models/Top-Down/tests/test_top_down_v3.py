@@ -13,7 +13,7 @@ from asg_top_down.errors import ArtifactValidationError, StorylinePlanningError
 from asg_top_down.generator import StoryGenerator
 from asg_top_down.incremental import IncrementalPlotPlanner
 from asg_top_down.narrative_db import (
-    CatalogEntry, NarrativeBlueprint, RetrievalTrace,
+    CatalogEntry, NarrativeBlueprint, NarrativeSchemaRepository, RetrievalTrace,
 )
 from asg_top_down.nekg import NarrativeEntityGraph
 from asg_top_down.schemas import (
@@ -442,3 +442,61 @@ def test_incremental_planner_enforces_adaptive_ceiling_and_cen_connection():
         planner.plan(story_outline, anchors, blueprint())
     assert captured.value.details["slot"] == 1
     assert captured.value.details["attempts"] == 2
+
+
+class V31Provider(V3Provider):
+    def generate_structured(self, *, system_instruction, prompt, schema):
+        if schema is StoryPlanArtifact:
+            self.calls.append((schema.__name__, system_instruction, prompt))
+            return StoryPlanArtifact(
+                logline="Lía leads a crew into an impossible vault",
+                theme="Trust makes expertise meaningful",
+                central_conflict="Lía's crew against a guarded institution",
+                progression=["recruit", "reconnoiter", "adapt", "escape"],
+                intended_ending="The crew escapes after choosing trust over the larger prize",
+                taxonomy_application={
+                    "primary_taxonomy_id": "heist-caper",
+                    "selected_promises": [{
+                        "taxonomy_id": "heist-caper", "option_id": "promise-impossible-job",
+                    }],
+                    "selected_roles": [],
+                    "selected_movements": [
+                        {"taxonomy_id": "heist-caper", "option_id": "move-proposition"},
+                        {"taxonomy_id": "heist-caper", "option_id": "move-operation"},
+                    ],
+                    "selected_complications": [],
+                    "selected_conclusion": {
+                        "taxonomy_id": "heist-caper", "option_id": "end-costly-win",
+                    },
+                    "freshness_choices": ["Let empathy defeat the decisive security barrier."],
+                    "prompt_evidence": ["The request explicitly asks for a heist."],
+                    "rationale": "The operational problem is the story's central reader promise.",
+                },
+            )
+        return super().generate_structured(
+            system_instruction=system_instruction, prompt=prompt, schema=schema,
+        )
+
+
+def test_v31_generation_persists_and_propagates_the_english_taxonomy_brief(tmp_path):
+    provider = V31Provider()
+    schema_repository = NarrativeSchemaRepository(db_path=tmp_path / "taxonomy.sqlite3")
+    generator = StoryGenerator(
+        provider, tmp_path / "stories", schema_repository=schema_repository,
+        max_cpn_retries=1, max_craft_revisions=0,
+    )
+    heist_request = request().model_copy(update={
+        "original_prompt": "Escribe un atraco con una llave roja.",
+        "genre": "atraco",
+        "premise": "Lía dirige un equipo para entrar en una bóveda antes del amanecer.",
+    })
+    run = generator.generate(heist_request)
+    application = json.loads((run.run_dir / "taxonomy_application.json").read_text(encoding="utf-8"))
+    brief = json.loads((run.run_dir / "taxonomy_brief.json").read_text(encoding="utf-8"))
+    candidates = json.loads((run.run_dir / "taxonomy_candidates.json").read_text(encoding="utf-8"))
+    assert application["primary_taxonomy_id"] == "heist-caper"
+    assert brief["primary_taxonomy"] == "Heist / Caper"
+    assert candidates["candidates"][0]["profile"]["id"] == "heist-caper"
+    assert all("TAXONOMY BRIEF:" in prompt for prompt in provider.writer_prompts)
+    assert all("promise-impossible-job" not in prompt for prompt in provider.writer_prompts)
+    assert "Lía" in run.story_path.read_text(encoding="utf-8")

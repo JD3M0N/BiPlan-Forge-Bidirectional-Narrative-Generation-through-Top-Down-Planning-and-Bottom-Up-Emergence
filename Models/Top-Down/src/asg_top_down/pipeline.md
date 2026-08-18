@@ -1,4 +1,4 @@
-# Pipeline Top-Down 3.0
+# Pipeline Top-Down 3.1
 
 ```text
 Prompt → Analyst → SQLite retrieval → Planner → World → Characters

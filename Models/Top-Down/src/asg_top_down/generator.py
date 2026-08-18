@@ -1,4 +1,4 @@
-"""Top-Down 3.0 production orchestration for STORYTELLER and independent craft."""
+"""Top-Down 3.1 production orchestration with flexible narrative taxonomies."""
 
 from __future__ import annotations
 
@@ -33,6 +33,7 @@ from .schemas import (
     CraftVariantsArtifact, IncrementalStorylineArtifact, LengthAuditArtifact,
     LengthAuditEntry, LLMUsageArtifact, NarrativeEntityGraphArtifact,
     StoryOutlineArtifact, StoryPlanArtifact, StoryRequest, WorldArtifact,
+    TaxonomyBrief,
 )
 from .storage import ArtifactRepository
 
@@ -90,7 +91,7 @@ def _canonical_chapter(title: str, text: str) -> str:
 
 
 class StoryGenerator:
-    """The only production entry point for the Top-Down 3.0 pipeline."""
+    """The only production entry point for the Top-Down 3.1 pipeline."""
 
     def __init__(
         self,
@@ -155,8 +156,14 @@ class StoryGenerator:
             recommendations=[f"Revisa artifact_attempts/{name}/ y usa un modelo más capaz."],
         )
 
-    @staticmethod
-    def _validate_plan(plan: StoryPlanArtifact, blueprint: NarrativeBlueprint) -> None:
+    def _validate_plan(self, plan: StoryPlanArtifact, blueprint: NarrativeBlueprint) -> None:
+        if blueprint.candidates:
+            if plan.taxonomy_application is None:
+                raise ValueError("new story plans require taxonomy_application")
+            self.schemas.validate_application(plan.taxonomy_application, blueprint)
+            return
+        if plan.archetypes is None:
+            raise ValueError("legacy blueprint requires archetype selection")
         allowed = {item.id for group in (
             blueprint.macroplots, blueprint.situations, blueprint.character_arcs,
         ) for item in group}
@@ -255,6 +262,10 @@ class StoryGenerator:
             blueprint = self.schemas.retrieve(request)
             repository.save_json("blueprint.json", blueprint)
             repository.save_json("retrieval_trace.json", blueprint.trace)
+            repository.save_data(
+                "taxonomy_candidates.json",
+                {"candidates": [item.model_dump(mode="json") for item in blueprint.candidates]},
+            )
             repository.complete_stage("retrieval")
             notify(8, "retrieval", "Esquemas narrativos recuperados")
 
@@ -265,9 +276,18 @@ class StoryGenerator:
                 validate=lambda value: self._validate_plan(value, blueprint),
             )
             repository.save_json("story_plan.json", plan)
+            taxonomy_brief = None
+            if plan.taxonomy_application is not None:
+                taxonomy_brief = self.schemas.compile_brief(
+                    plan.taxonomy_application, blueprint,
+                )
+                repository.save_json(
+                    "taxonomy_application.json", plan.taxonomy_application,
+                )
+                repository.save_json("taxonomy_brief.json", taxonomy_brief)
             repository.complete_stage("story_plan")
 
-            world = WorldBuilderAgent(self.provider).run(request, plan)
+            world = WorldBuilderAgent(self.provider).run(request, plan, taxonomy_brief)
             repository.save_json("world.json", world)
             repository.complete_stage("world")
 
@@ -276,6 +296,7 @@ class StoryGenerator:
                 repository, name="characters", stage="characters",
                 generate=lambda feedback: character_agent.run(
                     request, plan, world, blueprint, feedback,
+                    taxonomy_brief=taxonomy_brief,
                 ),
                 validate=validate_craft_characters,
             )
@@ -285,7 +306,9 @@ class StoryGenerator:
             planner = IncrementalPlotPlanner(self.provider, max_retries=self.max_cpn_retries)
             outline = self._validated_artifact(
                 repository, name="outline", stage="outline",
-                generate=lambda feedback: planner.outline(request, plan, blueprint, feedback),
+                generate=lambda feedback: planner.outline(
+                    request, plan, blueprint, feedback, taxonomy_brief,
+                ),
                 validate=lambda value: self._validate_outline(value, request),
             )
             repository.save_json("outline.json", outline)
@@ -307,6 +330,8 @@ class StoryGenerator:
 
             storyline, reviews = planner.plan(
                 outline, anchors, blueprint, on_checkpoint=checkpoint,
+                taxonomy_brief=taxonomy_brief,
+                taxonomy_application=plan.taxonomy_application,
             )
             nekg = planner.nekg.artifact()
             repository.save_json("storyline.json", storyline)
@@ -320,6 +345,7 @@ class StoryGenerator:
                 repository, name="craft_variants", stage="craft",
                 generate=lambda feedback: craft_agent.run(
                     request, plan, world, characters, outline, storyline, feedback,
+                    taxonomy_brief=taxonomy_brief,
                 ),
                 validate=lambda value: validate_craft_variants(
                     value, outline, characters, request.target_words,
@@ -334,6 +360,7 @@ class StoryGenerator:
                 repository, name="craft_selection", stage="craft",
                 generate=lambda feedback: selector.run(
                     request, characters, storyline, variants, feedback,
+                    taxonomy_brief=taxonomy_brief,
                 ),
                 validate=lambda value: self._validate_selection(value, variants),
             )
@@ -345,6 +372,7 @@ class StoryGenerator:
             rendered = self._render_to_prefix(
                 repository, request, plan, world, characters, outline, storyline,
                 reviews, selected, f"craft/variants/{selected.id}", notify,
+                taxonomy_brief,
             )
             self._mirror_selected(repository, rendered, outline)
             create_evaluation_template(repository.run_dir)
@@ -377,6 +405,7 @@ class StoryGenerator:
         variant: CraftVariant,
         prefix: str,
         notify,
+        taxonomy_brief: TaxonomyBrief | None = None,
     ) -> _RenderedVariant:
         usage_start = len(getattr(self.provider, "usage_records", []))
         writer = ChapterWriterAgent(self.provider)
@@ -390,7 +419,7 @@ class StoryGenerator:
                 writing_nekg.apply(node, changes_by_node.get(node.id, []))
             body = writer.run(
                 request, plan, world, characters, variant, storyline,
-                writing_nekg.artifact(), chapter, previous_chapter,
+                writing_nekg.artifact(), chapter, previous_chapter, taxonomy_brief,
             )
             text = _canonical_chapter(chapter.title, body)
             repository.save_text(f"{prefix}/chapters/chapter-{chapter.order:03d}.md", text)
@@ -404,6 +433,7 @@ class StoryGenerator:
         repository.save_text(f"{prefix}/draft.md", draft)
         story, audit, revisions, warnings = self._review_draft(
             repository, request, variant, characters, outline, storyline, draft, notify, prefix,
+            taxonomy_brief,
         )
         chapter_audits = []
         for chapter, text in zip(outline.chapters, chapter_texts):
@@ -451,6 +481,7 @@ class StoryGenerator:
         draft: str,
         notify,
         prefix: str,
+        taxonomy_brief: TaxonomyBrief | None = None,
     ) -> tuple[str, CraftAuditArtifact, CraftRevisionHistory, list[str]]:
         critic = CraftCriticAgent(self.provider)
         rewriter = CraftRewriterAgent(self.provider)
@@ -471,6 +502,7 @@ class StoryGenerator:
             try:
                 audit = critic.run(
                     request, variant, characters, outline, storyline, current_text,
+                    taxonomy_brief,
                 )
             except Exception as exc:
                 critic_failed = True
@@ -487,7 +519,9 @@ class StoryGenerator:
                         evidence="La auditoría automática no estuvo disponible.",
                         issue="El criterio no pudo evaluarse.",
                         revision_instruction="Revisar este criterio manualmente.",
-                    ) for question in audit_questions(request, variant, characters)],
+                    ) for question in audit_questions(
+                        request, variant, characters, taxonomy_brief,
+                    )],
                 )
             repository.save_json(audit_file, audit)
             advisory = [answer.question_id for answer in audit.answers
@@ -516,6 +550,7 @@ class StoryGenerator:
                 current_text = rewriter.run(
                     request, variant, characters, outline, storyline, current_text, audit,
                     length_instruction=length_instruction,
+                    taxonomy_brief=taxonomy_brief,
                 )
             except Exception as exc:
                 warnings.append(
@@ -611,6 +646,11 @@ class StoryGenerator:
         try:
             request = StoryRequest.model_validate_json((run_dir / "request.json").read_text(encoding="utf-8"))
             plan = StoryPlanArtifact.model_validate_json((run_dir / "story_plan.json").read_text(encoding="utf-8"))
+            taxonomy_brief = (
+                TaxonomyBrief.model_validate_json(
+                    (run_dir / "taxonomy_brief.json").read_text(encoding="utf-8")
+                ) if (run_dir / "taxonomy_brief.json").is_file() else None
+            )
             world = WorldArtifact.model_validate_json((run_dir / "world.json").read_text(encoding="utf-8"))
             characters = CharactersArtifact.model_validate_json((run_dir / "characters.json").read_text(encoding="utf-8"))
             outline = StoryOutlineArtifact.model_validate_json((run_dir / "outline.json").read_text(encoding="utf-8"))
@@ -628,6 +668,7 @@ class StoryGenerator:
             self._render_to_prefix(
                 repository, request, plan, world, characters, outline, storyline,
                 reviews, variant, f"craft/variants/{variant_id}", notify,
+                taxonomy_brief,
             )
             repository.complete()
             notify(100, "completed", f"Variante {variant_id} terminada")

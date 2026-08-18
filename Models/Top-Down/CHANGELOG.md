@@ -2,6 +2,17 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [3.1.0] - 2026-08-18
+
+- Sustituido el catálogo fragmentario por 24 perfiles taxonómicos descriptivos
+  en inglés, con fuentes, variantes, alternativas y guía anticliché.
+- Añadidos `TaxonomyApplication`, `TaxonomyBrief`, shortlist híbrida auditable y
+  léxico español de reconocimiento separado del contenido narrativo.
+- Integrado el brief flexible en mundo, personajes, STORYTELLER, craft,
+  redacción, auditoría y reescritura sin convertir convenciones en una plantilla.
+- Versionados los runs nuevos como Top-Down 3.1 y conservada la lectura de
+  artefactos Top-Down 3.0 terminados.
+
 ## [3.0.0] - 2026-08-16
 
 - Eliminados `StoryOrchestrator`, el procesador DAG, los agentes y contratos del

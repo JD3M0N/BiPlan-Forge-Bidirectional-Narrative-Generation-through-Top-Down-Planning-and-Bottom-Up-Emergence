@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "profiles": [
+    "heist-caper",
+    "whodunit-mystery",
+    "conspiracy-political-thriller",
+    "cat-and-mouse-thriller",
+    "courtroom-legal-drama",
+    "revenge",
+    "escape-prison-break",
+    "rescue-mission",
+    "survival",
+    "disaster",
+    "expedition-adventure",
+    "fantasy-quest",
+    "war-mission",
+    "western-frontier",
+    "first-contact",
+    "dystopian-rebellion",
+    "monster-creature-horror",
+    "gothic-horror",
+    "psychological-horror",
+    "romance",
+    "romantic-comedy",
+    "coming-of-age",
+    "family-domestic-drama",
+    "sports-underdog"
+  ]
+}

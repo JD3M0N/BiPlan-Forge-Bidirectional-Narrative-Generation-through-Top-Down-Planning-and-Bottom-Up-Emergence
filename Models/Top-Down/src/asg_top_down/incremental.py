@@ -15,7 +15,7 @@ from .schemas import (
     AcceptedNodeRecord, ChapterAnchorsArtifact, ChapterPlan, CharactersArtifact,
     IncrementalStorylineArtifact, NarrativeEdge, NodeGoal, PlotNode,
     PlotNodeProposal, PlotNodeReview, StoryOutlineArtifact, StoryPlanArtifact,
-    StoryRequest, WorldArtifact,
+    StoryRequest, TaxonomyApplication, TaxonomyBrief, WorldArtifact,
 )
 
 
@@ -100,16 +100,20 @@ class IncrementalPlotPlanner:
         plan: StoryPlanArtifact,
         blueprint: NarrativeBlueprint,
         repair_feedback: str = "",
+        taxonomy_brief: TaxonomyBrief | None = None,
     ) -> StoryOutlineArtifact:
         return self.provider.generate_structured(
             system_instruction=(
                 "Create the high-level STORYTELLER frame before creating plot nodes. Produce one "
                 "premise, a complete synopsis, and all ordered chapter titles and abstracts. Allocate "
                 "exactly the requested total words. Use retrieved knowledge as flexible guidance rather "
-                "than literal prose. Ensure escalation, a consequential climax, and enough aftermath."
+                "than literal prose. Ensure escalation, a consequential climax, and enough aftermath. "
+                "Return all artifact text in English regardless of the requested fiction language."
             ),
             prompt=(f"REQUEST:\n{_json(request)}\n\nPLAN:\n{_json(plan)}"
-                    f"\n\nRETRIEVED KNOWLEDGE:\n{_json(blueprint)}{repair_feedback}"),
+                    f"\n\nRETRIEVED KNOWLEDGE:\n{_json(blueprint.model_context())}"
+                    f"\n\nSELECTED TAXONOMY BRIEF:\n{_json(taxonomy_brief) if taxonomy_brief else 'none'}"
+                    f"{repair_feedback}"),
             schema=StoryOutlineArtifact,
         )
 
@@ -125,7 +129,8 @@ class IncrementalPlotPlanner:
                 "Generate exactly one concrete SVO chapter-begin node and one concrete SVO chapter-end "
                 "node for every chapter before generating any internal plot nodes. Use the current, "
                 "preceding, and following chapter abstracts so adjacent states connect smoothly. "
-                "Describe observable events rather than themes or writing instructions."
+                "Describe observable events rather than themes or writing instructions. Return all "
+                "artifact text in English."
             ),
             prompt=(f"OUTLINE:\n{_json(outline)}\n\nWORLD:\n{_json(world)}"
                     f"\n\nCHARACTERS:\n{_json(characters)}{repair_feedback}"),
@@ -166,7 +171,9 @@ class IncrementalPlotPlanner:
             conflict=proposal.conflict,
             goals=[NodeGoal(
                 purpose=proposal.purpose,
-                archetype_id="composed",
+                taxonomy_id=proposal.taxonomy_id,
+                taxonomy_movement_id=proposal.taxonomy_movement_id,
+                archetype_id="composed" if proposal.schema_beat_id else None,
                 schema_beat_id=proposal.schema_beat_id,
                 success_criteria=["The event causes an observable state change"],
             )],
@@ -181,6 +188,8 @@ class IncrementalPlotPlanner:
         revision: str,
         slot: int,
         maximum: int,
+        taxonomy_brief: TaxonomyBrief | None = None,
+        taxonomy_application: TaxonomyApplication | None = None,
     ) -> PlotNodeProposal:
         final_instruction = (
             " This is the final allowed slot, so the event must create a natural immediate bridge to "
@@ -194,6 +203,10 @@ class IncrementalPlotPlanner:
                 "chapter-begin node, the pre-generated chapter-end target, and accepted internal nodes. "
                 "The event must be caused or enabled by accepted history, follow a character intention, "
                 "meet active opposition, change story state, and avoid repeating prior events."
+                " When the event realizes a selected taxonomy movement, copy its taxonomy ID and "
+                "movement ID into taxonomy_id and taxonomy_movement_id. Do not force a taxonomy "
+                "movement merely to fill a slot and do not treat the brief as a fixed sequence."
+                " Return all artifact text in English."
                 + final_instruction
             ),
             prompt=(
@@ -206,7 +219,10 @@ class IncrementalPlotPlanner:
                     'object': anchor.end_object,
                 })}"
                 f"\n\nSLOT: {slot}/{maximum}\n\nACCEPTED CHAPTER PLOT NODES:\n{_json(chapter_cpns)}"
-                f"\n\nRETRIEVED KNOWLEDGE:\n{_json(blueprint)}"
+                f"\n\nRETRIEVED KNOWLEDGE:\n{_json(blueprint.model_context())}"
+                f"\n\nSELECTED TAXONOMY BRIEF:\n{_json(taxonomy_brief) if taxonomy_brief else 'none'}"
+                f"\n\nSELECTED TAXONOMY REFERENCES:\n"
+                f"{_json(taxonomy_application) if taxonomy_application else 'none'}"
                 f"\n\nREVISION FEEDBACK:\n{revision or 'none'}"
             ),
             schema=PlotNodeProposal,
@@ -223,7 +239,8 @@ class IncrementalPlotPlanner:
                 "Classify relevant review work as theme, logic, emotion, mystery, plot_resolution, "
                 "language, or redundancy. Set aligns_with_cen only when the final candidate makes the "
                 "pre-generated ending a natural immediate next event. Every boolean must evaluate the "
-                "replacement when revised is present, otherwise the submitted proposal."
+                "replacement when revised is present, otherwise the submitted proposal. Return all "
+                "review and replacement text in English."
             ),
             prompt=(
                 f"PROPOSAL:\n{_json(proposal)}\n\nCHAPTER:\n{_json(chapter)}"
@@ -250,6 +267,8 @@ class IncrementalPlotPlanner:
         anchors: ChapterAnchorsArtifact,
         blueprint: NarrativeBlueprint,
         on_checkpoint=None,
+        taxonomy_brief: TaxonomyBrief | None = None,
+        taxonomy_application: TaxonomyApplication | None = None,
     ) -> tuple[IncrementalStorylineArtifact, NodeReviewHistory]:
         self.state = StorylineState(outline.chapters)
         self.nekg = self._graph_factory()
@@ -302,6 +321,7 @@ class IncrementalPlotPlanner:
                     try:
                         proposal = self._proposal(
                             chapter, anchor, blueprint, chapter_cpns, revision, slot, maximum,
+                            taxonomy_brief, taxonomy_application,
                         )
                     except StructuredResponseError as exc:
                         issue, validation = self._structured_rejection(exc, "proposal")
@@ -319,6 +339,34 @@ class IncrementalPlotPlanner:
                         revision = issue
                         self._checkpoint(on_checkpoint)
                         continue
+                    if taxonomy_application and (
+                        proposal.taxonomy_id or proposal.taxonomy_movement_id
+                    ):
+                        selected = {
+                            (item.taxonomy_id, item.option_id)
+                            for item in taxonomy_application.selected_movements
+                        }
+                        reference = (
+                            proposal.taxonomy_id, proposal.taxonomy_movement_id,
+                        )
+                        if None in reference or reference not in selected:
+                            issue = (
+                                "The proposal taxonomy reference must identify one selected movement "
+                                "or leave both taxonomy fields empty."
+                            )
+                            self.history.rejected.append({
+                                "chapter_id": chapter.id,
+                                "slot": slot,
+                                "attempt": attempt,
+                                "stage": "taxonomy_reference",
+                                "proposal": proposal.model_dump(mode="json"),
+                                "review": None,
+                                "candidate": proposal.model_dump(mode="json"),
+                                "issues": [issue],
+                            })
+                            revision = issue
+                            self._checkpoint(on_checkpoint)
+                            continue
                     try:
                         review = self._review(proposal, chapter, anchor)
                     except StructuredResponseError as exc:

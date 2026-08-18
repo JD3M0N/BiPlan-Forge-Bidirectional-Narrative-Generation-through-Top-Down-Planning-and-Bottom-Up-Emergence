@@ -2,6 +2,11 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [1.1.6] - 2026-08-18
+
+- Actualizada la dependencia mínima a ASG Top-Down 3.1.0 para generar historias
+  con las nuevas taxonomías flexibles sin cambiar el idioma final solicitado.
+
 ## [1.1.5] - 2026-08-16
 
 - Actualizada la dependencia mínima a ASG Top-Down 2.0.5 para impedir falsos

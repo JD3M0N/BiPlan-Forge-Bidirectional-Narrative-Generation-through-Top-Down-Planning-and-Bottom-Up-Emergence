@@ -17,7 +17,9 @@ class AnalystAgent(Agent[StoryRequest]):
                 "You are a narrative requirements analyst. Convert the user's request into a "
                 "faithful specification. Preserve every explicit constraint. If no language is "
                 f"given, use Spanish; if no length is given, use {self.default_target_words} words. "
-                "An explicitly requested length always takes priority. Do not invent constraints."
+                "An explicitly requested length always takes priority. Write title, genre, tone, "
+                "premise, and normalized constraints in English; keep original_prompt verbatim and "
+                "set language to the requested fiction language. Do not invent constraints."
             ),
             prompt=prompt,
             schema=StoryRequest,
