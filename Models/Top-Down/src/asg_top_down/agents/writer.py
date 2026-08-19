@@ -1,6 +1,6 @@
 from .base import Agent, json_text
 from ..schemas import (
-    ChapterPlan, CharactersArtifact, CraftVariant, IncrementalStorylineArtifact,
+    ChapterPlan, ChapterWritingBrief, CharactersArtifact, IncrementalStorylineArtifact,
     NarrativeEntityGraphArtifact, StoryPlanArtifact, StoryRequest, WorldArtifact,
     TaxonomyBrief,
 )
@@ -15,7 +15,7 @@ class ChapterWriterAgent(Agent[str]):
         plan: StoryPlanArtifact,
         world: WorldArtifact,
         characters: CharactersArtifact,
-        variant: CraftVariant,
+        writing_brief: ChapterWritingBrief,
         storyline: IncrementalStorylineArtifact,
         nekg: NarrativeEntityGraphArtifact,
         chapter: ChapterPlan,
@@ -26,12 +26,25 @@ class ChapterWriterAgent(Agent[str]):
         node_ids = {node.id for node in nodes}
         edges = [edge for edge in storyline.accepted_edges
                  if edge.source in node_ids or edge.target in node_ids]
-        local_craft = next(item for item in variant.chapters if item.chapter_id == chapter.id)
-        milestones = [item for item in variant.character_milestones if item.chapter_id == chapter.id]
-        cycles = [item for item in variant.try_fail_cycles if item.chapter_id == chapter.id]
+        narrative_events = [node.model_dump(
+            mode="json",
+            exclude={"id", "chapter_id", "node_type", "timestamp", "global_order", "local_order"},
+        ) for node in nodes]
+        causal_guidance = [
+            f"A prior accepted event {edge.relation} the current chapter event."
+            for edge in edges
+        ]
+        entity_context = {
+            "entities": [entity.model_dump(mode="json", exclude={"id", "last_event_id"})
+                         for entity in nekg.entities],
+            "relations": [relation.model_dump(
+                mode="json", exclude={"plot_node_id", "timestamp"},
+            ) for relation in nekg.relations],
+        }
         story_plan_context = plan.model_dump(
             mode="json", exclude={"taxonomy_application", "archetypes"},
         )
+        chapter_context = chapter.model_dump(mode="json", exclude={"id", "order"})
         return self.provider.generate_text(
             system_instruction=(
                 f"Write only the requested fiction chapter body in Markdown and in {request.language}. "
@@ -48,13 +61,12 @@ class ChapterWriterAgent(Agent[str]):
             prompt=(
                 f"REQUEST:\n{json_text(request)}\n\nPLAN:\n{json_text(story_plan_context)}"
                 f"\n\nWORLD:\n{json_text(world)}\n\nCHARACTERS:\n{json_text(characters)}"
-                f"\n\nGLOBAL CRAFT:\n{json_text({'master': variant.master_line, 'subplots': variant.subplots})}"
-                f"\n\nCHAPTER CRAFT:\n{json_text(local_craft)}"
-                f"\n\nCHARACTER MILESTONES:\n{json_text(milestones)}"
-                f"\n\nTRY-FAIL CYCLES:\n{json_text(cycles)}"
+                f"\n\nCHAPTER WRITING BRIEF:\n{json_text(writing_brief)}"
                 f"\n\nTAXONOMY BRIEF:\n{json_text(taxonomy_brief) if taxonomy_brief else 'none'}"
-                f"\n\nCHAPTER:\n{json_text(chapter)}\n\nNODES:\n{json_text(nodes)}"
-                f"\n\nCAUSAL LINKS:\n{json_text(edges)}\n\nCURRENT NEKG:\n{json_text(nekg)}"
+                f"\n\nCHAPTER:\n{json_text(chapter_context)}"
+                f"\n\nNARRATIVE EVENTS:\n{json_text(narrative_events)}"
+                f"\n\nCAUSAL GUIDANCE:\n{json_text(causal_guidance)}"
+                f"\n\nCURRENT ENTITY CONTEXT:\n{json_text(entity_context)}"
                 f"\n\nPREVIOUS CHAPTER:\n{previous_chapter or 'none'}"
             ),
         )

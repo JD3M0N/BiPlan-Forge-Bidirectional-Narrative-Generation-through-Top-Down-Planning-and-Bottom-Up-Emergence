@@ -8,8 +8,10 @@ import pytest
 from asg_top_down.craft import audit_questions
 from asg_top_down.narrative_db import NarrativeSchemaRepository
 from asg_top_down.schemas import (
-    CharactersArtifact, CraftVariant, PPPLine, PPPPoint, StoryRequest,
-    TaxonomyApplication, TaxonomyOptionReference,
+    ChapterPPPBeat, ChapterPPPPlan, CharacterArcPlan, CharacterMilestone,
+    CharactersArtifact, GlobalPPPLine, GlobalPPPPlan, GlobalPPPPoint, StoryCraftPlan,
+    StoryRequest, TaxonomyApplication, TaxonomyOptionReference, TonePromise,
+    TryFailCycle, TryFailPlan,
 )
 
 
@@ -110,21 +112,41 @@ def test_application_is_flexible_compiles_an_english_brief_and_adds_audits(tmp_p
     assert brief.roles == []
     assert all("atraco" not in value.casefold() for value in brief.reader_promises)
 
-    line = PPPLine(
-        id="master", kind="master", subject="crew",
-        promise=PPPPoint(chapter_id="chapter-001", description="The vault"),
-        progress=[PPPPoint(chapter_id="chapter-001", description="The attempt")],
-        payoff=PPPPoint(chapter_id="chapter-001", description="The cost"),
+    global_ppp = GlobalPPPPlan(
+        tone_promise=TonePromise(description="Tense", opening_signal="Risk",
+                                 continuity_rule="Escalate"),
+        primary_line=GlobalPPPLine(
+            id="master", kind="plot", subject="crew",
+            promise=GlobalPPPPoint(id="p", chapter_id="chapter-001",
+                                   description="The vault", reader_effect="Expect entry"),
+            progress=[GlobalPPPPoint(id="g", chapter_id="chapter-001",
+                                     description="The attempt", reader_effect="Feel progress")],
+            payoff=GlobalPPPPoint(id="o", chapter_id="chapter-001",
+                                  description="The cost", reader_effect="Feel resolution"),
+        ),
     )
-    variant = CraftVariant(
-        id="variant-1", strategy="quiet tension", master_line=line,
-        chapters=[{
-            "chapter_id": "chapter-001", "promise": "Enter", "progress": ["Adapt"],
-            "payoff": "Leave", "advances_global_line_ids": ["master"],
-        }],
+    craft = StoryCraftPlan(
+        global_ppp=global_ppp,
+        character_arcs=CharacterArcPlan(milestones=[CharacterMilestone(
+            character_name="A", chapter_id="chapter-001", stage="start",
+            description="A hesitates",
+        )]),
+        try_fail=TryFailPlan(cycles=[
+            TryFailCycle(id="t1", chapter_id="chapter-001", action="Enter",
+                         outcome="yes_but", consequence="Alarm"),
+            TryFailCycle(id="t2", chapter_id="chapter-001", action="Escape",
+                         outcome="no_and", consequence="Lockdown"),
+        ]),
+        chapters=[ChapterPPPPlan(
+            chapter_id="chapter-001",
+            promise=ChapterPPPBeat(description="Enter", node_ids=["n_0001"]),
+            progress=[ChapterPPPBeat(description="Adapt", node_ids=["n_0002"])],
+            payoff=ChapterPPPBeat(description="Leave", node_ids=["n_0003"]),
+            advances_global_point_ids=["p", "g", "o"],
+        )],
     )
     questions = audit_questions(
-        request("heist", "Write a heist."), variant,
+        request("heist", "Write a heist."), craft,
         CharactersArtifact(characters=[{
             "name": "A", "narrative_role": "lead", "jungian_archetype": "explorer",
             "goal": "open vault", "motivation": "need", "conflict": "security", "arc": "change",

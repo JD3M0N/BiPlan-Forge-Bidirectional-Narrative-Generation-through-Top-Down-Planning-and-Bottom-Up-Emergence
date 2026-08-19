@@ -15,7 +15,8 @@ from .schemas import (
     AcceptedNodeRecord, ChapterAnchorsArtifact, ChapterPlan, CharactersArtifact,
     IncrementalStorylineArtifact, NarrativeEdge, NodeGoal, PlotNode,
     PlotNodeProposal, PlotNodeReview, StoryOutlineArtifact, StoryPlanArtifact,
-    StoryRequest, TaxonomyApplication, TaxonomyBrief, WorldArtifact,
+    StoryRequest, StorylineObligation, StorylineObligationsArtifact,
+    TaxonomyApplication, TaxonomyBrief, WorldArtifact,
 )
 
 
@@ -123,6 +124,7 @@ class IncrementalPlotPlanner:
         outline: StoryOutlineArtifact,
         world: WorldArtifact,
         characters: CharactersArtifact,
+        obligations: StorylineObligationsArtifact | None = None,
         repair_feedback: str = "",
     ) -> ChapterAnchorsArtifact:
         return self.provider.generate_structured(
@@ -130,11 +132,14 @@ class IncrementalPlotPlanner:
                 "Generate exactly one concrete SVO chapter-begin node and one concrete SVO chapter-end "
                 "node for every chapter before generating any internal plot nodes. Use the current, "
                 "preceding, and following chapter abstracts so adjacent states connect smoothly. "
-                "Describe observable events rather than themes or writing instructions. Return all "
-                "artifact text in English."
+                "Make the events realize the supplied neutral narrative obligations without exposing "
+                "their IDs. Describe observable events rather than themes or writing instructions. "
+                "Return all artifact text in English."
             ),
             prompt=(f"OUTLINE:\n{_json(outline)}\n\nWORLD:\n{_json(world)}"
-                    f"\n\nCHARACTERS:\n{_json(characters)}{repair_feedback}"),
+                    f"\n\nCHARACTERS:\n{_json(characters)}"
+                    f"\n\nNARRATIVE OBLIGATIONS:\n{_json(obligations) if obligations else 'none'}"
+                    f"{repair_feedback}"),
             schema=ChapterAnchorsArtifact,
         )
 
@@ -191,6 +196,7 @@ class IncrementalPlotPlanner:
         maximum: int,
         taxonomy_brief: TaxonomyBrief | None = None,
         taxonomy_application: TaxonomyApplication | None = None,
+        obligations: list[StorylineObligation] | None = None,
     ) -> PlotNodeProposal:
         final_instruction = (
             " This is the final allowed slot, so the event must create a natural immediate bridge to "
@@ -203,7 +209,8 @@ class IncrementalPlotPlanner:
                 "Generate one pseudo chapter-plot node as a concrete SVO event. Base it on the "
                 "chapter-begin node, the pre-generated chapter-end target, and accepted internal nodes. "
                 "The event must be caused or enabled by accepted history, follow a character intention, "
-                "meet active opposition, change story state, and avoid repeating prior events."
+                "meet active opposition, change story state, and avoid repeating prior events. It must "
+                "advance the supplied neutral narrative obligations naturally without exposing IDs."
                 " When the event realizes a selected taxonomy movement, copy its taxonomy ID and "
                 "movement ID into taxonomy_id and taxonomy_movement_id. Do not force a taxonomy "
                 "movement merely to fill a slot and do not treat the brief as a fixed sequence."
@@ -224,19 +231,24 @@ class IncrementalPlotPlanner:
                 f"\n\nSELECTED TAXONOMY BRIEF:\n{_json(taxonomy_brief) if taxonomy_brief else 'none'}"
                 f"\n\nSELECTED TAXONOMY REFERENCES:\n"
                 f"{_json(taxonomy_application) if taxonomy_application else 'none'}"
+                f"\n\nCHAPTER NARRATIVE OBLIGATIONS:\n{_json(obligations or [])}"
                 f"\n\nREVISION FEEDBACK:\n{revision or 'none'}"
             ),
             schema=PlotNodeProposal,
         )
 
-    def _review(self, proposal: PlotNodeProposal, chapter: ChapterPlan, anchor) -> PlotNodeReview:
+    def _review(
+        self, proposal: PlotNodeProposal, chapter: ChapterPlan, anchor,
+        obligations: list[StorylineObligation] | None = None,
+    ) -> PlotNodeReview:
         related = self.nekg.related(proposal.subject, proposal.object, limit=10)
         return self.provider.generate_structured(
             system_instruction=(
                 "Review one pseudo chapter-plot node using recent STORYLINE events and NEKG relations. "
                 "Accept only when the final candidate passes all seven semantic checks: causal support, "
                 "character intention, active conflict, continuity, novelty, progress toward the chapter "
-                "ending, and world consistency. If repairable, return a complete replacement candidate. "
+                "ending and supplied narrative obligations, and world consistency. If repairable, "
+                "return a complete replacement candidate. "
                 "Classify relevant review work as theme, logic, emotion, mystery, plot_resolution, "
                 "language, or redundancy. Set aligns_with_cen only when the final candidate makes the "
                 "pre-generated ending a natural immediate next event. Every boolean must evaluate the "
@@ -251,6 +263,7 @@ class IncrementalPlotPlanner:
                 })}"
                 f"\n\nRECENT STORYLINE EVENTS:\n{_json(self.state.recent(8))}"
                 f"\n\nRELATED NEKG RELATIONS:\n{_json(related)}"
+                f"\n\nCHAPTER NARRATIVE OBLIGATIONS:\n{_json(obligations or [])}"
             ),
             schema=PlotNodeReview,
         )
@@ -267,6 +280,7 @@ class IncrementalPlotPlanner:
         outline: StoryOutlineArtifact,
         anchors: ChapterAnchorsArtifact,
         blueprint: NarrativeBlueprint,
+        obligations: StorylineObligationsArtifact | None = None,
         on_checkpoint=None,
         taxonomy_brief: TaxonomyBrief | None = None,
         taxonomy_application: TaxonomyApplication | None = None,
@@ -275,6 +289,11 @@ class IncrementalPlotPlanner:
         self.nekg = self._graph_factory()
         self.history = NodeReviewHistory()
         by_chapter = {item.chapter_id: item for item in anchors.anchors}
+        obligations_by_chapter = {
+            chapter.id: [item for item in (obligations.obligations if obligations else [])
+                         if item.chapter_id == chapter.id]
+            for chapter in outline.chapters
+        }
         expected = [chapter.id for chapter in outline.chapters]
         actual = [anchor.chapter_id for anchor in anchors.anchors]
         if len(actual) != len(set(actual)) or set(actual) != set(expected) or len(actual) != len(expected):
@@ -288,6 +307,7 @@ class IncrementalPlotPlanner:
         previous: PlotNode | None = None
         for chapter in outline.chapters:
             anchor = by_chapter[chapter.id]
+            chapter_obligations = obligations_by_chapter[chapter.id]
             begin_proposal = PlotNodeProposal(
                 subject=anchor.begin_subject,
                 verb=anchor.begin_verb,
@@ -322,7 +342,7 @@ class IncrementalPlotPlanner:
                     try:
                         proposal = self._proposal(
                             chapter, anchor, blueprint, chapter_cpns, revision, slot, maximum,
-                            taxonomy_brief, taxonomy_application,
+                            taxonomy_brief, taxonomy_application, chapter_obligations,
                         )
                     except StructuredResponseError as exc:
                         issue, validation = self._structured_rejection(exc, "proposal")
@@ -369,7 +389,7 @@ class IncrementalPlotPlanner:
                             self._checkpoint(on_checkpoint)
                             continue
                     try:
-                        review = self._review(proposal, chapter, anchor)
+                        review = self._review(proposal, chapter, anchor, chapter_obligations)
                     except StructuredResponseError as exc:
                         issue, validation = self._structured_rejection(exc, "review")
                         self.history.rejected.append({

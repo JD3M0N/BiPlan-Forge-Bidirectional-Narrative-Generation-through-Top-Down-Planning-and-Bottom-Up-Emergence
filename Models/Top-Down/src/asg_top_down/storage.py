@@ -35,7 +35,7 @@ class ArtifactRepository:
             created_at=now,
             updated_at=now,
             status="running",
-            pipeline_version="3.2",
+            pipeline_version="3.3",
         )
         self._write_metadata()
 

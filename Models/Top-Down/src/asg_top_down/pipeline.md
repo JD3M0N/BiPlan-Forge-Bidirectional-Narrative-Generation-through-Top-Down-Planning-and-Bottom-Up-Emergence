@@ -1,22 +1,21 @@
-# Pipeline Top-Down 3.2
+# Pipeline Top-Down 3.3
 
 ```text
-Prompt → Analyst → SQLite retrieval → Planner → World → Characters
-       → premise/synopsis/chapters → all CBN/CEN anchors
-       → incremental reviewed CPN → STORYLINE + local NEKG
-       → three independent craft variants → selection
+Prompt → Analyst → SQLite retrieval → Planner → World → Characters → Outline
+       → Global PPP → Character arcs + Try-fail → neutral obligations
+       → CBN/CEN anchors → incremental reviewed CPN → STORYLINE + local NEKG
+       → one traceable PPP per chapter → sanitized writing briefs
        → chapter writer → blocking craft audit ↔ rewriter → story
 ```
 
-`StoryGenerator` coordina el flujo, pero los prompts viven en agentes de análisis,
-planificación, mundo, personajes, craft y escritura. Los validadores puros viven
-fuera de los agentes y de la persistencia.
+`StoryGenerator` coordina el flujo; los prompts viven en agentes especializados y
+los validadores puros permanecen fuera de agentes y persistencia.
 
-El planificador incremental no conoce PPP, sliders ni try-fail. Acepta un evento
-solo tras los siete controles semánticos, actualiza inmediatamente STORYLINE y
-NEKG, y guarda un checkpoint. Un candidato rechazado nunca llega al grafo.
+El adaptador de craft es la única frontera entre PPP/arcos/try-fail y STORYTELLER.
+El planificador incremental consume `StorylineObligationsArtifact`, pero sus nodos
+siguen siendo contratos narrativos neutrales.
 
-El craft se crea cuando STORYLINE ya es inmutable. Sus referencias son capítulos
-y descripciones naturales. La selección no destruye las alternativas: cualquier
-variante puede redactarse más tarde con `render_variant()` sin recalcular la
-planificación ni alterar la entrega canónica.
+Los PPP locales se crean después de aceptar STORYLINE y enlazan sus beats con nodos
+reales. El compositor elimina esas referencias antes de entregar el brief al
+escritor. Si la cobertura no puede repararse localmente, se permite exactamente una
+replanificación de anclas y STORYLINE antes de fallar.

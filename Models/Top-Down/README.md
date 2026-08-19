@@ -1,37 +1,12 @@
-# ASG Top-Down 3.2
+# ASG Top-Down 3.3
 
-`StoryGenerator` es la única ruta de producción. Separa tres decisiones que no
-deben contaminarse entre sí:
+`StoryGenerator` es la única ruta de producción. El pipeline separa la decisión
+de qué ocurre, el diseño de expectativas narrativas y la redacción de prosa
+mediante artefactos validados.
 
-1. El sistema de taxonomías recupera una paleta de género y el planificador
-   selecciona solo las promesas y posibilidades útiles para esta historia.
-2. STORYTELLER determina qué ocurre mediante una STORYLINE causal de eventos
-   SVO/SVS aceptados y un NEKG local.
-3. El módulo de craft determina cómo preparar expectativas, progresos, pagos,
-   arcos de personajes y ciclos try-fail, sin aceptar, rechazar ni modificar
-   nodos.
-
-Todas las instrucciones enviadas al modelo están en inglés. El analista conserva el
-prompt original, crea una versión inglesa enriquecida y usa el idioma de salida pedido;
-si no se especifica, usa el idioma dominante del prompt y recurre a español únicamente
-cuando no puede determinarlo. El escritor y el auditor aplican ese idioma también a
-los títulos de capítulos.
-
-## Taxonomías flexibles
-
-El catálogo SQLite contiene 24 perfiles ingleses de géneros y story engines,
-desde `heist-caper` y `whodunit-mystery` hasta `first-contact`,
-`family-domestic-drama` y `sports-underdog`. Cada perfil ofrece promesas al
-lector, señales de identificación, roles con variaciones, movimientos `core`,
-`common` u `optional`, complicaciones, giros opcionales, conclusiones,
-subversiones y controles de calidad. No es una plantilla de beats.
-
-La recuperación híbrida devuelve hasta tres candidatos. El plan nuevo usa una
-taxonomía primaria y, solo cuando el prompt lo pide explícitamente, un accent.
-`taxonomy_application.json` registra las opciones elegidas y
-`taxonomy_brief.json` compila descripciones inglesas para los agentes. El
-escritor puede fusionar, reordenar u omitir convenciones no esenciales y nunca
-expone nombres ni IDs taxonómicos en la ficción.
+Todas las instrucciones internas están en inglés. El analista conserva el prompt
+original, crea una especificación inglesa enriquecida y mantiene por separado el
+idioma solicitado para la ficción y sus títulos.
 
 ```python
 from asg_top_down import StoryGenerator
@@ -41,87 +16,90 @@ run = generator.generate(prompt_or_request)
 print(run.story_path)
 ```
 
-## Planificación STORYTELLER
+## Taxonomías flexibles
 
-El catálogo SQLite reproducible recupera perfiles taxonómicos completos mediante
-aliases, señales, FTS y embeddings con fallback local. El planificador crea
-premisa, sinopsis y capítulos; genera un
-CBN y un CEN por capítulo; y luego propone pseudo-CPN uno a uno. Cada revisión
-consulta los ocho eventos más recientes y hasta diez relaciones NEKG, priorizando
-el par dirigido sujeto→objeto y después las relaciones incidentes por recencia.
+El catálogo SQLite contiene 24 perfiles ingleses de géneros y story engines.
+La recuperación híbrida devuelve hasta tres candidatos y el planificador elige
+una taxonomía primaria y, sólo con evidencia explícita, un accent.
+`taxonomy_application.json` conserva las referencias seleccionadas y
+`taxonomy_brief.json` entrega descripciones naturales a los agentes. Las
+convenciones no esenciales pueden fusionarse, reordenarse u omitirse.
 
-Los siete controles causales —causalidad, intención, conflicto, continuidad,
-novedad, avance hacia el final y consistencia del mundo— son bloqueantes. El
-capítulo termina cuando al menos un CPN aceptado conecta naturalmente con el CEN,
-con un techo de `max(1, min(10, ceil(target_words / 350)))`. Solo los eventos
-aceptados actualizan STORYLINE y NEKG. Cada aceptación y rechazo produce un
-checkpoint auditable.
+## Craft modular previo a STORYLINE
 
-## Craft independiente
+Después de crear el outline, agentes independientes producen una única estrategia
+autoritativa:
 
-Después de cerrar STORYLINE, una llamada produce exactamente `variant-1`,
-`variant-2` y `variant-3`, y otra selecciona la variante canónica. Cada plan
-contiene una línea PPP maestra, entre cero y dos sublíneas, una línea PPP local
-por capítulo, hitos observables del slider focal y la cantidad adaptativa de
-ciclos Yes-but/No-and. Los contratos no contienen IDs de nodos ni pueden usar
-los términos CBN, CPN o CEN.
+- `GlobalPPPPlan`: promesa tonal, una línea PPP principal y hasta dos secundarias.
+- `CharacterArcPlan`: hitos observables del slider focal de cada protagonista.
+- `TryFailPlan`: ciclos Yes-but/No-and con consecuencias persistentes.
 
-Cada personaje principal empieza con exactamente dos sliders altos (7–10) y uno
-bajo (1–4). El bajo es el foco y debe terminar alto (7–10). El escritor recibe
-solo la variante seleccionada, el craft del capítulo actual y el capítulo
-anterior completo. El auditor convierte PPP, sliders, try-fail y cada constraint
-del usuario en preguntas bloqueantes; permite hasta dos reescrituras y conserva
-la mejor versión si una etapa tardía falla.
+Un adaptador puro transforma esos artefactos en obligaciones narrativas neutrales.
+STORYTELLER recibe las obligaciones, pero sus contratos `ChapterPlan`, `PlotNode`,
+`PlotNodeProposal` y `PlotNodeReview` no contienen campos PPP, sliders ni try-fail.
+
+El planificador genera CBN/CEN y propone CPN incrementales. Cada candidato debe
+superar causalidad, intención, conflicto, continuidad, novedad, avance hacia el
+final y consistencia del mundo. Sólo eventos aceptados actualizan STORYLINE y NEKG.
+
+## PPP por capítulo y escritura
+
+Con STORYLINE cerrada, `ChapterPPPPlannerAgent` se ejecuta una vez por capítulo,
+en orden. Cada `ChapterPPPPlan` enlaza promesa, progreso y payoff locales con IDs
+de nodos aceptados y cubre todos los puntos PPP globales asignados al capítulo.
+
+Si un PPP local no puede cubrir sus obligaciones, se repara localmente. Si los
+reintentos se agotan, el sistema reconstruye anclas, STORYLINE y NEKG exactamente
+una vez, invalida los enlaces locales anteriores y vuelve a generarlos. Una segunda
+falta de cobertura detiene el run con un diagnóstico estructurado.
+
+Antes de redactar, un compositor crea `ChapterWritingBrief`: conserva las
+instrucciones globales y locales, los hitos y los try-fail relevantes, pero elimina
+IDs de nodos y términos CBN/CPN/CEN. El escritor también recibe eventos, causalidad
+y contexto de entidades sanitizados, además del capítulo anterior completo.
+
+La auditoría convierte tono, PPP global/local, preparación del payoff, sliders,
+try-fail, idioma y constraints explícitos en preguntas bloqueantes. Puede activar
+hasta dos reescrituras y conserva la mejor versión disponible ante fallos tardíos.
 
 ## Artefactos
 
-`plan.json` es la fuente autoritativa de cada variante:
-
 ```text
 craft/
-  selection.json
-  variants/
-    variant-N/
-      plan.json
-      global.json
-      chapters/chapter-XXX.json
-      chapters/chapter-XXX.md
-      draft.md
-      craft_audit.json
-      craft_revision_history.json
-      length_audit.json
-      llm_usage.json
-      story.md
+  global_ppp.json
+  character_arcs.json
+  try_fail.json
+  chapters/
+    chapter-XXX.ppp.json
+    chapter-XXX.brief.json
+storyline_obligations.json
+storyline_obligation_trace.json
+chapter_anchors.json
+storyline.json
+nekg.json
+node_reviews.json
+chapters/chapter-XXX.md
+draft.md
+craft_audit.json
+craft_revision_history.json
+length_audit.json
+story.md
 ```
 
-La variante seleccionada también se refleja en `story.md`, `draft.md`,
-`chapters/`, `craft_audit.json`, `craft_revision_history.json` y
-`length_audit.json` de la raíz para mantener compatibles el CLI, la consola y
-Telegram. Los directorios de variantes renderizadas pueden pasarse directamente
-a `compare-story-runs`.
+`storyline_replans/` y `planning_checkpoint/` conservan los intentos y estados
+intermedios. `llm_usage.json` registra llamadas, tokens, esperas y reintentos.
 
-Una variante alternativa se redacta sin volver a llamar al analista, planificador,
-constructor de mundo, diseñador de personajes, planificador STORYTELLER ni
-selector de craft:
-
-```python
-alternate = generator.render_variant(run.run_dir, "variant-2")
-print(alternate.story_path)
-```
-
-La operación es idempotente cuando ya existe su `story.md` y nunca cambia
-`craft/selection.json` ni la historia canónica. Los runs v2 terminados siguen
-siendo entregables; los parciales reinician desde `request.json`, y
-`render_variant` exige artefactos v3.
-
-## Recuperación y límites
-
-`planning_checkpoint/` conserva STORYLINE, NEKG y revisiones tras cada decisión.
-`resume()` devuelve inmediatamente un run terminado y reinicia un parcial en un
-nuevo directorio. La longitud final se audita con tolerancia −10 %/+20 %. Las
-llamadas, tokens, esperas y reintentos se conservan en `llm_usage.json`.
+Top-Down 3.3 no lee contratos de craft ni variantes de versiones anteriores y ya
+no expone `render_variant()`. `compare-story-runs` continúa comparando dos runs o
+dos archivos `story.md` distintos:
 
 ```powershell
-compare-story-runs Stories/Top-Down/run/craft/variants/variant-1 `
-  Stories/Top-Down/run/craft/variants/variant-2 --output comparacion.html
+compare-story-runs Stories/Top-Down/run-a Stories/Top-Down/run-b `
+  --output comparacion.html
+```
+
+## Desarrollo
+
+```powershell
+python -m pytest Models/Top-Down/tests
 ```

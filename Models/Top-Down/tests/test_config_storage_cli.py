@@ -33,7 +33,7 @@ def test_repository_never_serializes_an_api_key(tmp_path) -> None:
             "warnings",
             "pipeline_version",
         }
-    assert data["pipeline_version"] == "3.2"
+    assert data["pipeline_version"] == "3.3"
 
 
 def test_settings_require_api_key(tmp_path, monkeypatch) -> None:

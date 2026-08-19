@@ -2,6 +2,11 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [1.3.0] - 2026-08-18
+
+- Actualizada la dependencia mínima a ASG Top-Down 3.3.0 y conservada la salida
+  canónica de historias del nuevo pipeline PPP modular.
+
 ## [1.2.0] - 2026-08-18
 
 - Eliminado el modo de tres alternativas y la dependencia de Prompt-crafter.

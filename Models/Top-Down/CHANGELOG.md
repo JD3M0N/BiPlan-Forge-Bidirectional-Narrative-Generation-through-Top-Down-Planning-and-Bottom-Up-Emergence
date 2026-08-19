@@ -2,6 +2,18 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [3.3.0] - 2026-08-18
+
+- Sustituido el contenedor `CraftVariant` por planes independientes de PPP global,
+  arcos de personaje, try-fail y PPP por capítulo.
+- Movido el craft estructural antes de STORYLINE mediante obligaciones narrativas
+  neutrales que no contaminan los contratos de nodos.
+- Añadida trazabilidad de PPP locales a nodos aceptados, briefs sanitizados para el
+  escritor y una única replanificación estructural ante cobertura imposible.
+- Eliminadas las tres variantes, el selector, `render_variant()` y los artefactos
+  `craft/variants/`; conservadas las salidas canónicas para consola y Telegram.
+- Versionados el paquete y los runs como Top-Down 3.3.
+
 ## [3.2.0] - 2026-08-18
 
 - Integrado en el analista el enriquecimiento inglés de cada prompt, conservando

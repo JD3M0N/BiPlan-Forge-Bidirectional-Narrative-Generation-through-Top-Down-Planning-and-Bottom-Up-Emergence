@@ -363,29 +363,55 @@ class NarrativeEntityGraphArtifact(BaseModel):
     relations: list[EntityRelation] = Field(default_factory=list)
 
 
-PPPLineKind = Literal["master", "plot", "character", "relationship"]
+PPPLineKind = Literal["plot", "character", "relationship"]
+PPPPhase = Literal["promise", "progress", "payoff"]
 
 
-class PPPPoint(BaseModel):
+class TonePromise(BaseModel):
+    description: str = Field(min_length=1)
+    opening_signal: str = Field(min_length=1)
+    continuity_rule: str = Field(min_length=1)
+
+
+class GlobalPPPPoint(BaseModel):
+    id: str = Field(min_length=1)
     chapter_id: str
     description: str = Field(min_length=1)
+    reader_effect: str = Field(min_length=1)
 
 
-class PPPLine(BaseModel):
+class GlobalPPPLine(BaseModel):
     id: str = Field(min_length=1)
     kind: PPPLineKind
     subject: str = Field(min_length=1)
-    promise: PPPPoint
-    progress: list[PPPPoint] = Field(min_length=1)
-    payoff: PPPPoint
+    promise: GlobalPPPPoint
+    progress: list[GlobalPPPPoint] = Field(min_length=1)
+    payoff: GlobalPPPPoint
+
+    @model_validator(mode="after")
+    def point_ids_are_unique(self) -> "GlobalPPPLine":
+        ids = [self.promise.id, *(point.id for point in self.progress), self.payoff.id]
+        if len(ids) != len(set(ids)):
+            raise ValueError("global PPP point ids must be unique within a line")
+        return self
 
 
-class ChapterCraftLine(BaseModel):
-    chapter_id: str
-    promise: str = Field(min_length=1)
-    progress: list[str] = Field(min_length=1)
-    payoff: str = Field(min_length=1)
-    advances_global_line_ids: list[str] = Field(min_length=1)
+class GlobalPPPPlan(BaseModel):
+    tone_promise: TonePromise
+    primary_line: GlobalPPPLine
+    secondary_lines: list[GlobalPPPLine] = Field(default_factory=list, max_length=2)
+
+    @model_validator(mode="after")
+    def line_and_point_ids_are_unique(self) -> "GlobalPPPPlan":
+        lines = [self.primary_line, *self.secondary_lines]
+        line_ids = [line.id for line in lines]
+        point_ids = [point.id for line in lines
+                     for point in [line.promise, *line.progress, line.payoff]]
+        if len(line_ids) != len(set(line_ids)):
+            raise ValueError("global PPP line ids must be unique")
+        if len(point_ids) != len(set(point_ids)):
+            raise ValueError("global PPP point ids must be unique")
+        return self
 
 
 class CharacterMilestone(BaseModel):
@@ -393,6 +419,10 @@ class CharacterMilestone(BaseModel):
     chapter_id: str
     stage: Literal["start", "transition", "end"]
     description: str = Field(min_length=1)
+
+
+class CharacterArcPlan(BaseModel):
+    milestones: list[CharacterMilestone] = Field(min_length=1)
 
 
 class TryFailCycle(BaseModel):
@@ -403,38 +433,68 @@ class TryFailCycle(BaseModel):
     consequence: str = Field(min_length=1)
 
 
-class CraftVariant(BaseModel):
-    id: Literal["variant-1", "variant-2", "variant-3"]
-    strategy: str = Field(min_length=1)
-    master_line: PPPLine
-    subplots: list[PPPLine] = Field(default_factory=list, max_length=2)
-    chapters: list[ChapterCraftLine] = Field(min_length=1)
-    character_milestones: list[CharacterMilestone] = Field(default_factory=list)
-    try_fail_cycles: list[TryFailCycle] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def master_is_master(self) -> "CraftVariant":
-        if self.master_line.kind != "master":
-            raise ValueError("master_line.kind must be master")
-        ids = [self.master_line.id, *(line.id for line in self.subplots)]
-        if len(ids) != len(set(ids)):
-            raise ValueError("global craft line ids must be unique")
-        return self
+class TryFailPlan(BaseModel):
+    cycles: list[TryFailCycle] = Field(min_length=1)
 
 
-class CraftVariantsArtifact(BaseModel):
-    variants: list[CraftVariant] = Field(min_length=3, max_length=3)
-
-    @model_validator(mode="after")
-    def exact_variant_ids(self) -> "CraftVariantsArtifact":
-        if {variant.id for variant in self.variants} != {"variant-1", "variant-2", "variant-3"}:
-            raise ValueError("craft variants must use variant-1, variant-2, and variant-3")
-        return self
+class StorylineObligation(BaseModel):
+    id: str = Field(min_length=1)
+    chapter_id: str
+    source: Literal["global_ppp", "character_arc", "try_fail"]
+    phase: str = Field(min_length=1)
+    description: str = Field(min_length=1)
 
 
-class CraftSelectionArtifact(BaseModel):
-    selected_variant_id: Literal["variant-1", "variant-2", "variant-3"]
-    rationale: str = Field(min_length=1)
+class StorylineObligationsArtifact(BaseModel):
+    obligations: list[StorylineObligation] = Field(min_length=1)
+
+
+class ChapterPPPBeat(BaseModel):
+    description: str = Field(min_length=1)
+    node_ids: list[str] = Field(min_length=1)
+
+
+class ChapterPPPPlan(BaseModel):
+    chapter_id: str
+    promise: ChapterPPPBeat
+    progress: list[ChapterPPPBeat] = Field(min_length=1)
+    payoff: ChapterPPPBeat
+    advances_global_point_ids: list[str] = Field(min_length=1)
+
+
+class PPPLineBrief(BaseModel):
+    kind: PPPLineKind
+    subject: str
+    promise: str
+    progress: list[str]
+    payoff: str
+
+
+class ChapterWritingBrief(BaseModel):
+    tone_promise: str
+    global_lines: list[PPPLineBrief] = Field(min_length=1)
+    chapter_promise: str
+    chapter_progress: list[str] = Field(min_length=1)
+    chapter_payoff: str
+    character_milestones: list[str] = Field(default_factory=list)
+    try_fail_cycles: list[str] = Field(default_factory=list)
+
+
+class ObligationTraceEntry(BaseModel):
+    obligation_id: str
+    chapter_id: str
+    node_ids: list[str] = Field(min_length=1)
+
+
+class StorylineObligationTrace(BaseModel):
+    entries: list[ObligationTraceEntry] = Field(min_length=1)
+
+
+class StoryCraftPlan(BaseModel):
+    global_ppp: GlobalPPPPlan
+    character_arcs: CharacterArcPlan
+    try_fail: TryFailPlan
+    chapters: list[ChapterPPPPlan] = Field(min_length=1)
 
 
 class DiagnosticAudit(BaseModel):
@@ -555,4 +615,4 @@ class RunMetadata(BaseModel):
     error_code: str | None = None
     error_stage: str | None = None
     warnings: list[str] = Field(default_factory=list)
-    pipeline_version: str = "3.0"
+    pipeline_version: str = "3.3"

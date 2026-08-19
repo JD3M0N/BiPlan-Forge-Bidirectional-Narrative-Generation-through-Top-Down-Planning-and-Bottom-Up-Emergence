@@ -1,4 +1,4 @@
-"""Agents for independent post-STORYLINE craft planning and prose review."""
+"""Independent modular craft planners plus prose critic and rewriter."""
 
 from __future__ import annotations
 
@@ -7,79 +7,114 @@ import json
 from .base import Agent, json_text
 from ..craft import audit_questions, normalize_audit, try_fail_target
 from ..schemas import (
-    CharactersArtifact, CraftAuditArtifact, CraftSelectionArtifact, CraftVariant,
-    CraftVariantsArtifact, IncrementalStorylineArtifact, StoryOutlineArtifact,
-    StoryPlanArtifact, StoryRequest, TaxonomyBrief, WorldArtifact,
+    ChapterPPPPlan, ChapterPlan, CharactersArtifact, CharacterArcPlan,
+    CraftAuditArtifact, GlobalPPPPlan, IncrementalStorylineArtifact,
+    StoryCraftPlan, StoryOutlineArtifact, StoryPlanArtifact, StoryRequest,
+    StorylineObligation, TaxonomyBrief, TryFailPlan, WorldArtifact,
 )
 
 
-class CraftVariantPlannerAgent(Agent[CraftVariantsArtifact]):
-    name = "craft_variants"
+class GlobalPPPPlannerAgent(Agent[GlobalPPPPlan]):
+    name = "global_ppp"
 
     def run(
-        self,
-        request: StoryRequest,
-        plan: StoryPlanArtifact,
-        world: WorldArtifact,
-        characters: CharactersArtifact,
-        outline: StoryOutlineArtifact,
-        storyline: IncrementalStorylineArtifact,
-        repair_feedback: str = "",
-        taxonomy_brief: TaxonomyBrief | None = None,
-    ) -> CraftVariantsArtifact:
-        cycles = try_fail_target(request.target_words)
+        self, request: StoryRequest, plan: StoryPlanArtifact, world: WorldArtifact,
+        characters: CharactersArtifact, outline: StoryOutlineArtifact,
+        repair_feedback: str = "", taxonomy_brief: TaxonomyBrief | None = None,
+    ) -> GlobalPPPPlan:
         return self.provider.generate_structured(
             system_instruction=(
-                "Design exactly three substantially different post-STORYLINE craft variants named "
-                "variant-1, variant-2, and variant-3. Each variant needs one master "
-                "promise-progress-payoff line spanning the first through final chapter, zero to two "
-                "complete global subplots, and exactly one local promise-progress-payoff line for every "
-                "chapter. Every local line must identify which global line it advances. For every main "
-                "character, create observable start, transition, and end milestones for the already "
-                "chosen low-to-high focus slider. Add exactly the supplied number of Yes-but or No-and "
-                "cycles with persistent consequences. Fit all guidance to accepted events without "
-                "changing causal facts. Refer only to chapter IDs and natural-language events: never "
-                "include plot-node IDs or the terms CBN, CPN, or CEN. Promise means reader expectation; "
-                "progress means meaningful signposting; payoff must be surprising but prepared. Return "
-                "all artifact text in English regardless of the requested fiction language."
+                "Design one authoritative global Promise-Progress-Payoff plan before STORYLINE. "
+                "Include a tone promise, exactly one primary line, and zero to two supporting plot, "
+                "character, or relationship lines. Every line needs one promise, at least one visible "
+                "conflict-bearing progress signal, and one prepared, fulfilling, potentially surprising "
+                "payoff. Give every point a stable descriptive ID and schedule at least one global point "
+                "in every chapter. The primary promise starts in the first chapter and its payoff occurs "
+                "in the final chapter. Use chapter IDs and natural-language events only. Return all "
+                "artifact text in English."
             ),
             prompt=(
                 f"REQUEST:\n{json_text(request)}\n\nPLAN:\n{json_text(plan)}"
                 f"\n\nWORLD:\n{json_text(world)}\n\nCHARACTERS:\n{json_text(characters)}"
-                f"\n\nOUTLINE:\n{json_text(outline)}\n\nACCEPTED STORYLINE:\n{json_text(storyline)}"
+                f"\n\nOUTLINE:\n{json_text(outline)}"
                 f"\n\nTAXONOMY BRIEF:\n{json_text(taxonomy_brief) if taxonomy_brief else 'none'}"
-                f"\n\nEXACT TRY-FAIL COUNT PER VARIANT: {cycles}{repair_feedback}"
+                f"{repair_feedback}"
             ),
-            schema=CraftVariantsArtifact,
+            schema=GlobalPPPPlan,
         )
 
 
-class CraftVariantSelectorAgent(Agent[CraftSelectionArtifact]):
-    name = "craft_selector"
+class CharacterArcPlannerAgent(Agent[CharacterArcPlan]):
+    name = "character_arcs"
 
     def run(
-        self,
-        request: StoryRequest,
-        characters: CharactersArtifact,
-        storyline: IncrementalStorylineArtifact,
-        variants: CraftVariantsArtifact,
-        repair_feedback: str = "",
-        taxonomy_brief: TaxonomyBrief | None = None,
-    ) -> CraftSelectionArtifact:
+        self, characters: CharactersArtifact, outline: StoryOutlineArtifact,
+        global_ppp: GlobalPPPPlan, repair_feedback: str = "",
+    ) -> CharacterArcPlan:
         return self.provider.generate_structured(
             system_instruction=(
-                "Select exactly one supplied craft variant. Prefer faithful user-constraint coverage, "
-                "causal fit with the accepted storyline, clear global and chapter-level progression, "
-                "earned payoffs, and observable low-to-high main-character growth. Return only a valid "
-                "variant ID and a concise English rationale. Do not assign numeric quality scores."
+                "Plan observable character craft independently from PPP. For every main character, "
+                "create exactly start, transition, and end milestones for the already selected "
+                "low-to-high focus slider. Schedule them in nondecreasing chapter order and make the "
+                "change affect consequential choices that support the global PPP. Return English text."
             ),
             prompt=(
-                f"REQUEST:\n{json_text(request)}\n\nCHARACTERS:\n{json_text(characters)}"
-                f"\n\nACCEPTED STORYLINE:\n{json_text(storyline)}"
-                f"\n\nTAXONOMY BRIEF:\n{json_text(taxonomy_brief) if taxonomy_brief else 'none'}"
-                f"\n\nCRAFT VARIANTS:\n{json_text(variants)}{repair_feedback}"
+                f"CHARACTERS:\n{json_text(characters)}\n\nOUTLINE:\n{json_text(outline)}"
+                f"\n\nGLOBAL PPP:\n{json_text(global_ppp)}{repair_feedback}"
             ),
-            schema=CraftSelectionArtifact,
+            schema=CharacterArcPlan,
+        )
+
+
+class TryFailPlannerAgent(Agent[TryFailPlan]):
+    name = "try_fail"
+
+    def run(
+        self, request: StoryRequest, outline: StoryOutlineArtifact,
+        global_ppp: GlobalPPPPlan, repair_feedback: str = "",
+    ) -> TryFailPlan:
+        count = try_fail_target(request.target_words)
+        return self.provider.generate_structured(
+            system_instruction=(
+                "Plan exactly the requested number of independent Yes-but or No-and cycles. Each "
+                "attempt must advance a global promise through conflict, change the terms of the "
+                "problem, and have a persistent consequence. Use chapter IDs and English text."
+            ),
+            prompt=(
+                f"REQUEST:\n{json_text(request)}\n\nOUTLINE:\n{json_text(outline)}"
+                f"\n\nGLOBAL PPP:\n{json_text(global_ppp)}"
+                f"\n\nEXACT CYCLE COUNT: {count}{repair_feedback}"
+            ),
+            schema=TryFailPlan,
+        )
+
+
+class ChapterPPPPlannerAgent(Agent[ChapterPPPPlan]):
+    name = "chapter_ppp"
+
+    def run(
+        self, global_ppp: GlobalPPPPlan, chapter: ChapterPlan,
+        storyline: IncrementalStorylineArtifact,
+        chapter_obligations: list[StorylineObligation],
+        previous: ChapterPPPPlan | None = None, repair_feedback: str = "",
+    ) -> ChapterPPPPlan:
+        nodes = [node for node in storyline.nodes if node.chapter_id == chapter.id]
+        return self.provider.generate_structured(
+            system_instruction=(
+                "Ground one chapter-level Promise-Progress-Payoff line in the immutable accepted "
+                "STORYLINE. Establish a local expectation, signal progress through conflict, and "
+                "resolve or consequentially transform it. Reference only supplied node IDs from this "
+                "chapter, in event order. Include every global PPP point scheduled for the chapter in "
+                "advances_global_point_ids. Do not invent, alter, or reorder facts. Return English text."
+            ),
+            prompt=(
+                f"GLOBAL PPP:\n{json_text(global_ppp)}\n\nCHAPTER:\n{json_text(chapter)}"
+                f"\n\nACCEPTED CHAPTER NODES:\n{json_text(nodes)}"
+                f"\n\nCHAPTER OBLIGATIONS:\n{json_text(chapter_obligations)}"
+                f"\n\nPREVIOUS CHAPTER PPP:\n{json_text(previous) if previous else 'none'}"
+                f"{repair_feedback}"
+            ),
+            schema=ChapterPPPPlan,
         )
 
 
@@ -87,27 +122,22 @@ class CraftCriticAgent(Agent[CraftAuditArtifact]):
     name = "craft_critic"
 
     def run(
-        self,
-        request: StoryRequest,
-        variant: CraftVariant,
-        characters: CharactersArtifact,
-        outline: StoryOutlineArtifact,
-        storyline: IncrementalStorylineArtifact,
-        draft: str,
+        self, request: StoryRequest, craft: StoryCraftPlan,
+        characters: CharactersArtifact, outline: StoryOutlineArtifact,
+        storyline: IncrementalStorylineArtifact, draft: str,
         taxonomy_brief: TaxonomyBrief | None = None,
     ) -> CraftAuditArtifact:
-        questions = audit_questions(request, variant, characters, taxonomy_brief)
+        questions = audit_questions(request, craft, characters, taxonomy_brief)
         raw = self.provider.generate_structured(
             system_instruction=(
                 "You are a demanding story-craft critic. Answer every supplied question exactly once "
-                "using its exact question_id, category, subject_id, question, and blocking value. Judge "
-                "the fiction rather than planning labels and cite concise location-specific evidence. "
-                "A failure must include an actionable issue and revision instruction. Use not_applicable "
-                "only for non-blocking questions. Write all audit analysis in English; concise evidence "
-                "may quote the fiction's requested language. Do not assign scores or invent questions."
+                "using its exact metadata. Judge fiction rather than planning labels and cite concise "
+                "location-specific evidence. Failures require actionable issues and revision instructions. "
+                "Use not_applicable only for non-blocking questions. Write analysis in English, assign "
+                "no scores, and invent no questions."
             ),
             prompt=(
-                f"REQUEST:\n{json_text(request)}\n\nCRAFT VARIANT:\n{json_text(variant)}"
+                f"REQUEST:\n{json_text(request)}\n\nMODULAR CRAFT:\n{json_text(craft)}"
                 f"\n\nCHARACTERS:\n{json_text(characters)}\n\nOUTLINE:\n{json_text(outline)}"
                 f"\n\nSTORYLINE:\n{json_text(storyline)}"
                 f"\n\nTAXONOMY BRIEF:\n{json_text(taxonomy_brief) if taxonomy_brief else 'none'}"
@@ -123,39 +153,30 @@ class CraftRewriterAgent(Agent[str]):
     name = "craft_rewriter"
 
     def run(
-        self,
-        request: StoryRequest,
-        variant: CraftVariant,
-        characters: CharactersArtifact,
-        outline: StoryOutlineArtifact,
-        storyline: IncrementalStorylineArtifact,
-        draft: str,
-        audit: CraftAuditArtifact,
-        length_instruction: str = "",
-        taxonomy_brief: TaxonomyBrief | None = None,
+        self, request: StoryRequest, craft: StoryCraftPlan,
+        characters: CharactersArtifact, outline: StoryOutlineArtifact,
+        storyline: IncrementalStorylineArtifact, draft: str, audit: CraftAuditArtifact,
+        length_instruction: str = "", taxonomy_brief: TaxonomyBrief | None = None,
     ) -> str:
-        failed = [answer for answer in audit.answers if answer.verdict == "fail"]
-        failed.sort(key=lambda answer: not answer.blocking)
-        taxonomy_context = (
-            "none" if taxonomy_brief is None else json_text(taxonomy_brief)
+        failed = sorted(
+            (answer for answer in audit.answers if answer.verdict == "fail"),
+            key=lambda answer: not answer.blocking,
         )
         return self.provider.generate_text(
             system_instruction=(
                 "You are a literary rewriter. Rewrite the complete fiction once, applying every failed "
                 "audit instruction. Preserve accepted facts, causal dependencies, event outcomes, user "
-                f"constraints, the required output language ({request.language}), and approximate length. "
-                "Keep all reader-visible prose and every chapter heading in that language. Realize global "
-                "and local "
-                "promise-progress-payoff lines, character growth, and try-fail consequences through "
-                "action and choice. Never expose scores, IDs, questions, or planning terminology. "
-                "Treat taxonomy material as flexible guidance and never expose taxonomy names or IDs. "
-                "Return only the complete revised story in Markdown and preserve every canonical chapter heading."
+                f"constraints, the output language ({request.language}), headings, and approximate length. "
+                "Realize global and chapter PPP, character growth, and try-fail consequences through "
+                "action and choice. Never expose IDs, questions, taxonomy, or planning terminology. "
+                "Return only the complete revised story in Markdown with canonical chapter headings."
             ),
             prompt=(
-                f"REQUEST:\n{json_text(request)}\n\nCRAFT VARIANT:\n{json_text(variant)}"
+                f"REQUEST:\n{json_text(request)}\n\nMODULAR CRAFT:\n{json_text(craft)}"
                 f"\n\nCHARACTERS:\n{json_text(characters)}\n\nOUTLINE:\n{json_text(outline)}"
                 f"\n\nSTORYLINE:\n{json_text(storyline)}"
-                f"\n\nTAXONOMY BRIEF:\n{taxonomy_context}\n\nFAILED AUDIT ANSWERS:\n"
+                f"\n\nTAXONOMY BRIEF:\n{json_text(taxonomy_brief) if taxonomy_brief else 'none'}"
+                f"\n\nFAILED AUDIT ANSWERS:\n"
                 f"{json.dumps([answer.model_dump(mode='json') for answer in failed], ensure_ascii=False, indent=2)}"
                 f"\n\nDETERMINISTIC LENGTH INSTRUCTION:\n{length_instruction or 'none'}"
                 f"\n\nDRAFT:\n{draft}"

@@ -1,20 +1,16 @@
-"""Pure validation and audit helpers for chapter-scoped craft variants."""
+"""Pure contracts, adapters, validation, and audit helpers for modular story craft."""
 
 from __future__ import annotations
 
-import json
 import math
-import re
 
 from .schemas import (
-    Character, CharactersArtifact, CraftAuditAnswer, CraftAuditArtifact,
-    CraftVariant, CraftVariantsArtifact, DiagnosticAudit, StoryOutlineArtifact,
-    StoryRequest, TaxonomyBrief,
-)
-
-
-FORBIDDEN_STORYTELLER_REFERENCE = re.compile(
-    r"\bn_\d{4}\b|\b(?:CBN|CPN|CEN)\b", re.IGNORECASE,
+    ChapterPPPPlan, ChapterPlan, ChapterWritingBrief, Character, CharacterArcPlan,
+    CharactersArtifact, CraftAuditAnswer, CraftAuditArtifact, DiagnosticAudit,
+    GlobalPPPLine, GlobalPPPPlan, IncrementalStorylineArtifact, ObligationTraceEntry,
+    PPPLineBrief, StoryCraftPlan, StoryOutlineArtifact, StoryRequest,
+    StorylineObligation, StorylineObligationsArtifact, StorylineObligationTrace,
+    TaxonomyBrief, TryFailPlan,
 )
 
 
@@ -35,94 +31,241 @@ def validate_craft_characters(characters: CharactersArtifact) -> None:
         raise ValueError(f"main characters require slider arcs: {', '.join(missing)}")
 
 
-def _line_order(line, chapter_orders: dict[str, int]) -> None:
-    points = [line.promise, *line.progress, line.payoff]
-    unknown = [point.chapter_id for point in points if point.chapter_id not in chapter_orders]
-    if unknown:
-        raise ValueError(f"global craft line {line.id} references unknown chapters: {unknown}")
-    orders = [chapter_orders[point.chapter_id] for point in points]
-    if orders != sorted(orders):
-        raise ValueError(f"global craft line {line.id} is out of order")
+def global_lines(plan: GlobalPPPPlan) -> list[GlobalPPPLine]:
+    return [plan.primary_line, *plan.secondary_lines]
 
 
-def validate_craft_variant(
-    variant: CraftVariant,
+def global_points(plan: GlobalPPPPlan):
+    return [point for line in global_lines(plan)
+            for point in [line.promise, *line.progress, line.payoff]]
+
+
+def _chapter_orders(outline: StoryOutlineArtifact) -> dict[str, int]:
+    orders = {chapter.id: chapter.order for chapter in outline.chapters}
+    if len(orders) != len(outline.chapters):
+        raise ValueError("outline chapter ids must be unique")
+    return orders
+
+
+def validate_global_ppp(plan: GlobalPPPPlan, outline: StoryOutlineArtifact) -> None:
+    orders = _chapter_orders(outline)
+    for line in global_lines(plan):
+        points = [line.promise, *line.progress, line.payoff]
+        unknown = [point.chapter_id for point in points if point.chapter_id not in orders]
+        if unknown:
+            raise ValueError(f"global PPP line {line.id} references unknown chapters: {unknown}")
+        point_orders = [orders[point.chapter_id] for point in points]
+        if point_orders != sorted(point_orders):
+            raise ValueError(f"global PPP line {line.id} is out of order")
+    first = min(orders.values())
+    last = max(orders.values())
+    if orders[plan.primary_line.promise.chapter_id] != first:
+        raise ValueError("the primary promise must begin in the first chapter")
+    if orders[plan.primary_line.payoff.chapter_id] != last:
+        raise ValueError("the primary payoff must occur in the final chapter")
+    covered = {point.chapter_id for point in global_points(plan)}
+    missing = set(orders) - covered
+    if missing:
+        raise ValueError(f"global PPP must schedule at least one point in every chapter: {sorted(missing)}")
+
+
+def validate_character_arc_plan(
+    plan: CharacterArcPlan,
     outline: StoryOutlineArtifact,
     characters: CharactersArtifact,
-    target_words: int,
 ) -> None:
     validate_craft_characters(characters)
-    chapter_orders = {chapter.id: chapter.order for chapter in outline.chapters}
-    expected_chapters = set(chapter_orders)
-    if len(chapter_orders) != len(outline.chapters):
-        raise ValueError("outline chapter ids must be unique")
-
-    serialized = json.dumps(variant.model_dump(mode="json"), ensure_ascii=False)
-    if FORBIDDEN_STORYTELLER_REFERENCE.search(serialized):
-        raise ValueError("craft variants cannot reference STORYTELLER nodes or node types")
-
-    lines = [variant.master_line, *variant.subplots]
-    for line in lines:
-        _line_order(line, chapter_orders)
-    first_order = min(chapter_orders.values())
-    last_order = max(chapter_orders.values())
-    if chapter_orders[variant.master_line.promise.chapter_id] != first_order:
-        raise ValueError("the master promise must begin in the first chapter")
-    if chapter_orders[variant.master_line.payoff.chapter_id] != last_order:
-        raise ValueError("the master payoff must occur in the final chapter")
-
-    actual_chapters = [chapter.chapter_id for chapter in variant.chapters]
-    if len(actual_chapters) != len(set(actual_chapters)) or set(actual_chapters) != expected_chapters:
-        raise ValueError("each craft variant requires exactly one local line per chapter")
-    global_ids = {line.id for line in lines}
-    for chapter in variant.chapters:
-        unknown = set(chapter.advances_global_line_ids) - global_ids
-        if unknown:
-            raise ValueError(f"chapter {chapter.chapter_id} references unknown global lines: {unknown}")
-
+    orders = _chapter_orders(outline)
     mains = {character.name.casefold(): character for character in main_characters(characters)}
-    milestones_by_character: dict[str, list] = {name: [] for name in mains}
-    for milestone in variant.character_milestones:
+    grouped = {name: [] for name in mains}
+    for milestone in plan.milestones:
         key = milestone.character_name.casefold()
         if key not in mains:
             raise ValueError(f"unknown main character milestone: {milestone.character_name}")
-        if milestone.chapter_id not in chapter_orders:
+        if milestone.chapter_id not in orders:
             raise ValueError(f"character milestone references unknown chapter: {milestone.chapter_id}")
-        milestones_by_character[key].append(milestone)
-    for name, milestones in milestones_by_character.items():
-        if len(milestones) != 3 or {item.stage for item in milestones} != {"start", "transition", "end"}:
-            raise ValueError(f"main character {mains[name].name} requires start, transition, and end milestones")
+        grouped[key].append(milestone)
+    for key, milestones in grouped.items():
+        if len(milestones) != 3 or {item.stage for item in milestones} != {
+            "start", "transition", "end",
+        }:
+            raise ValueError(
+                f"main character {mains[key].name} requires start, transition, and end milestones"
+            )
         by_stage = {item.stage: item for item in milestones}
-        orders = [chapter_orders[by_stage[stage].chapter_id] for stage in ("start", "transition", "end")]
-        if orders != sorted(orders):
-            raise ValueError(f"milestones for {mains[name].name} are out of order")
+        sequence = [orders[by_stage[stage].chapter_id]
+                    for stage in ("start", "transition", "end")]
+        if sequence != sorted(sequence):
+            raise ValueError(f"milestones for {mains[key].name} are out of order")
 
-    cycles = variant.try_fail_cycles
-    expected_cycles = try_fail_target(target_words)
-    if len(cycles) != expected_cycles:
-        raise ValueError(f"craft variant requires exactly {expected_cycles} try-fail cycles")
-    if len({cycle.id for cycle in cycles}) != len(cycles):
+
+def validate_try_fail_plan(
+    plan: TryFailPlan,
+    outline: StoryOutlineArtifact,
+    target_words: int,
+) -> None:
+    known = set(_chapter_orders(outline))
+    expected = try_fail_target(target_words)
+    if len(plan.cycles) != expected:
+        raise ValueError(f"try-fail plan requires exactly {expected} cycles")
+    ids = [cycle.id for cycle in plan.cycles]
+    if len(ids) != len(set(ids)):
         raise ValueError("try-fail cycle ids must be unique")
-    if any(cycle.chapter_id not in chapter_orders for cycle in cycles):
+    if any(cycle.chapter_id not in known for cycle in plan.cycles):
         raise ValueError("try-fail cycles may only reference outline chapters")
 
 
-def validate_craft_variants(
-    artifact: CraftVariantsArtifact,
+def build_storyline_obligations(
+    global_ppp: GlobalPPPPlan,
+    character_arcs: CharacterArcPlan,
+    try_fail: TryFailPlan,
+) -> StorylineObligationsArtifact:
+    obligations: list[StorylineObligation] = []
+    for line in global_lines(global_ppp):
+        for phase, points in (
+            ("promise", [line.promise]), ("progress", line.progress), ("payoff", [line.payoff]),
+        ):
+            obligations.extend(StorylineObligation(
+                id=point.id,
+                chapter_id=point.chapter_id,
+                source="global_ppp",
+                phase=phase,
+                description=point.description,
+            ) for point in points)
+    obligations.extend(StorylineObligation(
+        id=f"character:{item.character_name}:{item.stage}",
+        chapter_id=item.chapter_id,
+        source="character_arc",
+        phase=item.stage,
+        description=item.description,
+    ) for item in character_arcs.milestones)
+    obligations.extend(StorylineObligation(
+        id=f"try_fail:{item.id}",
+        chapter_id=item.chapter_id,
+        source="try_fail",
+        phase=item.outcome,
+        description=f"{item.action}; consequence: {item.consequence}",
+    ) for item in try_fail.cycles)
+    return StorylineObligationsArtifact(obligations=obligations)
+
+
+def validate_storyline_obligations(
+    artifact: StorylineObligationsArtifact,
     outline: StoryOutlineArtifact,
-    characters: CharactersArtifact,
-    target_words: int,
 ) -> None:
-    strategies = [re.sub(r"\W+", " ", item.strategy.casefold()).strip() for item in artifact.variants]
-    if len(strategies) != len(set(strategies)):
-        raise ValueError("craft variants require distinct strategies")
-    for variant in artifact.variants:
-        validate_craft_variant(variant, outline, characters, target_words)
+    known = set(_chapter_orders(outline))
+    ids = [item.id for item in artifact.obligations]
+    if len(ids) != len(set(ids)):
+        raise ValueError("storyline obligation ids must be unique")
+    unknown = [item.chapter_id for item in artifact.obligations if item.chapter_id not in known]
+    if unknown:
+        raise ValueError(f"storyline obligations reference unknown chapters: {unknown}")
+
+
+def expected_global_point_ids(global_ppp: GlobalPPPPlan, chapter_id: str) -> set[str]:
+    return {point.id for point in global_points(global_ppp) if point.chapter_id == chapter_id}
+
+
+def validate_chapter_ppp(
+    plan: ChapterPPPPlan,
+    chapter: ChapterPlan,
+    storyline: IncrementalStorylineArtifact,
+    global_ppp: GlobalPPPPlan,
+) -> None:
+    if plan.chapter_id != chapter.id:
+        raise ValueError(f"chapter PPP expected {chapter.id}, received {plan.chapter_id}")
+    chapter_nodes = {node.id: node for node in storyline.nodes if node.chapter_id == chapter.id}
+    beats = [plan.promise, *plan.progress, plan.payoff]
+    referenced = [node_id for beat in beats for node_id in beat.node_ids]
+    unknown = [node_id for node_id in referenced if node_id not in chapter_nodes]
+    if unknown:
+        raise ValueError(f"chapter PPP references unknown or foreign nodes: {unknown}")
+    positions = [min(chapter_nodes[node_id].local_order for node_id in beat.node_ids)
+                 for beat in beats]
+    if positions != sorted(positions):
+        raise ValueError("chapter PPP beats must follow accepted node order")
+    expected = expected_global_point_ids(global_ppp, chapter.id)
+    supplied = set(plan.advances_global_point_ids)
+    all_ids = {point.id for point in global_points(global_ppp)}
+    if supplied - all_ids:
+        raise ValueError(f"chapter PPP references unknown global points: {sorted(supplied - all_ids)}")
+    if supplied - expected:
+        raise ValueError(
+            f"chapter PPP references global points scheduled for another chapter: "
+            f"{sorted(supplied - expected)}"
+        )
+    if expected - supplied:
+        raise ValueError(f"chapter PPP leaves global points uncovered: {sorted(expected - supplied)}")
+
+
+def validate_chapter_ppp_plans(
+    plans: list[ChapterPPPPlan],
+    outline: StoryOutlineArtifact,
+    storyline: IncrementalStorylineArtifact,
+    global_ppp: GlobalPPPPlan,
+) -> None:
+    expected_chapters = {chapter.id for chapter in outline.chapters}
+    actual = [plan.chapter_id for plan in plans]
+    if len(actual) != len(set(actual)) or set(actual) != expected_chapters:
+        raise ValueError("chapter PPP plans must match outline chapters exactly")
+    by_id = {chapter.id: chapter for chapter in outline.chapters}
+    for plan in plans:
+        validate_chapter_ppp(plan, by_id[plan.chapter_id], storyline, global_ppp)
+    covered = {identifier for plan in plans for identifier in plan.advances_global_point_ids}
+    required = {point.id for point in global_points(global_ppp)}
+    if required - covered:
+        raise ValueError(f"global PPP coverage is incomplete: {sorted(required - covered)}")
+
+
+def build_obligation_trace(plans: list[ChapterPPPPlan]) -> StorylineObligationTrace:
+    entries: list[ObligationTraceEntry] = []
+    for plan in plans:
+        node_ids = list(dict.fromkeys(
+            node_id for beat in [plan.promise, *plan.progress, plan.payoff]
+            for node_id in beat.node_ids
+        ))
+        entries.extend(ObligationTraceEntry(
+            obligation_id=identifier,
+            chapter_id=plan.chapter_id,
+            node_ids=node_ids,
+        ) for identifier in plan.advances_global_point_ids)
+    return StorylineObligationTrace(entries=entries)
+
+
+def build_chapter_writing_brief(
+    global_ppp: GlobalPPPPlan,
+    chapter_ppp: ChapterPPPPlan,
+    character_arcs: CharacterArcPlan,
+    try_fail: TryFailPlan,
+) -> ChapterWritingBrief:
+    return ChapterWritingBrief(
+        tone_promise=(
+            f"{global_ppp.tone_promise.description}. Opening signal: "
+            f"{global_ppp.tone_promise.opening_signal}. Continuity: "
+            f"{global_ppp.tone_promise.continuity_rule}"
+        ),
+        global_lines=[PPPLineBrief(
+            kind=line.kind,
+            subject=line.subject,
+            promise=line.promise.description,
+            progress=[point.description for point in line.progress],
+            payoff=line.payoff.description,
+        ) for line in global_lines(global_ppp)],
+        chapter_promise=chapter_ppp.promise.description,
+        chapter_progress=[beat.description for beat in chapter_ppp.progress],
+        chapter_payoff=chapter_ppp.payoff.description,
+        character_milestones=[item.description for item in character_arcs.milestones
+                              if item.chapter_id == chapter_ppp.chapter_id],
+        try_fail_cycles=[
+            f"{item.action}; {item.outcome}; persistent consequence: {item.consequence}"
+            for item in try_fail.cycles if item.chapter_id == chapter_ppp.chapter_id
+        ],
+    )
 
 
 def audit_questions(
     request: StoryRequest,
-    variant: CraftVariant,
+    craft: StoryCraftPlan,
     characters: CharactersArtifact,
     taxonomy_brief: TaxonomyBrief | None = None,
 ) -> list[dict[str, object]]:
@@ -131,31 +274,30 @@ def audit_questions(
     def add(identifier: str, category: str, subject: str, question: str,
             blocking: bool = True) -> None:
         questions.append({
-            "question_id": identifier,
-            "category": category,
-            "subject_id": subject,
-            "question": question,
-            "blocking": blocking,
+            "question_id": identifier, "category": category, "subject_id": subject,
+            "question": question, "blocking": blocking,
         })
 
-    for line in [variant.master_line, *variant.subplots]:
+    add("global_ppp:tone", "global_ppp", "tone",
+        "Does the fiction establish and consistently honor the planned tone promise?")
+    for line in global_lines(craft.global_ppp):
         prefix = f"global_ppp:{line.id}"
         add(f"{prefix}:promise", "global_ppp", line.id,
-            "Does the opening establish this global narrative expectation?")
+            f"Does the opening establish this expectation: {line.promise.description}")
         add(f"{prefix}:progress", "global_ppp", line.id,
-            "Does the story provide visible and meaningful progress toward this global payoff?")
+            "Does the reader receive visible, conflict-bearing progress toward this payoff?")
         add(f"{prefix}:payoff", "global_ppp", line.id,
-            "Does the story deliver the promised global resolution?")
+            f"Does the fiction fulfill this payoff: {line.payoff.description}")
         add(f"{prefix}:earned", "global_ppp", line.id,
-            "Is the global payoff surprising but earned by prior progress?", False)
-    for chapter in variant.chapters:
+            "Is the payoff both prepared and satisfyingly surprising?")
+    for chapter in craft.chapters:
         prefix = f"chapter_ppp:{chapter.chapter_id}"
         add(f"{prefix}:promise", "chapter_ppp", chapter.chapter_id,
             "Does this chapter establish its local expectation?")
         add(f"{prefix}:progress", "chapter_ppp", chapter.chapter_id,
-            "Does this chapter visibly advance its local expectation?")
+            "Does this chapter visibly advance that expectation through conflict?")
         add(f"{prefix}:payoff", "chapter_ppp", chapter.chapter_id,
-            "Does this chapter resolve or consequentially transform its local expectation?")
+            "Does this chapter resolve or consequentially transform its expectation?")
     for character in main_characters(characters):
         prefix = f"character:{character.name}"
         add(f"{prefix}:start", "character", character.name,
@@ -166,7 +308,7 @@ def audit_questions(
             "Does focus-slider growth affect a consequential choice?")
         add(f"{prefix}:end", "character", character.name,
             "Does final behavior demonstrate that the focus slider has become high?")
-    for cycle in variant.try_fail_cycles:
+    for cycle in craft.try_fail.cycles:
         prefix = f"try_fail:{cycle.id}"
         add(f"{prefix}:outcome", "try_fail", cycle.id,
             "Is the planned Yes-but or No-and attempt dramatized?")
@@ -175,27 +317,15 @@ def audit_questions(
     for index, constraint in enumerate(request.constraints, 1):
         add(f"constraint:{index}", "constraint", str(index),
             f"Does the complete fiction satisfy this user constraint: {constraint}")
-    add(
-        "language:output", "language", request.language,
-        f"Is all reader-visible fiction, including chapter headings, written in {request.language}?",
-    )
+    add("language:output", "language", request.language,
+        f"Is all reader-visible fiction, including headings, written in {request.language}?")
     if taxonomy_brief:
         for index, promise in enumerate(taxonomy_brief.reader_promises, 1):
-            add(
-                f"taxonomy:promise:{index}", "taxonomy", taxonomy_brief.primary_taxonomy,
-                f"Does the complete fiction fulfill this selected reader promise: {promise}", True,
-            )
+            add(f"taxonomy:promise:{index}", "taxonomy", taxonomy_brief.primary_taxonomy,
+                f"Does the fiction fulfill this selected reader promise: {promise}")
         for index, check in enumerate(taxonomy_brief.quality_checks, 1):
-            add(
-                f"taxonomy:quality:{index}", "taxonomy", taxonomy_brief.primary_taxonomy,
-                f"Does the fiction satisfy this taxonomy quality check: {check}", False,
-            )
-        if taxonomy_brief.avoid:
-            add(
-                "taxonomy:anti-formula", "taxonomy", taxonomy_brief.primary_taxonomy,
-                "Does the fiction avoid the listed formulaic shortcuts while remaining recognizable? "
-                + "; ".join(taxonomy_brief.avoid), False,
-            )
+            add(f"taxonomy:quality:{index}", "taxonomy", taxonomy_brief.primary_taxonomy,
+                f"Does the fiction satisfy this taxonomy quality check: {check}", False)
     add("global:causality", "global", "story",
         "Does the revision preserve accepted causal facts and event outcomes?")
     add("global:scaffolding", "global", "story",
@@ -214,8 +344,7 @@ def normalize_audit(
         answer = supplied.get(identifier)
         if answer is None:
             answer = CraftAuditAnswer(
-                **expected,
-                verdict="fail",
+                **expected, verdict="fail",
                 evidence="The critic did not provide evidence for this required question.",
                 issue="The criterion was not evaluated.",
                 revision_instruction="Evaluate and repair this criterion explicitly.",
@@ -233,10 +362,9 @@ def diagnostic_from_craft(audit: CraftAuditArtifact) -> DiagnosticAudit:
     return DiagnosticAudit(
         causal_issues=[answer.issue for answer in failed if answer.question_id == "global:causality"],
         intentionality_issues=[answer.issue for answer in failed if answer.category == "character"],
-        continuity_issues=[answer.issue for answer in failed
-                           if answer.category in {
-                               "global_ppp", "chapter_ppp", "try_fail", "constraint", "taxonomy",
-                           }],
+        continuity_issues=[answer.issue for answer in failed if answer.category in {
+            "global_ppp", "chapter_ppp", "try_fail", "constraint", "taxonomy",
+        }],
         template_like_passages=[answer.issue for answer in failed
                                 if answer.question_id == "global:scaffolding"],
         revision_suggestions=audit.revision_instructions,
