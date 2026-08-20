@@ -6,18 +6,18 @@ Cada carpeta que contiene una historia terminada (`story.md`) incluye un
 
 ## Parámetros
 
-- `coherence`: sentido global de la historia, conexión lógica entre los
-  eventos y progresión causal clara, sin saltos abruptos ni huecos en la trama.
-- `pacing`: estructura reconocible —inicio, nudo y desenlace— y dosificación de
-  la información y la tensión sin monotonía ni aceleración excesiva.
+- `coherence`: sentido global, continuidad del estado del mundo y del
+  conocimiento, motivaciones creíbles y progresión causal sin contradicciones.
+- `pacing`: estructura reconocible, progreso perceptible en cada tramo y
+  dosificación de información, decisiones, consecuencias y tensión.
 - `creativity`: originalidad, incorporación de elementos inesperados e ideas
   valiosas, evitando clichés y tropos trillados.
-- `engagement`: interés, disfrute e impacto emocional que el relato mantiene
-  en el lector de principio a fin.
+- `engagement`: interés e impacto emocional sostenidos por preguntas claras,
+  progreso visible, costos cambiantes y preparación narrativa.
 - `relevance`: fidelidad al prompt original y ausencia de elementos fuera de
   lugar respecto al tema solicitado.
-- `satisfaction`: valoración global de cuánto satisface la historia las
-  expectativas del evaluador.
+- `satisfaction`: valoración de si las expectativas importantes reciben pagos
+  claros, preparados, costosos y sorprendentes sin romper lo prometido.
 
 ## Formato
 

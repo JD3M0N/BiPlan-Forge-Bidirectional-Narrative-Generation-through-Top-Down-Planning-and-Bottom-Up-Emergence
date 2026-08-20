@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import json
 import threading
 import time
+import uuid
 from typing import Callable, Protocol, TypeVar
 
 from pydantic import BaseModel, ValidationError
@@ -64,7 +65,8 @@ class GeminiProvider:
     def __init__(self, api_key: str, model_name: str, *, rpm_limit: int = 15,
                  rpm_reserve: int = 1, tpm_limit: int = 0,
                  max_retries: int = 3, max_retry_delay: int = 120,
-                 embedding_model: str = "gemini-embedding-2") -> None:
+                 embedding_model: str = "gemini-embedding-2",
+                 generation_profiles: dict[str, float] | None = None) -> None:
         from google import genai
         from google.genai import types
 
@@ -87,9 +89,33 @@ class GeminiProvider:
         self.wait_callback: Callable[[int, str], None] | None = None
         self.usage_callback: Callable[[LLMUsageRecord], None] | None = None
         self.usage_records: list[LLMUsageRecord] = []
+        defaults = {
+            "extraction": 0.15, "review": 0.2, "planning": 0.5,
+            "proposal": 0.85, "prose": 0.9, "rewrite": 0.35,
+        }
+        self.generation_profiles = {**defaults, **(generation_profiles or {})}
+
+    def _temperature(self, operation: str, system_instruction: str = "") -> float:
+        text = f"{operation} {system_instruction}".casefold()
+        if "rewrite" in text:
+            profile = "rewrite"
+        elif any(word in text for word in ("review", "critic", "analyst")):
+            profile = "review" if "analyst" not in text else "extraction"
+        elif any(word in text for word in ("proposal", "plotnodeproposal", "chapter body")):
+            profile = "proposal"
+        elif operation == "text":
+            profile = "prose"
+        else:
+            profile = "planning"
+        defaults = {
+            "extraction": 0.15, "review": 0.2, "planning": 0.5,
+            "proposal": 0.85, "prose": 0.9, "rewrite": 0.35,
+        }
+        return float(getattr(self, "generation_profiles", defaults).get(profile, defaults[profile]))
 
     def _embed(self, texts: list[str], prefix: str) -> list[list[float]]:
         """Embed a batch using the asymmetric retrieval format recommended by Gemini."""
+        started = time.monotonic()
         try:
             contents = [f"{prefix}{text}" for text in texts]
             # Embeddings 2 aggregates multiple contents into one multimodal vector;
@@ -99,12 +125,19 @@ class GeminiProvider:
             response = self._client.models.embed_content(
                 model=self.embedding_model_name, contents=contents,
             )
+            self._record_auxiliary(
+                f"embedding:{self.embedding_model_name}", started, "succeeded",
+            )
             embeddings = getattr(response, "embeddings", None)
             if embeddings is None:
                 single = getattr(response, "embedding", None)
                 embeddings = [single] if single is not None else []
             return [list(item.values) for item in embeddings]
         except Exception as exc:
+            self._record_auxiliary(
+                f"embedding:{self.embedding_model_name}", started, "failed",
+                type(exc).__name__,
+            )
             raise _safe_provider_error(exc) from exc
 
     def embed_query(self, text: str) -> list[float]:
@@ -116,18 +149,44 @@ class GeminiProvider:
     def _preflight_tokens(self, prompt: str, system_instruction: str) -> None:
         if not getattr(self, "_token_limiter", None):
             return
-        response = self._client.models.count_tokens(
-            model=self.model_name,
-            contents=f"{system_instruction}\n\n{prompt}",
-        )
+        started = time.monotonic()
+        try:
+            response = self._client.models.count_tokens(
+                model=self.model_name,
+                contents=f"{system_instruction}\n\n{prompt}",
+            )
+            self._record_auxiliary("count_tokens", started, "succeeded")
+        except Exception as exc:
+            self._record_auxiliary("count_tokens", started, "failed", type(exc).__name__)
+            raise
         tokens = int(getattr(response, "total_tokens", 0) or 0)
         self._token_limiter.acquire(tokens, self.wait_callback)
+
+    def _emit_record(self, record: LLMUsageRecord) -> None:
+        if not hasattr(self, "usage_records"):
+            self.usage_records = []
+        self.usage_records.append(record)
+        callback = getattr(self, "usage_callback", None)
+        if callback:
+            callback(record)
+
+    def _record_auxiliary(self, operation: str, started: float,
+                          status: str, error_code: str | None = None) -> None:
+        self._emit_record(LLMUsageRecord(
+            call_id=uuid.uuid4().hex, operation=operation, stage=operation,
+            attempt=1, status=status, error_code=error_code,
+            model=(self.embedding_model_name if operation.startswith("embedding:")
+                   else self.model_name),
+            timestamp=datetime.now(timezone.utc),
+            duration_seconds=time.monotonic() - started,
+        ))
 
     def _record(self, response, operation: str, started: float, retries: int, waited: float) -> None:
         usage = getattr(response, "usage_metadata", None)
         value = lambda name: int(getattr(usage, name, 0) or 0) if usage else 0
         record = LLMUsageRecord(
-            operation=operation, model=self.model_name,
+            call_id=uuid.uuid4().hex, operation=operation, stage=operation,
+            attempt=retries + 1, status="succeeded", model=self.model_name,
             timestamp=datetime.now(timezone.utc),
             duration_seconds=time.monotonic() - started,
             prompt_tokens=value("prompt_token_count"),
@@ -137,10 +196,17 @@ class GeminiProvider:
             total_tokens=value("total_token_count"), retries=retries,
             wait_seconds=waited,
         )
-        self.usage_records.append(record)
-        callback = getattr(self, "usage_callback", None)
-        if callback:
-            callback(record)
+        self._emit_record(record)
+
+    def _record_failure(self, operation: str, started: float, attempt: int,
+                        waited: float, error_code: str) -> None:
+        self._emit_record(LLMUsageRecord(
+            call_id=uuid.uuid4().hex, operation=operation, stage=operation,
+            attempt=attempt + 1, status="failed", error_code=error_code,
+            model=self.model_name, timestamp=datetime.now(timezone.utc),
+            duration_seconds=time.monotonic() - started, wait_seconds=waited,
+            retries=attempt,
+        ))
 
     def _generate(self, operation: str, invoke):
         started, waited = time.monotonic(), 0.0
@@ -160,6 +226,7 @@ class GeminiProvider:
             except Exception as exc:
                 details = retry_details(exc)
                 status = details.get("status")
+                self._record_failure(operation, started, attempt, waited, str(status or type(exc).__name__))
                 quota_id = str(details.get("quota_id") or "").casefold()
                 metric = str(details.get("metric") or "").casefold()
                 permanent_quota = status == 429 and any(
@@ -211,6 +278,7 @@ class GeminiProvider:
                         config=types.GenerateContentConfig(
                             system_instruction=system_instruction,
                             response_mime_type="application/json", response_schema=schema,
+                            temperature=self._temperature(schema.__name__, system_instruction),
                         ),
                     ),
                 )
@@ -261,7 +329,8 @@ class GeminiProvider:
                 lambda: self._client.models.generate_content(
                     model=self.model_name, contents=prompt,
                     config=types.GenerateContentConfig(
-                        system_instruction=system_instruction, temperature=0.8,
+                        system_instruction=system_instruction,
+                        temperature=self._temperature("text", system_instruction),
                     ),
                 ),
             )

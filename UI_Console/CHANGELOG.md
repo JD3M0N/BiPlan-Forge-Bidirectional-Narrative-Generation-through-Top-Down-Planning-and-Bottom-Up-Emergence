@@ -2,6 +2,11 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [1.4.0] - 2026-08-20
+
+- Actualizada la dependencia a ASG Top-Down 4.0 y mantenida la interfaz pública
+  `StoryGenerator.generate/run` y la lectura de `story.md` históricos.
+
 ## [1.3.0] - 2026-08-18
 
 - Actualizada la dependencia mínima a ASG Top-Down 3.3.0 y conservada la salida

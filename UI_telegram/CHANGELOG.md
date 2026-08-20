@@ -2,6 +2,12 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [1.4.0] - 2026-08-20
+
+- Actualizada la dependencia a ASG Top-Down 4.0.
+- Los trabajos interrumpidos quedan `recovery_pending`; la cola restante continúa
+  y ya no se simula una reanudación creando un run nuevo.
+
 ## [1.3.0] - 2026-08-18
 
 - Actualizada la dependencia mínima a ASG Top-Down 3.3.0 y conservada la entrega

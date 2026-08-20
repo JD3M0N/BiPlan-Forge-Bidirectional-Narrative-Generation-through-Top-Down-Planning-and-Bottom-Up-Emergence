@@ -6,6 +6,8 @@ import pytest
 from asg_top_down import cli
 from asg_top_down.config import find_project_root, load_settings
 from asg_top_down.errors import ConfigurationError
+from asg_top_down.errors import ArtifactValidationError
+from asg_top_down.generator import StoryRun
 from asg_top_down.storage import ArtifactRepository, slugify
 from asg_top_down.schemas import StoryRequest
 from pydantic import ValidationError
@@ -33,7 +35,7 @@ def test_repository_never_serializes_an_api_key(tmp_path) -> None:
             "warnings",
             "pipeline_version",
         }
-    assert data["pipeline_version"] == "3.3"
+    assert data["pipeline_version"] == "4.0"
 
 
 def test_settings_require_api_key(tmp_path, monkeypatch) -> None:
@@ -101,6 +103,12 @@ def test_repository_saves_incremental_nested_artifacts(tmp_path) -> None:
         (repository.run_dir / "metadata.json").read_text(encoding="utf-8")
     )
     assert metadata["completed_stages"] == ["scenes"]
+    manifest = json.loads(
+        (repository.run_dir / "pipeline_manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["completed_stages"] == ["scenes"]
+    assert len(manifest["artifacts"]["scenes/chapter-001.md"]["sha256"]) == 64
+    assert not list(repository.run_dir.rglob("*.tmp"))
 
 
 def test_find_project_root_from_nested_path(tmp_path) -> None:
@@ -108,6 +116,23 @@ def test_find_project_root_from_nested_path(tmp_path) -> None:
     nested = tmp_path / "Stories" / "Top-Down"
     nested.mkdir(parents=True)
     assert find_project_root(nested) == tmp_path
+
+
+def test_story_run_reads_completed_v3_but_rejects_incomplete_runs(tmp_path) -> None:
+    completed = tmp_path / "completed-v3"
+    completed.mkdir()
+    (completed / "metadata.json").write_text(
+        json.dumps({"pipeline_version": "3.3"}), encoding="utf-8",
+    )
+    (completed / "story.md").write_text("## Historia\n\nFin", encoding="utf-8")
+    assert StoryRun(completed).story_path.is_file()
+    incomplete = tmp_path / "incomplete-v3"
+    incomplete.mkdir()
+    (incomplete / "metadata.json").write_text(
+        json.dumps({"pipeline_version": "3.3"}), encoding="utf-8",
+    )
+    with pytest.raises(ArtifactValidationError, match="incompleta"):
+        StoryRun(incomplete)
 
 
 def test_cli_rejects_empty_prompt(monkeypatch, capsys) -> None:

@@ -42,6 +42,11 @@ class AnalystAgent(Agent[StoryRequest]):
             flags=re.IGNORECASE,
         )
         target_words = request.target_words
+        chapter_match = re.search(
+            r"(?<!\d)(\d+)\s*(?:cap[ií]tulos?|chapters?)\b",
+            prompt,
+            flags=re.IGNORECASE,
+        )
         if match:
             target_words = int(re.sub(r"[^\d]", "", match.group(1)))
         elif target_words == StoryRequest.model_fields["target_words"].default:
@@ -50,4 +55,5 @@ class AnalystAgent(Agent[StoryRequest]):
             **request.model_dump(),
             "original_prompt": prompt,
             "target_words": target_words,
+            "requested_chapters": int(chapter_match.group(1)) if chapter_match else request.requested_chapters,
         })

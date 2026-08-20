@@ -1,341 +1,286 @@
-"""Pure contracts, adapters, validation, and audit helpers for modular story craft."""
+"""Deterministic validation and sanitization for post-STORYLINE craft."""
 
 from __future__ import annotations
 
-import math
-
-from .schemas import (
-    ChapterPPPPlan, ChapterPlan, ChapterWritingBrief, Character, CharacterArcPlan,
-    CharactersArtifact, CraftAuditAnswer, CraftAuditArtifact, DiagnosticAudit,
-    GlobalPPPLine, GlobalPPPPlan, IncrementalStorylineArtifact, ObligationTraceEntry,
-    PPPLineBrief, StoryCraftPlan, StoryOutlineArtifact, StoryRequest,
-    StorylineObligation, StorylineObligationsArtifact, StorylineObligationTrace,
-    TaxonomyBrief, TryFailPlan,
+from .craft_models import (
+    ChapterCraftView, ChapterWritingBrief, CharacterArcPlan, CharacterWritingCard,
+    CraftAlignment, PromiseActionBrief, PromiseLedger, SceneWritingDirective,
+    StoryCraftPlan, TryFailPlan, EntityStateBrief, FactualEventBrief,
+    PlannedMutationBrief,
 )
+from .domain import CharactersArtifact, StoryOutlineArtifact, StoryRequest, TaxonomyBrief
+from .schemas import CraftAuditAnswer, CraftAuditArtifact
+from .storyline.models import IncrementalStorylineArtifact, StoryStateSnapshot
 
 
 def try_fail_target(target_words: int) -> int:
-    return max(2, min(7, math.ceil(target_words / 2000)))
+    return max(1, min(6, round(target_words / 600)))
 
 
-def main_characters(characters: CharactersArtifact) -> list[Character]:
-    return [character for character in characters.characters if character.importance == "main"]
+def main_characters(characters: CharactersArtifact):
+    return [item for item in characters.characters if item.importance == "main"]
 
 
 def validate_craft_characters(characters: CharactersArtifact) -> None:
-    mains = main_characters(characters)
-    if not mains:
-        raise ValueError("character planning requires at least one main character")
-    missing = [character.name for character in mains if character.slider_arc is None]
-    if missing:
-        raise ValueError(f"main characters require slider arcs: {', '.join(missing)}")
-
-
-def global_lines(plan: GlobalPPPPlan) -> list[GlobalPPPLine]:
-    return [plan.primary_line, *plan.secondary_lines]
-
-
-def global_points(plan: GlobalPPPPlan):
-    return [point for line in global_lines(plan)
-            for point in [line.promise, *line.progress, line.payoff]]
+    for character in main_characters(characters):
+        if not character.flaw_cost.strip():
+            raise ValueError(f"{character.id} needs an observable flaw cost")
+        if character.slider_arc is None:
+            raise ValueError(f"{character.id} needs a validated slider arc")
 
 
 def _chapter_orders(outline: StoryOutlineArtifact) -> dict[str, int]:
     orders = {chapter.id: chapter.order for chapter in outline.chapters}
     if len(orders) != len(outline.chapters):
-        raise ValueError("outline chapter ids must be unique")
+        raise ValueError("chapter IDs must be unique")
     return orders
 
 
-def validate_global_ppp(plan: GlobalPPPPlan, outline: StoryOutlineArtifact) -> None:
+def validate_promise_ledger(
+    ledger: PromiseLedger, outline: StoryOutlineArtifact, target_words: int,
+) -> None:
     orders = _chapter_orders(outline)
-    for line in global_lines(plan):
-        points = [line.promise, *line.progress, line.payoff]
-        unknown = [point.chapter_id for point in points if point.chapter_id not in orders]
+    final_chapter = max(outline.chapters, key=lambda item: item.order).id
+    required_kinds = {"story_direction", "character_conflict", "genre_structure"}
+    if {item.kind for item in ledger.promises} != required_kinds:
+        raise ValueError("ledger needs direction, character/conflict, and genre promises")
+    for promise in ledger.promises:
+        chapter_ids = [
+            promise.opening.chapter_id,
+            *(item.chapter_id for item in promise.progress),
+            promise.payoff.chapter_id,
+        ]
+        unknown = set(chapter_ids) - set(orders)
         if unknown:
-            raise ValueError(f"global PPP line {line.id} references unknown chapters: {unknown}")
-        point_orders = [orders[point.chapter_id] for point in points]
-        if point_orders != sorted(point_orders):
-            raise ValueError(f"global PPP line {line.id} is out of order")
-    first = min(orders.values())
-    last = max(orders.values())
-    if orders[plan.primary_line.promise.chapter_id] != first:
-        raise ValueError("the primary promise must begin in the first chapter")
-    if orders[plan.primary_line.payoff.chapter_id] != last:
-        raise ValueError("the primary payoff must occur in the final chapter")
-    covered = {point.chapter_id for point in global_points(plan)}
-    missing = set(orders) - covered
-    if missing:
-        raise ValueError(f"global PPP must schedule at least one point in every chapter: {sorted(missing)}")
+            raise ValueError(f"promise {promise.id} references unknown chapters: {sorted(unknown)}")
+        sequence = [orders[item] for item in chapter_ids]
+        if sequence != sorted(sequence) or sequence[0] > sequence[-1]:
+            raise ValueError(f"promise {promise.id} must open, progress, then pay off")
+        if not promise.payoff.prepared_by_progress_ids:
+            raise ValueError(f"promise {promise.id} has an unprepared payoff")
+    primary = next(item for item in ledger.promises if item.id == ledger.primary_promise_id)
+    if primary.payoff.chapter_id != final_chapter:
+        raise ValueError("the primary promise must close in the final chapter")
+    if target_words >= 1200 and len(primary.progress) < 2:
+        raise ValueError("stories of 1200+ words need two primary-promise progresses")
 
 
 def validate_character_arc_plan(
-    plan: CharacterArcPlan,
-    outline: StoryOutlineArtifact,
-    characters: CharactersArtifact,
+    plan: CharacterArcPlan, characters: CharactersArtifact,
+    outline: StoryOutlineArtifact, ledger: PromiseLedger,
 ) -> None:
-    validate_craft_characters(characters)
+    mains = {item.id: item for item in main_characters(characters)}
+    if {arc.character_id for arc in plan.arcs} != set(mains):
+        raise ValueError("character arc plan must cover every main character exactly once")
     orders = _chapter_orders(outline)
-    mains = {character.name.casefold(): character for character in main_characters(characters)}
-    grouped = {name: [] for name in mains}
-    for milestone in plan.milestones:
-        key = milestone.character_name.casefold()
-        if key not in mains:
-            raise ValueError(f"unknown main character milestone: {milestone.character_name}")
-        if milestone.chapter_id not in orders:
-            raise ValueError(f"character milestone references unknown chapter: {milestone.chapter_id}")
-        grouped[key].append(milestone)
-    for key, milestones in grouped.items():
-        if len(milestones) != 3 or {item.stage for item in milestones} != {
-            "start", "transition", "end",
-        }:
-            raise ValueError(
-                f"main character {mains[key].name} requires start, transition, and end milestones"
-            )
-        by_stage = {item.stage: item for item in milestones}
-        sequence = [orders[by_stage[stage].chapter_id]
-                    for stage in ("start", "transition", "end")]
-        if sequence != sorted(sequence):
-            raise ValueError(f"milestones for {mains[key].name} are out of order")
+    promise_ids = {item.id for item in ledger.promises}
+    expected_stages = ["establishment", "pressure", "decisive_choice", "consequence"]
+    for arc in plan.arcs:
+        profile = mains[arc.character_id]
+        assert profile.slider_arc is not None
+        if arc.arc_type != profile.slider_arc.arc_type:
+            raise ValueError(f"arc type mismatch for {arc.character_id}")
+        if [item.stage for item in arc.evidences] != expected_stages:
+            raise ValueError(f"{arc.character_id} needs four ordered arc evidences")
+        if any(item.chapter_id not in orders for item in arc.evidences):
+            raise ValueError(f"{arc.character_id} references an unknown chapter")
+        if [orders[item.chapter_id] for item in arc.evidences] != sorted(
+            orders[item.chapter_id] for item in arc.evidences
+        ):
+            raise ValueError(f"{arc.character_id} arc evidence is out of order")
+        if arc.enables_or_prevents_promise_id not in promise_ids:
+            raise ValueError(f"{arc.character_id} must connect internal and external payoffs")
 
 
 def validate_try_fail_plan(
-    plan: TryFailPlan,
-    outline: StoryOutlineArtifact,
-    target_words: int,
+    plan: TryFailPlan, request: StoryRequest, outline: StoryOutlineArtifact,
+    ledger: PromiseLedger,
 ) -> None:
-    known = set(_chapter_orders(outline))
-    expected = try_fail_target(target_words)
-    if len(plan.cycles) != expected:
-        raise ValueError(f"try-fail plan requires exactly {expected} cycles")
-    ids = [cycle.id for cycle in plan.cycles]
-    if len(ids) != len(set(ids)):
-        raise ValueError("try-fail cycle ids must be unique")
-    if any(cycle.chapter_id not in known for cycle in plan.cycles):
-        raise ValueError("try-fail cycles may only reference outline chapters")
+    if len(plan.cycles) != try_fail_target(request.target_words):
+        raise ValueError("try-fail cycle count does not match the adaptive target")
+    chapter_ids = set(_chapter_orders(outline))
+    promise_ids = {item.id for item in ledger.promises}
+    if len({item.id for item in plan.cycles}) != len(plan.cycles):
+        raise ValueError("try-fail IDs must be unique")
+    for cycle in plan.cycles:
+        if cycle.chapter_id not in chapter_ids or cycle.promise_id not in promise_ids:
+            raise ValueError(f"invalid try-fail references in {cycle.id}")
+        if cycle.lesson.strip() == cycle.stakes_change.strip():
+            raise ValueError(f"{cycle.id} must both teach and change the stakes")
 
 
-def build_storyline_obligations(
-    global_ppp: GlobalPPPPlan,
-    character_arcs: CharacterArcPlan,
-    try_fail: TryFailPlan,
-) -> StorylineObligationsArtifact:
-    obligations: list[StorylineObligation] = []
-    for line in global_lines(global_ppp):
-        for phase, points in (
-            ("promise", [line.promise]), ("progress", line.progress), ("payoff", [line.payoff]),
-        ):
-            obligations.extend(StorylineObligation(
-                id=point.id,
-                chapter_id=point.chapter_id,
-                source="global_ppp",
-                phase=phase,
-                description=point.description,
-            ) for point in points)
-    obligations.extend(StorylineObligation(
-        id=f"character:{item.character_name}:{item.stage}",
-        chapter_id=item.chapter_id,
-        source="character_arc",
-        phase=item.stage,
-        description=item.description,
-    ) for item in character_arcs.milestones)
-    obligations.extend(StorylineObligation(
-        id=f"try_fail:{item.id}",
-        chapter_id=item.chapter_id,
-        source="try_fail",
-        phase=item.outcome,
-        description=f"{item.action}; consequence: {item.consequence}",
-    ) for item in try_fail.cycles)
-    return StorylineObligationsArtifact(obligations=obligations)
+def all_craft_ids(
+    ledger: PromiseLedger, arcs: CharacterArcPlan, try_fail: TryFailPlan,
+) -> set[str]:
+    return {
+        beat_id for promise in ledger.promises
+        for beat_id in [
+            promise.opening.id, *(item.id for item in promise.progress), promise.payoff.id,
+        ]
+    } | {
+        evidence.id for arc in arcs.arcs for evidence in arc.evidences
+    } | {cycle.id for cycle in try_fail.cycles}
 
 
-def validate_storyline_obligations(
-    artifact: StorylineObligationsArtifact,
-    outline: StoryOutlineArtifact,
+def validate_craft_alignment(
+    alignment: CraftAlignment, chapters: list[ChapterCraftView],
+    ledger: PromiseLedger, arcs: CharacterArcPlan, try_fail: TryFailPlan,
+    outline: StoryOutlineArtifact, storyline: IncrementalStorylineArtifact,
 ) -> None:
-    known = set(_chapter_orders(outline))
-    ids = [item.id for item in artifact.obligations]
-    if len(ids) != len(set(ids)):
-        raise ValueError("storyline obligation ids must be unique")
-    unknown = [item.chapter_id for item in artifact.obligations if item.chapter_id not in known]
-    if unknown:
-        raise ValueError(f"storyline obligations reference unknown chapters: {unknown}")
+    expected = all_craft_ids(ledger, arcs, try_fail)
+    entries = {item.craft_id: item for item in alignment.entries}
+    if set(entries) != expected:
+        raise ValueError(f"craft alignment mismatch: missing={sorted(expected-set(entries))}")
+    nodes = {item.id: item for item in storyline.nodes}
+    for entry in entries.values():
+        if not set(entry.node_ids) <= set(nodes):
+            raise ValueError(f"{entry.craft_id} references an unaccepted node")
+        if any(nodes[node_id].chapter_id != entry.chapter_id for node_id in entry.node_ids):
+            raise ValueError(f"{entry.craft_id} crosses chapter boundaries")
+    chapter_ids = set(_chapter_orders(outline))
+    if {item.chapter_id for item in chapters} != chapter_ids:
+        raise ValueError("chapter craft views must cover every chapter")
+    promise_ids = {item.id for item in ledger.promises}
+    for view in chapters:
+        acted = {
+            *view.opened_promise_ids, *view.progressed_promise_ids, *view.paid_promise_ids,
+        }
+        if not acted <= promise_ids:
+            raise ValueError(f"chapter {view.chapter_id} references an unknown promise")
+        for directive in view.scene_directives:
+            node = nodes.get(directive.node_id)
+            if node is None or node.chapter_id != view.chapter_id:
+                raise ValueError("scene directives must reference accepted nodes in their chapter")
+            if directive.outcome == "final_resolution" and node.node_type != "CEN":
+                raise ValueError("simple final resolution is allowed only on CEN")
 
 
-def expected_global_point_ids(global_ppp: GlobalPPPPlan, chapter_id: str) -> set[str]:
-    return {point.id for point in global_points(global_ppp) if point.chapter_id == chapter_id}
-
-
-def validate_chapter_ppp(
-    plan: ChapterPPPPlan,
-    chapter: ChapterPlan,
-    storyline: IncrementalStorylineArtifact,
-    global_ppp: GlobalPPPPlan,
-) -> None:
-    if plan.chapter_id != chapter.id:
-        raise ValueError(f"chapter PPP expected {chapter.id}, received {plan.chapter_id}")
-    chapter_nodes = {node.id: node for node in storyline.nodes if node.chapter_id == chapter.id}
-    beats = [plan.promise, *plan.progress, plan.payoff]
-    referenced = [node_id for beat in beats for node_id in beat.node_ids]
-    unknown = [node_id for node_id in referenced if node_id not in chapter_nodes]
-    if unknown:
-        raise ValueError(f"chapter PPP references unknown or foreign nodes: {unknown}")
-    positions = [min(chapter_nodes[node_id].local_order for node_id in beat.node_ids)
-                 for beat in beats]
-    if positions != sorted(positions):
-        raise ValueError("chapter PPP beats must follow accepted node order")
-    expected = expected_global_point_ids(global_ppp, chapter.id)
-    supplied = set(plan.advances_global_point_ids)
-    all_ids = {point.id for point in global_points(global_ppp)}
-    if supplied - all_ids:
-        raise ValueError(f"chapter PPP references unknown global points: {sorted(supplied - all_ids)}")
-    if supplied - expected:
-        raise ValueError(
-            f"chapter PPP references global points scheduled for another chapter: "
-            f"{sorted(supplied - expected)}"
-        )
-    if expected - supplied:
-        raise ValueError(f"chapter PPP leaves global points uncovered: {sorted(expected - supplied)}")
-
-
-def validate_chapter_ppp_plans(
-    plans: list[ChapterPPPPlan],
-    outline: StoryOutlineArtifact,
-    storyline: IncrementalStorylineArtifact,
-    global_ppp: GlobalPPPPlan,
-) -> None:
-    expected_chapters = {chapter.id for chapter in outline.chapters}
-    actual = [plan.chapter_id for plan in plans]
-    if len(actual) != len(set(actual)) or set(actual) != expected_chapters:
-        raise ValueError("chapter PPP plans must match outline chapters exactly")
-    by_id = {chapter.id: chapter for chapter in outline.chapters}
-    for plan in plans:
-        validate_chapter_ppp(plan, by_id[plan.chapter_id], storyline, global_ppp)
-    covered = {identifier for plan in plans for identifier in plan.advances_global_point_ids}
-    required = {point.id for point in global_points(global_ppp)}
-    if required - covered:
-        raise ValueError(f"global PPP coverage is incomplete: {sorted(required - covered)}")
-
-
-def build_obligation_trace(plans: list[ChapterPPPPlan]) -> StorylineObligationTrace:
-    entries: list[ObligationTraceEntry] = []
-    for plan in plans:
-        node_ids = list(dict.fromkeys(
-            node_id for beat in [plan.promise, *plan.progress, plan.payoff]
-            for node_id in beat.node_ids
-        ))
-        entries.extend(ObligationTraceEntry(
-            obligation_id=identifier,
-            chapter_id=plan.chapter_id,
-            node_ids=node_ids,
-        ) for identifier in plan.advances_global_point_ids)
-    return StorylineObligationTrace(entries=entries)
+def character_writing_cards(characters: CharactersArtifact) -> list[CharacterWritingCard]:
+    return [CharacterWritingCard(
+        name=item.name,
+        want=item.want,
+        immediate_behavior=f"Pursue {item.goal}; under pressure, {item.flaw} costs {item.flaw_cost}.",
+        voice=item.voice,
+        notices=item.notices,
+        unspoken_rule=item.unspoken_rule,
+        flaw_pressure=item.flaw_cost,
+    ) for item in characters.characters]
 
 
 def build_chapter_writing_brief(
-    global_ppp: GlobalPPPPlan,
-    chapter_ppp: ChapterPPPPlan,
-    character_arcs: CharacterArcPlan,
-    try_fail: TryFailPlan,
+    chapter_id: str, craft: StoryCraftPlan, characters: CharactersArtifact,
+    storyline: IncrementalStorylineArtifact,
+    state_before: StoryStateSnapshot | None = None,
 ) -> ChapterWritingBrief:
+    view = next(item for item in craft.chapters if item.chapter_id == chapter_id)
+    actions: list[PromiseActionBrief] = []
+    for promise in craft.promise_ledger.promises:
+        if promise.id in view.opened_promise_ids:
+            actions.append(PromiseActionBrief(
+                phase="open", subject=promise.subject, instruction=promise.opening.signal,
+            ))
+        progress = next((item for item in promise.progress if item.chapter_id == chapter_id), None)
+        if promise.id in view.progressed_promise_ids and progress:
+            actions.append(PromiseActionBrief(
+                phase="progress", subject=promise.subject,
+                instruction=f"{progress.observable_delta}; introduce {progress.new_cost_or_information}.",
+            ))
+        if promise.id in view.paid_promise_ids:
+            actions.append(PromiseActionBrief(
+                phase="payoff", subject=promise.subject, instruction=promise.payoff.answer,
+            ))
+    nodes = {item.id: item for item in storyline.nodes}
+    names = {item.id: item.name for item in characters.characters}
+    if state_before:
+        names.update({item.id: item.name for item in state_before.entities})
+    for node in nodes.values():
+        names[node.subject.id] = node.subject.name
+        names[node.object.id] = node.object.name
+    factual_events = [FactualEventBrief(
+        event=node.event,
+        intention=node.intention,
+        conflict=node.conflict,
+        consequence=node.consequence,
+        location=names.get(node.location_id, node.location_id.replace("_", " ")),
+        planned_changes=[PlannedMutationBrief(
+            entity=names.get(change.entity_id, change.entity_id.replace("_", " ")),
+            change=change.attribute,
+            value=names.get(change.value, change.value),
+        ) for change in node.effects],
+    ) for node in nodes.values() if node.chapter_id == chapter_id]
+    scenes = [SceneWritingDirective(
+        event=nodes[item.node_id].event,
+        goal=item.goal,
+        conflict=item.conflict,
+        outcome=item.outcome,
+        consequence=item.consequence,
+        reaction_dilemma_decision=" / ".join((item.reaction, item.dilemma, item.decision)),
+    ) for item in view.scene_directives]
+    arc_behaviors = [
+        evidence.behavior
+        for arc in craft.character_arcs.arcs for evidence in arc.evidences
+        if evidence.chapter_id == chapter_id
+    ]
     return ChapterWritingBrief(
-        tone_promise=(
-            f"{global_ppp.tone_promise.description}. Opening signal: "
-            f"{global_ppp.tone_promise.opening_signal}. Continuity: "
-            f"{global_ppp.tone_promise.continuity_rule}"
-        ),
-        global_lines=[PPPLineBrief(
-            kind=line.kind,
-            subject=line.subject,
-            promise=line.promise.description,
-            progress=[point.description for point in line.progress],
-            payoff=line.payoff.description,
-        ) for line in global_lines(global_ppp)],
-        chapter_promise=chapter_ppp.promise.description,
-        chapter_progress=[beat.description for beat in chapter_ppp.progress],
-        chapter_payoff=chapter_ppp.payoff.description,
-        character_milestones=[item.description for item in character_arcs.milestones
-                              if item.chapter_id == chapter_ppp.chapter_id],
-        try_fail_cycles=[
-            f"{item.action}; {item.outcome}; persistent consequence: {item.consequence}"
-            for item in try_fail.cycles if item.chapter_id == chapter_ppp.chapter_id
-        ],
+        tone_guidance=craft.promise_ledger.tone.continuity_rule,
+        factual_events=factual_events,
+        state_before=[EntityStateBrief(
+            entity=item.name, kind=item.kind,
+            state={key: names.get(value, value) for key, value in item.state.items()},
+            knowledge=item.knowledge,
+        ) for item in (state_before.entities if state_before else [])],
+        promise_actions=actions,
+        scene_directives=scenes,
+        character_cards=character_writing_cards(characters),
+        arc_behaviors=arc_behaviors,
     )
 
 
 def audit_questions(
-    request: StoryRequest,
-    craft: StoryCraftPlan,
-    characters: CharactersArtifact,
+    request: StoryRequest, craft: StoryCraftPlan, characters: CharactersArtifact,
     taxonomy_brief: TaxonomyBrief | None = None,
 ) -> list[dict[str, object]]:
     questions: list[dict[str, object]] = []
 
     def add(identifier: str, category: str, subject: str, question: str,
-            blocking: bool = True) -> None:
+            chapter_ids: list[str] | None = None, blocking: bool = True) -> None:
         questions.append({
             "question_id": identifier, "category": category, "subject_id": subject,
-            "question": question, "blocking": blocking,
+            "question": question, "chapter_ids": chapter_ids or [], "blocking": blocking,
         })
 
-    add("global_ppp:tone", "global_ppp", "tone",
-        "Does the fiction establish and consistently honor the planned tone promise?")
-    for line in global_lines(craft.global_ppp):
-        prefix = f"global_ppp:{line.id}"
-        add(f"{prefix}:promise", "global_ppp", line.id,
-            f"Does the opening establish this expectation: {line.promise.description}")
-        add(f"{prefix}:progress", "global_ppp", line.id,
-            "Does the reader receive visible, conflict-bearing progress toward this payoff?")
-        add(f"{prefix}:payoff", "global_ppp", line.id,
-            f"Does the fiction fulfill this payoff: {line.payoff.description}")
-        add(f"{prefix}:earned", "global_ppp", line.id,
-            "Is the payoff both prepared and satisfyingly surprising?")
-    for chapter in craft.chapters:
-        prefix = f"chapter_ppp:{chapter.chapter_id}"
-        add(f"{prefix}:promise", "chapter_ppp", chapter.chapter_id,
-            "Does this chapter establish its local expectation?")
-        add(f"{prefix}:progress", "chapter_ppp", chapter.chapter_id,
-            "Does this chapter visibly advance that expectation through conflict?")
-        add(f"{prefix}:payoff", "chapter_ppp", chapter.chapter_id,
-            "Does this chapter resolve or consequentially transform its expectation?")
-    for character in main_characters(characters):
-        prefix = f"character:{character.name}"
-        add(f"{prefix}:start", "character", character.name,
-            "Does behavior establish the character's initially low focus slider?")
-        add(f"{prefix}:transition", "character", character.name,
-            "Is there an observable intermediate change in the focus slider?")
-        add(f"{prefix}:choice", "character", character.name,
-            "Does focus-slider growth affect a consequential choice?")
-        add(f"{prefix}:end", "character", character.name,
-            "Does final behavior demonstrate that the focus slider has become high?")
+    for promise in craft.promise_ledger.promises:
+        chapters = [promise.opening.chapter_id, *(x.chapter_id for x in promise.progress), promise.payoff.chapter_id]
+        add(f"promise:{promise.id}", "promise", promise.id,
+            "Is this expectation visibly opened, changed through conflict, and paid off using its preparation?",
+            chapters)
+    for arc in craft.character_arcs.arcs:
+        add(f"character:{arc.character_id}", "character", arc.character_id,
+            "Do behavior, flaw cost, want/need choice, and consequence prove the planned arc direction?",
+            [item.chapter_id for item in arc.evidences])
     for cycle in craft.try_fail.cycles:
-        prefix = f"try_fail:{cycle.id}"
-        add(f"{prefix}:outcome", "try_fail", cycle.id,
-            "Is the planned Yes-but or No-and attempt dramatized?")
-        add(f"{prefix}:consequence", "try_fail", cycle.id,
-            "Does the attempt's consequence persist into later events?")
+        add(f"try_fail:{cycle.id}", "try_fail", cycle.id,
+            "Does the attempt teach something and visibly raise or transform the cost?", [cycle.chapter_id])
     for index, constraint in enumerate(request.constraints, 1):
         add(f"constraint:{index}", "constraint", str(index),
-            f"Does the complete fiction satisfy this user constraint: {constraint}")
+            f"Does the fiction satisfy this explicit constraint: {constraint}")
+    add("global:coherence", "coherence", "story",
+        "Are world state, acquired knowledge, causal facts, and character motivations coherent?")
+    add("global:pacing", "pacing", "story",
+        "Does each chapter create perceptible progress and does escalation receive enough space?")
+    add("global:engagement", "engagement", "story",
+        "Do prepared questions, changing costs, and uncertainty sustain reader interest?", blocking=False)
+    add("global:satisfaction", "satisfaction", "story",
+        "Do the prepared promises receive costly, clear, and non-arbitrary fulfillment?")
     add("language:output", "language", request.language,
-        f"Is all reader-visible fiction, including headings, written in {request.language}?")
-    if taxonomy_brief:
-        for index, promise in enumerate(taxonomy_brief.reader_promises, 1):
-            add(f"taxonomy:promise:{index}", "taxonomy", taxonomy_brief.primary_taxonomy,
-                f"Does the fiction fulfill this selected reader promise: {promise}")
-        for index, check in enumerate(taxonomy_brief.quality_checks, 1):
-            add(f"taxonomy:quality:{index}", "taxonomy", taxonomy_brief.primary_taxonomy,
-                f"Does the fiction satisfy this taxonomy quality check: {check}", False)
-    add("global:causality", "global", "story",
-        "Does the revision preserve accepted causal facts and event outcomes?")
+        f"Is all reader-visible fiction written in {request.language}?")
     add("global:scaffolding", "global", "story",
-        "Is all planning terminology absent from the fiction?", False)
+        "Is internal planning terminology absent from the fiction?", blocking=False)
     return questions
 
 
 def normalize_audit(
-    raw: CraftAuditArtifact,
-    expected_questions: list[dict[str, object]],
+    raw: CraftAuditArtifact, expected_questions: list[dict[str, object]],
 ) -> CraftAuditArtifact:
     supplied = {answer.question_id: answer for answer in raw.answers}
     answers: list[CraftAuditAnswer] = []
@@ -344,9 +289,8 @@ def normalize_audit(
         answer = supplied.get(identifier)
         if answer is None:
             answer = CraftAuditAnswer(
-                **expected, verdict="fail",
-                evidence="The critic did not provide evidence for this required question.",
-                issue="The criterion was not evaluated.",
+                **expected, verdict="fail", evidence="The criterion was not evaluated.",
+                issue="Missing critic answer.",
                 revision_instruction="Evaluate and repair this criterion explicitly.",
             )
         else:
@@ -355,17 +299,3 @@ def normalize_audit(
             answer = CraftAuditAnswer.model_validate(payload)
         answers.append(answer)
     return CraftAuditArtifact(answers=answers, summary=raw.summary)
-
-
-def diagnostic_from_craft(audit: CraftAuditArtifact) -> DiagnosticAudit:
-    failed = [answer for answer in audit.answers if answer.verdict == "fail"]
-    return DiagnosticAudit(
-        causal_issues=[answer.issue for answer in failed if answer.question_id == "global:causality"],
-        intentionality_issues=[answer.issue for answer in failed if answer.category == "character"],
-        continuity_issues=[answer.issue for answer in failed if answer.category in {
-            "global_ppp", "chapter_ppp", "try_fail", "constraint", "taxonomy",
-        }],
-        template_like_passages=[answer.issue for answer in failed
-                                if answer.question_id == "global:scaffolding"],
-        revision_suggestions=audit.revision_instructions,
-    )

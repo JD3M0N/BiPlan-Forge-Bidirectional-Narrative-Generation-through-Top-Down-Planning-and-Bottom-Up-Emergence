@@ -3,8 +3,8 @@
 from .analyst import AnalystAgent
 from .characters import CharacterDesignerAgent
 from .craft import (
-    ChapterPPPPlannerAgent, CharacterArcPlannerAgent, CraftCriticAgent,
-    CraftRewriterAgent, GlobalPPPPlannerAgent, TryFailPlannerAgent,
+    ChapterRewriterAgent, CharacterArcPlannerAgent, CraftComposerAgent, CraftCriticAgent,
+    PromiseLedgerPlannerAgent, TryFailPlannerAgent,
 )
 from .planner import PlannerAgent
 from .world import WorldBuilderAgent
@@ -15,11 +15,11 @@ __all__ = [
     "PlannerAgent",
     "WorldBuilderAgent",
     "CharacterDesignerAgent",
-    "GlobalPPPPlannerAgent",
+    "PromiseLedgerPlannerAgent",
     "CharacterArcPlannerAgent",
     "TryFailPlannerAgent",
-    "ChapterPPPPlannerAgent",
+    "CraftComposerAgent",
     "CraftCriticAgent",
-    "CraftRewriterAgent",
+    "ChapterRewriterAgent",
     "ChapterWriterAgent",
 ]

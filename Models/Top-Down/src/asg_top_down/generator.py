@@ -1,4 +1,4 @@
-"""Top-Down 3.3 orchestration with modular, traceable PPP planning."""
+"""Top-Down 4.0 orchestration with a frozen factual/craft boundary."""
 
 from __future__ import annotations
 
@@ -14,15 +14,14 @@ from pydantic import BaseModel
 from asg_evaluation import create_evaluation_template
 
 from .agents import (
-    AnalystAgent, ChapterPPPPlannerAgent, ChapterWriterAgent, CharacterArcPlannerAgent,
-    CharacterDesignerAgent, CraftCriticAgent, CraftRewriterAgent, GlobalPPPPlannerAgent,
-    PlannerAgent, TryFailPlannerAgent, WorldBuilderAgent,
+    AnalystAgent, ChapterRewriterAgent, ChapterWriterAgent, CharacterArcPlannerAgent,
+    CharacterDesignerAgent, CraftComposerAgent, CraftCriticAgent, PlannerAgent,
+    PromiseLedgerPlannerAgent, TryFailPlannerAgent, WorldBuilderAgent,
 )
 from .craft import (
-    audit_questions, build_chapter_writing_brief, build_obligation_trace,
-    build_storyline_obligations, diagnostic_from_craft, validate_chapter_ppp,
-    validate_chapter_ppp_plans, validate_character_arc_plan, validate_craft_characters,
-    validate_global_ppp, validate_storyline_obligations, validate_try_fail_plan,
+    audit_questions, build_chapter_writing_brief, validate_character_arc_plan,
+    validate_craft_alignment, validate_craft_characters, validate_promise_ledger,
+    validate_try_fail_plan,
 )
 from .errors import ArtifactValidationError
 from .incremental import IncrementalPlotPlanner, NodeReviewHistory
@@ -30,12 +29,11 @@ from .narrative_db import NarrativeBlueprint, NarrativeSchemaRepository
 from .nekg import NarrativeEntityGraph
 from .progress import ProgressCallback, ProgressUpdate
 from .schemas import (
-    ChapterAnchorsArtifact, ChapterPPPPlan, ChapterWritingBrief, CharacterArcPlan,
-    CharactersArtifact, CraftAuditAnswer, CraftAuditArtifact, CraftRevisionAttempt,
-    CraftRevisionHistory, GlobalPPPPlan, IncrementalStorylineArtifact,
-    LengthAuditArtifact, LengthAuditEntry, LLMUsageArtifact, StoryCraftPlan,
-    StoryOutlineArtifact, StoryPlanArtifact, StoryRequest, StorylineObligationsArtifact,
-    TaxonomyBrief, TryFailPlan, WorldArtifact,
+    ChapterAnchorsArtifact, CharactersArtifact,
+    CraftAuditAnswer, CraftAuditArtifact, CraftRevisionAttempt, CraftRevisionHistory,
+    IncrementalStorylineArtifact, LengthAuditArtifact, LengthAuditEntry,
+    LLMUsageArtifact, StoryCraftPlan, StoryOutlineArtifact, StoryPlanArtifact,
+    StoryRequest, TaxonomyBrief, WorldArtifact,
 )
 from .storage import ArtifactRepository
 
@@ -44,8 +42,22 @@ TArtifact = TypeVar("TArtifact", bound=BaseModel)
 
 
 class StoryRun:
+    """Stable handle for both completed 4.0 and historical completed 3.x runs."""
+
     def __init__(self, run_dir: Path) -> None:
         self.run_dir = Path(run_dir)
+        metadata_path = self.run_dir / "metadata.json"
+        if self.run_dir.exists() and metadata_path.is_file() and not self.story_path.is_file():
+            try:
+                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                metadata = {}
+            version = str(metadata.get("pipeline_version", "unknown"))
+            raise ArtifactValidationError(
+                f"La ejecución Top-Down {version} está incompleta y no puede abrirse como StoryRun 4.0.",
+                stage="compatibility", details={"run_id": str(self.run_dir), "version": version},
+                recommendations=["Usa un run terminado con story.md o inicia una ejecución 4.0 nueva."],
+            )
 
     @property
     def story_path(self) -> Path:
@@ -69,14 +81,11 @@ class _RenderedStory:
 def _dump(value) -> str:
     if isinstance(value, BaseModel):
         value = value.model_dump(mode="json")
-    elif isinstance(value, list):
-        value = [item.model_dump(mode="json") if isinstance(item, BaseModel) else item
-                 for item in value]
     return json.dumps(value, ensure_ascii=False, indent=2)
 
 
 def _word_count(text: str) -> int:
-    return len(text.split())
+    return len(re.findall(r"\b\w+\b", text, flags=re.UNICODE))
 
 
 def _length_bounds(target_words: int) -> tuple[int, int]:
@@ -91,15 +100,23 @@ def _canonical_chapter(title: str, text: str) -> str:
     return f"## {title}\n\n{body}".rstrip()
 
 
-class StoryGenerator:
-    """The only production entry point for the Top-Down 3.3 pipeline."""
+def _parse_story(story: str, outline: StoryOutlineArtifact) -> list[str]:
+    matches = list(re.finditer(r"(?m)^##\s+.+$", story))
+    if len(matches) != len(outline.chapters):
+        raise ValueError("selected story does not contain the canonical chapter count")
+    return [
+        story[match.start():(matches[index + 1].start() if index + 1 < len(matches) else len(story))].strip()
+        for index, match in enumerate(matches)
+    ]
 
-    def __init__(
-        self, provider, output_root: Path, *,
-        schema_repository: NarrativeSchemaRepository | None = None,
-        default_target_words: int = 1500, max_cpn_retries: int = 2,
-        max_craft_revisions: int = 2, max_artifact_retries: int = 2,
-    ) -> None:
+
+class StoryGenerator:
+    """Public Top-Down 4.0 generator."""
+
+    def __init__(self, provider, output_root: Path, *,
+                 schema_repository: NarrativeSchemaRepository | None = None,
+                 default_target_words: int = 1500, max_cpn_retries: int = 2,
+                 max_craft_revisions: int = 2, max_artifact_retries: int = 2) -> None:
         if min(max_cpn_retries, max_craft_revisions, max_artifact_retries) < 0:
             raise ValueError("retry counts cannot be negative")
         self.provider = provider
@@ -114,10 +131,9 @@ class StoryGenerator:
         if callback:
             callback(ProgressUpdate(percent, stage, description, chapter, total))
 
-    def _validated_artifact(
-        self, repository: ArtifactRepository, *, name: str, stage: str,
-        generate: Callable[[str], TArtifact], validate: Callable[[TArtifact], None],
-    ) -> TArtifact:
+    def _validated_artifact(self, repository: ArtifactRepository, *, name: str, stage: str,
+                            generate: Callable[[str], TArtifact],
+                            validate: Callable[[TArtifact], None]) -> TArtifact:
         issues: list[str] = []
         feedback = ""
         attempts = self.max_artifact_retries + 1
@@ -131,70 +147,75 @@ class StoryGenerator:
                 issues.append(issue)
                 prefix = f"artifact_attempts/{name}/attempt-{attempt:03d}"
                 repository.save_json(f"{prefix}.json", candidate)
-                repository.save_data(
-                    f"{prefix}-validation.json",
-                    {"artifact": name, "stage": stage, "attempt": attempt, "issue": issue},
-                )
+                repository.save_data(f"{prefix}-validation.json", {
+                    "artifact": name, "stage": stage, "attempt": attempt, "issue": issue,
+                })
                 feedback = (
-                    "\n\nSEMANTIC REPAIR REQUIRED:\nReturn a complete replacement, not a patch. "
-                    f"Previous candidate:\n{_dump(candidate)}\nVALIDATION ERROR:\n{issue}"
+                    "\n\nREPAIR ONLY THIS ARTIFACT. Return a complete replacement. "
+                    f"Validation error: {issue}\nPrevious value:\n{_dump(candidate)}"
                 )
         raise ArtifactValidationError(
-            f"No se pudo obtener un artefacto {name} válido después de {attempts} intentos.",
-            stage=stage,
-            details={"artifact": name, "attempts": attempts, "validation_errors": issues},
-            recommendations=[f"Revisa artifact_attempts/{name}/ y usa un modelo más capaz."],
+            f"No se pudo validar {name} después de {attempts} intentos.", stage=stage,
+            details={"artifact": name, "validation_errors": issues},
+            recommendations=[f"Revisa artifact_attempts/{name}/."],
         )
 
     def _validate_plan(self, plan: StoryPlanArtifact, blueprint: NarrativeBlueprint) -> None:
-        if blueprint.candidates:
-            if plan.taxonomy_application is None:
-                raise ValueError("new story plans require taxonomy_application")
-            self.schemas.validate_application(plan.taxonomy_application, blueprint)
-            return
-        if plan.archetypes is None:
-            raise ValueError("legacy blueprint requires archetype selection")
-        allowed = {item.id for group in (
-            blueprint.macroplots, blueprint.situations, blueprint.character_arcs,
-        ) for item in group}
-        unknown = {plan.archetypes.primary, *plan.archetypes.secondary} - allowed
-        if unknown:
-            raise ValueError(f"unknown retrieved archetype IDs: {', '.join(sorted(unknown))}")
+        self.schemas.validate_application(plan.taxonomy_application, blueprint)
 
     @staticmethod
     def _validate_outline(outline: StoryOutlineArtifact, request: StoryRequest) -> None:
-        ids = [chapter.id for chapter in outline.chapters]
-        orders = [chapter.order for chapter in outline.chapters]
-        if len(ids) != len(set(ids)):
-            raise ValueError("outline chapter IDs must be unique")
-        if orders != list(range(1, len(orders) + 1)):
-            raise ValueError("outline chapter orders must be consecutive and start at one")
-        if sum(chapter.target_words for chapter in outline.chapters) != request.target_words:
-            raise ValueError("chapter word budgets must equal requested target_words")
+        ids = [item.id for item in outline.chapters]
+        orders = [item.order for item in outline.chapters]
+        if len(ids) != len(set(ids)) or orders != list(range(1, len(orders) + 1)):
+            raise ValueError("outline IDs/orders must be unique and consecutive")
+        if request.requested_chapters and len(outline.chapters) != request.requested_chapters:
+            raise ValueError("outline does not honor the explicit chapter count")
+        if sum(item.target_words for item in outline.chapters) != request.target_words:
+            raise ValueError("chapter budgets must equal requested target words")
+        if not request.requested_chapters and any(
+            not 400 <= item.target_words <= 900 for item in outline.chapters
+        ):
+            raise ValueError("automatic chapter budgets must remain between 400 and 900 words")
+
+    @staticmethod
+    def _validate_world_characters(world: WorldArtifact, characters: CharactersArtifact) -> None:
+        locations = {item.id for item in world.locations}
+        character_ids = {item.id for item in characters.characters}
+        bad_locations = {item.initial_location_id for item in characters.characters
+                         if item.initial_location_id not in locations}
+        bad_owners = {item.initial_owner_character_id for item in world.objects
+                      if item.initial_owner_character_id and item.initial_owner_character_id not in character_ids}
+        if bad_locations or bad_owners:
+            raise ValueError(f"invalid initial entity references: locations={bad_locations}, owners={bad_owners}")
 
     @staticmethod
     def _validate_anchors(anchors: ChapterAnchorsArtifact, outline: StoryOutlineArtifact) -> None:
-        expected = [chapter.id for chapter in outline.chapters]
-        actual = [anchor.chapter_id for anchor in anchors.anchors]
-        if len(actual) != len(set(actual)) or set(actual) != set(expected):
-            raise ValueError(
-                "chapter anchors must match outline chapters exactly; "
-                f"expected {expected}, received {actual}"
-            )
+        expected = {item.id for item in outline.chapters}
+        actual = [item.chapter_id for item in anchors.anchors]
+        if len(actual) != len(set(actual)) or set(actual) != expected:
+            raise ValueError("chapter anchors must match outline chapters exactly")
 
     @staticmethod
     def _usage_artifact(provider, start: int) -> LLMUsageArtifact:
         records = list(getattr(provider, "usage_records", []))[start:]
         return LLMUsageArtifact(
             records=records, calls=len(records),
+            failed_calls=sum(item.status == "failed" for item in records),
             total_tokens=sum(item.total_tokens for item in records),
             total_wait_seconds=sum(item.wait_seconds for item in records),
         )
 
-    def generate(
-        self, request: StoryRequest | str, on_progress: ProgressCallback | None = None,
-        on_run_created=None,
-    ) -> StoryRun:
+    @staticmethod
+    def _cpn_call_count(provider) -> int:
+        return sum(
+            any(name in item.operation for name in ("PlotNodeProposal", "PlotNodeReview"))
+            for item in getattr(provider, "usage_records", [])
+        )
+
+    def generate(self, request: StoryRequest | str,
+                 on_progress: ProgressCallback | None = None,
+                 on_run_created=None) -> StoryRun:
         progress = {"percent": 0, "stage": "analysis"}
 
         def notify(percent, stage, description, chapter=None, total=None) -> None:
@@ -204,8 +225,7 @@ class StoryGenerator:
 
         if hasattr(self.provider, "wait_callback"):
             self.provider.wait_callback = lambda seconds, reason: notify(
-                progress["percent"], "rate_limit",
-                f"Esperando cuota de Gemini: {seconds}s ({reason}; etapa {progress['stage']})",
+                progress["percent"], "rate_limit", f"Esperando cuota: {seconds}s ({reason})",
             )
         usage_start = len(getattr(self.provider, "usage_records", []))
         notify(0, "analysis", "Analizando la solicitud")
@@ -215,209 +235,145 @@ class StoryGenerator:
         if on_run_created:
             on_run_created(repository.run_dir)
 
+        for record in list(getattr(self.provider, "usage_records", []))[usage_start:]:
+            repository.append_llm_call(record)
+
         def save_usage() -> None:
-            usage = self._usage_artifact(self.provider, usage_start)
-            repository.save_json("llm_usage.json", usage)
-            repository.save_json("llm_usage_summary.json", usage)
+            repository.save_json("llm_usage.json", self._usage_artifact(self.provider, usage_start))
 
         if hasattr(self.provider, "usage_callback"):
-            self.provider.usage_callback = lambda _record: save_usage()
+            self.provider.usage_callback = lambda record: (
+                repository.append_llm_call(record), save_usage(),
+            )
         try:
             repository.save_json("request.json", request)
             repository.complete_stage("analysis")
             blueprint = self.schemas.retrieve(request)
             repository.save_json("blueprint.json", blueprint)
             repository.save_json("retrieval_trace.json", blueprint.trace)
-            repository.save_data("taxonomy_candidates.json", {
-                "candidates": [item.model_dump(mode="json") for item in blueprint.candidates]
-            })
             repository.complete_stage("retrieval")
-            notify(8, "retrieval", "Esquemas narrativos recuperados")
 
-            plan_agent = PlannerAgent(self.provider)
             plan = self._validated_artifact(
                 repository, name="story_plan", stage="planning",
-                generate=lambda feedback: plan_agent.run(request, blueprint, feedback),
+                generate=lambda feedback: PlannerAgent(self.provider).run(request, blueprint, feedback),
                 validate=lambda value: self._validate_plan(value, blueprint),
             )
+            taxonomy_brief = self.schemas.compile_brief(plan.taxonomy_application, blueprint)
             repository.save_json("story_plan.json", plan)
-            taxonomy_brief = None
-            if plan.taxonomy_application is not None:
-                taxonomy_brief = self.schemas.compile_brief(plan.taxonomy_application, blueprint)
-                repository.save_json("taxonomy_application.json", plan.taxonomy_application)
-                repository.save_json("taxonomy_brief.json", taxonomy_brief)
-
+            repository.save_json("story_frame.json", plan.story_frame)
+            repository.save_json("taxonomy_application.json", plan.taxonomy_application)
+            repository.save_json("taxonomy_brief.json", taxonomy_brief)
             world = WorldBuilderAgent(self.provider).run(request, plan, taxonomy_brief)
             repository.save_json("world.json", world)
-            character_agent = CharacterDesignerAgent(self.provider)
             characters = self._validated_artifact(
                 repository, name="characters", stage="characters",
-                generate=lambda feedback: character_agent.run(
-                    request, plan, world, blueprint, feedback, taxonomy_brief=taxonomy_brief,
+                generate=lambda feedback: CharacterDesignerAgent(self.provider).run(
+                    request, plan, world, feedback, taxonomy_brief,
                 ),
-                validate=validate_craft_characters,
+                validate=lambda value: (
+                    validate_craft_characters(value), self._validate_world_characters(world, value),
+                ),
             )
             repository.save_json("characters.json", characters)
+            storyline_cast = characters.storyline_cast()
 
-            frame_planner = IncrementalPlotPlanner(self.provider, max_retries=self.max_cpn_retries)
+            factual = IncrementalPlotPlanner(self.provider, max_retries=self.max_cpn_retries)
             outline = self._validated_artifact(
                 repository, name="outline", stage="outline",
-                generate=lambda feedback: frame_planner.outline(
-                    request, plan, blueprint, feedback, taxonomy_brief,
+                generate=lambda feedback: factual.outline(
+                    request.agent_spec(), plan, blueprint, feedback, taxonomy_brief,
                 ),
                 validate=lambda value: self._validate_outline(value, request),
             )
             repository.save_json("outline.json", outline)
-            notify(22, "outline", "Premisa, sinopsis y capítulos terminados")
-
-            global_ppp_agent = GlobalPPPPlannerAgent(self.provider)
-            global_ppp = self._validated_artifact(
-                repository, name="global_ppp", stage="global_ppp",
-                generate=lambda feedback: global_ppp_agent.run(
-                    request, plan, world, characters, outline, feedback, taxonomy_brief,
+            anchors = self._validated_artifact(
+                repository, name="chapter_anchors", stage="anchors",
+                generate=lambda feedback: factual.anchors(
+                    outline, world, storyline_cast, plan.story_frame, feedback,
                 ),
-                validate=lambda value: validate_global_ppp(value, outline),
+                validate=lambda value: self._validate_anchors(value, outline),
             )
-            character_arcs = self._validated_artifact(
-                repository, name="character_arcs", stage="character_arcs",
-                generate=lambda feedback: CharacterArcPlannerAgent(self.provider).run(
-                    characters, outline, global_ppp, feedback,
-                ),
-                validate=lambda value: validate_character_arc_plan(value, outline, characters),
-            )
-            try_fail = self._validated_artifact(
-                repository, name="try_fail", stage="try_fail",
-                generate=lambda feedback: TryFailPlannerAgent(self.provider).run(
-                    request, outline, global_ppp, feedback,
-                ),
-                validate=lambda value: validate_try_fail_plan(value, outline, request.target_words),
-            )
-            repository.save_json("craft/global_ppp.json", global_ppp)
-            repository.save_json("craft/character_arcs.json", character_arcs)
-            repository.save_json("craft/try_fail.json", try_fail)
-            obligations = build_storyline_obligations(global_ppp, character_arcs, try_fail)
-            validate_storyline_obligations(obligations, outline)
-            repository.save_json("storyline_obligations.json", obligations)
-            repository.complete_stage("craft_planning")
-            notify(36, "craft_planning", "PPP global y craft estructural terminados")
-
-            storyline = None
-            reviews = None
-            nekg = None
-            anchors = None
-            chapter_ppps: list[ChapterPPPPlan] = []
-            coverage_failures: list[dict] = []
-            repair_feedback = ""
-            for structural_attempt in range(2):
-                planner = IncrementalPlotPlanner(self.provider, max_retries=self.max_cpn_retries)
-                attempt_name = structural_attempt + 1
-                anchors = self._validated_artifact(
-                    repository, name=f"chapter_anchors/replan-{attempt_name}", stage="anchors",
-                    generate=lambda feedback, planner=planner: planner.anchors(
-                        outline, world, characters, obligations, repair_feedback + feedback,
-                    ),
-                    validate=lambda value: self._validate_anchors(value, outline),
-                )
-
-                def checkpoint(story, graph, history) -> None:
-                    prefix = f"planning_checkpoint/replan-{attempt_name}"
-                    repository.save_json(f"{prefix}/storyline.json", story)
-                    repository.save_json(f"{prefix}/nekg.json", graph)
-                    repository.save_json(f"{prefix}/node_reviews.json", history)
-
-                storyline, reviews = planner.plan(
-                    outline, anchors, blueprint, obligations, on_checkpoint=checkpoint,
-                    taxonomy_brief=taxonomy_brief,
-                    taxonomy_application=plan.taxonomy_application,
-                )
-                nekg = planner.nekg.artifact()
-                repository.save_json(
-                    f"storyline_replans/attempt-{attempt_name}/chapter_anchors.json", anchors,
-                )
-                repository.save_json(
-                    f"storyline_replans/attempt-{attempt_name}/storyline.json", storyline,
-                )
-                repository.save_json(
-                    f"storyline_replans/attempt-{attempt_name}/nekg.json", nekg,
-                )
-                repository.save_json(
-                    f"storyline_replans/attempt-{attempt_name}/node_reviews.json", reviews,
-                )
-                try:
-                    chapter_ppps = []
-                    previous = None
-                    local_agent = ChapterPPPPlannerAgent(self.provider)
-                    for chapter in outline.chapters:
-                        relevant = [item for item in obligations.obligations
-                                    if item.chapter_id == chapter.id]
-                        chapter_ppp = self._validated_artifact(
-                            repository,
-                            name=f"chapter_ppp/replan-{attempt_name}/{chapter.id}",
-                            stage="chapter_ppp",
-                            generate=lambda feedback, chapter=chapter, previous=previous: local_agent.run(
-                                global_ppp, chapter, storyline, relevant, previous, feedback,
-                            ),
-                            validate=lambda value, chapter=chapter: validate_chapter_ppp(
-                                value, chapter, storyline, global_ppp,
-                            ),
-                        )
-                        chapter_ppps.append(chapter_ppp)
-                        previous = chapter_ppp
-                    validate_chapter_ppp_plans(chapter_ppps, outline, storyline, global_ppp)
-                    break
-                except (ArtifactValidationError, ValueError) as exc:
-                    details = getattr(exc, "details", {})
-                    failure = {
-                        "attempt": attempt_name,
-                        "summary": getattr(exc, "summary", str(exc)),
-                        "details": details,
-                    }
-                    coverage_failures.append(failure)
-                    repository.save_data(
-                        f"storyline_replans/attempt-{attempt_name}/coverage_failure.json", failure,
-                    )
-                    if structural_attempt == 1:
-                        raise ArtifactValidationError(
-                            "La cobertura PPP siguió incompleta después de una replanificación estructural.",
-                            stage="chapter_ppp",
-                            details={"structural_attempts": 2, "failures": coverage_failures},
-                            recommendations=[
-                                "Revisa storyline_replans y los intentos de chapter_ppp."
-                            ],
-                        ) from exc
-                    repair_feedback = (
-                        "\n\nSTRUCTURAL REPLAN REQUIRED:\nThe prior STORYLINE could not ground all "
-                        f"narrative obligations. Repair the anchors while preserving the outline.\n{_dump(failure)}"
-                    )
-            assert storyline is not None and reviews is not None and nekg is not None and anchors is not None
             repository.save_json("chapter_anchors.json", anchors)
+            checkpoint = {"number": 0}
+
+            def save_checkpoint(story, graph, reviews) -> None:
+                checkpoint["number"] += 1
+                prefix = f"checkpoints/{checkpoint['number']:05d}"
+                repository.save_json(f"{prefix}/storyline.json", story)
+                repository.save_json(f"{prefix}/nekg.json", graph)
+                repository.save_json(f"{prefix}/node_reviews.json", reviews)
+
+            storyline, reviews = factual.plan(
+                outline, anchors, blueprint, world, storyline_cast, plan.story_frame,
+                on_checkpoint=save_checkpoint, taxonomy_brief=taxonomy_brief,
+                taxonomy_application=plan.taxonomy_application,
+            )
+            nekg = factual.nekg.artifact()
             repository.save_json("storyline.json", storyline)
             repository.save_json("nekg.json", nekg)
             repository.save_json("node_reviews.json", reviews)
-            repository.complete_stage("storyline")
-            notify(58, "storyline", "STORYLINE y cobertura PPP validadas")
+            repository.complete_stage("storyline_frozen")
+            frozen_storyline = storyline.model_dump_json()
+            frozen_cpn_calls = self._cpn_call_count(self.provider)
+            notify(52, "storyline", "STORYLINE factual congelada")
 
-            briefs: list[ChapterWritingBrief] = []
-            for chapter_ppp in chapter_ppps:
-                brief = build_chapter_writing_brief(
-                    global_ppp, chapter_ppp, character_arcs, try_fail,
-                )
-                briefs.append(brief)
-                repository.save_json(
-                    f"craft/chapters/{chapter_ppp.chapter_id}.ppp.json", chapter_ppp,
-                )
-                repository.save_json(
-                    f"craft/chapters/{chapter_ppp.chapter_id}.brief.json", brief,
-                )
-            trace = build_obligation_trace(chapter_ppps)
-            repository.save_json("storyline_obligation_trace.json", trace)
-            craft = StoryCraftPlan(
-                global_ppp=global_ppp, character_arcs=character_arcs,
-                try_fail=try_fail, chapters=chapter_ppps,
+            ledger = self._validated_artifact(
+                repository, name="promise_ledger", stage="craft",
+                generate=lambda feedback: PromiseLedgerPlannerAgent(self.provider).run(
+                    request, plan, characters, outline, storyline, taxonomy_brief, feedback,
+                ),
+                validate=lambda value: validate_promise_ledger(value, outline, request.target_words),
             )
+            arcs = self._validated_artifact(
+                repository, name="character_arcs", stage="craft",
+                generate=lambda feedback: CharacterArcPlannerAgent(self.provider).run(
+                    characters, outline, storyline, ledger, feedback,
+                ),
+                validate=lambda value: validate_character_arc_plan(
+                    value, characters, outline, ledger,
+                ),
+            )
+            try_fail = self._validated_artifact(
+                repository, name="try_fail", stage="craft",
+                generate=lambda feedback: TryFailPlannerAgent(self.provider).run(
+                    request, outline, storyline, ledger, feedback,
+                ),
+                validate=lambda value: validate_try_fail_plan(value, request, outline, ledger),
+            )
+            composition = self._validated_artifact(
+                repository, name="craft_alignment", stage="craft",
+                generate=lambda feedback: CraftComposerAgent(self.provider).run(
+                    outline, storyline, ledger, arcs, try_fail, feedback,
+                ),
+                validate=lambda value: validate_craft_alignment(
+                    value.alignment, value.chapters, ledger, arcs, try_fail, outline, storyline,
+                ),
+            )
+            craft = StoryCraftPlan(
+                promise_ledger=ledger, character_arcs=arcs, try_fail=try_fail,
+                alignment=composition.alignment, chapters=composition.chapters,
+            )
+            if (storyline.model_dump_json() != frozen_storyline
+                    or self._cpn_call_count(self.provider) != frozen_cpn_calls):
+                raise ArtifactValidationError(
+                    "Craft intentó modificar o volver a consultar la STORYLINE congelada.",
+                    stage="architecture",
+                    details={"boundary": "storyline_frozen -> craft"},
+                )
+            repository.save_json("craft/promise_ledger.json", ledger)
+            repository.save_json("craft/character_arcs.json", arcs)
+            repository.save_json("craft/try_fail.json", try_fail)
+            repository.save_json("craft/alignment.json", composition.alignment)
+            repository.save_json("craft/plan.json", craft)
+            for chapter in outline.chapters:
+                view = next(item for item in composition.chapters if item.chapter_id == chapter.id)
+                repository.save_json(f"craft/chapters/{chapter.id}.view.json", view)
+            repository.complete_stage("craft")
+            notify(68, "craft", "Craft alineado sin modificar STORYLINE")
+
             rendered = self._render_story(
                 repository, request, plan, world, characters, outline, storyline,
-                reviews, craft, briefs, notify, taxonomy_brief,
+                craft, notify, taxonomy_brief,
             )
             create_evaluation_template(repository.run_dir)
             repository.complete_stage("quality_review")
@@ -436,46 +392,50 @@ class StoryGenerator:
             if hasattr(self.provider, "wait_callback"):
                 self.provider.wait_callback = None
 
-    def _render_story(
-        self, repository: ArtifactRepository, request: StoryRequest,
-        plan: StoryPlanArtifact, world: WorldArtifact, characters: CharactersArtifact,
-        outline: StoryOutlineArtifact, storyline: IncrementalStorylineArtifact,
-        reviews: NodeReviewHistory, craft: StoryCraftPlan,
-        briefs: list[ChapterWritingBrief], notify,
-        taxonomy_brief: TaxonomyBrief | None = None,
-    ) -> _RenderedStory:
+    def _render_story(self, repository: ArtifactRepository, request: StoryRequest,
+                      plan: StoryPlanArtifact, world: WorldArtifact,
+                      characters: CharactersArtifact, outline: StoryOutlineArtifact,
+                      storyline: IncrementalStorylineArtifact, craft: StoryCraftPlan,
+                      notify, taxonomy_brief: TaxonomyBrief | None) -> _RenderedStory:
         writer = ChapterWriterAgent(self.provider)
-        changes_by_node = {record.node.id: record.state_changes for record in reviews.records}
-        writing_nekg = NarrativeEntityGraph()
-        chapter_texts: list[str] = []
-        previous_chapter = ""
-        total = len(outline.chapters)
-        for index, (chapter, brief) in enumerate(zip(outline.chapters, briefs), 1):
-            for node in (node for node in storyline.nodes if node.chapter_id == chapter.id):
-                writing_nekg.apply(node, changes_by_node.get(node.id, []))
-            body = writer.run(
-                request, plan, world, characters, brief, storyline,
-                writing_nekg.artifact(), chapter, previous_chapter, taxonomy_brief,
+        graph = NarrativeEntityGraph(world, characters.storyline_cast())
+        bodies: list[str] = []
+        previous = ""
+        for index, chapter in enumerate(outline.chapters, 1):
+            before = graph.snapshot()
+            repository.save_json(f"chapters/state-before-{chapter.id}.json", before)
+            brief = build_chapter_writing_brief(
+                chapter.id, craft, characters, storyline, before,
             )
-            text = _canonical_chapter(chapter.title, body)
-            repository.save_text(f"chapters/chapter-{chapter.order:03d}.md", text)
-            chapter_texts.append(text)
-            previous_chapter = text
-            notify(58 + index * 30 // total, "chapters",
-                   f"Capítulo {index} de {total} terminado", index, total)
-        draft = "\n\n".join(chapter_texts)
+            repository.save_json(f"craft/chapters/{chapter.id}.brief.json", brief)
+            body = writer.run(
+                request, plan, world, brief, chapter, previous,
+            )
+            bodies.append(body.strip())
+            previous = _canonical_chapter(chapter.title, body)
+            repository.save_text(f"chapters/chapter-{chapter.order:03d}.md", previous)
+            for node in storyline.nodes:
+                if node.chapter_id == chapter.id:
+                    graph.apply(node)
+            notify(68 + index * 20 // len(outline.chapters), "chapters",
+                   f"Capítulo {index} de {len(outline.chapters)} terminado", index, len(outline.chapters))
+        draft = "\n\n".join(
+            _canonical_chapter(chapter.title, body)
+            for chapter, body in zip(outline.chapters, bodies)
+        )
         repository.save_text("draft.md", draft)
         story, audit, revisions, warnings = self._review_draft(
-            repository, request, craft, characters, outline, storyline, draft,
+            repository, request, craft, characters, outline, storyline, bodies,
             notify, taxonomy_brief,
         )
+        parsed = _parse_story(story, outline)
         chapter_audits = []
-        for chapter, text in zip(outline.chapters, chapter_texts):
+        for chapter, text in zip(outline.chapters, parsed):
             minimum, maximum = _length_bounds(chapter.target_words)
             actual = _word_count(text)
             chapter_audits.append(LengthAuditEntry(
-                target_words=chapter.target_words, minimum_words=minimum,
-                maximum_words=maximum, actual_words=actual,
+                chapter_id=chapter.id, target_words=chapter.target_words,
+                minimum_words=minimum, maximum_words=maximum, actual_words=actual,
                 within_tolerance=minimum <= actual <= maximum,
             ))
         minimum, maximum = _length_bounds(request.target_words)
@@ -491,127 +451,112 @@ class StoryGenerator:
         repository.save_json("craft_revision_history.json", revisions)
         repository.save_json("craft_audit.json", audit)
         repository.save_json("length_audit.json", length)
-        repository.save_json("diagnostic_audit.json", diagnostic_from_craft(audit))
         repository.save_text("story.md", story)
         if warnings:
             repository.save_data("quality_warning.json", {"warnings": warnings})
             for warning in warnings:
                 repository.add_warning(warning)
-        return _RenderedStory(story, draft, chapter_texts, audit, revisions, length, warnings)
+        return _RenderedStory(story, draft, parsed, audit, revisions, length, warnings)
 
-    def _review_draft(
-        self, repository: ArtifactRepository, request: StoryRequest, craft: StoryCraftPlan,
-        characters: CharactersArtifact, outline: StoryOutlineArtifact,
-        storyline: IncrementalStorylineArtifact, draft: str, notify,
-        taxonomy_brief: TaxonomyBrief | None = None,
-    ) -> tuple[str, CraftAuditArtifact, CraftRevisionHistory, list[str]]:
+    def _review_draft(self, repository: ArtifactRepository, request: StoryRequest,
+                      craft: StoryCraftPlan, characters: CharactersArtifact,
+                      outline: StoryOutlineArtifact, storyline: IncrementalStorylineArtifact,
+                      initial_bodies: list[str], notify,
+                      taxonomy_brief: TaxonomyBrief | None):
         critic = CraftCriticAgent(self.provider)
-        rewriter = CraftRewriterAgent(self.provider)
-        versions: list[tuple[int, str, CraftAuditArtifact, bool]] = []
+        rewriter = ChapterRewriterAgent(self.provider)
+        bodies = list(initial_bodies)
         attempts: list[CraftRevisionAttempt] = []
+        versions: list[tuple[int, list[str], CraftAuditArtifact]] = []
         warnings: list[str] = []
-        minimum, maximum = _length_bounds(request.target_words)
-        notify(90, "craft_critic", "Auditando el borrador")
-        current_text = draft
         for attempt in range(self.max_craft_revisions + 1):
+            story = "\n\n".join(
+                _canonical_chapter(chapter.title, body)
+                for chapter, body in zip(outline.chapters, bodies)
+            )
             text_file = f"craft_revisions/attempt-{attempt}.md"
             audit_file = f"craft_revisions/attempt-{attempt}-audit.json"
-            repository.save_text(text_file, current_text)
-            within_length = minimum <= _word_count(current_text) <= maximum
-            critic_failed = False
+            repository.save_text(text_file, story)
             try:
                 audit = critic.run(
-                    request, craft, characters, outline, storyline, current_text,
-                    taxonomy_brief,
+                    request, craft, characters, outline, storyline, story, taxonomy_brief,
                 )
             except Exception as exc:
-                critic_failed = True
-                warning = (
-                    "La auditoría de craft no pudo completarse; se conservó el mejor "
-                    f"borrador disponible ({type(exc).__name__})."
-                )
+                warning = f"La auditoría de craft falló ({type(exc).__name__}); requiere revisión humana."
                 warnings.append(warning)
-                audit = CraftAuditArtifact(
-                    summary=warning,
-                    answers=[CraftAuditAnswer(
-                        **question, verdict="fail",
-                        evidence="La auditoría automática no estuvo disponible.",
-                        issue="El criterio no pudo evaluarse.",
-                        revision_instruction="Revisar este criterio manualmente.",
-                    ) for question in audit_questions(
-                        request, craft, characters, taxonomy_brief,
-                    )],
-                )
+                audit = CraftAuditArtifact(summary=warning, answers=[CraftAuditAnswer(
+                    **question, verdict="fail", evidence="Auditoría no disponible.",
+                    issue="Criterio no evaluado.", revision_instruction="Revisar manualmente.",
+                ) for question in audit_questions(request, craft, characters, taxonomy_brief)])
             repository.save_json(audit_file, audit)
-            advisory = [answer.question_id for answer in audit.answers
-                        if not answer.blocking and answer.verdict != "pass"]
+            chapter_lengths = []
+            for chapter, body in zip(outline.chapters, bodies):
+                lower, upper = _length_bounds(chapter.target_words)
+                if not lower <= _word_count(body) <= upper:
+                    chapter_lengths.append(chapter.id)
+            affected = set(audit.affected_chapter_ids) | set(chapter_lengths)
+            if audit.failed_blocking_ids and not audit.affected_chapter_ids:
+                affected.update(item.id for item in outline.chapters)
+            passed = audit.passed and not chapter_lengths
             attempts.append(CraftRevisionAttempt(
-                attempt=attempt, text_file=text_file, audit_file=audit_file,
-                passed=audit.passed and within_length,
+                attempt=attempt, text_file=text_file, audit_file=audit_file, passed=passed,
+                repaired_chapter_ids=sorted(affected) if attempt < self.max_craft_revisions else [],
                 failed_blocking_ids=audit.failed_blocking_ids,
-                failed_advisory_ids=advisory,
+                failed_advisory_ids=[item.question_id for item in audit.answers
+                                     if not item.blocking and item.verdict != "pass"],
             ))
-            versions.append((attempt, current_text, audit, within_length))
-            if critic_failed or (audit.passed and within_length) or attempt == self.max_craft_revisions:
+            versions.append((attempt, list(bodies), audit))
+            if passed or attempt == self.max_craft_revisions or warnings:
                 break
-            notify(92 + attempt * 2, "craft_rewriter",
-                   f"Aplicando revisión de craft {attempt + 1} de {self.max_craft_revisions}")
-            actual = _word_count(current_text)
-            length_instruction = "" if within_length else (
-                f"Rewrite the complete story to contain between {minimum} and {maximum} words; "
-                f"the current version has {actual}."
-            )
-            try:
-                current_text = rewriter.run(
-                    request, craft, characters, outline, storyline, current_text, audit,
-                    length_instruction=length_instruction, taxonomy_brief=taxonomy_brief,
-                )
-            except Exception as exc:
-                warnings.append(
-                    "La reescritura de craft falló; se conservó la mejor versión "
-                    f"auditada ({type(exc).__name__})."
-                )
+            notify(90 + attempt * 3, "chapter_repair", "Reparando capítulos afectados")
+            repair_failed = False
+            for index, chapter in enumerate(outline.chapters):
+                if chapter.id not in affected:
+                    continue
+                failed = [item for item in audit.answers
+                          if item.verdict == "fail" and (
+                              not item.chapter_ids or chapter.id in item.chapter_ids
+                          )]
+                lower, upper = _length_bounds(chapter.target_words)
+                try:
+                    bodies[index] = rewriter.run(
+                        request, chapter.id, chapter.title, bodies[index],
+                        {"chapter": chapter.model_dump(mode="json"),
+                         "brief": build_chapter_writing_brief(
+                             chapter.id, craft, characters, storyline,
+                         )},
+                        failed, f"Keep the chapter between {lower} and {upper} words.",
+                    )
+                except Exception as exc:
+                    warnings.append(
+                        "La reparación selectiva falló; se conservó la mejor versión "
+                        f"auditada ({type(exc).__name__})."
+                    )
+                    repair_failed = True
+                    break
+            if repair_failed:
                 break
 
-        def length_distance(item) -> int:
-            actual = _word_count(item[1])
-            if minimum <= actual <= maximum:
-                return 0
-            return min(abs(actual - minimum), abs(actual - maximum))
+        def quality(item) -> tuple[int, int, int]:
+            _, candidate_bodies, audit = item
+            story = " ".join(candidate_bodies)
+            low, high = _length_bounds(request.target_words)
+            actual = _word_count(story)
+            distance = 0 if low <= actual <= high else min(abs(actual-low), abs(actual-high))
+            return len(audit.failed_blocking_ids), distance, -item[0]
 
-        selected_attempt, story, selected_audit, _ = min(
-            versions,
-            key=lambda item: (
-                len(item[2].failed_blocking_ids), length_distance(item),
-                sum(not answer.blocking and answer.verdict != "pass"
-                    for answer in item[2].answers), -item[0],
-            ),
+        selected_attempt, selected_bodies, selected_audit = min(versions, key=quality)
+        story = "\n\n".join(
+            _canonical_chapter(chapter.title, body)
+            for chapter, body in zip(outline.chapters, selected_bodies)
         )
-        exhausted = not any(item[2].passed and item[3] for item in versions)
+        exhausted = not any(item.passed for item in attempts)
         if exhausted and not warnings:
-            warnings.append(
-                "La revisión de calidad agotó sus intentos; se entregó la mejor versión disponible."
-            )
+            warnings.append("Se agotaron las reparaciones; se entregó la mejor versión auditada.")
         return story, selected_audit, CraftRevisionHistory(
             selected_attempt=selected_attempt, exhausted=exhausted, attempts=attempts,
         ), warnings
 
-    def run(
-        self, request: StoryRequest | str, on_progress: ProgressCallback | None = None,
-        on_run_created=None,
-    ) -> StoryRun:
-        return self.generate(request, on_progress=on_progress, on_run_created=on_run_created)
-
-    def resume(
-        self, run_id: str | Path, on_progress: ProgressCallback | None = None,
-        on_run_created=None,
-    ) -> StoryRun:
-        run_dir = Path(run_id)
-        if not run_dir.is_absolute():
-            run_dir = self.output_root / run_dir
-        if (run_dir / "story.md").is_file():
-            return StoryRun(run_dir)
-        request = StoryRequest.model_validate_json(
-            (run_dir / "request.json").read_text(encoding="utf-8")
-        )
+    def run(self, request: StoryRequest | str,
+            on_progress: ProgressCallback | None = None, on_run_created=None) -> StoryRun:
         return self.generate(request, on_progress=on_progress, on_run_created=on_run_created)

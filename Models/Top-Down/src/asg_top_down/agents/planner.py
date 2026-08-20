@@ -21,7 +21,7 @@ class PlannerAgent(Agent[StoryPlanArtifact]):
                 "goal, mistaken belief or conviction, active opposition, irreversible choices, climax, "
                 "and ending must form one causal argument. All planning text must be English."
             ),
-            prompt=(f"REQUEST:\n{json_text(request)}\n\nBLUEPRINT:\n{json_text(blueprint.model_context())}"
+            prompt=(f"NORMALIZED SPECIFICATION:\n{json_text(request.agent_spec())}\n\nBLUEPRINT:\n{json_text(blueprint.model_context())}"
                     f"{repair_feedback}"),
             schema=StoryPlanArtifact,
         )

@@ -20,10 +20,6 @@ class StoryGeneratorAdapter(Protocol):
         on_run_created=None,
     ) -> Path: ...
 
-    def resume(self, run_dir: Path, on_progress: ProgressCallback | None = None,
-               on_run_created=None) -> Path: ...
-
-
 class TopDownGenerator:
     @property
     def display_name(self) -> str:
@@ -49,26 +45,6 @@ class TopDownGenerator:
         ).run(
             prompt, on_progress=on_progress, on_run_created=on_run_created,
         ).run_dir
-
-    def resume(self, run_dir: Path, on_progress: ProgressCallback | None = None,
-               on_run_created=None) -> Path:
-        settings = load_top_down_settings()
-        provider = GeminiProvider(
-            settings.api_key, settings.model,
-            rpm_limit=settings.rpm_limit, rpm_reserve=settings.rpm_reserve,
-            tpm_limit=settings.tpm_limit, max_retries=settings.max_retries,
-            max_retry_delay=settings.max_retry_delay,
-            embedding_model=settings.embedding_model,
-        )
-        return StoryGenerator(
-            provider, settings.output_root,
-            default_target_words=settings.default_target_words,
-            max_cpn_retries=settings.max_cpn_retries,
-            max_artifact_retries=settings.max_artifact_retries,
-        ).resume(
-            run_dir, on_progress=on_progress, on_run_created=on_run_created,
-        ).run_dir
-
 
 GeneratorFactory = Callable[[], StoryGeneratorAdapter]
 

@@ -2,6 +2,21 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [4.0.0] - 2026-08-20
+
+- Separados físicamente los carriles factual y de craft; STORYLINE consume una
+  proyección de personajes sin sliders y queda congelada antes de PPP.
+- Añadidos `StoryFrame`, predicados/mutaciones tipados, estado rico de mundo,
+  DAG causal real, validación determinista y presupuestos CPN adaptativos.
+- Sustituido PPP 3.3 por `PromiseLedger`, arcos positivo/negativo/plano,
+  directivas scene/sequel, try-fail y `CraftAlignment` posteriores a STORYLINE.
+- Añadidos briefs sanitizados, estado anterior al capítulo, reparación selectiva
+  y recálculo de longitud sobre la versión final.
+- Añadidas escrituras atómicas, manifiesto con hashes, checkpoints por respuesta
+  y registro de llamadas Gemini exitosas y fallidas.
+- Eliminados obligaciones PPP→STORYLINE, catálogo legacy, auditoría diagnóstica
+  duplicada y falsa recuperación automática; Telegram usa `recovery_pending`.
+
 ## [3.3.0] - 2026-08-18
 
 - Sustituido el contenedor `CraftVariant` por planes independientes de PPP global,

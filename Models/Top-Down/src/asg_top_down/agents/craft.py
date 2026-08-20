@@ -1,4 +1,4 @@
-"""Independent modular craft planners plus prose critic and rewriter."""
+"""Post-STORYLINE craft planners, critic, and selective chapter rewriter."""
 
 from __future__ import annotations
 
@@ -7,61 +7,58 @@ import json
 from .base import Agent, json_text
 from ..craft import audit_questions, normalize_audit, try_fail_target
 from ..schemas import (
-    ChapterPPPPlan, ChapterPlan, CharactersArtifact, CharacterArcPlan,
-    CraftAuditArtifact, GlobalPPPPlan, IncrementalStorylineArtifact,
-    StoryCraftPlan, StoryOutlineArtifact, StoryPlanArtifact, StoryRequest,
-    StorylineObligation, TaxonomyBrief, TryFailPlan, WorldArtifact,
+    CharacterArcPlan, CharactersArtifact, CraftAuditArtifact, CraftComposition,
+    IncrementalStorylineArtifact, PromiseLedger, StoryCraftPlan,
+    StoryOutlineArtifact, StoryPlanArtifact, StoryRequest, TaxonomyBrief, TryFailPlan,
 )
 
 
-class GlobalPPPPlannerAgent(Agent[GlobalPPPPlan]):
-    name = "global_ppp"
+class PromiseLedgerPlannerAgent(Agent[PromiseLedger]):
+    name = "promise_ledger"
 
-    def run(
-        self, request: StoryRequest, plan: StoryPlanArtifact, world: WorldArtifact,
-        characters: CharactersArtifact, outline: StoryOutlineArtifact,
-        repair_feedback: str = "", taxonomy_brief: TaxonomyBrief | None = None,
-    ) -> GlobalPPPPlan:
+    def run(self, request: StoryRequest, plan: StoryPlanArtifact,
+            characters: CharactersArtifact, outline: StoryOutlineArtifact,
+            storyline: IncrementalStorylineArtifact,
+            taxonomy_brief: TaxonomyBrief | None = None,
+            repair_feedback: str = "") -> PromiseLedger:
         return self.provider.generate_structured(
             system_instruction=(
-                "Design one authoritative global Promise-Progress-Payoff plan before STORYLINE. "
-                "Include a tone promise, exactly one primary line, and zero to two supporting plot, "
-                "character, or relationship lines. Every line needs one promise, at least one visible "
-                "conflict-bearing progress signal, and one prepared, fulfilling, potentially surprising "
-                "payoff. Give every point a stable descriptive ID and schedule at least one global point "
-                "in every chapter. The primary promise starts in the first chapter and its payoff occurs "
-                "in the final chapter. Use chapter IDs and natural-language events only. Return all "
-                "artifact text in English."
+                "The factual STORYLINE is frozen. Design a global Promise-Progress-Payoff ledger over it; "
+                "never request, imply, or perform event regeneration. Include exactly one story-direction, "
+                "one character/conflict, and one genre/structure promise. Each has one opening, visible "
+                "advance/complicate/reframe progresses, and one costly prepared payoff. The primary promise "
+                "opens first and pays in the final chapter; use at least two progresses for 1200+ words. "
+                "Connect the internal need to the external resolution. Use chapter IDs and English text."
             ),
             prompt=(
-                f"REQUEST:\n{json_text(request)}\n\nPLAN:\n{json_text(plan)}"
-                f"\n\nWORLD:\n{json_text(world)}\n\nCHARACTERS:\n{json_text(characters)}"
-                f"\n\nOUTLINE:\n{json_text(outline)}"
-                f"\n\nTAXONOMY BRIEF:\n{json_text(taxonomy_brief) if taxonomy_brief else 'none'}"
+                f"NORMALIZED SPECIFICATION:\n{json_text(request.agent_spec())}\n\nSTORY FRAME:\n"
+                f"{json_text(plan.story_frame)}\n\nCHARACTERS:\n{json_text(characters)}"
+                f"\n\nOUTLINE:\n{json_text(outline)}\n\nFROZEN STORYLINE:\n{json_text(storyline)}"
+                f"\n\nGENRE PALETTE:\n{json_text(taxonomy_brief) if taxonomy_brief else 'none'}"
                 f"{repair_feedback}"
             ),
-            schema=GlobalPPPPlan,
+            schema=PromiseLedger,
         )
 
 
 class CharacterArcPlannerAgent(Agent[CharacterArcPlan]):
     name = "character_arcs"
 
-    def run(
-        self, characters: CharactersArtifact, outline: StoryOutlineArtifact,
-        global_ppp: GlobalPPPPlan, repair_feedback: str = "",
-    ) -> CharacterArcPlan:
+    def run(self, characters: CharactersArtifact, outline: StoryOutlineArtifact,
+            storyline: IncrementalStorylineArtifact, ledger: PromiseLedger,
+            repair_feedback: str = "") -> CharacterArcPlan:
         return self.provider.generate_structured(
             system_instruction=(
-                "Plan observable character craft independently from PPP. For every main character, "
-                "create exactly start, transition, and end milestones for the already selected "
-                "low-to-high focus slider. Schedule them in nondecreasing chapter order and make the "
-                "change affect consequential choices that support the global PPP. Return English text."
+                "Plan exactly four behavioral evidences for every main character over the frozen "
+                "STORYLINE: establishment, pressure, decisive_choice, consequence. Honor each profile's "
+                "positive, negative, or flat arc direction. The flaw must impose its stated cost; the "
+                "decisive choice must expose want versus need; the internal outcome must enable or prevent "
+                "an external promise payoff. Fill both want/need choice fields and the explicit "
+                "enables/prevents rationale. Use chapter IDs and English text, never alter events."
             ),
-            prompt=(
-                f"CHARACTERS:\n{json_text(characters)}\n\nOUTLINE:\n{json_text(outline)}"
-                f"\n\nGLOBAL PPP:\n{json_text(global_ppp)}{repair_feedback}"
-            ),
+            prompt=(f"CHARACTERS:\n{json_text(characters)}\n\nOUTLINE:\n{json_text(outline)}"
+                    f"\n\nFROZEN STORYLINE:\n{json_text(storyline)}\n\nLEDGER:\n{json_text(ledger)}"
+                    f"{repair_feedback}"),
             schema=CharacterArcPlan,
         )
 
@@ -69,116 +66,86 @@ class CharacterArcPlannerAgent(Agent[CharacterArcPlan]):
 class TryFailPlannerAgent(Agent[TryFailPlan]):
     name = "try_fail"
 
-    def run(
-        self, request: StoryRequest, outline: StoryOutlineArtifact,
-        global_ppp: GlobalPPPPlan, repair_feedback: str = "",
-    ) -> TryFailPlan:
+    def run(self, request: StoryRequest, outline: StoryOutlineArtifact,
+            storyline: IncrementalStorylineArtifact, ledger: PromiseLedger,
+            repair_feedback: str = "") -> TryFailPlan:
         count = try_fail_target(request.target_words)
         return self.provider.generate_structured(
             system_instruction=(
-                "Plan exactly the requested number of independent Yes-but or No-and cycles. Each "
-                "attempt must advance a global promise through conflict, change the terms of the "
-                "problem, and have a persistent consequence. Use chapter IDs and English text."
+                "Build try-fail cycles only after and over the frozen STORYLINE. Each cycle is yes_but "
+                "or no_and, changes the terms of the problem, teaches something, and raises or transforms "
+                "the cost. Link it to an active promise and chapter. A plain yes/no is reserved for final "
+                "resolution and is not a try-fail cycle. Never alter factual events. Return English text."
             ),
-            prompt=(
-                f"REQUEST:\n{json_text(request)}\n\nOUTLINE:\n{json_text(outline)}"
-                f"\n\nGLOBAL PPP:\n{json_text(global_ppp)}"
-                f"\n\nEXACT CYCLE COUNT: {count}{repair_feedback}"
-            ),
+            prompt=(f"NORMALIZED SPECIFICATION:\n{json_text(request.agent_spec())}"
+                    f"\n\nOUTLINE:\n{json_text(outline)}\n\nFROZEN STORYLINE:\n{json_text(storyline)}"
+                    f"\n\nLEDGER:\n{json_text(ledger)}\n\nEXACT CYCLE COUNT: {count}{repair_feedback}"),
             schema=TryFailPlan,
         )
 
 
-class ChapterPPPPlannerAgent(Agent[ChapterPPPPlan]):
-    name = "chapter_ppp"
+class CraftComposerAgent(Agent[CraftComposition]):
+    name = "craft_alignment"
 
-    def run(
-        self, global_ppp: GlobalPPPPlan, chapter: ChapterPlan,
-        storyline: IncrementalStorylineArtifact,
-        chapter_obligations: list[StorylineObligation],
-        previous: ChapterPPPPlan | None = None, repair_feedback: str = "",
-    ) -> ChapterPPPPlan:
-        nodes = [node for node in storyline.nodes if node.chapter_id == chapter.id]
+    def run(self, outline: StoryOutlineArtifact, storyline: IncrementalStorylineArtifact,
+            ledger: PromiseLedger, arcs: CharacterArcPlan, try_fail: TryFailPlan,
+            repair_feedback: str = "") -> CraftComposition:
         return self.provider.generate_structured(
             system_instruction=(
-                "Ground one chapter-level Promise-Progress-Payoff line in the immutable accepted "
-                "STORYLINE. Establish a local expectation, signal progress through conflict, and "
-                "resolve or consequentially transform it. Reference only supplied node IDs from this "
-                "chapter, in event order. Include every global PPP point scheduled for the chapter in "
-                "advances_global_point_ids. Do not invent, alter, or reorder facts. Return English text."
+                "Align every promise beat, character evidence, and try-fail cycle to one or more accepted "
+                "node IDs in its own chapter. Cover every craft ID exactly once. Then derive one chapter "
+                "craft view per chapter, listing only promises opened, progressed, or paid there. A chapter "
+                "may have empty phases but must act on an active promise. Add scene directives separately: "
+                "goal, conflict, yes_but/no_and or CEN-only final_resolution, consequence, reaction, dilemma, "
+                "decision. Repair craft alignment only; the STORYLINE is immutable. Return English text."
             ),
-            prompt=(
-                f"GLOBAL PPP:\n{json_text(global_ppp)}\n\nCHAPTER:\n{json_text(chapter)}"
-                f"\n\nACCEPTED CHAPTER NODES:\n{json_text(nodes)}"
-                f"\n\nCHAPTER OBLIGATIONS:\n{json_text(chapter_obligations)}"
-                f"\n\nPREVIOUS CHAPTER PPP:\n{json_text(previous) if previous else 'none'}"
-                f"{repair_feedback}"
-            ),
-            schema=ChapterPPPPlan,
+            prompt=(f"OUTLINE:\n{json_text(outline)}\n\nFROZEN STORYLINE:\n{json_text(storyline)}"
+                    f"\n\nLEDGER:\n{json_text(ledger)}\n\nARCS:\n{json_text(arcs)}"
+                    f"\n\nTRY-FAIL:\n{json_text(try_fail)}{repair_feedback}"),
+            schema=CraftComposition,
         )
 
 
 class CraftCriticAgent(Agent[CraftAuditArtifact]):
     name = "craft_critic"
 
-    def run(
-        self, request: StoryRequest, craft: StoryCraftPlan,
-        characters: CharactersArtifact, outline: StoryOutlineArtifact,
-        storyline: IncrementalStorylineArtifact, draft: str,
-        taxonomy_brief: TaxonomyBrief | None = None,
-    ) -> CraftAuditArtifact:
+    def run(self, request: StoryRequest, craft: StoryCraftPlan,
+            characters: CharactersArtifact, outline: StoryOutlineArtifact,
+            storyline: IncrementalStorylineArtifact, draft: str,
+            taxonomy_brief: TaxonomyBrief | None = None) -> CraftAuditArtifact:
         questions = audit_questions(request, craft, characters, taxonomy_brief)
         raw = self.provider.generate_structured(
             system_instruction=(
-                "You are a demanding story-craft critic. Answer every supplied question exactly once "
-                "using its exact metadata. Judge fiction rather than planning labels and cite concise "
-                "location-specific evidence. Failures require actionable issues and revision instructions. "
-                "Use not_applicable only for non-blocking questions. Write analysis in English, assign "
-                "no scores, and invent no questions."
+                "Answer every supplied story-craft question exactly once. Identify affected chapter IDs "
+                "for every localizable failure. Coherence includes world state, knowledge, causality, and "
+                "motivation; pacing requires visible progress; engagement and satisfaction require prepared "
+                "and fulfilled promises. Cite evidence, assign no scores, and make failures actionable."
             ),
-            prompt=(
-                f"REQUEST:\n{json_text(request)}\n\nMODULAR CRAFT:\n{json_text(craft)}"
-                f"\n\nCHARACTERS:\n{json_text(characters)}\n\nOUTLINE:\n{json_text(outline)}"
-                f"\n\nSTORYLINE:\n{json_text(storyline)}"
-                f"\n\nTAXONOMY BRIEF:\n{json_text(taxonomy_brief) if taxonomy_brief else 'none'}"
-                f"\n\nQUESTIONS:\n{json.dumps(questions, ensure_ascii=False, indent=2)}"
-                f"\n\nFICTION:\n{draft}"
-            ),
+            prompt=(f"NORMALIZED SPECIFICATION:\n{json_text(request.agent_spec())}"
+                    f"\n\nCRAFT:\n{json_text(craft)}\n\nCHARACTERS:\n{json_text(characters)}"
+                    f"\n\nOUTLINE:\n{json_text(outline)}\n\nFROZEN STORYLINE:\n{json_text(storyline)}"
+                    f"\n\nQUESTIONS:\n{json.dumps(questions, ensure_ascii=False, indent=2)}"
+                    f"\n\nFICTION:\n{draft}"),
             schema=CraftAuditArtifact,
         )
         return normalize_audit(raw, questions)
 
 
-class CraftRewriterAgent(Agent[str]):
-    name = "craft_rewriter"
+class ChapterRewriterAgent(Agent[str]):
+    name = "chapter_rewriter"
 
-    def run(
-        self, request: StoryRequest, craft: StoryCraftPlan,
-        characters: CharactersArtifact, outline: StoryOutlineArtifact,
-        storyline: IncrementalStorylineArtifact, draft: str, audit: CraftAuditArtifact,
-        length_instruction: str = "", taxonomy_brief: TaxonomyBrief | None = None,
-    ) -> str:
-        failed = sorted(
-            (answer for answer in audit.answers if answer.verdict == "fail"),
-            key=lambda answer: not answer.blocking,
-        )
+    def run(self, request: StoryRequest, chapter_id: str, chapter_title: str,
+            chapter_text: str, chapter_context: dict, audit_answers: list,
+            length_instruction: str = "") -> str:
         return self.provider.generate_text(
             system_instruction=(
-                "You are a literary rewriter. Rewrite the complete fiction once, applying every failed "
-                "audit instruction. Preserve accepted facts, causal dependencies, event outcomes, user "
-                f"constraints, the output language ({request.language}), headings, and approximate length. "
-                "Realize global and chapter PPP, character growth, and try-fail consequences through "
-                "action and choice. Never expose IDs, questions, taxonomy, or planning terminology. "
-                "Return only the complete revised story in Markdown with canonical chapter headings."
+                f"Rewrite only this fiction chapter body in {request.language}. Preserve all accepted "
+                "facts, event order, causal outcomes, proper nouns, and the chapter title (which you must "
+                "not output). Apply only supplied repair instructions. Do not expose IDs or planning terms."
             ),
-            prompt=(
-                f"REQUEST:\n{json_text(request)}\n\nMODULAR CRAFT:\n{json_text(craft)}"
-                f"\n\nCHARACTERS:\n{json_text(characters)}\n\nOUTLINE:\n{json_text(outline)}"
-                f"\n\nSTORYLINE:\n{json_text(storyline)}"
-                f"\n\nTAXONOMY BRIEF:\n{json_text(taxonomy_brief) if taxonomy_brief else 'none'}"
-                f"\n\nFAILED AUDIT ANSWERS:\n"
-                f"{json.dumps([answer.model_dump(mode='json') for answer in failed], ensure_ascii=False, indent=2)}"
-                f"\n\nDETERMINISTIC LENGTH INSTRUCTION:\n{length_instruction or 'none'}"
-                f"\n\nDRAFT:\n{draft}"
-            ),
+            prompt=(f"NORMALIZED SPECIFICATION:\n{json_text(request.agent_spec())}"
+                    f"\n\nCHAPTER CONTEXT:\n{json_text(chapter_context)}"
+                    f"\n\nFAILED CHECKS:\n{json_text(audit_answers)}"
+                    f"\n\nLENGTH:\n{length_instruction or 'Preserve approximate length.'}"
+                    f"\n\nCHAPTER BODY:\n{chapter_text}"),
         )

@@ -20,6 +20,7 @@ class QueueJob:
     progress_message_id: int | None = None
     run_dir: str | None = None
     recovery_count: int = 0
+    error_code: str | None = None
 
 
 class QueueRepository:
@@ -107,13 +108,22 @@ class QueueRepository:
         with self._lock, self._connect() as db:
             self.last_recovered_ids = {
                 row[0] for row in db.execute(
-                    "SELECT id FROM jobs WHERE status='running' AND recovery_count < 3"
+                    "SELECT id FROM jobs WHERE status='running'"
                 ).fetchall()
             }
-            db.execute("""UPDATE jobs SET status='queued', recovery_count=recovery_count+1,
-                enqueued_at='0000-' || enqueued_at WHERE status='running' AND recovery_count < 3""")
-            db.execute("UPDATE jobs SET status='failed', error_code='CHECKPOINT_RECOVERY_FAILED' WHERE status='running' AND recovery_count >= 3")
+            # TODO(recovery-4.x): rebuild STORYLINE/NEKG from the final checkpoint,
+            # continue the first pending provider call, and deliver to the original user.
+            db.execute("""UPDATE jobs SET status='recovery_pending',
+                recovery_count=recovery_count+1, error_code='RECOVERY_NOT_IMPLEMENTED'
+                WHERE status='running'""")
         return self.active()
+
+    def recovery_pending(self) -> list[QueueJob]:
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT * FROM jobs WHERE status='recovery_pending' ORDER BY enqueued_at"
+            ).fetchall()
+        return [self._job(row) for row in rows]
 
     def average_duration(self) -> float | None:
         with self._connect() as db:

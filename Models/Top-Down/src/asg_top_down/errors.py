@@ -75,8 +75,3 @@ class GeminiDailyQuotaError(ProviderError):
 
 class GeminiBillingQuotaError(ProviderError):
     code = "GEMINI_BILLING_LIMIT_EXHAUSTED"
-
-
-class QueueRecoveryError(ASGError):
-    code = "CHECKPOINT_RECOVERY_FAILED"
-    stage = "queue"

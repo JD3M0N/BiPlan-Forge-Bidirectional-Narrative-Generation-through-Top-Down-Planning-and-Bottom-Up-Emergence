@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS catalog_fts;
+DROP TABLE IF EXISTS beat;
+DROP TABLE IF EXISTS catalog_entry;

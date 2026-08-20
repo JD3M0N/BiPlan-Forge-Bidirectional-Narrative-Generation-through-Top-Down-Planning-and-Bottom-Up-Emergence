@@ -1,105 +1,106 @@
-# ASG Top-Down 3.3
+# ASG Top-Down 4.0
 
-`StoryGenerator` es la única ruta de producción. El pipeline separa la decisión
-de qué ocurre, el diseño de expectativas narrativas y la redacción de prosa
-mediante artefactos validados.
+`StoryGenerator.generate/run` es la ruta pública de producción. La versión 4.0
+separa hechos y craft mediante una dependencia unidireccional:
 
-Todas las instrucciones internas están en inglés. El analista conserva el prompt
-original, crea una especificación inglesa enriquecida y mantiene por separado el
-idioma solicitado para la ficción y sus títulos.
+```text
+Request → StoryFrame → World/Characters → Outline → CBN/CEN
+→ CPN incremental validado → STORYLINE/NEKG congelados
+→ PromiseLedger + arcos + try-fail → CraftAlignment
+→ briefs sanitizados → capítulos → auditoría/reparación selectiva → story.md
+```
+
+`storyline/` no importa ni recibe contratos de `craft/`. Recibe una proyección
+`StorylineCast` sin sliders y trabaja solo con eventos, entidades, predicados y
+mutaciones factuales. Si falla una alineación de craft, se repara el ledger, el
+arco, el try-fail o la alineación; nunca se regeneran CBN, CPN o CEN.
 
 ```python
 from asg_top_down import StoryGenerator
 
-generator = StoryGenerator(provider, output_root)
-run = generator.generate(prompt_or_request)
+run = StoryGenerator(provider, output_root).generate(prompt_or_request)
 print(run.story_path)
 ```
 
-## Taxonomías flexibles
+## STORYTELLER factual
 
-El catálogo SQLite contiene 24 perfiles ingleses de géneros y story engines.
-La recuperación híbrida devuelve hasta tres candidatos y el planificador elige
-una taxonomía primaria y, sólo con evidencia explícita, un accent.
-`taxonomy_application.json` conserva las referencias seleccionadas y
-`taxonomy_brief.json` entrega descripciones naturales a los agentes. Las
-convenciones no esenciales pueden fusionarse, reordenarse u omitirse.
+`StoryFrame` fija pregunta central, A-plot, necesidad/B-plot, hilo MICE, estados
+inicial/final y la relación entre resolución interna y externa. El mundo usa IDs
+estables, mapa de localizaciones, objetos y propietarios. `StorylineState`
+mantiene dependencias múltiples y calcula un orden topológico real.
 
-## Craft modular previo a STORYLINE
+Cada CPN recibe reglas del mundo, elenco factual, estado NEKG vigente, relaciones
+pertinentes y eventos recientes. `DependencyValidator` rechaza entidades o
+objetos ausentes, personajes muertos, conocimiento no adquirido, movimiento
+imposible, precondiciones falsas, dependencias desconocidas y efectos
+contradictorios. Un reemplazo del revisor pasa exactamente las mismas reglas.
 
-Después de crear el outline, agentes independientes producen una única estrategia
-autoritativa:
+Los capítulos automáticos tienen 400–900 palabras. Una cantidad explícita de
+capítulos prevalece y permite presupuestos desde 200 palabras. Hay al menos un
+CPN por capítulo corto y dos desde 400 palabras; el máximo es
+`min(8, ceil(target_words/180))`. CBN y CEN reciben 15 % cada uno y los CPN el 70 %.
 
-- `GlobalPPPPlan`: promesa tonal, una línea PPP principal y hasta dos secundarias.
-- `CharacterArcPlan`: hitos observables del slider focal de cada protagonista.
-- `TryFailPlan`: ciclos Yes-but/No-and con consecuencias persistentes.
+## Personajes y craft posterior
 
-Un adaptador puro transforma esos artefactos en obligaciones narrativas neutrales.
-STORYTELLER recibe las obligaciones, pero sus contratos `ChapterPlan`, `PlotNode`,
-`PlotNodeProposal` y `PlotNodeReview` no contienen campos PPP, sliders ni try-fail.
+`CharacterProfile` conserva rol, asiento del elenco, competencia, want, need,
+creencia equivocada, herida, fuerza/defecto/costo, regla personal, voz y foco de
+percepción. Los arcos pueden ser positivos, negativos o planos. Tras congelar
+STORYLINE se planifican cuatro evidencias: establecimiento, presión, elección
+decisiva y consecuencia.
 
-El planificador genera CBN/CEN y propone CPN incrementales. Cada candidato debe
-superar causalidad, intención, conflicto, continuidad, novedad, avance hacia el
-final y consistencia del mundo. Sólo eventos aceptados actualizan STORYLINE y NEKG.
+`PromiseLedger` contiene un contrato tonal y promesas de dirección,
+personaje/conflicto y estructura de género. Cada promesa tiene apertura,
+progresos `advance|complicate|reframe` y un payoff único, costoso y preparado.
+`ChapterCraftView` es solo una vista derivada; no obliga a ejecutar un PPP entero
+por capítulo. `SceneCraftDirective` modela goal/conflict, `yes_but|no_and` o
+resolución final, consecuencia, reacción, dilema y decisión.
 
-## PPP por capítulo y escritura
+El escritor recibe el snapshot anterior al capítulo, los cambios que debe
+dramatizar, acciones del ledger pertinentes, directivas de escena y tarjetas
+conductuales sin IDs internos, taxonomías ni valores de sliders. Nunca recibe
+payoffs futuros innecesarios.
 
-Con STORYLINE cerrada, `ChapterPPPPlannerAgent` se ejecuta una vez por capítulo,
-en orden. Cada `ChapterPPPPlan` enlaza promesa, progreso y payoff locales con IDs
-de nodos aceptados y cubre todos los puntos PPP globales asignados al capítulo.
+## Persistencia y calidad
 
-Si un PPP local no puede cubrir sus obligaciones, se repara localmente. Si los
-reintentos se agotan, el sistema reconstruye anclas, STORYLINE y NEKG exactamente
-una vez, invalida los enlaces locales anteriores y vuelve a generarlos. Una segunda
-falta de cobertura detiene el run con un diagnóstico estructurado.
-
-Antes de redactar, un compositor crea `ChapterWritingBrief`: conserva las
-instrucciones globales y locales, los hitos y los try-fail relevantes, pero elimina
-IDs de nodos y términos CBN/CPN/CEN. El escritor también recibe eventos, causalidad
-y contexto de entidades sanitizados, además del capítulo anterior completo.
-
-La auditoría convierte tono, PPP global/local, preparación del payoff, sliders,
-try-fail, idioma y constraints explícitos en preguntas bloqueantes. Puede activar
-hasta dos reescrituras y conserva la mejor versión disponible ante fallos tardíos.
-
-## Artefactos
+Las escrituras son atómicas. `pipeline_manifest.json` guarda hashes y etapas;
+`checkpoints/` conserva STORYLINE, NEKG y revisiones después de cada respuesta
+incremental; `llm_calls.jsonl` incluye intentos exitosos y fallidos.
 
 ```text
-craft/
-  global_ppp.json
-  character_arcs.json
-  try_fail.json
-  chapters/
-    chapter-XXX.ppp.json
-    chapter-XXX.brief.json
-storyline_obligations.json
-storyline_obligation_trace.json
+story_frame.json
+world.json
+characters.json
+outline.json
 chapter_anchors.json
 storyline.json
 nekg.json
 node_reviews.json
-chapters/chapter-XXX.md
+craft/promise_ledger.json
+craft/character_arcs.json
+craft/try_fail.json
+craft/alignment.json
+craft/chapters/*.view.json
+craft/chapters/*.brief.json
+chapters/state-before-*.json
 draft.md
 craft_audit.json
 craft_revision_history.json
 length_audit.json
+pipeline_manifest.json
+llm_calls.jsonl
 story.md
 ```
 
-`storyline_replans/` y `planning_checkpoint/` conservan los intentos y estados
-intermedios. `llm_usage.json` registra llamadas, tokens, esperas y reintentos.
+El crítico identifica capítulos afectados y la reescritura es local. La
+longitud se recalcula parseando la versión finalmente seleccionada.
+`DiagnosticAudit` fue eliminado: `craft_audit.json` es la fuente única.
 
-Top-Down 3.3 no lee contratos de craft ni variantes de versiones anteriores y ya
-no expone `render_variant()`. `compare-story-runs` continúa comparando dos runs o
-dos archivos `story.md` distintos:
-
-```powershell
-compare-story-runs Stories/Top-Down/run-a Stories/Top-Down/run-b `
-  --output comparacion.html
-```
-
-## Desarrollo
+Los runs 3.x terminados continúan leyéndose y comparándose por `story.md`. Los
+runs incompletos no se migran. La recuperación automática está pendiente:
+Telegram los marca `recovery_pending`, conserva sus checkpoints y continúa con
+la cola restante.
 
 ```powershell
+compare-story-runs Stories/Top-Down/run-a Stories/Top-Down/run-b --output comparison.html
 python -m pytest Models/Top-Down/tests
 ```

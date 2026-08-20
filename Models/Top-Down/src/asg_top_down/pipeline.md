@@ -1,21 +1,21 @@
-# Pipeline Top-Down 3.3
+# Pipeline Top-Down 4.0
 
 ```text
-Prompt → Analyst → SQLite retrieval → Planner → World → Characters → Outline
-       → Global PPP → Character arcs + Try-fail → neutral obligations
-       → CBN/CEN anchors → incremental reviewed CPN → STORYLINE + local NEKG
-       → one traceable PPP per chapter → sanitized writing briefs
-       → chapter writer → blocking craft audit ↔ rewriter → story
+FACTUAL
+Request → normalized AgentStorySpec → StoryFrame → World + Character profiles
+→ StorylineCast (sin sliders) → Outline → CBN/CEN → reviewed CPN
+→ deterministic dependency checks → STORYLINE DAG + NEKG → FREEZE
+
+CRAFT (solo lectura de STORYLINE)
+PromiseLedger ─┐
+Character arcs ├→ CraftAlignment → ChapterCraftView → sanitized brief
+Try-fail cycles┘
+→ writer(state-before) → chapter audit → selective repair → final parse → story.md
 ```
 
-`StoryGenerator` coordina el flujo; los prompts viven en agentes especializados y
-los validadores puros permanecen fuera de agentes y persistencia.
+La frontera es `CraftAlignment`. STORYLINE no importa `craft_models`, no recibe
+PPP, sliders ni try-fail y no ofrece una ruta de regeneración desde craft.
+Los predicados y mutaciones tipados son la autoridad del estado factual.
 
-El adaptador de craft es la única frontera entre PPP/arcos/try-fail y STORYTELLER.
-El planificador incremental consume `StorylineObligationsArtifact`, pero sus nodos
-siguen siendo contratos narrativos neutrales.
-
-Los PPP locales se crean después de aceptar STORYLINE y enlazan sus beats con nodos
-reales. El compositor elimina esas referencias antes de entregar el brief al
-escritor. Si la cobertura no puede repararse localmente, se permite exactamente una
-replanificación de anclas y STORYLINE antes de fallar.
+Los checkpoints preparan recuperación futura, pero 4.0 no simula `resume`: un
+run incompleto queda explícitamente como `recovery_pending`.

@@ -99,6 +99,18 @@ class TelegramStoryBot:
         if not self.queue:
             return
         jobs = self.queue.recover_interrupted()
+        for job in self.queue.recovery_pending():
+            try:
+                await application.bot.send_message(
+                    chat_id=job.chat_id,
+                    text=(
+                        "El bot se reinició durante tu historia. El trabajo quedó marcado como "
+                        "recovery_pending: sus checkpoints se conservan, pero la reanudación automática "
+                        "todavía no está implementada. Las demás solicitudes continuarán."
+                    ),
+                )
+            except TelegramError:
+                LOGGER.warning("No se pudo avisar el trabajo pendiente %s", job.id)
         for job in jobs:
             self.active_users.add(job.user_id)
             user = SimpleNamespace(id=job.user_id, username=job.username, full_name=job.username)
@@ -106,17 +118,6 @@ class TelegramStoryBot:
                 bot=application.bot, application=application,
                 user_data=application.user_data[job.user_id],
             )
-            if job.id in self.queue.last_recovered_ids:
-                try:
-                    await application.bot.send_message(
-                        chat_id=job.chat_id,
-                        text=(
-                            "El bot se reinició durante tu historia. La solicitud sigue "
-                            "guardada y se reanudará desde el último checkpoint válido."
-                        ),
-                    )
-                except TelegramError:
-                    LOGGER.warning("No se pudo avisar la recuperación del trabajo %s", job.id)
             application.create_task(self._generate_and_deliver(
                 context=context, chat_id=job.chat_id, user=user, prompt=job.prompt,
                 progress_message_id=job.progress_message_id, job_id=job.id,
@@ -359,11 +360,7 @@ class TelegramStoryBot:
                     (prompt, report_progress, run_created) if len(parameters) >= 3
                     else (prompt, report_progress) if len(parameters) >= 2 else (prompt,)
                 )
-                job = self.queue.get(job_id) if job_id and self.queue else None
                 operation = self.generator.generate
-                if job and job.run_dir and hasattr(self.generator, "resume"):
-                    operation = self.generator.resume
-                    args = (Path(job.run_dir), report_progress, run_created)
                 story_directory = await asyncio.to_thread(
                     operation, *args
                 )

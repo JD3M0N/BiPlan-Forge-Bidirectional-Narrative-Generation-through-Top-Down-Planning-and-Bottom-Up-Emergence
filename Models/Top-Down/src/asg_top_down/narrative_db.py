@@ -19,25 +19,7 @@ from .config import find_project_root
 from .schemas import StoryRequest, TaxonomyApplication, TaxonomyBrief, TaxonomyOptionReference
 
 
-KINDS = ("macroplot", "situation", "character_arc", "beat", "genre", "role")
 Importance = Literal["core", "common", "optional"]
-
-
-class CatalogEntry(BaseModel):
-    """Legacy v3 catalog entry retained for artifact compatibility."""
-
-    id: str
-    kind: str
-    name: str
-    description: str
-    signals: list[str] = Field(default_factory=list)
-    compatible: list[str] = Field(default_factory=list)
-    provenance: str
-    score: float = 0.0
-    beat: dict | None = None
-
-    def retrieval_text(self) -> str:
-        return f"{self.name}. {self.description}. {'; '.join(self.signals)}"
 
 
 class TaxonomyOption(BaseModel):
@@ -151,32 +133,23 @@ class RetrievalTrace(BaseModel):
     embedding_model: str | None = None
     used_embeddings: bool = False
     candidates: list[TaxonomyCandidate] = Field(default_factory=list)
-    selections: dict[str, list[CatalogEntry]] = Field(default_factory=dict)
 
 
 class NarrativeBlueprint(BaseModel):
-    """V3.1 taxonomy shortlist plus optional fields used when reading v3 artifacts."""
+    """Current taxonomy shortlist. Legacy catalog shapes are deliberately rejected."""
 
-    candidates: list[TaxonomyCandidate] = Field(default_factory=list)
+    candidates: list[TaxonomyCandidate] = Field(min_length=1)
     trace: RetrievalTrace
-    macroplots: list[CatalogEntry] = Field(default_factory=list)
-    situations: list[CatalogEntry] = Field(default_factory=list)
-    character_arcs: list[CatalogEntry] = Field(default_factory=list)
-    beats: list[CatalogEntry] = Field(default_factory=list)
-    genres: list[CatalogEntry] = Field(default_factory=list)
-    roles: list[CatalogEntry] = Field(default_factory=list)
 
     def model_context(self) -> dict:
         """Return taxonomy content without retrieval lexicon matches or diagnostic traces."""
-        if self.candidates:
-            return {
-                "candidates": [{
-                    "profile": item.profile.model_dump(mode="json"),
-                    "score": item.score,
-                    "explicit_match": item.explicit_match,
-                } for item in self.candidates]
-            }
-        return self.model_dump(mode="json", exclude={"trace"})
+        return {
+            "candidates": [{
+                "profile": item.profile.model_dump(mode="json"),
+                "score": item.score,
+                "explicit_match": item.explicit_match,
+            } for item in self.candidates]
+        }
 
 
 class EmbeddingProvider(Protocol):
@@ -248,24 +221,7 @@ class NarrativeSchemaRepository:
                     continue
                 db.executescript(migration.read_text(encoding="utf-8"))
                 db.execute("INSERT INTO schema_migration(version) VALUES (?)", (migration.name,))
-            self._seed_legacy(db)
             self._seed_taxonomies(db)
-
-    def _seed_legacy(self, db: sqlite3.Connection) -> None:
-        seed = self.schema_root / "seeds" / "catalog.json"
-        if not seed.is_file():
-            return
-        document = json.loads(seed.read_text(encoding="utf-8"))
-        for item in document.get("entries", []):
-            db.execute(
-                "INSERT INTO catalog_entry(id,kind,name,description,signals_json,compatible_json,provenance) "
-                "VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,name=excluded.name,"
-                "description=excluded.description,signals_json=excluded.signals_json,"
-                "compatible_json=excluded.compatible_json,provenance=excluded.provenance",
-                (item["id"], item["kind"], item["name"], item["description"],
-                 json.dumps(item.get("signals", []), ensure_ascii=False),
-                 json.dumps(item.get("compatible", []), ensure_ascii=False), item["provenance"]),
-            )
 
     def _seed_taxonomies(self, db: sqlite3.Connection) -> None:
         folder = self.schema_root / "taxonomies"
@@ -318,20 +274,6 @@ class NarrativeSchemaRepository:
         if row is None:
             raise ValueError(f"unknown taxonomy profile: {taxonomy_id}")
         return TaxonomyProfile.model_validate_json(row[0])
-
-    def entries(self, kind: str | None = None) -> list[CatalogEntry]:
-        sql = "SELECT * FROM catalog_entry"
-        params: tuple = ()
-        if kind:
-            sql += " WHERE kind=?"
-            params = (kind,)
-        with closing(self._connect()) as db:
-            rows = db.execute(sql, params).fetchall()
-        return [CatalogEntry(
-            id=row["id"], kind=row["kind"], name=row["name"], description=row["description"],
-            signals=json.loads(row["signals_json"]), compatible=json.loads(row["compatible_json"]),
-            provenance=row["provenance"],
-        ) for row in rows]
 
     def _recognition_lexicon(self) -> dict[str, list[str]]:
         path = self.schema_root / "seeds" / "recognition_lexicon.json"
@@ -416,7 +358,7 @@ class NarrativeSchemaRepository:
         evidence_query = story_request.original_prompt
         profiles = self.profiles()
         if not profiles:
-            return self._retrieve_legacy(story_request)
+            raise RuntimeError("no current taxonomy profiles are installed")
         lexicon = self._recognition_lexicon()
         fts_scores = self._taxonomy_fts_scores(query)
         try:
@@ -449,29 +391,6 @@ class NarrativeSchemaRepository:
             query=query, embedding_model=model, used_embeddings=bool(query_vector), candidates=candidates,
         )
         return NarrativeBlueprint(candidates=candidates, trace=trace)
-
-    def _retrieve_legacy(self, story_request: StoryRequest) -> NarrativeBlueprint:
-        entries = self.entries()
-        query = " ".join(filter(None, (
-            story_request.processed_prompt, story_request.premise,
-            story_request.genre, story_request.tone,
-        )))
-        selections: dict[str, list[CatalogEntry]] = {}
-        for kind in KINDS:
-            candidates = [entry for entry in entries if entry.kind == kind]
-            candidates.sort(
-                key=lambda entry: -sum(
-                    token in _normalize(entry.retrieval_text())
-                    for token in set(_normalize(query).split())
-                )
-            )
-            selections[kind] = candidates[:{"beat": 8, "role": 4}.get(kind, 2)]
-        trace = RetrievalTrace(query=query, selections=selections)
-        return NarrativeBlueprint(
-            trace=trace, macroplots=selections["macroplot"], situations=selections["situation"],
-            character_arcs=selections["character_arc"], beats=selections["beat"],
-            genres=selections["genre"], roles=selections["role"],
-        )
 
     @staticmethod
     def _profiles_from_blueprint(blueprint: NarrativeBlueprint) -> dict[str, TaxonomyProfile]:

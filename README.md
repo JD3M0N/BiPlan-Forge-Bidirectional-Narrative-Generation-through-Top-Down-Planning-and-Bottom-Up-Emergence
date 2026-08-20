@@ -44,16 +44,14 @@ Cuando falte el idioma se usará el idioma dominante del prompt y, si no puede
 determinarse, español. Si falta la extensión se usarán unas 1500 palabras. El
 analista conserva la solicitud original y genera una versión enriquecida en inglés
 para el resto del pipeline. Cada ejecución crea una carpeta independiente en
-`Stories/Top-Down` con una STORYLINE incremental, un NEKG local, un PPP global
-previo a la planificación de eventos y un PPP trazable por capítulo. Agentes
-independientes generan arcos de personaje y ciclos try-fail, y un compositor
-sanitiza el brief que recibe el escritor.
+`Stories/Top-Down` con una STORYLINE incremental, un DAG causal y un NEKG local.
+Top-Down 4.0 congela primero los hechos y solo después construye
+Promise–Progress–Payoff, arcos de personaje y ciclos try-fail. El carril factual
+no recibe sliders ni craft; una reparación posterior nunca regenera CPN.
 
-Top-Down 3.3 usa taxonomías inglesas flexibles y exige a cada protagonista dos sliders iniciales altos y uno bajo
-que progresa hasta alto. Promise–Progress–Payoff, los hitos de personaje y los
-ciclos `yes_but`/`no_and` están desacoplados de los nodos CBN/CPN/CEN. Un
-auditor estructurado trata cada constraint del prompt como bloqueante y puede
-activar hasta dos reescrituras.
+Los personajes admiten arcos positivos, negativos y planos. El escritor recibe
+el estado anterior a cada capítulo y un brief conductual sanitizado. La auditoría
+señala capítulos concretos, que se reparan sin reescribir hechos correctos.
 
 Toda historia terminada incluye además `evaluation.json`, una plantilla para
 evaluaciones humanas con puntuaciones de 1 a 10. Puede completarse manualmente
