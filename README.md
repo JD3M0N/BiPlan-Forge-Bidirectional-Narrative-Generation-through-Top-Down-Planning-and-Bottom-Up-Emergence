@@ -45,7 +45,7 @@ determinarse, español. Si falta la extensión se usarán unas 1500 palabras. El
 analista conserva la solicitud original y genera una versión enriquecida en inglés
 para el resto del pipeline. Cada ejecución crea una carpeta independiente en
 `Stories/Top-Down` con una STORYLINE incremental, un DAG causal y un NEKG local.
-Top-Down 4.0 congela primero los hechos y solo después construye
+Top-Down 4.1 congela primero los hechos y solo después construye
 Promise–Progress–Payoff, arcos de personaje y ciclos try-fail. El carril factual
 no recibe sliders ni craft; una reparación posterior nunca regenera CPN.
 

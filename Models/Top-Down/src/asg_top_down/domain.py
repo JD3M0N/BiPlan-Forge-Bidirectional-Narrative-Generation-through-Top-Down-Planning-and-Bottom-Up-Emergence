@@ -1,4 +1,4 @@
-"""Shared factual contracts for the Top-Down 4.0 pipeline.
+"""Shared factual contracts for the Top-Down 4.1 pipeline.
 
 This module deliberately contains no Promise-Progress-Payoff or STORYLINE
 implementation details.  It is the stable language used by planning, world,

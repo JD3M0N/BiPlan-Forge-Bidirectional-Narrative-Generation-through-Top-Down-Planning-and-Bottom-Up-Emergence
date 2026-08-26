@@ -1,4 +1,4 @@
-"""Top-Down 4.0 public API."""
+"""Top-Down 4.1 public API."""
 
 from .generator import StoryGenerator, StoryRun
 from .incremental import IncrementalPlotPlanner, StorylineState

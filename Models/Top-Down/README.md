@@ -1,6 +1,6 @@
-# ASG Top-Down 4.0
+# ASG Top-Down 4.1
 
-`StoryGenerator.generate/run` es la ruta pública de producción. La versión 4.0
+`StoryGenerator.generate/run` es la ruta pública de producción. La versión 4.1
 separa hechos y craft mediante una dependencia unidireccional:
 
 ```text
@@ -34,6 +34,18 @@ pertinentes y eventos recientes. `DependencyValidator` rechaza entidades o
 objetos ausentes, personajes muertos, conocimiento no adquirido, movimiento
 imposible, precondiciones falsas, dependencias desconocidas y efectos
 contradictorios. Un reemplazo del revisor pasa exactamente las mismas reglas.
+
+La generacion interna sigue el ciclo pseudo-CPN de STORYTELLER. `CpnContext`
+congela el estado factual de cada intento, `CpnPlanner` genera y revisa el nodo,
+y `CpnValidator` aplica una sola tuberia de reglas tanto al candidato como a una
+correccion del revisor. Los rechazos reciben codigos y correcciones estructuradas;
+si Gemini repite el mismo error, tambien recibe el SVO y los efectos que no debe
+reutilizar.
+
+Cada capitulo se construye sobre copias temporales de STORYLINE y NEKG. Solo se
+compromete cuando CBN, todos sus CPN y CEN son validos. Al agotar los intentos se
+descarta la copia, se regeneran una vez las anclas del capitulo y se reintenta
+desde el ultimo prefijo comprometido; los intentos fallidos permanecen auditables.
 
 Los capítulos automáticos tienen 400–900 palabras. Una cantidad explícita de
 capítulos prevalece y permite presupuestos desde 200 palabras. Hay al menos un

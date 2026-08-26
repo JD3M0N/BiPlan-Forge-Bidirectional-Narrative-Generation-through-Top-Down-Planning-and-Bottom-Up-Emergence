@@ -1,4 +1,4 @@
-"""Public Top-Down 4.0 contracts.
+"""Public Top-Down 4.1 contracts.
 
 The module is intentionally a compatibility façade for consumers.  Factual
 domain, STORYLINE, and post-STORYLINE craft types live in separate modules so
@@ -149,4 +149,4 @@ class RunMetadata(BaseModel):
     error_code: str | None = None
     error_stage: str | None = None
     warnings: list[str] = Field(default_factory=list)
-    pipeline_version: str = "4.0"
+    pipeline_version: str = "4.1"

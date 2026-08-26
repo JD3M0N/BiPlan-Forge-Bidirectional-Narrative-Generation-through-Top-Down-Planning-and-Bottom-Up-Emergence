@@ -2,6 +2,17 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [4.1.0] - 2026-08-26
+
+- Extraido el ciclo pseudo-CPN a contratos de contexto, resultado y planificador
+  independientes del coordinador de STORYLINE.
+- Unificada la validacion determinista antes y despues de las correcciones del
+  revisor, con codigos estables y feedback estructurado para Gemini.
+- Convertida la planificacion de cada capitulo en una transaccion: un fallo no
+  modifica STORYLINE/NEKG y permite regenerar sus anclas una vez antes de fallar.
+- Anadidas pruebas de rollback, agotamiento, errores repetidos, compatibilidad y
+  una suite Gemini real opt-in con tres historias.
+
 ## [4.0.0] - 2026-08-20
 
 - Separados físicamente los carriles factual y de craft; STORYLINE consume una

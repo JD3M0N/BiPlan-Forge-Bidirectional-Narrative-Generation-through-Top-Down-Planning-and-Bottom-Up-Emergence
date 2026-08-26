@@ -1,4 +1,4 @@
-"""Top-Down 4.0 contract, dependency, craft, and architecture tests."""
+"""Top-Down 4.1 contract, dependency, craft, and architecture tests."""
 
 import json
 from pathlib import Path
@@ -25,7 +25,8 @@ from asg_top_down.schemas import (
     TaxonomyApplication, TaxonomyOptionReference, ToneContract, TryFailCycle, TryFailPlan,
     WorldArtifact,
 )
-from asg_top_down.storyline.dependency import DependencyValidator
+from asg_top_down.errors import StorylinePlanningError
+from asg_top_down.storyline.dependency import CpnValidator, DependencyValidator
 from asg_top_down.storyline.graph import NarrativeEntityGraph
 from asg_top_down.storyline.planner import (
     IncrementalPlotPlanner, StorylineState, chapter_word_budgets,
@@ -738,3 +739,256 @@ def test_pipeline_repairs_repeated_and_absent_cpn_and_emits_events(tmp_path) -> 
     proposal_calls = [item for item in provider.calls if item[0] == "PlotNodeProposal"]
     assert "Rewrite and repair" in proposal_calls[2][1]
     assert "PREVIOUS REJECTED PROPOSAL" in proposal_calls[2][2]
+
+
+def test_repeated_cpn_failure_receives_structured_do_not_reuse_feedback(tmp_path) -> None:
+    class RepeatingProvider(FullFakeProvider):
+        def generate_structured(self, *, system_instruction, prompt, schema):
+            if schema is PlotNodeProposal:
+                self.calls.append((schema.__name__, system_instruction, prompt))
+                self.proposal_index += 1
+                if self.proposal_index <= 2:
+                    return proposal(
+                        verb="seeks", depends_on_node_ids=["n_0001"],
+                        effects=[StateMutation(
+                            entity_id="mara", attribute="knowledge", value="repeated",
+                        )],
+                    )
+                if self.proposal_index == 3:
+                    return proposal(
+                        verb="studies", depends_on_node_ids=["n_0001"],
+                        effects=[StateMutation(
+                            entity_id="mara", attribute="knowledge", value="guard-route",
+                        )],
+                    )
+                return proposal(
+                    verb="carries", depends_on_node_ids=["n_0001", "n_0002"],
+                    effects=[StateMutation(entity_id="mara", attribute="location", value="gate")],
+                )
+            return super().generate_structured(
+                system_instruction=system_instruction, prompt=prompt, schema=schema,
+            )
+
+    provider = RepeatingProvider()
+    schemas = NarrativeSchemaRepository(db_path=tmp_path / "taxonomies.sqlite3")
+    request = StoryRequest(
+        original_prompt="Escribe un atraco de 600 palabras",
+        processed_prompt="Write a 600-word heist", title="Feedback", language="Spanish",
+        genre="heist", tone="tense", target_words=600, premise="Mara opens a gate",
+    )
+    run = StoryGenerator(
+        provider, tmp_path / "stories", schema_repository=schemas,
+        max_cpn_retries=2, max_artifact_retries=0, max_craft_revisions=0,
+    ).generate(request)
+
+    calls = [item for item in provider.calls if item[0] == "PlotNodeProposal"]
+    assert '"repeated_failure"' in calls[2][2]
+    assert '"must_not_reuse"' in calls[2][2]
+    assert '"DUPLICATE_SVO"' in calls[2][2]
+    assert (run.run_dir / "story.md").is_file()
+
+
+def test_failed_chapter_is_rolled_back_then_replanned_once(tmp_path) -> None:
+    class ReplanningProvider(FullFakeProvider):
+        def generate_structured(self, *, system_instruction, prompt, schema):
+            if schema is PlotNodeProposal:
+                self.calls.append((schema.__name__, system_instruction, prompt))
+                self.proposal_index += 1
+                if self.proposal_index == 1:
+                    return proposal(
+                        verb="seeks", depends_on_node_ids=["n_0001"],
+                        effects=[StateMutation(
+                            entity_id="mara", attribute="knowledge", value="invalid",
+                        )],
+                    )
+                if self.proposal_index == 2:
+                    return proposal(
+                        verb="studies", depends_on_node_ids=["n_0001"],
+                        effects=[StateMutation(
+                            entity_id="mara", attribute="knowledge", value="guard-route",
+                        )],
+                    )
+                return proposal(
+                    verb="carries", depends_on_node_ids=["n_0001", "n_0002"],
+                    effects=[StateMutation(entity_id="mara", attribute="location", value="gate")],
+                )
+            return super().generate_structured(
+                system_instruction=system_instruction, prompt=prompt, schema=schema,
+            )
+
+    events = []
+    provider = ReplanningProvider()
+    schemas = NarrativeSchemaRepository(db_path=tmp_path / "taxonomies.sqlite3")
+    request = StoryRequest(
+        original_prompt="Escribe un atraco de 600 palabras",
+        processed_prompt="Write a 600-word heist", title="Rollback", language="Spanish",
+        genre="heist", tone="tense", target_words=600, premise="Mara opens a gate",
+    )
+    run = StoryGenerator(
+        provider, tmp_path / "stories", schema_repository=schemas,
+        max_cpn_retries=0, max_artifact_retries=0, max_craft_revisions=0,
+    ).generate(request, on_event=events.append)
+
+    storyline_data = json.loads((run.run_dir / "storyline.json").read_text(encoding="utf-8"))
+    assert [item["id"] for item in storyline_data["nodes"]] == [
+        "n_0001", "n_0002", "n_0003", "n_0004",
+    ]
+    assert [item["node_type"] for item in storyline_data["nodes"]] == [
+        "CBN", "CPN", "CPN", "CEN",
+    ]
+    kinds = [event.kind for event in events]
+    assert kinds.count("chapter_rolled_back") == 1
+    assert kinds.count("chapter_replanned") == 1
+    assert [item[0] for item in provider.calls].count("ChapterAnchorsArtifact") == 2
+
+
+def test_exhausted_replan_reports_stable_issue_codes(tmp_path) -> None:
+    class InvalidProvider(FullFakeProvider):
+        def generate_structured(self, *, system_instruction, prompt, schema):
+            if schema is PlotNodeProposal:
+                self.calls.append((schema.__name__, system_instruction, prompt))
+                self.proposal_index += 1
+                return proposal(
+                    verb="seeks", depends_on_node_ids=["n_0001"],
+                    effects=[StateMutation(
+                        entity_id="mara", attribute="knowledge", value=f"bad-{self.proposal_index}",
+                    )],
+                )
+            return super().generate_structured(
+                system_instruction=system_instruction, prompt=prompt, schema=schema,
+            )
+
+    provider = InvalidProvider()
+    schemas = NarrativeSchemaRepository(db_path=tmp_path / "taxonomies.sqlite3")
+    request = StoryRequest(
+        original_prompt="Escribe un atraco de 600 palabras",
+        processed_prompt="Write a 600-word heist", title="Exhaustion", language="Spanish",
+        genre="heist", tone="tense", target_words=600, premise="Mara opens a gate",
+    )
+    with pytest.raises(StorylinePlanningError) as captured:
+        StoryGenerator(
+            provider, tmp_path / "stories", schema_repository=schemas,
+            max_cpn_retries=0, max_artifact_retries=0, max_craft_revisions=0,
+        ).generate(request)
+
+    assert captured.value.details["chapter_replans"] == 1
+    assert captured.value.details["issue_codes"] == ["DUPLICATE_SVO"]
+    assert len(captured.value.details["attempts"]) == 2
+
+
+def test_cpn_validator_revalidates_reviewer_replacements_with_same_rules() -> None:
+    graph = NarrativeEntityGraph(world(), cast().storyline_cast())
+    anchor = ChapterAnchors(
+        chapter_id="c1", begin_location_id="square",
+        begin_subject=EntityRef(id="mara", name="Mara", kind="character"),
+        begin_verb="seeks", begin_object=EntityRef(id="key", name="Key", kind="object"),
+        begin_effects=[StateMutation(entity_id="mara", attribute="situation", value="searching")],
+        end_location_id="gate",
+        end_subject=EntityRef(id="mara", name="Mara", kind="character"),
+        end_verb="exits", end_object=EntityRef(id="gate", name="Gate", kind="location"),
+        end_effects=[StateMutation(entity_id="mara", attribute="knowledge", value="secret")],
+    )
+    validator = CpnValidator(world(), cast().storyline_cast())
+    arguments = dict(
+        snapshot=graph.snapshot(), accepted_node_ids=set(), anchor=anchor,
+        forbidden_svos={('mara', 'seeks', 'key'), ('mara', 'exits', 'gate')},
+        location_bridge={"subject_id": "mara", "must_move_now": False, "reachable": True},
+    )
+    original = proposal(verb="studies", effects=[StateMutation(
+        entity_id="mara", attribute="knowledge", value="partial",
+    )])
+    replacement = proposal(verb="learns", effects=[StateMutation(
+        entity_id="mara", attribute="knowledge", value="secret",
+    )])
+
+    assert validator.validate(original, **arguments).passed
+    assert {item.code for item in validator.validate(replacement, **arguments).issues} == {
+        "CEN_EFFECT_RESERVED",
+    }
+
+
+def test_owned_object_inherits_owner_location_in_preconditions() -> None:
+    graph = NarrativeEntityGraph(world(), cast().storyline_cast())
+    snapshot = graph.snapshot()
+    key = next(item for item in snapshot.entities if item.id == "key")
+    mara = next(item for item in snapshot.entities if item.id == "mara")
+    key.state = {"owner": "mara"}
+    mara.state["location"] = "gate"
+    candidate = proposal(
+        location_id="gate",
+        preconditions=[StatePredicate(
+            entity_id="key", attribute="location", value="gate",
+        )],
+        effects=[StateMutation(entity_id="key", attribute="status", value="used")],
+    )
+
+    assert DependencyValidator(world(), cast().storyline_cast()).validate(
+        candidate, snapshot, set(),
+    ).passed
+
+
+def test_carried_object_satisfies_and_normalizes_stale_cen_location() -> None:
+    graph = NarrativeEntityGraph(world(), cast().storyline_cast())
+    snapshot = graph.snapshot()
+    key = next(item for item in snapshot.entities if item.id == "key")
+    key.state = {"owner": "mara"}
+    anchor = ChapterAnchors(
+        chapter_id="c1", begin_location_id="square",
+        begin_subject=EntityRef(id="mara", name="Mara", kind="character"),
+        begin_verb="takes", begin_object=EntityRef(id="key", name="Key", kind="object"),
+        begin_effects=[StateMutation(entity_id="key", attribute="owner", value="mara")],
+        end_location_id="gate",
+        end_subject=EntityRef(id="mara", name="Mara", kind="character"),
+        end_verb="opens", end_object=EntityRef(id="gate", name="Gate", kind="location"),
+        end_preconditions=[StatePredicate(
+            entity_id="key", attribute="location", value="square",
+        )],
+        end_effects=[StateMutation(entity_id="mara", attribute="situation", value="free")],
+    )
+    movement = proposal(effects=[StateMutation(
+        entity_id="mara", attribute="location", value="gate",
+    )])
+    validator = CpnValidator(world(), cast().storyline_cast())
+
+    assert validator.cen_ready(movement, snapshot, anchor)
+    after = snapshot.model_copy(deep=True)
+    next(item for item in after.entities if item.id == "mara").state["location"] = "gate"
+    IncrementalPlotPlanner(object())._normalize_carried_cen_preconditions(
+        anchor, after, chapter_id="c1",
+    )
+    assert anchor.end_preconditions[0].attribute == "owner"
+    assert anchor.end_preconditions[0].value == "mara"
+
+
+def test_cpn_refactor_contracts_are_publicly_importable() -> None:
+    from asg_top_down.storyline import CpnAttemptResult, CpnContext, CpnPlanner
+
+    assert CpnAttemptResult.__name__ == "CpnAttemptResult"
+    assert CpnContext.__name__ == "CpnContext"
+    assert CpnPlanner.__name__ == "CpnPlanner"
+
+
+def test_craft_alignment_error_reports_extra_ids() -> None:
+    compact_ledger = ledger()
+    compact_arcs = arc_plan()
+    cycles = try_fail()
+    story = storyline()
+    entries = [CraftAlignmentEntry(
+        craft_id=item, chapter_id="c1", node_ids=["n1"],
+    ) for item in sorted({
+        beat for promise in compact_ledger.promises
+        for beat in [promise.opening.id, *(x.id for x in promise.progress), promise.payoff.id]
+    } | {x.id for arc in compact_arcs.arcs for x in arc.evidences}
+      | {x.id for x in cycles.cycles})]
+    entries.append(CraftAlignmentEntry(
+        craft_id="invented-id", chapter_id="c1", node_ids=["n1"],
+    ))
+    views = [ChapterCraftView(
+        chapter_id=item.id, opened_promise_ids=["p1"],
+    ) for item in chapters().chapters]
+
+    with pytest.raises(ValueError, match=r"extra=\['invented-id'\]"):
+        validate_craft_alignment(
+            CraftAlignment(entries=entries), views, compact_ledger, compact_arcs,
+            cycles, chapters(), story,
+        )

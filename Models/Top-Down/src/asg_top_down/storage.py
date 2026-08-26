@@ -39,10 +39,10 @@ class ArtifactRepository:
         self.on_artifact = on_artifact
         self.metadata = RunMetadata(
             run_id=run_dir.name, model=model, created_at=now, updated_at=now,
-            status="running", pipeline_version="4.0",
+            status="running", pipeline_version="4.1",
         )
         self.manifest: dict = {
-            "pipeline_version": "4.0", "run_id": run_dir.name,
+            "pipeline_version": "4.1", "run_id": run_dir.name,
             "completed_stages": [], "artifacts": {},
         }
         self._write_metadata()

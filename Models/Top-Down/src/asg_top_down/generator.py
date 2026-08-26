@@ -1,4 +1,4 @@
-"""Top-Down 4.0 orchestration with a frozen factual/craft boundary."""
+"""Top-Down 4.1 orchestration with a frozen factual/craft boundary."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ TArtifact = TypeVar("TArtifact", bound=BaseModel)
 
 
 class StoryRun:
-    """Stable handle for both completed 4.0 and historical completed 3.x runs."""
+    """Stable handle for completed 4.x and historical completed 3.x runs."""
 
     def __init__(self, run_dir: Path) -> None:
         self.run_dir = Path(run_dir)
@@ -56,9 +56,9 @@ class StoryRun:
                 metadata = {}
             version = str(metadata.get("pipeline_version", "unknown"))
             raise ArtifactValidationError(
-                f"La ejecución Top-Down {version} está incompleta y no puede abrirse como StoryRun 4.0.",
+                f"La ejecución Top-Down {version} está incompleta y no puede abrirse como StoryRun 4.1.",
                 stage="compatibility", details={"run_id": str(self.run_dir), "version": version},
-                recommendations=["Usa un run terminado con story.md o inicia una ejecución 4.0 nueva."],
+                recommendations=["Usa un run terminado con story.md o inicia una ejecución 4.1 nueva."],
             )
 
     @property
@@ -113,7 +113,7 @@ def _parse_story(story: str, outline: StoryOutlineArtifact) -> list[str]:
 
 
 class StoryGenerator:
-    """Public Top-Down 4.0 generator."""
+    """Public Top-Down 4.1 generator."""
 
     def __init__(self, provider, output_root: Path, *,
                  schema_repository: NarrativeSchemaRepository | None = None,
@@ -367,6 +367,7 @@ class StoryGenerator:
                 on_checkpoint=save_checkpoint, taxonomy_brief=taxonomy_brief,
                 taxonomy_application=plan.taxonomy_application,
             )
+            repository.save_json("chapter_anchors.json", anchors)
             nekg = factual.nekg.artifact()
             repository.save_json("storyline.json", storyline)
             repository.save_json("nekg.json", nekg)

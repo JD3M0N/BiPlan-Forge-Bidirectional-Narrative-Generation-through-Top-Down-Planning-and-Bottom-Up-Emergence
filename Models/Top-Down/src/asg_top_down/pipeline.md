@@ -1,4 +1,4 @@
-# Pipeline Top-Down 4.0
+# Pipeline Top-Down 4.1
 
 ```text
 FACTUAL
@@ -17,5 +17,5 @@ La frontera es `CraftAlignment`. STORYLINE no importa `craft_models`, no recibe
 PPP, sliders ni try-fail y no ofrece una ruta de regeneración desde craft.
 Los predicados y mutaciones tipados son la autoridad del estado factual.
 
-Los checkpoints preparan recuperación futura, pero 4.0 no simula `resume`: un
+Los checkpoints preparan recuperación futura, pero 4.1 no simula `resume`: un
 run incompleto queda explícitamente como `recovery_pending`.

@@ -130,7 +130,11 @@ def validate_craft_alignment(
     expected = all_craft_ids(ledger, arcs, try_fail)
     entries = {item.craft_id: item for item in alignment.entries}
     if set(entries) != expected:
-        raise ValueError(f"craft alignment mismatch: missing={sorted(expected-set(entries))}")
+        raise ValueError(
+            "craft alignment mismatch: "
+            f"missing={sorted(expected-set(entries))}, "
+            f"extra={sorted(set(entries)-expected)}"
+        )
     nodes = {item.id: item for item in storyline.nodes}
     for entry in entries.values():
         if not set(entry.node_ids) <= set(nodes):

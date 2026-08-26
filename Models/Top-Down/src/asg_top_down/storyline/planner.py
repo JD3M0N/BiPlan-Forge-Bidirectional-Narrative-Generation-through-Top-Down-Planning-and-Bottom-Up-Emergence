@@ -1,4 +1,4 @@
-"""Adaptive factual STORYTELLER planner for Top-Down 4.0."""
+"""Adaptive factual STORYTELLER planner for Top-Down 4.1."""
 
 from __future__ import annotations
 
@@ -13,14 +13,15 @@ from ..domain import (
     AgentStorySpec, ChapterPlan, StoryFrame, StorylineCast, StoryOutlineArtifact,
     StoryPlanArtifact, TaxonomyApplication, TaxonomyBrief, WorldArtifact,
 )
-from ..errors import StorylinePlanningError, StructuredResponseError
+from ..errors import StorylinePlanningError
 from ..narrative_db import NarrativeBlueprint
 from ..progress import PipelineEvent, PipelineEventCallback
-from .dependency import DependencyValidator
+from .cpn import CpnAttemptsExhausted, CpnContext, CpnPlanner
+from .dependency import CpnValidator, DependencyValidator
 from .graph import NarrativeEntityGraph, NarrativeGraphBackend
 from .models import (
-    AcceptedNodeRecord, ChapterAnchorsArtifact, IncrementalStorylineArtifact,
-    NarrativeEdge, NodeGoal, PlotNode, PlotNodeProposal,
+    AcceptedNodeRecord, ChapterAnchors, ChapterAnchorsArtifact, EntityRef,
+    IncrementalStorylineArtifact, NarrativeEdge, NodeGoal, PlotNode, PlotNodeProposal,
     StateMutation,
 )
 from .reviewer import DramaticReviewer
@@ -81,6 +82,12 @@ class StorylineState:
     def recent(self, limit: int = 8) -> list[PlotNode]:
         return self.nodes[-limit:]
 
+    def clone(self) -> "StorylineState":
+        copy = StorylineState([item.model_copy(deep=True) for item in self.chapters])
+        copy.nodes = [item.model_copy(deep=True) for item in self.nodes]
+        copy.edges = [item.model_copy(deep=True) for item in self.edges]
+        return copy
+
     def _topological_order(self) -> list[str]:
         ids = [item.id for item in self.nodes]
         incoming = dict.fromkeys(ids, 0)
@@ -124,19 +131,6 @@ def _json(value) -> str:
     return json.dumps(convert(value), ensure_ascii=False, indent=2)
 
 
-def _storyline_palette(brief: TaxonomyBrief | None) -> dict | None:
-    if brief is None:
-        return None
-    return {
-        "movements": brief.movements,
-        "complications": brief.complications,
-        "conclusion": brief.conclusion,
-        "freshness_choices": brief.freshness_choices,
-        "avoid": brief.avoid,
-        "usage_rule": brief.usage_rule,
-    }
-
-
 class IncrementalPlotPlanner:
     """Generate and review only factual plot events; story craft is downstream."""
 
@@ -148,9 +142,13 @@ class IncrementalPlotPlanner:
         graph_factory: Callable[..., NarrativeGraphBackend] = NarrativeEntityGraph,
         on_event: PipelineEventCallback | None = None,
         on_attempt: Callable[[dict], None] | None = None,
+        max_chapter_replans: int = 1,
     ) -> None:
+        if max_retries < 0 or max_chapter_replans < 0:
+            raise ValueError("retry counts cannot be negative")
         self.provider = provider
         self.max_retries = max_retries
+        self.max_chapter_replans = max_chapter_replans
         self._graph_factory = graph_factory
         self.on_event = on_event
         self.on_attempt = on_attempt
@@ -215,6 +213,58 @@ class IncrementalPlotPlanner:
             )]
         return effective
 
+    def _normalize_epistemic_anchor_object(
+        self, proposal: PlotNodeProposal, report, *, chapter_id: str, anchor_kind: str,
+    ) -> bool:
+        """Represent learning about an absent physical object as a factual concept."""
+        epistemic_absence = (
+            proposal.object.kind == "object"
+            and any(
+                item.entity_id == proposal.subject.id and item.attribute == "knowledge"
+                for item in proposal.effects
+            )
+            and report.issues
+            and {item.code for item in report.issues} <= {
+                "OBJECT_ABSENT", "OBJECT_UNAVAILABLE",
+            }
+        )
+        if not epistemic_absence:
+            return False
+        physical = proposal.object
+        proposal.object = EntityRef(
+            id=f"evidence-about-{physical.id}",
+            name=f"evidence about {physical.name}",
+            kind="concept",
+        )
+        self._emit(
+            "anchor_normalized",
+            f"{anchor_kind} epistemico de {chapter_id}: objeto ausente representado como concepto",
+            chapter_id=chapter_id,
+        )
+        return True
+
+    def _normalize_carried_cen_preconditions(
+        self, anchor: ChapterAnchors, snapshot, *, chapter_id: str,
+    ) -> None:
+        """Replace stale object locations with ownership when the CEN actor carries them."""
+        entities = {item.id: item for item in snapshot.entities}
+        subject = entities.get(anchor.end_subject.id)
+        if not subject or subject.state.get("location") != anchor.end_location_id:
+            return
+        for predicate in anchor.end_preconditions:
+            entity = entities.get(predicate.entity_id)
+            if (predicate.attribute == "location" and entity
+                    and entity.kind == "object"
+                    and entity.state.get("owner") == anchor.end_subject.id):
+                predicate.attribute = "owner"
+                predicate.operator = "equals"
+                predicate.value = anchor.end_subject.id
+                self._emit(
+                    "anchor_normalized",
+                    f"CEN de {chapter_id}: ubicacion de objeto portado convertida en propiedad",
+                    chapter_id=chapter_id,
+                )
+
     @staticmethod
     def _shortest_location_path(world: WorldArtifact, start: str, target: str) -> list[str]:
         connections = {item.id: item.connected_location_ids for item in world.locations}
@@ -250,6 +300,7 @@ class IncrementalPlotPlanner:
             "pre_cen_location": pre_cen_location,
             "post_cen_location": anchor.end_location_id,
             "shortest_path": path,
+            "reachable": current is None or current == pre_cen_location or bool(path),
             "remaining_cpn_slots": remaining_slots,
             "must_move_now": len(path) > 1 and len(path) - 1 >= remaining_slots,
             "required_next_location": path[1] if len(path) > 1 else None,
@@ -286,13 +337,6 @@ class IncrementalPlotPlanner:
                     f"{mutation.entity_id}.{mutation.attribute}"
                 )
         return issues
-
-    @staticmethod
-    def _structured_rejection(exc: StructuredResponseError, stage: str) -> tuple[str, dict]:
-        return (
-            f"The {stage} response was structurally invalid. Return a complete valid replacement.",
-            {"error_code": exc.code, "error_stage": exc.stage, "details": exc.details},
-        )
 
     def outline(
         self,
@@ -399,84 +443,67 @@ class IncrementalPlotPlanner:
             rationale=f"Accepted event {source} is an explicit factual dependency",
         ) for source in node.depends_on_node_ids]
 
-    def _proposal(
+    def _graph_from_state(
+        self, world: WorldArtifact, characters: StorylineCast, state: StorylineState,
+    ) -> NarrativeGraphBackend:
+        graph = self._graph_factory(world, characters)
+        for node in state.nodes:
+            graph.apply(node)
+        return graph
+
+    def _replacement_anchor(
         self,
         chapter: ChapterPlan,
-        anchor,
+        outline: StoryOutlineArtifact,
+        current: ChapterAnchors,
         world: WorldArtifact,
         characters: StorylineCast,
         story_frame: StoryFrame,
-        chapter_cpns: list[PlotNode],
-        revision: str,
-        previous_proposal: PlotNodeProposal | None,
-        slot: int,
-        minimum: int,
-        maximum: int,
-        taxonomy_brief: TaxonomyBrief | None,
-        taxonomy_application: TaxonomyApplication | None,
-    ) -> PlotNodeProposal:
-        ending_rule = (
-            "The event may bridge immediately to the ending because the minimum development exists."
-            if slot >= minimum else
-            "The event must develop the conflict and must not bridge immediately to the ending yet."
-        )
-        if slot == maximum:
-            ending_rule = "This final allowed event must create an immediate factual bridge to the ending."
-        snapshot = self.nekg.snapshot()
-        location_bridge = self._location_bridge(world, anchor, snapshot, slot, maximum)
-        forbidden = [
-            (anchor.begin_subject.id, anchor.begin_verb.casefold().strip(), anchor.begin_object.id),
-            (anchor.end_subject.id, anchor.end_verb.casefold().strip(), anchor.end_object.id),
-            *((item.subject.id, item.verb.casefold().strip(), item.object.id) for item in chapter_cpns),
+        failures: list[dict],
+    ) -> ChapterAnchors:
+        """Regenerate only the failed chapter's anchors from compact failure evidence."""
+        digest = [
+            {
+                "slot": item.get("slot"),
+                "stage": item.get("stage"),
+                "issue_codes": item.get("issue_codes", []),
+                "issues": item.get("issues", []),
+            }
+            for item in failures[-8:]
         ]
-        repair_rule = (
-            "Rewrite and repair the previous candidate using every validation issue below. "
-            if revision else ""
-        )
         self._emit(
-            "agent_called", "se llamo al agente plot_node_proposal",
+            "agent_called", "se llamo al agente chapter_anchor_replanner",
             chapter_id=chapter.id,
         )
-        return self.provider.generate_structured(
+        replacement = self.provider.generate_structured(
             system_instruction=(
-                f"{repair_rule}Generate one concrete SVO internal plot event. "
-                "Use canonical supplied entity and "
-                "location IDs, explicit dependencies on accepted node IDs, typed factual "
-                "preconditions, and typed state mutations. The event must follow character intention, "
-                "meet active opposition, change state, avoid repetition, and advance toward the "
-                f"chapter ending. {ending_rule} Taxonomy is a flexible palette, never a checklist. "
-                "An object can only participate where its current state says it is located or owned. "
-                "A movement event happens at the actor's current source location; represent the adjacent "
-                "destination only as a location effect. If REQUIRED LOCATION BRIDGE says must_move_now, "
-                "the event must move its subject to required_next_location. "
-                "Never repeat a forbidden SVO. Return internal text in English."
+                "Replace the begin and end anchors for exactly one failed chapter. Return one anchor "
+                "entry with the same chapter_id. Use canonical entity and location IDs. The begin "
+                "must be valid in CURRENT COMMITTED STATE. The end must be reachable through adjacent "
+                "locations within the chapter's CPN limit, must differ from the begin SVO, and must "
+                "declare factual preconditions that internal CPNs can establish. Do not solve the end "
+                "event inside the begin anchor. Return internal text in English."
             ),
             prompt=(
-                f"CHAPTER:\n{_json(chapter)}\n\nBEGIN ANCHOR:\n{_json(anchor)}"
-                f"\n\nEND TARGET:\n{_json({'subject': anchor.end_subject, 'verb': anchor.end_verb, 'object': anchor.end_object, 'location_id': anchor.end_location_id})}"
-                f"\n\nCEN TARGET STATE:\n"
-                f"{_json({'preconditions': anchor.end_preconditions, 'effects': anchor.end_effects})}"
-                "\nDo not perform an exact CEN effect early. Its preconditions are targets for the "
-                "state immediately before the CEN: intermediate values may evolve, and later CPNs "
-                "must establish the exact required state."
-                f"\n\nSLOT: {slot}/{maximum}; MINIMUM: {minimum}"
+                f"CHAPTER:\n{_json(chapter)}\n\nOUTLINE CONTEXT:\n{_json(outline.chapters)}"
                 f"\n\nSTORY FRAME:\n{_json(story_frame)}"
-                f"\n\nWORLD RULES AND MAP:\n{_json(world)}"
-                f"\n\nCHARACTER FACTS:\n{_json(characters)}"
-                f"\n\nRECENT ACCEPTED EVENTS:\n{_json(self.state.recent(8))}"
-                f"\n\nACCEPTED CHAPTER EVENTS:\n{_json(chapter_cpns)}"
-                f"\n\nCURRENT ENTITY STATE (AUTHORITATIVE):\n{_json(snapshot)}"
-                f"\n\nREQUIRED LOCATION BRIDGE:\n{_json(location_bridge)}"
-                f"\n\nALLOWED DEPENDENCY IDS:\n{_json([item.id for item in self.state.nodes])}"
-                f"\n\nFORBIDDEN SVO SIGNATURES:\n{_json(forbidden)}"
-                f"\n\nNARRATIVE PALETTE:\n{_json(_storyline_palette(taxonomy_brief))}"
-                f"\n\nSELECTED MOVEMENT REFERENCES:\n"
-                f"{_json(taxonomy_application.selected_movements) if taxonomy_application else 'none'}"
-                f"\n\nPREVIOUS REJECTED PROPOSAL:\n{_json(previous_proposal) if previous_proposal else 'none'}"
-                f"\n\nREVISION FEEDBACK (ALL ITEMS ARE MANDATORY):\n{revision or 'none'}"
+                f"\n\nWORLD:\n{_json(world)}\n\nCHARACTERS:\n{_json(characters)}"
+                f"\n\nCURRENT COMMITTED STATE:\n{_json(self.nekg.snapshot())}"
+                f"\n\nFAILED ANCHORS:\n{_json(current)}"
+                f"\n\nCPN FAILURE DIGEST:\n{_json(digest)}"
+                f"\n\nCPN LIMIT: {self.max_cpn_count(chapter)}"
             ),
-            schema=PlotNodeProposal,
+            schema=ChapterAnchorsArtifact,
         )
+        if len(replacement.anchors) != 1 or replacement.anchors[0].chapter_id != chapter.id:
+            raise StorylinePlanningError(
+                f"Gemini no devolvio un reemplazo unico para las anclas de {chapter.id}.",
+                details={
+                    "chapter_id": chapter.id,
+                    "returned_chapter_ids": [item.chapter_id for item in replacement.anchors],
+                },
+            )
+        return replacement.anchors[0]
 
     @staticmethod
     def _allocate_words(chapter: ChapterPlan, nodes: list[PlotNode]) -> None:
@@ -490,33 +517,158 @@ class IncrementalPlotPlanner:
         difference = chapter.target_words - sum(item.target_words for item in nodes)
         middle[-1].target_words += difference
 
-    @staticmethod
-    def _taxonomy_issue(
-        proposal: PlotNodeProposal, application: TaxonomyApplication | None,
-    ) -> str | None:
-        if not application or not (proposal.taxonomy_id or proposal.taxonomy_movement_id):
-            return None
-        selected = {
-            (item.taxonomy_id, item.option_id) for item in application.selected_movements
+    def _cpn_context(
+        self, chapter: ChapterPlan, anchor: ChapterAnchors, world: WorldArtifact,
+        characters: StorylineCast, story_frame: StoryFrame,
+        chapter_cpns: list[PlotNode], slot: int, minimum: int, maximum: int,
+        taxonomy_brief: TaxonomyBrief | None,
+        taxonomy_application: TaxonomyApplication | None,
+    ) -> CpnContext:
+        snapshot = self.nekg.snapshot()
+        forbidden = {
+            (anchor.begin_subject.id, anchor.begin_verb.casefold().strip(), anchor.begin_object.id),
+            (anchor.end_subject.id, anchor.end_verb.casefold().strip(), anchor.end_object.id),
+            *((item.subject.id, item.verb.casefold().strip(), item.object.id) for item in chapter_cpns),
+            *((item.subject.id, item.verb.casefold().strip(), item.object.id)
+              for item in self.state.nodes if item.chapter_id == chapter.id),
         }
-        reference = proposal.taxonomy_id, proposal.taxonomy_movement_id
-        if None in reference or reference not in selected:
-            return "candidate taxonomy reference must identify one selected movement or be empty"
-        return None
+        return CpnContext(
+            chapter=chapter, anchor=anchor, world=world, characters=characters,
+            story_frame=story_frame, chapter_cpns=tuple(chapter_cpns),
+            recent_nodes=tuple(self.state.recent(8)), snapshot=snapshot,
+            accepted_node_ids=frozenset(item.id for item in self.state.nodes),
+            forbidden_svos=frozenset(forbidden),
+            location_bridge=self._location_bridge(world, anchor, snapshot, slot, maximum),
+            slot=slot, minimum=minimum, maximum=maximum,
+            taxonomy_brief=taxonomy_brief,
+            taxonomy_application=taxonomy_application,
+        )
+
+    def _plan_chapter(
+        self, chapter: ChapterPlan, anchor: ChapterAnchors, world: WorldArtifact,
+        characters: StorylineCast, story_frame: StoryFrame, cpn_planner: CpnPlanner,
+        validator: DependencyValidator, on_checkpoint,
+        taxonomy_brief: TaxonomyBrief | None,
+        taxonomy_application: TaxonomyApplication | None, *, attempt_offset: int,
+    ) -> None:
+        global_order = len(self.state.nodes) + 1
+        previous = self.state.nodes[-1] if self.state.nodes else None
+        before_begin = self.nekg.snapshot()
+        begin_effects = self._effective_anchor_effects(
+            anchor.begin_effects, before_begin, anchor.begin_subject, anchor.begin_verb,
+            anchor.begin_object, chapter_id=chapter.id, anchor_kind="CBN",
+        )
+        begin_proposal = PlotNodeProposal(
+            location_id=anchor.begin_location_id, subject=anchor.begin_subject,
+            verb=anchor.begin_verb, object=anchor.begin_object,
+            purpose="Establish the chapter's factual initial state",
+            narrative_function="chapter_begin",
+            depends_on_node_ids=[] if previous is None else [previous.id],
+            effects=begin_effects, intention="Continue the active character goal",
+            conflict="The central opposition remains active",
+            consequence="The chapter's initial conditions become unavoidable",
+        )
+        begin_report = validator.validate(
+            begin_proposal, before_begin, {item.id for item in self.state.nodes},
+        )
+        if self._normalize_epistemic_anchor_object(
+            begin_proposal, begin_report, chapter_id=chapter.id, anchor_kind="CBN",
+        ):
+            begin_report = validator.validate(
+                begin_proposal, before_begin, {item.id for item in self.state.nodes},
+            )
+        if not begin_report.passed:
+            raise StorylinePlanningError(
+                f"El CBN de {chapter.id} contradice el estado del mundo.",
+                details={"issues": [item.model_dump() for item in begin_report.issues]},
+            )
+        begin = self._node(begin_proposal, chapter, "CBN", global_order, 1)
+        self.state.accept(begin, self._links(begin))
+        self.nekg.apply(begin)
+        global_order += 1
+        self._checkpoint(on_checkpoint)
+
+        chapter_cpns: list[PlotNode] = []
+        minimum, maximum = self.min_cpn_count(chapter), self.max_cpn_count(chapter)
+        aligned = False
+        for slot in range(1, maximum + 1):
+            context = self._cpn_context(
+                chapter, anchor, world, characters, story_frame, chapter_cpns,
+                slot, minimum, maximum, taxonomy_brief, taxonomy_application,
+            )
+            result = cpn_planner.plan_slot(
+                context, self.nekg, attempt_offset=attempt_offset,
+            )
+            candidate, review = result.candidate, result.review
+            if candidate is None or review is None:
+                raise RuntimeError("accepted CPN result is incomplete")
+            node = self._node(candidate, chapter, "CPN", global_order, slot + 1)
+            self.state.accept(node, self._links(node))
+            self.nekg.apply(node)
+            self.history.records.append(AcceptedNodeRecord(
+                node=node, review=review, attempt=result.attempt,
+            ))
+            chapter_cpns.append(node)
+            global_order += 1
+            aligned = review.aligns_with_cen and len(chapter_cpns) >= minimum
+            self._checkpoint(on_checkpoint)
+            if aligned:
+                break
+        if not aligned:
+            raise StorylinePlanningError(
+                f"El capitulo {chapter.id} no conecto con su CEN dentro del limite.",
+                details={"chapter_id": chapter.id, "max_cpn": maximum},
+            )
+
+        before_end = self.nekg.snapshot()
+        self._normalize_carried_cen_preconditions(
+            anchor, before_end, chapter_id=chapter.id,
+        )
+        end_effects = self._effective_anchor_effects(
+            anchor.end_effects, before_end, anchor.end_subject, anchor.end_verb,
+            anchor.end_object, chapter_id=chapter.id, anchor_kind="CEN",
+        )
+        end_proposal = PlotNodeProposal(
+            location_id=anchor.end_location_id, subject=anchor.end_subject,
+            verb=anchor.end_verb, object=anchor.end_object,
+            purpose="Establish the chapter's factual end state",
+            narrative_function="chapter_end", depends_on_node_ids=[chapter_cpns[-1].id],
+            preconditions=anchor.end_preconditions, effects=end_effects,
+            intention="Resolve or transform the active chapter goal",
+            conflict="The outcome has a meaningful cost",
+            consequence="The chapter ending changes the next chapter's conditions",
+        )
+        self._normalize_movement_origin(end_proposal, before_end, chapter_id=chapter.id)
+        end_report = validator.validate(
+            end_proposal, before_end, {item.id for item in self.state.nodes},
+        )
+        if self._normalize_epistemic_anchor_object(
+            end_proposal, end_report, chapter_id=chapter.id, anchor_kind="CEN",
+        ):
+            end_report = validator.validate(
+                end_proposal, before_end, {item.id for item in self.state.nodes},
+            )
+        if not end_report.passed:
+            raise StorylinePlanningError(
+                f"El CEN de {chapter.id} contradice el estado del mundo.",
+                details={"issues": [item.model_dump() for item in end_report.issues]},
+            )
+        end = self._node(
+            end_proposal, chapter, "CEN", global_order, len(chapter_cpns) + 2,
+        )
+        self.state.accept(end, self._links(end))
+        self.nekg.apply(end)
+        self._allocate_words(chapter, [begin, *chapter_cpns, end])
+        self._checkpoint(on_checkpoint)
 
     def plan(
-        self,
-        outline: StoryOutlineArtifact,
-        anchors: ChapterAnchorsArtifact,
-        blueprint: NarrativeBlueprint,
-        world: WorldArtifact,
-        characters: StorylineCast,
-        story_frame: StoryFrame,
-        on_checkpoint=None,
+        self, outline: StoryOutlineArtifact, anchors: ChapterAnchorsArtifact,
+        blueprint: NarrativeBlueprint, world: WorldArtifact, characters: StorylineCast,
+        story_frame: StoryFrame, on_checkpoint=None,
         taxonomy_brief: TaxonomyBrief | None = None,
         taxonomy_application: TaxonomyApplication | None = None,
     ) -> tuple[IncrementalStorylineArtifact, NodeReviewHistory]:
-        del blueprint  # retrieval has already been compiled into the selected palette
+        del blueprint
         self.state = StorylineState(outline.chapters)
         self.nekg = self._graph_factory(world, characters)
         self.history = NodeReviewHistory()
@@ -526,277 +678,97 @@ class IncrementalPlotPlanner:
         actual = [item.chapter_id for item in anchors.anchors]
         if len(actual) != len(set(actual)) or set(actual) != set(expected):
             raise StorylinePlanningError(
-                "Las anclas no corresponden exactamente con los capítulos del outline.",
+                "Las anclas no corresponden exactamente con los capitulos del outline.",
                 details={"chapter_ids": expected, "anchor_ids": actual},
             )
 
-        global_order = 1
-        previous: PlotNode | None = None
         for chapter in outline.chapters:
+            baseline = self.state.clone()
+            accepted_record_count = len(self.history.records)
             anchor = by_chapter[chapter.id]
-            before_begin = self.nekg.snapshot()
-            begin_effects = self._effective_anchor_effects(
-                anchor.begin_effects, before_begin,
-                anchor.begin_subject, anchor.begin_verb, anchor.begin_object,
-                chapter_id=chapter.id, anchor_kind="CBN",
-            )
-            begin_proposal = PlotNodeProposal(
-                location_id=anchor.begin_location_id,
-                subject=anchor.begin_subject, verb=anchor.begin_verb, object=anchor.begin_object,
-                purpose="Establish the chapter's factual initial state",
-                narrative_function="chapter_begin",
-                depends_on_node_ids=[] if previous is None else [previous.id],
-                effects=begin_effects,
-                intention="Continue the active character goal",
-                conflict="The central opposition remains active",
-                consequence="The chapter's initial conditions become unavoidable",
-            )
-            begin = self._node(begin_proposal, chapter, "CBN", global_order, 1)
-            begin_report = validator.validate(
-                begin_proposal, before_begin, {item.id for item in self.state.nodes},
-            )
-            if not begin_report.passed:
-                raise StorylinePlanningError(
-                    f"El CBN de {chapter.id} contradice el estado del mundo.",
-                    details={"issues": [item.model_dump() for item in begin_report.issues]},
-                )
-            self.state.accept(begin, self._links(begin))
-            self.nekg.apply(begin)
-            previous = begin
-            global_order += 1
-            self._checkpoint(on_checkpoint)
+            last_failure: Exception | None = None
+            succeeded = False
+            for chapter_attempt in range(self.max_chapter_replans + 1):
+                self.state = baseline.clone()
+                self.nekg = self._graph_from_state(world, characters, self.state)
 
-            chapter_cpns: list[PlotNode] = []
-            minimum, maximum = self.min_cpn_count(chapter), self.max_cpn_count(chapter)
-            aligned = False
-            for slot in range(1, maximum + 1):
-                revision = ""
-                previous_proposal: PlotNodeProposal | None = None
-                for attempt in range(1, self.max_retries + 2):
-                    try:
-                        proposal = self._proposal(
-                            chapter, anchor, world, characters, story_frame,
-                            chapter_cpns, revision, previous_proposal, slot, minimum,
-                            maximum, taxonomy_brief, taxonomy_application,
-                        )
-                    except StructuredResponseError as exc:
-                        issue, validation = self._structured_rejection(exc, "candidate")
-                        self._reject({
-                            "chapter_id": chapter.id, "slot": slot, "attempt": attempt,
-                            "stage": "proposal", "issues": [issue], "validation": validation,
-                        })
-                        revision = issue
-                        self._checkpoint(on_checkpoint)
-                        continue
-
-                    current_snapshot = self.nekg.snapshot()
-                    self._normalize_movement_origin(
-                        proposal, current_snapshot, chapter_id=chapter.id,
-                    )
-
-                    taxonomy_issue = self._taxonomy_issue(proposal, taxonomy_application)
-                    dependency = validator.validate(
-                        proposal, current_snapshot, {item.id for item in self.state.nodes},
-                    )
-                    deterministic_issues = [item.message for item in dependency.issues]
-                    deterministic_issues.extend(
-                        self._cen_reservation_issues(proposal, anchor)
-                    )
-                    bridge = self._location_bridge(
-                        world, anchor, current_snapshot, slot, maximum,
-                    )
-                    movement_destination = next((
-                        item.value for item in proposal.effects
-                        if item.entity_id == bridge["subject_id"]
-                        and item.attribute == "location"
-                    ), None)
-                    if bridge["must_move_now"] and movement_destination != bridge["required_next_location"]:
-                        deterministic_issues.append(
-                            "candidate must move the ending subject from "
-                            f"{bridge['current_location']} to adjacent "
-                            f"{bridge['required_next_location']} in this slot"
-                        )
-                    if taxonomy_issue:
-                        deterministic_issues.append(taxonomy_issue)
-                    signature = (proposal.subject.id, proposal.verb.casefold().strip(), proposal.object.id)
-                    forbidden = {
-                        (anchor.begin_subject.id, anchor.begin_verb.casefold().strip(), anchor.begin_object.id),
-                        (anchor.end_subject.id, anchor.end_verb.casefold().strip(), anchor.end_object.id),
-                        *((item.subject.id, item.verb.casefold().strip(), item.object.id) for item in chapter_cpns),
-                    }
-                    if signature in forbidden:
-                        deterministic_issues.append("candidate repeats an anchor or accepted chapter event")
-                    if deterministic_issues:
-                        self._reject({
-                            "chapter_id": chapter.id, "slot": slot, "attempt": attempt,
-                            "stage": "dependency", "proposal": proposal.model_dump(mode="json"),
-                            "validation_codes": [item.code for item in dependency.issues],
-                            "issues": deterministic_issues,
-                        })
-                        revision = "; ".join(deterministic_issues)
-                        previous_proposal = proposal
-                        self._checkpoint(on_checkpoint)
-                        continue
-
-                    try:
-                        self._emit(
-                            "agent_called", "se llamo al agente dramatic_reviewer",
-                            chapter_id=chapter.id, attempt=attempt,
-                        )
-                        review = self.reviewer.review(
-                            proposal, chapter, anchor, world, characters, dependency,
-                            self.state.recent(8), self.nekg,
-                            alignment_allowed=slot >= minimum,
-                        )
-                    except StructuredResponseError as exc:
-                        issue, validation = self._structured_rejection(exc, "review")
-                        self._reject({
-                            "chapter_id": chapter.id, "slot": slot, "attempt": attempt,
-                            "stage": "review", "proposal": proposal.model_dump(mode="json"),
-                            "issues": [issue], "validation": validation,
-                        })
-                        revision = issue
-                        self._checkpoint(on_checkpoint)
-                        continue
-
-                    if slot < minimum:
-                        alignment_issues = [
-                            issue for issue in review.issues
-                            if "aligns_with_cen" in issue.casefold()
-                            or (
-                                "minimum" in issue.casefold()
-                                and "chapter" in issue.casefold()
-                            )
-                        ]
-                        normalized = review.aligns_with_cen
-                        review.aligns_with_cen = False
-                        review_checks = (
-                            review.causal, review.intentional, review.conflict_present,
-                            review.continuous, review.novel, review.advances_ending,
-                            review.world_consistent, review.emotionally_effective,
-                        )
-                        if (
-                            not review.accepted
-                            and review.issues
-                            and len(alignment_issues) == len(review.issues)
-                            and all(review_checks)
-                        ):
-                            review.accepted = True
-                            review.issues = []
-                            normalized = True
-                        if normalized:
-                            self._emit(
-                                "review_normalized",
-                                f"CPN {chapter.id}:{slot}: alineacion aplazada hasta el minimo",
-                                chapter_id=chapter.id, attempt=attempt,
-                            )
-                    candidate = review.revised or proposal
-                    self._normalize_movement_origin(
-                        candidate, current_snapshot, chapter_id=chapter.id,
-                    )
-                    replacement_dependency = validator.validate(
-                        candidate, current_snapshot, {item.id for item in self.state.nodes},
-                    )
-                    post_issues = [item.message for item in replacement_dependency.issues]
-                    post_issues.extend(self._cen_reservation_issues(candidate, anchor))
-                    replacement_taxonomy_issue = self._taxonomy_issue(candidate, taxonomy_application)
-                    if replacement_taxonomy_issue:
-                        post_issues.append(replacement_taxonomy_issue)
-                    replacement_signature = (
-                        candidate.subject.id, candidate.verb.casefold().strip(), candidate.object.id,
-                    )
-                    if replacement_signature in forbidden:
-                        post_issues.append(
-                            "reviewer replacement repeats an anchor or accepted chapter event"
-                        )
-                    final_without_alignment = slot == maximum and not review.aligns_with_cen
-                    too_early = review.aligns_with_cen and slot < minimum
-                    if review.accepted and not post_issues and not final_without_alignment and not too_early:
-                        node = self._node(candidate, chapter, "CPN", global_order, slot + 1)
-                        self.state.accept(node, self._links(node))
-                        self.nekg.apply(node)
-                        self.history.records.append(AcceptedNodeRecord(
-                            node=node, review=review, attempt=attempt,
-                        ))
-                        chapter_cpns.append(node)
-                        previous = node
-                        global_order += 1
-                        aligned = review.aligns_with_cen and len(chapter_cpns) >= minimum
-                        self._checkpoint(on_checkpoint)
-                        break
-
-                    issues = [*review.issues, *post_issues]
-                    if too_early:
-                        issues.append("minimum chapter development has not been reached")
-                    if final_without_alignment:
-                        issues.append("final candidate does not bridge immediately to the ending")
-                    self._reject({
-                        "chapter_id": chapter.id, "slot": slot, "attempt": attempt,
-                        "stage": "review", "proposal": proposal.model_dump(mode="json"),
-                        "review": review.model_dump(mode="json"),
-                        "candidate": candidate.model_dump(mode="json"), "issues": issues,
-                    })
-                    revision = "; ".join(issues)
-                    previous_proposal = candidate
+                def reject_and_checkpoint(record: dict) -> None:
+                    self._reject(record)
                     self._checkpoint(on_checkpoint)
-                else:
-                    attempts = [
-                        item for item in self.history.rejected
-                        if item.get("chapter_id") == chapter.id and item.get("slot") == slot
-                    ]
-                    raise StorylinePlanningError(
-                        f"No se pudo validar el CPN {chapter.id}:{slot}.",
-                        details={
-                            "chapter_id": chapter.id, "slot": slot,
-                            "attempts": attempts,
-                            "checkpoints": "checkpoints/",
-                            "attempt_artifacts": f"storyline_attempts/{chapter.id}/slot-{slot:02d}/",
-                        },
-                    )
-                if aligned:
-                    break
-            if not aligned:
-                raise StorylinePlanningError(
-                    f"El capítulo {chapter.id} no conectó con su CEN dentro del límite.",
-                    details={"chapter_id": chapter.id, "max_cpn": maximum},
-                )
 
-            before_end = self.nekg.snapshot()
-            end_effects = self._effective_anchor_effects(
-                anchor.end_effects, before_end,
-                anchor.end_subject, anchor.end_verb, anchor.end_object,
-                chapter_id=chapter.id, anchor_kind="CEN",
-            )
-            end_proposal = PlotNodeProposal(
-                location_id=anchor.end_location_id,
-                subject=anchor.end_subject, verb=anchor.end_verb, object=anchor.end_object,
-                purpose="Establish the chapter's factual end state",
-                narrative_function="chapter_end",
-                depends_on_node_ids=[previous.id] if previous else [],
-                preconditions=anchor.end_preconditions, effects=end_effects,
-                intention="Resolve or transform the active chapter goal",
-                conflict="The outcome has a meaningful cost",
-                consequence="The chapter ending changes the next chapter's conditions",
-            )
-            self._normalize_movement_origin(
-                end_proposal, before_end, chapter_id=chapter.id,
-            )
-            end_report = validator.validate(
-                end_proposal, before_end, {item.id for item in self.state.nodes},
-            )
-            if not end_report.passed:
-                raise StorylinePlanningError(
-                    f"El CEN de {chapter.id} contradice el estado del mundo.",
-                    details={"issues": [item.model_dump() for item in end_report.issues]},
+                cpn_planner = CpnPlanner(
+                    self.provider, CpnValidator(world, characters),
+                    max_retries=self.max_retries, reviewer=self.reviewer,
+                    emit=self._emit, reject=reject_and_checkpoint,
                 )
-            end = self._node(
-                end_proposal, chapter, "CEN", global_order, len(chapter_cpns) + 2,
-            )
-            self.state.accept(end, self._links(end))
-            self.nekg.apply(end)
-            self._allocate_words(chapter, [begin, *chapter_cpns, end])
-            previous = end
-            global_order += 1
-            self._checkpoint(on_checkpoint)
+                try:
+                    self._plan_chapter(
+                        chapter, anchor, world, characters, story_frame, cpn_planner,
+                        validator, on_checkpoint, taxonomy_brief, taxonomy_application,
+                        attempt_offset=chapter_attempt * (self.max_retries + 1),
+                    )
+                    by_chapter[chapter.id] = anchor
+                    succeeded = True
+                    break
+                except (CpnAttemptsExhausted, StorylinePlanningError) as exc:
+                    last_failure = exc
+                    self.history.records = self.history.records[:accepted_record_count]
+                    self.state = baseline.clone()
+                    self.nekg = self._graph_from_state(world, characters, self.state)
+                    self._emit(
+                        "chapter_rolled_back",
+                        f"capitulo {chapter.id} descartado antes de comprometer STORYLINE",
+                        chapter_id=chapter.id,
+                    )
+                    self._checkpoint(on_checkpoint)
+                    if chapter_attempt >= self.max_chapter_replans:
+                        break
+                    failures = [
+                        item for item in self.history.rejected
+                        if item.get("chapter_id") == chapter.id
+                    ]
+                    anchor = self._replacement_anchor(
+                        chapter, outline, anchor, world, characters, story_frame, failures,
+                    )
+                    for index, item in enumerate(anchors.anchors):
+                        if item.chapter_id == chapter.id:
+                            anchors.anchors[index] = anchor
+                            break
+                    self._emit(
+                        "chapter_replanned",
+                        f"anclas de {chapter.id} regeneradas; reintentando el capitulo",
+                        chapter_id=chapter.id,
+                    )
+
+            if not succeeded:
+                failures = [
+                    item for item in self.history.rejected
+                    if item.get("chapter_id") == chapter.id
+                ]
+                issue_codes = sorted({
+                    code for item in failures for code in item.get("issue_codes", [])
+                })
+                slot = (
+                    last_failure.context.slot
+                    if isinstance(last_failure, CpnAttemptsExhausted) else None
+                )
+                summary = (
+                    f"No se pudo validar el CPN {chapter.id}:{slot}."
+                    if slot is not None else str(last_failure)
+                )
+                raise StorylinePlanningError(
+                    summary,
+                    details={
+                        "chapter_id": chapter.id, "slot": slot, "attempts": failures,
+                        "issue_codes": issue_codes,
+                        "chapter_failure": (
+                            last_failure.details
+                            if isinstance(last_failure, StorylinePlanningError) else None
+                        ),
+                        "chapter_replans": self.max_chapter_replans,
+                        "checkpoints": "checkpoints/",
+                        "attempt_artifacts": f"storyline_attempts/{chapter.id}/",
+                    },
+                ) from last_failure
 
         return self.state.artifact(), self.history
