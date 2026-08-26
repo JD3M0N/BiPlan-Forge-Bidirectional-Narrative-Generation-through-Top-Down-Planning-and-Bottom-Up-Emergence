@@ -44,3 +44,4 @@
     final de la ficción se conserva por separado.
 - [x] TODO: En algun lugar debe haber un chequeo de los constraints del usuario
   - Cada constraint explícito genera una pregunta bloqueante en la auditoría.
+  - [ ]TODO: Los constraints que sean en ingles

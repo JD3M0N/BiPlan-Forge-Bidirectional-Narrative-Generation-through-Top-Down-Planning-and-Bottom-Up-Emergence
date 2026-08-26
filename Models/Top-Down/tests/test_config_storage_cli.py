@@ -62,6 +62,14 @@ def test_artifact_retries_can_be_configured(tmp_path, monkeypatch) -> None:
     assert load_settings(tmp_path).max_artifact_retries == 4
 
 
+def test_request_timeout_can_be_configured(tmp_path, monkeypatch) -> None:
+    (tmp_path / "Models").mkdir()
+    (tmp_path / "Stories").mkdir()
+    monkeypatch.setenv("GEMINI_API_KEY", "test")
+    monkeypatch.setenv("GEMINI_REQUEST_TIMEOUT_MS", "45000")
+    assert load_settings(tmp_path).request_timeout_ms == 45_000
+
+
 @pytest.mark.parametrize("value", ["299", "20001", "no-es-entero"])
 def test_default_target_words_rejects_invalid_values(
     tmp_path, monkeypatch, value
@@ -109,6 +117,24 @@ def test_repository_saves_incremental_nested_artifacts(tmp_path) -> None:
     assert manifest["completed_stages"] == ["scenes"]
     assert len(manifest["artifacts"]["scenes/chapter-001.md"]["sha256"]) == 64
     assert not list(repository.run_dir.rglob("*.tmp"))
+
+
+def test_repository_announces_artifact_only_after_atomic_write(tmp_path) -> None:
+    received = []
+    repository = None
+
+    def announce(filename, created):
+        received.append((filename, created, (repository.run_dir / filename).is_file()))
+
+    repository = ArtifactRepository(
+        tmp_path, "gemini-test", "Historia", on_artifact=announce,
+    )
+    repository.save_text("notes/result.md", "primero")
+    repository.save_text("notes/result.md", "segundo")
+    assert received == [
+        ("notes/result.md", True, True),
+        ("notes/result.md", False, True),
+    ]
 
 
 def test_find_project_root_from_nested_path(tmp_path) -> None:

@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from asg_evaluation import METRICS, add_evaluation
-from asg_top_down.progress import ProgressUpdate, format_progress
+from asg_top_down.progress import PipelineEvent, ProgressUpdate, format_progress
 from asg_top_down.errors import ASGError
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
@@ -349,6 +349,15 @@ class TelegramStoryBot:
         self, *, context, chat_id, user, prompt, progress_message_id,
         job_id, report_progress, last_progress,
     ) -> None:
+        def report_event(event: PipelineEvent) -> None:
+            log_user_action(
+                LOGGER,
+                user_id=user.id,
+                username=user.username or user.full_name,
+                action=event.message,
+                category="generaciÃ³n",
+            )
+
         try:
             try:
                 parameters = inspect.signature(self.generator.generate).parameters
@@ -356,13 +365,16 @@ class TelegramStoryBot:
                     (lambda path: self.queue.set_run_dir(job_id, str(path)))
                     if job_id and self.queue else None
                 )
-                args = (
-                    (prompt, report_progress, run_created) if len(parameters) >= 3
-                    else (prompt, report_progress) if len(parameters) >= 2 else (prompt,)
-                )
+                kwargs = {}
+                if "on_progress" in parameters:
+                    kwargs["on_progress"] = report_progress
+                if "on_run_created" in parameters:
+                    kwargs["on_run_created"] = run_created
+                if "on_event" in parameters:
+                    kwargs["on_event"] = report_event
                 operation = self.generator.generate
                 story_directory = await asyncio.to_thread(
-                    operation, *args
+                    operation, prompt, **kwargs
                 )
             except Exception as exc:
                 if job_id and self.queue:

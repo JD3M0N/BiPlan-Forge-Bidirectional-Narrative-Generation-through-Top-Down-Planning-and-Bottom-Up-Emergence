@@ -71,9 +71,13 @@ def retry_details(exc: Exception) -> dict[str, object]:
     delay_match = re.search(r"(?:retryDelay['\"]?\s*:\s*['\"]?|retry in\s+)(\d+(?:\.\d+)?)", text, re.I)
     metric = re.search(r"Quota exceeded for metric:\s*([^,\n]+)", text, re.I)
     quota_id = re.search(r"quotaId['\"]?\s*:\s*['\"]([^'\"]+)", text, re.I)
-    status = re.search(r"\b(429|408|5\d\d)\b", text)
+    status = re.search(r"\b([45]\d\d)\b", text)
+    explicit_code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+    if not isinstance(explicit_code, int):
+        explicit_code = None
     return {
-        "status": int(status.group(1)) if status else None,
+        "status": explicit_code or (int(status.group(1)) if status else None),
+        "status_name": getattr(exc, "status", None),
         "retry_delay": float(delay_match.group(1)) if delay_match else None,
         "metric": metric.group(1).strip() if metric else None,
         "quota_id": quota_id.group(1) if quota_id else None,

@@ -32,8 +32,13 @@ class DramaticReviewer:
     def review(self, proposal: PlotNodeProposal, chapter: ChapterPlan, anchor,
                world: WorldArtifact, characters: StorylineCast,
                dependency_report: DependencyReport, recent: list[PlotNode],
-               graph: NarrativeGraphBackend) -> PlotNodeReview:
+               graph: NarrativeGraphBackend, *, alignment_allowed: bool = True) -> PlotNodeReview:
         related = graph.related(proposal.subject.id, proposal.object.id, limit=10)
+        alignment_rule = (
+            "Alignment is allowed only if the supplied ending can occur immediately next."
+            if alignment_allowed else
+            "The minimum chapter development is not complete: set aligns_with_cen to false."
+        )
         return self.provider.generate_structured(
             system_instruction=(
                 "Review one internal plot event. Accept only if it has causal support, a character "
@@ -41,7 +46,13 @@ class DramaticReviewer:
                 "world consistency, and an emotionally effective change. A replacement must be a "
                 "complete candidate using canonical IDs and will be independently revalidated. Set "
                 "aligns_with_cen only when the candidate makes the supplied ending an immediate next "
-                "event. Return internal analysis in English."
+                "event. The candidate is an internal event: never require it to match the ending's "
+                "verb or object, and never copy either the begin-anchor SVO or end-anchor SVO into a "
+                "replacement. Advancing toward the ending means establishing its prerequisites, not "
+                "performing the ending early. Never apply an end anchor effect early or contradict an "
+                "end anchor precondition. Return internal analysis in English."
+                f" {alignment_rule} For any movement replacement, location_id is the actor's current source location "
+                "and the adjacent destination belongs only in a typed location effect."
             ),
             prompt=(f"CANDIDATE:\n{_json(proposal)}\n\nCHAPTER:\n{_json(chapter)}"
                     f"\n\nEND TARGET:\n{_json({'subject': anchor.end_subject, 'verb': anchor.end_verb, 'object': anchor.end_object, 'location_id': anchor.end_location_id})}"

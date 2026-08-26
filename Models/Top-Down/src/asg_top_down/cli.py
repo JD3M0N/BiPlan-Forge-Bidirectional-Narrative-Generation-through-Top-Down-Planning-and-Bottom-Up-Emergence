@@ -35,6 +35,8 @@ def main() -> int:
             rpm_limit=settings.rpm_limit, rpm_reserve=settings.rpm_reserve,
             tpm_limit=settings.tpm_limit, max_retries=settings.max_retries,
             max_retry_delay=settings.max_retry_delay,
+            request_timeout_ms=settings.request_timeout_ms,
+            structured_validation_retries=settings.max_artifact_retries,
             embedding_model=settings.embedding_model,
         )
         generator = StoryGenerator(
@@ -46,11 +48,9 @@ def main() -> int:
         print(f"\nGenerando con {settings.model}...")
         output = generator.run(
             prompt,
-            on_progress=lambda update: print(
-                f"\r{format_progress(update)}", end="", flush=True
-            ),
+            on_progress=lambda update: print(format_progress(update), flush=True),
+            on_event=lambda event: print(event.message, flush=True),
         )
-        print()
         print(f"\nHistoria terminada: {output.story_path}")
         return 0
     except (ASGError, KeyboardInterrupt) as exc:

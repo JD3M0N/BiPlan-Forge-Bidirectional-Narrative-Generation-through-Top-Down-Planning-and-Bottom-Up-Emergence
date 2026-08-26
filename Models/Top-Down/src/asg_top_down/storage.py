@@ -10,6 +10,7 @@ import tempfile
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 from pydantic import BaseModel
 
@@ -24,7 +25,8 @@ def slugify(value: str) -> str:
 
 
 class ArtifactRepository:
-    def __init__(self, output_root: Path, model: str, title: str) -> None:
+    def __init__(self, output_root: Path, model: str, title: str, *,
+                 on_artifact: Callable[[str, bool], None] | None = None) -> None:
         now = datetime.now(timezone.utc)
         base = f"{now.strftime('%Y%m%d-%H%M%S')}-{slugify(title)}"
         run_dir = output_root / base
@@ -34,6 +36,7 @@ class ArtifactRepository:
             suffix += 1
         run_dir.mkdir(parents=True, exist_ok=False)
         self.run_dir = run_dir
+        self.on_artifact = on_artifact
         self.metadata = RunMetadata(
             run_id=run_dir.name, model=model, created_at=now, updated_at=now,
             status="running", pipeline_version="4.0",
@@ -75,20 +78,31 @@ class ArtifactRepository:
 
     def save_data(self, filename: str, value) -> None:
         content = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
-        self._atomic_write(self.run_dir / filename, content)
+        destination = self.run_dir / filename
+        created = not destination.exists()
+        self._atomic_write(destination, content)
         self._record(filename, content)
+        if self.on_artifact:
+            self.on_artifact(filename.replace("\\", "/"), created)
 
     def save_text(self, filename: str, value: str) -> None:
         content = value.rstrip() + "\n"
-        self._atomic_write(self.run_dir / filename, content)
+        destination = self.run_dir / filename
+        created = not destination.exists()
+        self._atomic_write(destination, content)
         self._record(filename, content)
+        if self.on_artifact:
+            self.on_artifact(filename.replace("\\", "/"), created)
 
     def append_llm_call(self, record: LLMUsageRecord) -> None:
         path = self.run_dir / "llm_calls.jsonl"
-        existing = path.read_text(encoding="utf-8") if path.exists() else ""
+        created = not path.exists()
+        existing = path.read_text(encoding="utf-8") if not created else ""
         line = json.dumps(record.model_dump(mode="json"), ensure_ascii=False) + "\n"
         self._atomic_write(path, existing + line)
         self._record("llm_calls.jsonl", existing + line)
+        if self.on_artifact:
+            self.on_artifact("llm_calls.jsonl", created)
 
     def complete_stage(self, stage: str) -> None:
         if stage not in self.metadata.completed_stages:

@@ -2,6 +2,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+import asg_top_down.provider as provider_module
 
 from asg_top_down.errors import (
     EmptyResponseError, GeminiDailyQuotaError, ProviderError, StructuredResponseError,
@@ -142,3 +143,77 @@ def test_daily_quota_is_not_retried() -> None:
     provider.max_retries = 3
     with pytest.raises(GeminiDailyQuotaError):
         provider._generate("text", provider._client.models.generate_content)
+
+
+def test_connect_error_is_retried_then_succeeds(monkeypatch) -> None:
+    class ConnectError(Exception):
+        pass
+
+    class FlakyModels(FakeModels):
+        def generate_content(self, **kwargs):
+            self.generate_calls.append(kwargs)
+            if len(self.generate_calls) == 1:
+                raise ConnectError("getaddrinfo failed")
+            return SimpleNamespace(text="respuesta", usage_metadata=None)
+
+    provider = provider_with()
+    provider.max_retries = 3
+    provider._client.models = FlakyModels()
+    monkeypatch.setattr(provider_module, "retry_delay", lambda attempt, details: 0)
+    monkeypatch.setattr(provider_module, "countdown_wait", lambda *args: None)
+    assert provider.generate_text(system_instruction="test", prompt="test") == "respuesta"
+    assert len(provider._client.models.generate_calls) == 2
+    assert [record.status for record in provider.usage_records] == ["failed", "succeeded"]
+
+
+def test_authentication_error_is_not_retried() -> None:
+    provider = provider_with(error=Exception("401 invalid API key"))
+    provider.max_retries = 3
+    with pytest.raises(ProviderError):
+        provider.generate_text(system_instruction="test", prompt="test")
+    assert len(provider._client.models.generate_calls) == 1
+
+
+def test_socket_permission_error_is_classified_as_transport() -> None:
+    class ConnectError(Exception):
+        pass
+
+    error = provider_module._safe_provider_error(ConnectError(
+        "socket access forbidden by its access permissions"
+    ))
+    assert "comunicarse con Gemini" in error.summary
+
+
+def test_client_error_preserves_safe_status_diagnostics() -> None:
+    class ClientError(Exception):
+        code = 400
+        status = "INVALID_ARGUMENT"
+
+    error = provider_module._safe_provider_error(ClientError("400 invalid argument"))
+    assert error.details["status"] == 400
+    assert error.details["status_name"] == "INVALID_ARGUMENT"
+    assert "esquema" in error.summary
+
+
+def test_embedding_transport_error_is_retried(monkeypatch) -> None:
+    class ConnectError(Exception):
+        pass
+
+    class FlakyEmbeddingModels(FakeModels):
+        def embed_content(self, **kwargs):
+            self.generate_calls.append(kwargs)
+            if len(self.generate_calls) == 1:
+                raise ConnectError("temporary DNS failure")
+            return SimpleNamespace(
+                embeddings=[SimpleNamespace(values=[0.1, 0.2])], usage_metadata=None,
+            )
+
+    provider = provider_with()
+    provider.embedding_model_name = "fake-embedding"
+    provider.max_retries = 2
+    provider._client.models = FlakyEmbeddingModels()
+    monkeypatch.setattr(provider_module, "retry_delay", lambda attempt, details: 0)
+    monkeypatch.setattr(provider_module, "countdown_wait", lambda *args: None)
+    assert provider.embed_query("query") == [0.1, 0.2]
+    assert len(provider._client.models.generate_calls) == 2
+    assert provider.usage_records[-1].model == "fake-embedding"

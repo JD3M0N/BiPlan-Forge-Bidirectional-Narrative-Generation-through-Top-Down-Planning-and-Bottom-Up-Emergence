@@ -7,7 +7,7 @@ from typing import Callable, Protocol
 
 from asg_top_down.config import load_settings as load_top_down_settings
 from asg_top_down import StoryGenerator
-from asg_top_down.progress import ProgressCallback
+from asg_top_down.progress import PipelineEventCallback, ProgressCallback
 from asg_top_down.provider import GeminiProvider
 
 
@@ -17,7 +17,7 @@ class StoryGeneratorAdapter(Protocol):
 
     def generate(
         self, prompt: str, on_progress: ProgressCallback | None = None,
-        on_run_created=None,
+        on_run_created=None, on_event: PipelineEventCallback | None = None,
     ) -> Path: ...
 
 class TopDownGenerator:
@@ -27,7 +27,7 @@ class TopDownGenerator:
 
     def generate(
         self, prompt: str, on_progress: ProgressCallback | None = None,
-        on_run_created=None,
+        on_run_created=None, on_event: PipelineEventCallback | None = None,
     ) -> Path:
         settings = load_top_down_settings()
         provider = GeminiProvider(
@@ -35,6 +35,8 @@ class TopDownGenerator:
             rpm_limit=settings.rpm_limit, rpm_reserve=settings.rpm_reserve,
             tpm_limit=settings.tpm_limit, max_retries=settings.max_retries,
             max_retry_delay=settings.max_retry_delay,
+            request_timeout_ms=settings.request_timeout_ms,
+            structured_validation_retries=settings.max_artifact_retries,
             embedding_model=settings.embedding_model,
         )
         return StoryGenerator(
@@ -44,6 +46,7 @@ class TopDownGenerator:
             max_artifact_retries=settings.max_artifact_retries,
         ).run(
             prompt, on_progress=on_progress, on_run_created=on_run_created,
+            on_event=on_event,
         ).run_dir
 
 GeneratorFactory = Callable[[], StoryGeneratorAdapter]

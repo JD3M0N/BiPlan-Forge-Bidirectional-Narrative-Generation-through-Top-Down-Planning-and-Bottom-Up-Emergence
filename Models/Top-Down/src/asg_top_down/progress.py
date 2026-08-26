@@ -24,6 +24,21 @@ class ProgressUpdate:
 ProgressCallback = Callable[[ProgressUpdate], None]
 
 
+@dataclass(frozen=True, slots=True)
+class PipelineEvent:
+    """A concise diagnostic event that never carries prompts or credentials."""
+
+    kind: str
+    message: str
+    stage: str | None = None
+    chapter_id: str | None = None
+    attempt: int | None = None
+    artifact: str | None = None
+
+
+PipelineEventCallback = Callable[[PipelineEvent], None]
+
+
 def format_progress(update: ProgressUpdate, width: int = 10) -> str:
     """Render a compact, terminal- and chat-friendly progress bar."""
 

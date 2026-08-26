@@ -25,24 +25,62 @@ _LIMITERS_LOCK = threading.Lock()
 def _safe_provider_error(exc: Exception) -> ProviderError:
     """Classify provider failures without exposing request or credential data."""
     message = str(exc).casefold()
-    if any(token in message for token in ("api key", "unauth", "permission", "401", "403")):
+    diagnostic = retry_details(exc)
+    status = diagnostic.get("status")
+    if status in {401, 403} or any(token in message for token in (
+        "api key", "unauth", "permission_denied", "permission denied", "401", "403",
+    )):
         summary = "Gemini rechazó la autenticación o los permisos configurados."
         recommendation = "Comprueba GEMINI_API_KEY y el acceso al modelo seleccionado."
+    elif status == 400:
+        summary = "Gemini rechazó los parámetros o el esquema de la solicitud."
+        recommendation = "Revisa el esquema indicado y la compatibilidad del modelo configurado."
+    elif status == 404:
+        summary = "Gemini no encontró el modelo o recurso configurado."
+        recommendation = "Comprueba GEMINI_MODEL y GEMINI_EMBEDDING_MODEL."
     elif any(token in message for token in ("quota", "rate limit", "resource_exhausted", "429")):
         summary = "Gemini rechazó la solicitud por cuota o límite de uso."
         recommendation = "Espera unos minutos o revisa la cuota del proyecto de Gemini."
-    elif isinstance(exc, (OSError, ConnectionError, TimeoutError)) or any(
-        token in message for token in ("timeout", "timed out", "network", "connection", "dns", "sin red")
-    ):
+    elif _is_transient_transport_error(exc):
         summary = "No fue posible comunicarse con Gemini."
         recommendation = "Comprueba la conexión y vuelve a intentarlo."
     else:
         summary = "Gemini no pudo completar la solicitud."
         recommendation = "Vuelve a intentarlo y consulta el registro local si persiste."
     return ProviderError(
-        summary, details={"exception_type": type(exc).__name__},
+        summary, details={
+            "exception_type": type(exc).__name__,
+            **{key: value for key, value in diagnostic.items() if value is not None},
+        },
         recommendations=[recommendation],
     )
+
+
+def _is_transient_transport_error(exc: Exception) -> bool:
+    """Recognize retryable transport failures across supported HTTP clients."""
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    class_markers = {
+        "connecterror", "connecttimeout", "readtimeout", "writetimeout",
+        "pooltimeout", "networkerror", "transporterror", "timeouterror",
+        "connectionerror",
+    }
+    message_markers = (
+        "connection reset", "connection refused", "connection aborted",
+        "temporary failure", "temporarily unavailable", "timed out", "timeout",
+        "getaddrinfo", "name resolution", "dns", "network is unreachable",
+        "server disconnected", "remote protocol error",
+    )
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        name = type(current).__name__.casefold()
+        message = str(current).casefold()
+        if name in class_markers or isinstance(current, (OSError, ConnectionError, TimeoutError)):
+            return True
+        if any(marker in message for marker in message_markers):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
 
 
 class LanguageModelProvider(Protocol):
@@ -65,6 +103,8 @@ class GeminiProvider:
     def __init__(self, api_key: str, model_name: str, *, rpm_limit: int = 15,
                  rpm_reserve: int = 1, tpm_limit: int = 0,
                  max_retries: int = 3, max_retry_delay: int = 120,
+                 request_timeout_ms: int = 120_000,
+                 structured_validation_retries: int = 2,
                  embedding_model: str = "gemini-embedding-2",
                  generation_profiles: dict[str, float] | None = None) -> None:
         from google import genai
@@ -76,13 +116,14 @@ class GeminiProvider:
         self._token_limiter = TokenWindowLimiter(tpm_limit) if tpm_limit else None
         self.max_retries = max_retries
         self.max_retry_delay = max_retry_delay
-        self.structured_validation_retries = 1
+        self.structured_validation_retries = max(0, structured_validation_retries)
         capacity = max(1, rpm_limit - rpm_reserve)
         with _LIMITERS_LOCK:
             self._limiter = _LIMITERS.setdefault((capacity, 60), SlidingWindowLimiter(capacity))
         self._client = genai.Client(
             api_key=api_key,
             http_options=types.HttpOptions(
+                timeout=max(5_000, request_timeout_ms),
                 retry_options=types.HttpRetryOptions(attempts=1)
             ),
         )
@@ -115,29 +156,27 @@ class GeminiProvider:
 
     def _embed(self, texts: list[str], prefix: str) -> list[list[float]]:
         """Embed a batch using the asymmetric retrieval format recommended by Gemini."""
-        started = time.monotonic()
         try:
             contents = [f"{prefix}{text}" for text in texts]
             # Embeddings 2 aggregates multiple contents into one multimodal vector;
             # submit text documents independently so each catalog row keeps its vector.
             if self.embedding_model_name.endswith("-2") and len(contents) > 1:
                 return [self._embed([content.removeprefix(prefix)], prefix)[0] for content in contents]
-            response = self._client.models.embed_content(
-                model=self.embedding_model_name, contents=contents,
-            )
-            self._record_auxiliary(
-                f"embedding:{self.embedding_model_name}", started, "succeeded",
+            operation = f"embedding:{self.embedding_model_name}"
+            response = self._generate(
+                operation,
+                lambda: self._client.models.embed_content(
+                    model=self.embedding_model_name, contents=contents,
+                ),
             )
             embeddings = getattr(response, "embeddings", None)
             if embeddings is None:
                 single = getattr(response, "embedding", None)
                 embeddings = [single] if single is not None else []
             return [list(item.values) for item in embeddings]
+        except ProviderError:
+            raise
         except Exception as exc:
-            self._record_auxiliary(
-                f"embedding:{self.embedding_model_name}", started, "failed",
-                type(exc).__name__,
-            )
             raise _safe_provider_error(exc) from exc
 
     def embed_query(self, text: str) -> list[float]:
@@ -186,7 +225,9 @@ class GeminiProvider:
         value = lambda name: int(getattr(usage, name, 0) or 0) if usage else 0
         record = LLMUsageRecord(
             call_id=uuid.uuid4().hex, operation=operation, stage=operation,
-            attempt=retries + 1, status="succeeded", model=self.model_name,
+            attempt=retries + 1, status="succeeded",
+            model=(self.embedding_model_name if operation.startswith("embedding:")
+                   else self.model_name),
             timestamp=datetime.now(timezone.utc),
             duration_seconds=time.monotonic() - started,
             prompt_tokens=value("prompt_token_count"),
@@ -203,7 +244,9 @@ class GeminiProvider:
         self._emit_record(LLMUsageRecord(
             call_id=uuid.uuid4().hex, operation=operation, stage=operation,
             attempt=attempt + 1, status="failed", error_code=error_code,
-            model=self.model_name, timestamp=datetime.now(timezone.utc),
+            model=(self.embedding_model_name if operation.startswith("embedding:")
+                   else self.model_name),
+            timestamp=datetime.now(timezone.utc),
             duration_seconds=time.monotonic() - started, wait_seconds=waited,
             retries=attempt,
         ))
@@ -233,7 +276,11 @@ class GeminiProvider:
                     marker in quota_id or marker in metric
                     for marker in ("day", "daily", "billing", "spend")
                 )
-                transient = status in {408, 429} or (isinstance(status, int) and 500 <= status < 600)
+                transient = (
+                    status in {408, 429}
+                    or (isinstance(status, int) and 500 <= status < 600)
+                    or _is_transient_transport_error(exc)
+                )
                 if permanent_quota or not transient or attempt >= max_retries:
                     if status == 429:
                         metric = str(details.get("metric") or "")
@@ -294,6 +341,7 @@ class GeminiProvider:
                     {
                         "location": ".".join(str(part) for part in error.get("loc", ())) or "$",
                         "type": str(error.get("type", "validation_error")),
+                        "message": str(error.get("msg", "validation failed"))[:240],
                     }
                     for error in exc.errors(include_url=False, include_context=False, include_input=False)
                 ]

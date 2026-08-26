@@ -20,6 +20,7 @@ class Settings:
     tpm_limit: int = 0
     max_retries: int = 3
     max_retry_delay: int = 120
+    request_timeout_ms: int = 120_000
     default_target_words: int = 1500
     embedding_model: str = "gemini-embedding-2"
     max_cpn_retries: int = 2
@@ -62,6 +63,7 @@ def load_settings(start: Path | None = None) -> Settings:
         tpm_limit=max(0, int(os.getenv("GEMINI_TPM_LIMIT", "0"))),
         max_retries=max(1, int(os.getenv("GEMINI_MAX_RETRIES", "3"))),
         max_retry_delay=max(1, int(os.getenv("GEMINI_MAX_RETRY_DELAY", "120"))),
+        request_timeout_ms=max(5_000, int(os.getenv("GEMINI_REQUEST_TIMEOUT_MS", "120000"))),
         default_target_words=default_target_words,
         embedding_model=os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-2").strip()
         or "gemini-embedding-2",

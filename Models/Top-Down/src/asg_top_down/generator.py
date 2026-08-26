@@ -24,10 +24,12 @@ from .craft import (
     validate_try_fail_plan,
 )
 from .errors import ArtifactValidationError
-from .incremental import IncrementalPlotPlanner, NodeReviewHistory
+from .incremental import IncrementalPlotPlanner, NodeReviewHistory, chapter_word_budgets
 from .narrative_db import NarrativeBlueprint, NarrativeSchemaRepository
 from .nekg import NarrativeEntityGraph
-from .progress import ProgressCallback, ProgressUpdate
+from .progress import (
+    PipelineEvent, PipelineEventCallback, ProgressCallback, ProgressUpdate,
+)
 from .schemas import (
     ChapterAnchorsArtifact, CharactersArtifact,
     CraftAuditAnswer, CraftAuditArtifact, CraftRevisionAttempt, CraftRevisionHistory,
@@ -169,14 +171,11 @@ class StoryGenerator:
         orders = [item.order for item in outline.chapters]
         if len(ids) != len(set(ids)) or orders != list(range(1, len(orders) + 1)):
             raise ValueError("outline IDs/orders must be unique and consecutive")
-        if request.requested_chapters and len(outline.chapters) != request.requested_chapters:
-            raise ValueError("outline does not honor the explicit chapter count")
-        if sum(item.target_words for item in outline.chapters) != request.target_words:
-            raise ValueError("chapter budgets must equal requested target words")
-        if not request.requested_chapters and any(
-            not 400 <= item.target_words <= 900 for item in outline.chapters
-        ):
-            raise ValueError("automatic chapter budgets must remain between 400 and 900 words")
+        budgets = chapter_word_budgets(request.agent_spec())
+        if len(outline.chapters) != len(budgets):
+            raise ValueError(f"outline must contain exactly {len(budgets)} chapters")
+        if [item.target_words for item in outline.chapters] != budgets:
+            raise ValueError(f"chapter budgets must exactly equal {budgets}")
 
     @staticmethod
     def _validate_world_characters(world: WorldArtifact, characters: CharactersArtifact) -> None:
@@ -215,8 +214,22 @@ class StoryGenerator:
 
     def generate(self, request: StoryRequest | str,
                  on_progress: ProgressCallback | None = None,
-                 on_run_created=None) -> StoryRun:
+                 on_run_created=None,
+                 on_event: PipelineEventCallback | None = None) -> StoryRun:
         progress = {"percent": 0, "stage": "analysis"}
+
+        def emit(kind: str, message: str, *, stage: str | None = None,
+                 chapter_id: str | None = None, attempt: int | None = None,
+                 artifact: str | None = None) -> None:
+            if on_event:
+                on_event(PipelineEvent(
+                    kind=kind, message=message, stage=stage,
+                    chapter_id=chapter_id, attempt=attempt, artifact=artifact,
+                ))
+
+        def call_agent(name: str, function: Callable[[], TArtifact | str]):
+            emit("agent_called", f"se llamo al agente {name}", stage=progress["stage"])
+            return function()
 
         def notify(percent, stage, description, chapter=None, total=None) -> None:
             if stage != "rate_limit":
@@ -230,8 +243,18 @@ class StoryGenerator:
         usage_start = len(getattr(self.provider, "usage_records", []))
         notify(0, "analysis", "Analizando la solicitud")
         if isinstance(request, str):
-            request = AnalystAgent(self.provider, self.default_target_words).run(request)
-        repository = ArtifactRepository(self.output_root, self.provider.model_name, request.title)
+            request = call_agent(
+                "analyst",
+                lambda: AnalystAgent(self.provider, self.default_target_words).run(request),
+            )
+        repository = ArtifactRepository(
+            self.output_root, self.provider.model_name, request.title,
+            on_artifact=lambda filename, created: emit(
+                "artifact_created" if created else "artifact_updated",
+                f"artefacto {filename} {'creado' if created else 'actualizado'}",
+                stage=progress["stage"], artifact=filename,
+            ),
+        )
         if on_run_created:
             on_run_created(repository.run_dir)
 
@@ -246,8 +269,17 @@ class StoryGenerator:
                 repository.append_llm_call(record), save_usage(),
             )
         try:
+            try:
+                chapter_word_budgets(request.agent_spec())
+            except ValueError as exc:
+                raise ArtifactValidationError(
+                    "La extensiÃ³n solicitada no permite el nÃºmero de capÃ­tulos indicado.",
+                    stage="outline", details={"issue": str(exc)},
+                    recommendations=["Reduce los capÃ­tulos o aumenta la cantidad de palabras."],
+                ) from exc
             repository.save_json("request.json", request)
             repository.complete_stage("analysis")
+            emit("function_called", "se llamo a la funcion recuperacion taxonomica", stage="retrieval")
             blueprint = self.schemas.retrieve(request)
             repository.save_json("blueprint.json", blueprint)
             repository.save_json("retrieval_trace.json", blueprint.trace)
@@ -255,7 +287,9 @@ class StoryGenerator:
 
             plan = self._validated_artifact(
                 repository, name="story_plan", stage="planning",
-                generate=lambda feedback: PlannerAgent(self.provider).run(request, blueprint, feedback),
+                generate=lambda feedback: call_agent(
+                    "planner", lambda: PlannerAgent(self.provider).run(request, blueprint, feedback),
+                ),
                 validate=lambda value: self._validate_plan(value, blueprint),
             )
             taxonomy_brief = self.schemas.compile_brief(plan.taxonomy_application, blueprint)
@@ -263,12 +297,18 @@ class StoryGenerator:
             repository.save_json("story_frame.json", plan.story_frame)
             repository.save_json("taxonomy_application.json", plan.taxonomy_application)
             repository.save_json("taxonomy_brief.json", taxonomy_brief)
-            world = WorldBuilderAgent(self.provider).run(request, plan, taxonomy_brief)
+            world = call_agent(
+                "world", lambda: WorldBuilderAgent(self.provider).run(
+                    request, plan, taxonomy_brief,
+                ),
+            )
             repository.save_json("world.json", world)
             characters = self._validated_artifact(
                 repository, name="characters", stage="characters",
-                generate=lambda feedback: CharacterDesignerAgent(self.provider).run(
-                    request, plan, world, feedback, taxonomy_brief,
+                generate=lambda feedback: call_agent(
+                    "characters", lambda: CharacterDesignerAgent(self.provider).run(
+                        request, plan, world, feedback, taxonomy_brief,
+                    ),
                 ),
                 validate=lambda value: (
                     validate_craft_characters(value), self._validate_world_characters(world, value),
@@ -277,19 +317,37 @@ class StoryGenerator:
             repository.save_json("characters.json", characters)
             storyline_cast = characters.storyline_cast()
 
-            factual = IncrementalPlotPlanner(self.provider, max_retries=self.max_cpn_retries)
+            def save_storyline_attempt(record: dict) -> None:
+                chapter_id = str(record.get("chapter_id", "unknown"))
+                slot = int(record.get("slot", 0))
+                attempt = int(record.get("attempt", 0))
+                stage = str(record.get("stage", "unknown"))
+                repository.save_data(
+                    f"storyline_attempts/{chapter_id}/slot-{slot:02d}/"
+                    f"attempt-{attempt:02d}-{stage}.json",
+                    record,
+                )
+
+            factual = IncrementalPlotPlanner(
+                self.provider, max_retries=self.max_cpn_retries,
+                on_event=on_event, on_attempt=save_storyline_attempt,
+            )
             outline = self._validated_artifact(
                 repository, name="outline", stage="outline",
-                generate=lambda feedback: factual.outline(
-                    request.agent_spec(), plan, blueprint, feedback, taxonomy_brief,
+                generate=lambda feedback: call_agent(
+                    "outline", lambda: factual.outline(
+                        request.agent_spec(), plan, blueprint, feedback, taxonomy_brief,
+                    ),
                 ),
                 validate=lambda value: self._validate_outline(value, request),
             )
             repository.save_json("outline.json", outline)
             anchors = self._validated_artifact(
                 repository, name="chapter_anchors", stage="anchors",
-                generate=lambda feedback: factual.anchors(
-                    outline, world, storyline_cast, plan.story_frame, feedback,
+                generate=lambda feedback: call_agent(
+                    "chapter_anchors", lambda: factual.anchors(
+                        outline, world, storyline_cast, plan.story_frame, feedback,
+                    ),
                 ),
                 validate=lambda value: self._validate_anchors(value, outline),
             )
@@ -303,6 +361,7 @@ class StoryGenerator:
                 repository.save_json(f"{prefix}/nekg.json", graph)
                 repository.save_json(f"{prefix}/node_reviews.json", reviews)
 
+            emit("function_called", "se llamo a la funcion planificacion incremental", stage="storyline")
             storyline, reviews = factual.plan(
                 outline, anchors, blueprint, world, storyline_cast, plan.story_frame,
                 on_checkpoint=save_checkpoint, taxonomy_brief=taxonomy_brief,
@@ -319,15 +378,19 @@ class StoryGenerator:
 
             ledger = self._validated_artifact(
                 repository, name="promise_ledger", stage="craft",
-                generate=lambda feedback: PromiseLedgerPlannerAgent(self.provider).run(
-                    request, plan, characters, outline, storyline, taxonomy_brief, feedback,
+                generate=lambda feedback: call_agent(
+                    "promise_ledger", lambda: PromiseLedgerPlannerAgent(self.provider).run(
+                        request, plan, characters, outline, storyline, taxonomy_brief, feedback,
+                    ),
                 ),
                 validate=lambda value: validate_promise_ledger(value, outline, request.target_words),
             )
             arcs = self._validated_artifact(
                 repository, name="character_arcs", stage="craft",
-                generate=lambda feedback: CharacterArcPlannerAgent(self.provider).run(
-                    characters, outline, storyline, ledger, feedback,
+                generate=lambda feedback: call_agent(
+                    "character_arcs", lambda: CharacterArcPlannerAgent(self.provider).run(
+                        characters, outline, storyline, ledger, feedback,
+                    ),
                 ),
                 validate=lambda value: validate_character_arc_plan(
                     value, characters, outline, ledger,
@@ -335,15 +398,19 @@ class StoryGenerator:
             )
             try_fail = self._validated_artifact(
                 repository, name="try_fail", stage="craft",
-                generate=lambda feedback: TryFailPlannerAgent(self.provider).run(
-                    request, outline, storyline, ledger, feedback,
+                generate=lambda feedback: call_agent(
+                    "try_fail", lambda: TryFailPlannerAgent(self.provider).run(
+                        request, outline, storyline, ledger, feedback,
+                    ),
                 ),
                 validate=lambda value: validate_try_fail_plan(value, request, outline, ledger),
             )
             composition = self._validated_artifact(
                 repository, name="craft_alignment", stage="craft",
-                generate=lambda feedback: CraftComposerAgent(self.provider).run(
-                    outline, storyline, ledger, arcs, try_fail, feedback,
+                generate=lambda feedback: call_agent(
+                    "craft_alignment", lambda: CraftComposerAgent(self.provider).run(
+                        outline, storyline, ledger, arcs, try_fail, feedback,
+                    ),
                 ),
                 validate=lambda value: validate_craft_alignment(
                     value.alignment, value.chapters, ledger, arcs, try_fail, outline, storyline,
@@ -373,7 +440,7 @@ class StoryGenerator:
 
             rendered = self._render_story(
                 repository, request, plan, world, characters, outline, storyline,
-                craft, notify, taxonomy_brief,
+                craft, notify, taxonomy_brief, emit,
             )
             create_evaluation_template(repository.run_dir)
             repository.complete_stage("quality_review")
@@ -383,6 +450,12 @@ class StoryGenerator:
             notify(100, "completed", "Historia terminada")
             return StoryRun(repository.run_dir)
         except Exception as exc:
+            emit(
+                "pipeline_failed",
+                f"fallo la etapa {getattr(exc, 'stage', progress['stage'])}: "
+                f"{getattr(exc, 'summary', type(exc).__name__)}",
+                stage=getattr(exc, "stage", progress["stage"]),
+            )
             save_usage()
             repository.fail(exc)
             raise
@@ -396,7 +469,7 @@ class StoryGenerator:
                       plan: StoryPlanArtifact, world: WorldArtifact,
                       characters: CharactersArtifact, outline: StoryOutlineArtifact,
                       storyline: IncrementalStorylineArtifact, craft: StoryCraftPlan,
-                      notify, taxonomy_brief: TaxonomyBrief | None) -> _RenderedStory:
+                      notify, taxonomy_brief: TaxonomyBrief | None, emit) -> _RenderedStory:
         writer = ChapterWriterAgent(self.provider)
         graph = NarrativeEntityGraph(world, characters.storyline_cast())
         bodies: list[str] = []
@@ -408,6 +481,10 @@ class StoryGenerator:
                 chapter.id, craft, characters, storyline, before,
             )
             repository.save_json(f"craft/chapters/{chapter.id}.brief.json", brief)
+            emit(
+                "agent_called", "se llamo al agente chapter_writer",
+                stage="chapters", chapter_id=chapter.id,
+            )
             body = writer.run(
                 request, plan, world, brief, chapter, previous,
             )
@@ -426,7 +503,7 @@ class StoryGenerator:
         repository.save_text("draft.md", draft)
         story, audit, revisions, warnings = self._review_draft(
             repository, request, craft, characters, outline, storyline, bodies,
-            notify, taxonomy_brief,
+            notify, taxonomy_brief, emit,
         )
         parsed = _parse_story(story, outline)
         chapter_audits = []
@@ -462,7 +539,7 @@ class StoryGenerator:
                       craft: StoryCraftPlan, characters: CharactersArtifact,
                       outline: StoryOutlineArtifact, storyline: IncrementalStorylineArtifact,
                       initial_bodies: list[str], notify,
-                      taxonomy_brief: TaxonomyBrief | None):
+                      taxonomy_brief: TaxonomyBrief | None, emit):
         critic = CraftCriticAgent(self.provider)
         rewriter = ChapterRewriterAgent(self.provider)
         bodies = list(initial_bodies)
@@ -478,6 +555,10 @@ class StoryGenerator:
             audit_file = f"craft_revisions/attempt-{attempt}-audit.json"
             repository.save_text(text_file, story)
             try:
+                emit(
+                    "agent_called", "se llamo al agente craft_critic",
+                    stage="quality_review", attempt=attempt + 1,
+                )
                 audit = critic.run(
                     request, craft, characters, outline, storyline, story, taxonomy_brief,
                 )
@@ -519,6 +600,11 @@ class StoryGenerator:
                           )]
                 lower, upper = _length_bounds(chapter.target_words)
                 try:
+                    emit(
+                        "agent_called", "se llamo al agente chapter_rewriter",
+                        stage="chapter_repair", chapter_id=chapter.id,
+                        attempt=attempt + 1,
+                    )
                     bodies[index] = rewriter.run(
                         request, chapter.id, chapter.title, bodies[index],
                         {"chapter": chapter.model_dump(mode="json"),
@@ -558,5 +644,9 @@ class StoryGenerator:
         ), warnings
 
     def run(self, request: StoryRequest | str,
-            on_progress: ProgressCallback | None = None, on_run_created=None) -> StoryRun:
-        return self.generate(request, on_progress=on_progress, on_run_created=on_run_created)
+            on_progress: ProgressCallback | None = None, on_run_created=None,
+            on_event: PipelineEventCallback | None = None) -> StoryRun:
+        return self.generate(
+            request, on_progress=on_progress, on_run_created=on_run_created,
+            on_event=on_event,
+        )

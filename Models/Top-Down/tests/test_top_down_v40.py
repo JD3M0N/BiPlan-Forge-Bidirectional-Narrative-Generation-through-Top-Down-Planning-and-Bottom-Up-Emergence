@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
@@ -26,8 +27,11 @@ from asg_top_down.schemas import (
 )
 from asg_top_down.storyline.dependency import DependencyValidator
 from asg_top_down.storyline.graph import NarrativeEntityGraph
-from asg_top_down.storyline.planner import IncrementalPlotPlanner, StorylineState
+from asg_top_down.storyline.planner import (
+    IncrementalPlotPlanner, StorylineState, chapter_word_budgets,
+)
 from asg_top_down.generator import StoryGenerator
+from asg_top_down.agents.characters import CharactersDraft, _normalize_slider_arc
 from asg_top_down.narrative_db import NarrativeSchemaRepository
 from asg_top_down.schemas import CraftAuditArtifact, CraftComposition
 
@@ -224,6 +228,16 @@ def test_invalid_positive_and_flat_profiles_are_rejected() -> None:
         )
 
 
+def test_character_draft_normalizes_only_slider_invariants() -> None:
+    payload = cast().characters[0].model_dump(mode="json")
+    payload["slider_arc"]["competence"]["start"] = 5
+    payload["slider_arc"]["competence"]["target"] = 5
+    _normalize_slider_arc(payload)
+    repaired = CharacterProfile.model_validate(payload)
+    assert repaired.slider_arc.competence.start == 6
+    assert repaired.slider_arc.competence.target == 6
+
+
 def test_storyline_projection_and_writing_cards_remove_slider_scaffolding() -> None:
     characters = cast()
     projection = characters.storyline_cast().model_dump_json()
@@ -319,6 +333,90 @@ def test_dependency_validator_rejects_invalid_world_changes(candidate, code) -> 
     assert code in {item.code for item in report.issues}
 
 
+def test_anchor_no_op_effects_become_observable_situation_change() -> None:
+    graph = NarrativeEntityGraph(world(), cast().storyline_cast())
+    planner = IncrementalPlotPlanner(object())
+    effects = planner._effective_anchor_effects(
+        [
+            StateMutation(entity_id="mara", attribute="status", value="alive"),
+            StateMutation(entity_id="mara", attribute="location", value="square"),
+        ],
+        graph.snapshot(), EntityRef(id="mara", name="Mara", kind="character"),
+        "seeks", EntityRef(id="key", name="Key", kind="object"),
+        chapter_id="c1", anchor_kind="CBN",
+    )
+    assert [(item.attribute, item.value) for item in effects] == [
+        ("situation", "mara seeks key"),
+    ]
+
+
+def test_movement_event_is_normalized_to_source_location() -> None:
+    graph = NarrativeEntityGraph(world(), cast().storyline_cast())
+    planner = IncrementalPlotPlanner(object())
+    candidate = proposal(
+        location_id="gate",
+        effects=[StateMutation(entity_id="mara", attribute="location", value="gate")],
+    )
+    snapshot = graph.snapshot()
+    planner._normalize_movement_origin(candidate, snapshot, chapter_id="c1")
+    assert candidate.location_id == "square"
+    assert DependencyValidator(world(), cast().storyline_cast()).validate(
+        candidate, snapshot, set(),
+    ).passed
+
+
+def test_location_bridge_requires_adjacent_move_before_slots_run_out() -> None:
+    graph = NarrativeEntityGraph(world(), cast().storyline_cast())
+    planner = IncrementalPlotPlanner(object())
+    anchor = SimpleNamespace(
+        end_subject=EntityRef(id="mara", name="Mara", kind="character"),
+        end_location_id="gate",
+        end_preconditions=[],
+    )
+    bridge = planner._location_bridge(world(), anchor, graph.snapshot(), slot=3, maximum=3)
+    assert bridge["must_move_now"] is True
+    assert bridge["required_next_location"] == "gate"
+
+
+def test_location_bridge_targets_cen_precondition_not_post_effect_location() -> None:
+    graph = NarrativeEntityGraph(world(), cast().storyline_cast())
+    planner = IncrementalPlotPlanner(object())
+    anchor = SimpleNamespace(
+        end_subject=EntityRef(id="mara", name="Mara", kind="character"),
+        end_location_id="gate",
+        end_preconditions=[StatePredicate(
+            entity_id="mara", attribute="location", value="square",
+        )],
+    )
+    bridge = planner._location_bridge(world(), anchor, graph.snapshot(), slot=3, maximum=3)
+    assert bridge["pre_cen_location"] == "square"
+    assert bridge["must_move_now"] is False
+
+
+def test_cpn_reserves_cen_effect_but_allows_intermediate_state_progression() -> None:
+    planner = IncrementalPlotPlanner(object())
+    anchor = SimpleNamespace(
+        end_preconditions=[StatePredicate(
+            entity_id="key", attribute="owner", value=None,
+        )],
+        end_effects=[StateMutation(
+            entity_id="mara", attribute="knowledge", value="secret",
+        )],
+    )
+    candidate = proposal(effects=[
+        StateMutation(entity_id="key", attribute="owner", value="mara"),
+        StateMutation(entity_id="mara", attribute="knowledge", value="secret"),
+    ])
+    issues = planner._cen_reservation_issues(candidate, anchor)
+    assert any("reserved for the chapter ending" in item for item in issues)
+    assert not any("contradicts" in item for item in issues)
+
+    intermediate = proposal(effects=[
+        StateMutation(entity_id="mara", attribute="knowledge", value="partial clue"),
+    ])
+    assert planner._cen_reservation_issues(intermediate, anchor) == []
+
+
 def test_dead_character_and_rejected_candidate_do_not_mutate_graph() -> None:
     graph = NarrativeEntityGraph(world(), cast().storyline_cast())
     dead = graph.snapshot().model_copy(deep=True)
@@ -400,8 +498,8 @@ class FullFakeProvider:
             )
         if schema is WorldArtifact:
             return world().model_copy(update={"locations": world().locations[:2]})
-        if schema is CharactersArtifact:
-            return cast()
+        if schema in {CharactersArtifact, CharactersDraft}:
+            return schema.model_validate(cast().model_dump(mode="json"))
         if schema is StoryOutlineArtifact:
             return StoryOutlineArtifact(
                 premise="Mara must open the gate", synopsis="She learns and acts.",
@@ -515,6 +613,8 @@ def test_full_simulated_pipeline_freezes_storyline_before_craft(tmp_path) -> Non
             assert not any(term in cpn_context for term in (
                 "slider", "try_fail", "promiseledger", "storylineobligation", "ppp",
             ))
+        if name == "PlotNodeReview":
+            assert "never copy either the begin-anchor SVO or end-anchor SVO" in system
     assert (run.run_dir / "pipeline_manifest.json").is_file()
     assert (run.run_dir / "chapters" / "state-before-c1.json").is_file()
     brief = (run.run_dir / "craft" / "chapters" / "c1.brief.json").read_text(encoding="utf-8")
@@ -522,3 +622,119 @@ def test_full_simulated_pipeline_freezes_storyline_before_craft(tmp_path) -> Non
     assert "slider" not in brief.casefold()
     assert "searching" not in json.dumps(json.loads(brief)["state_before"])
     assert (run.run_dir / "story.md").is_file()
+
+
+def test_early_alignment_only_rejection_is_normalized(tmp_path) -> None:
+    class EarlyAlignmentProvider(FullFakeProvider):
+        def generate_structured(self, *, system_instruction, prompt, schema):
+            result = super().generate_structured(
+                system_instruction=system_instruction, prompt=prompt, schema=schema,
+            )
+            if schema is PlotNodeReview and self.review_index == 1:
+                return result.model_copy(update={
+                    "accepted": False,
+                    "aligns_with_cen": False,
+                    "issues": [
+                        "The minimum chapter development is not complete yet, "
+                        "so aligns_with_cen must be false."
+                    ],
+                })
+            return result
+
+    provider = EarlyAlignmentProvider()
+    schemas = NarrativeSchemaRepository(db_path=tmp_path / "taxonomies.sqlite3")
+    request = StoryRequest(
+        original_prompt="Escribe un atraco de 600 palabras",
+        processed_prompt="Write a 600-word heist", title="Prueba", language="Spanish",
+        genre="heist", tone="tense", target_words=600, premise="Mara opens a gate",
+    )
+    run = StoryGenerator(
+        provider, tmp_path / "stories", schema_repository=schemas,
+        max_cpn_retries=0, max_artifact_retries=0, max_craft_revisions=0,
+    ).generate(request)
+
+    assert (run.run_dir / "story.md").is_file()
+    assert [item[0] for item in provider.calls].count("PlotNodeProposal") == 2
+    assert not list((run.run_dir / "storyline_attempts").rglob("*.json"))
+
+
+@pytest.mark.parametrize(("target", "expected"), [
+    (300, [300]),
+    (1500, [750, 750]),
+    (2000, [667, 667, 666]),
+])
+def test_automatic_chapter_budgets_are_exact_and_compact(target, expected) -> None:
+    request = StoryRequest(
+        original_prompt="Historia", title="Historia", genre="drama", tone="serio",
+        premise="Una prueba", target_words=target,
+    )
+    assert chapter_word_budgets(request.agent_spec()) == expected
+
+
+def test_explicit_chapter_budgets_are_balanced_and_reject_impossible_counts() -> None:
+    request = StoryRequest(
+        original_prompt="Historia", title="Historia", genre="drama", tone="serio",
+        premise="Una prueba", target_words=1000, requested_chapters=3,
+    )
+    assert chapter_word_budgets(request.agent_spec()) == [334, 333, 333]
+    impossible = request.model_copy(update={"target_words": 300, "requested_chapters": 2})
+    with pytest.raises(ValueError, match="200 words per chapter"):
+        chapter_word_budgets(impossible.agent_spec())
+
+
+def test_pipeline_repairs_repeated_and_absent_cpn_and_emits_events(tmp_path) -> None:
+    class RepairingProvider(FullFakeProvider):
+        def generate_structured(self, *, system_instruction, prompt, schema):
+            if schema is PlotNodeProposal:
+                self.calls.append((schema.__name__, system_instruction, prompt))
+                self.proposal_index += 1
+                if self.proposal_index == 1:
+                    return proposal(
+                        verb="seeks", depends_on_node_ids=["n_0001"],
+                        effects=[StateMutation(
+                            entity_id="mara", attribute="knowledge", value="first-failure",
+                        )],
+                    )
+                if self.proposal_index == 2:
+                    return proposal(
+                        location_id="gate", depends_on_node_ids=["n_0001"],
+                        effects=[StateMutation(
+                            entity_id="mara", attribute="knowledge", value="second-failure",
+                        )],
+                    )
+                if self.proposal_index == 3:
+                    return proposal(
+                        verb="studies", depends_on_node_ids=["n_0001"],
+                        effects=[StateMutation(
+                            entity_id="mara", attribute="knowledge", value="guard-route",
+                        )],
+                    )
+                return proposal(
+                    verb="carries", depends_on_node_ids=["n_0001", "n_0002"],
+                    effects=[StateMutation(entity_id="mara", attribute="location", value="gate")],
+                )
+            return super().generate_structured(
+                system_instruction=system_instruction, prompt=prompt, schema=schema,
+            )
+
+    events = []
+    provider = RepairingProvider()
+    schemas = NarrativeSchemaRepository(db_path=tmp_path / "taxonomies.sqlite3")
+    request = StoryRequest(
+        original_prompt="Escribe un atraco de 600 palabras",
+        processed_prompt="Write a 600-word heist", title="Reparacion", language="Spanish",
+        genre="heist", tone="tense", target_words=600, premise="Mara opens a gate",
+    )
+    run = StoryGenerator(
+        provider, tmp_path / "stories", schema_repository=schemas,
+        max_cpn_retries=2, max_artifact_retries=0, max_craft_revisions=0,
+    ).generate(request, on_event=events.append)
+    attempts = list((run.run_dir / "storyline_attempts").rglob("*.json"))
+    assert len(attempts) == 2
+    assert (run.run_dir / "story.md").is_file()
+    messages = [event.message for event in events]
+    assert "se llamo al agente planner" in messages
+    assert "artefacto outline.json creado" in messages
+    proposal_calls = [item for item in provider.calls if item[0] == "PlotNodeProposal"]
+    assert "Rewrite and repair" in proposal_calls[2][1]
+    assert "PREVIOUS REJECTED PROPOSAL" in proposal_calls[2][2]

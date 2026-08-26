@@ -7,7 +7,7 @@ from telegram.error import BadRequest, TimedOut
 
 from asg_telegram import app
 from asg_telegram.app import TelegramStoryBot, _evaluator_name, build_application
-from asg_top_down.progress import ProgressUpdate
+from asg_top_down.progress import PipelineEvent, ProgressUpdate
 from asg_top_down.errors import ArtifactValidationError
 
 
@@ -355,3 +355,27 @@ def test_application_uses_resilient_timeouts():
     assert timeout.write == 30
     assert timeout.pool == 10
     assert request._media_write_timeout == 60
+
+
+def test_pipeline_events_are_logged_without_editing_chat(tmp_path, monkeypatch):
+    story = make_story(tmp_path)
+    actions = []
+
+    class EventGenerator(FakeGenerator):
+        def generate(self, prompt, on_progress=None, on_event=None):
+            on_event(PipelineEvent("agent_called", "se llamo al agente planner"))
+            return super().generate(prompt)
+
+    monkeypatch.setattr(
+        app, "log_user_action", lambda logger, **kwargs: actions.append(kwargs["action"]),
+    )
+    handler = TelegramStoryBot(EventGenerator(story))
+    bot = FakeBot()
+    context = SimpleNamespace(bot=bot, user_data={})
+    user = SimpleNamespace(id=11, username="ana", full_name="Ana")
+    asyncio.run(handler._generate_and_deliver(
+        context=context, chat_id=20, user=user, prompt="Una historia",
+        progress_message_id=99,
+    ))
+    assert "se llamo al agente planner" in actions
+    assert bot.edits == []

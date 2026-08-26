@@ -9,10 +9,14 @@ from .schemas import (
     ChapterCraftView, ChapterWritingBrief, CharacterArcPlan, CraftAlignment,
     PromiseLedger, TaxonomyApplication, TaxonomyBrief, TryFailPlan,
 )
-from .progress import ProgressCallback, ProgressUpdate, format_progress
+from .progress import (
+    PipelineEvent, PipelineEventCallback, ProgressCallback, ProgressUpdate,
+    format_progress,
+)
 
 __all__ = [
-    "ProgressCallback", "ProgressUpdate", "StoryGenerator", "StoryRun",
+    "PipelineEvent", "PipelineEventCallback", "ProgressCallback", "ProgressUpdate",
+    "StoryGenerator", "StoryRun",
     "IncrementalPlotPlanner", "StorylineState", "NarrativeBlueprint",
     "NarrativeSchemaRepository", "TaxonomyProfile", "TaxonomyCandidate",
     "TaxonomyApplication", "TaxonomyBrief", "PromiseLedger", "CharacterArcPlan",
