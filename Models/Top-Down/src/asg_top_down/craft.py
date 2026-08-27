@@ -122,6 +122,21 @@ def all_craft_ids(
     } | {cycle.id for cycle in try_fail.cycles}
 
 
+def normalize_craft_alignment(
+    alignment: CraftAlignment, ledger: PromiseLedger,
+) -> list[str]:
+    """Drop redundant parent-promise rows; alignment is defined over their beats."""
+    promise_ids = {item.id for item in ledger.promises}
+    removed = [
+        item.craft_id for item in alignment.entries if item.craft_id in promise_ids
+    ]
+    if removed:
+        alignment.entries = [
+            item for item in alignment.entries if item.craft_id not in promise_ids
+        ]
+    return removed
+
+
 def validate_craft_alignment(
     alignment: CraftAlignment, chapters: list[ChapterCraftView],
     ledger: PromiseLedger, arcs: CharacterArcPlan, try_fail: TryFailPlan,

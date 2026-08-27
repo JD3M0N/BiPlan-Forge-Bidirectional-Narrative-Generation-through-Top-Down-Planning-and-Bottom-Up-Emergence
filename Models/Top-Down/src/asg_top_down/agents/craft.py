@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 
 from .base import Agent, json_text
-from ..craft import audit_questions, normalize_audit, try_fail_target
+from ..craft import (
+    audit_questions, normalize_audit, normalize_craft_alignment, try_fail_target,
+)
 from ..schemas import (
     CharacterArcPlan, CharactersArtifact, CraftAuditArtifact, CraftComposition,
     IncrementalStorylineArtifact, PromiseLedger, StoryCraftPlan,
@@ -90,7 +92,7 @@ class CraftComposerAgent(Agent[CraftComposition]):
     def run(self, outline: StoryOutlineArtifact, storyline: IncrementalStorylineArtifact,
             ledger: PromiseLedger, arcs: CharacterArcPlan, try_fail: TryFailPlan,
             repair_feedback: str = "") -> CraftComposition:
-        return self.provider.generate_structured(
+        composition = self.provider.generate_structured(
             system_instruction=(
                 "Align every promise beat, character evidence, and try-fail cycle to one or more accepted "
                 "node IDs in its own chapter. Cover every craft ID exactly once. Then derive one chapter "
@@ -104,6 +106,8 @@ class CraftComposerAgent(Agent[CraftComposition]):
                     f"\n\nTRY-FAIL:\n{json_text(try_fail)}{repair_feedback}"),
             schema=CraftComposition,
         )
+        normalize_craft_alignment(composition.alignment, ledger)
+        return composition
 
 
 class CraftCriticAgent(Agent[CraftAuditArtifact]):

@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from asg_top_down.craft import (
     build_chapter_writing_brief, character_writing_cards,
+    normalize_craft_alignment,
     validate_character_arc_plan, validate_craft_alignment,
     validate_promise_ledger, validate_try_fail_plan,
 )
@@ -394,6 +395,67 @@ def test_location_bridge_targets_cen_precondition_not_post_effect_location() -> 
     assert bridge["must_move_now"] is False
 
 
+def test_location_bridge_schedules_every_character_required_by_cen() -> None:
+    ally = profile().model_copy(update={
+        "id": "ivo", "name": "Ivo", "narrative_role": "ally",
+        "ensemble_seat": "specialist",
+    })
+    characters = CharactersArtifact(characters=[profile(), ally]).storyline_cast()
+    graph = NarrativeEntityGraph(world(), characters)
+    planner = IncrementalPlotPlanner(object())
+    anchor = SimpleNamespace(
+        end_subject=EntityRef(id="mara", name="Mara", kind="character"),
+        end_location_id="gate",
+        end_preconditions=[
+            StatePredicate(entity_id="mara", attribute="location", value="gate"),
+            StatePredicate(entity_id="ivo", attribute="location", value="gate"),
+        ],
+    )
+
+    snapshot = graph.snapshot()
+    first = planner._location_bridge(world(), anchor, snapshot, slot=1, maximum=2)
+    assert first["subject_id"] == "mara"
+    assert first["must_move_now"] is True
+    assert first["required_next_location"] == "gate"
+    assert {item["subject_id"] for item in first["pending_character_movements"]} == {
+        "mara", "ivo",
+    }
+
+    next(item for item in snapshot.entities if item.id == "mara").state["location"] = "gate"
+    second = planner._location_bridge(world(), anchor, snapshot, slot=2, maximum=2)
+    assert second["subject_id"] == "ivo"
+    assert second["must_move_now"] is True
+    assert second["required_next_location"] == "gate"
+
+
+def test_location_bridge_prioritizes_physical_cen_object_transport() -> None:
+    graph = NarrativeEntityGraph(world(), cast().storyline_cast())
+    planner = IncrementalPlotPlanner(object())
+    anchor = SimpleNamespace(
+        end_subject=EntityRef(id="mara", name="Mara", kind="character"),
+        end_object=EntityRef(id="key", name="Key", kind="object"),
+        end_location_id="gate",
+        end_preconditions=[StatePredicate(
+            entity_id="mara", attribute="location", value="gate",
+        )],
+        end_effects=[StateMutation(
+            entity_id="mara", attribute="situation", value="free",
+        )],
+    )
+
+    bridge = planner._location_bridge(
+        world(), anchor, graph.snapshot(), slot=1, maximum=3,
+    )
+
+    assert bridge["subject_id"] == "key"
+    assert bridge["must_move_now"] is True
+    assert bridge["required_next_location"] == "gate"
+    assert next(
+        item for item in bridge["pending_entity_movements"]
+        if item["subject_id"] == "key"
+    )["entity_kind"] == "object"
+
+
 def test_cpn_reserves_cen_effect_but_allows_intermediate_state_progression() -> None:
     planner = IncrementalPlotPlanner(object())
     anchor = SimpleNamespace(
@@ -448,6 +510,26 @@ def test_real_dag_supports_multiple_dependencies_and_adaptive_cpn_limits() -> No
     assert IncrementalPlotPlanner.max_cpn_count(outline.chapters[0]) == 3
     short = outline.chapters[0].model_copy(update={"target_words": 200})
     assert IncrementalPlotPlanner.min_cpn_count(short) == 1
+
+
+def test_storyline_allows_recurrent_cbn_svo_only_across_chapters() -> None:
+    state = StorylineState(chapters().chapters)
+    first = node("n1", "c1", 1, verb="checks")
+    first.node_type = "CBN"
+    recurrent = node("n2", "c2", 2, verb="checks", deps=["n1"])
+    recurrent.node_type = "CBN"
+
+    state.accept(first, [])
+    state.accept(recurrent, [NarrativeEdge(
+        source="n1", target="n2", relation="causes", strength=5, rationale="x",
+    )])
+
+    duplicate = node("n3", "c2", 3, verb="checks", deps=["n2"])
+    duplicate.node_type = "CBN"
+    with pytest.raises(ValueError, match="repeats an accepted SVO"):
+        state.accept(duplicate, [NarrativeEdge(
+            source="n2", target="n3", relation="causes", strength=5, rationale="x",
+        )])
 
 
 def test_storyline_package_has_no_craft_dependency_or_forbidden_prompt_terms() -> None:
@@ -907,6 +989,149 @@ def test_cpn_validator_revalidates_reviewer_replacements_with_same_rules() -> No
     }
 
 
+def _two_character_final_cpn_context(*, must_move_now: bool):
+    from asg_top_down.storyline import CpnContext
+
+    ally = profile().model_copy(update={
+        "id": "ivo", "name": "Ivo", "narrative_role": "ally",
+        "ensemble_seat": "specialist",
+    })
+    characters = CharactersArtifact(characters=[profile(), ally]).storyline_cast()
+    story_world = world()
+    graph = NarrativeEntityGraph(story_world, characters)
+    chapter = ChapterPlan(
+        id="c1", order=1, title="One", abstract="Reach the gate",
+        target_words=300, freytag_phases=["climax"],
+    )
+    anchor = ChapterAnchors(
+        chapter_id="c1", begin_location_id="square",
+        begin_subject=EntityRef(id="mara", name="Mara", kind="character"),
+        begin_verb="seeks", begin_object=EntityRef(id="key", name="Key", kind="object"),
+        begin_effects=[StateMutation(
+            entity_id="mara", attribute="situation", value="searching",
+        )],
+        end_location_id="gate",
+        end_subject=EntityRef(id="mara", name="Mara", kind="character"),
+        end_verb="exits", end_object=EntityRef(id="gate", name="Gate", kind="location"),
+        end_preconditions=[
+            StatePredicate(entity_id="mara", attribute="location", value="gate"),
+            StatePredicate(entity_id="ivo", attribute="location", value="gate"),
+        ],
+        end_effects=[StateMutation(
+            entity_id="mara", attribute="situation", value="free",
+        )],
+    )
+    context = CpnContext(
+        chapter=chapter, anchor=anchor, world=story_world, characters=characters,
+        story_frame=StoryFrame(
+            central_question="Can they escape?", a_plot_goal="Reach the gate",
+            b_plot_need="Trust an ally", outer_mice_thread="event",
+            opening_state="Both are trapped", closing_state="Both are free",
+            internal_change_enables_external_resolution="Cooperation enables escape",
+        ),
+        chapter_cpns=(), recent_nodes=(), snapshot=graph.snapshot(),
+        accepted_node_ids=frozenset(),
+        forbidden_svos=frozenset({("mara", "seeks", "key"), ("mara", "exits", "gate")}),
+        location_bridge={
+            "subject_id": "mara", "current_location": "square",
+            "pre_cen_location": "gate", "post_cen_location": "gate",
+            "shortest_path": ["square", "gate"], "reachable": True,
+            "remaining_cpn_slots": 1, "must_move_now": must_move_now,
+            "required_next_location": "gate" if must_move_now else None,
+        },
+        slot=1, minimum=1, maximum=1,
+    )
+    return context, graph
+
+
+def _positive_rejection(revised: PlotNodeProposal) -> PlotNodeReview:
+    return PlotNodeReview(
+        accepted=False, causal=True, intentional=True, conflict_present=True,
+        continuous=True, novel=True, advances_ending=True, world_consistent=True,
+        emotionally_effective=True, aligns_with_cen=False, review_focus=["logic"],
+        issues=["Use the proposed replacement"], revised=revised,
+    )
+
+
+def test_final_cpn_keeps_ready_original_when_reviewer_breaks_cen_bridge() -> None:
+    from asg_top_down.storyline import CpnPlanner
+
+    context, graph = _two_character_final_cpn_context(must_move_now=True)
+    original = proposal(
+        verb="leads", object=EntityRef(id="gate", name="Gate", kind="location"),
+        effects=[
+            StateMutation(entity_id="mara", attribute="location", value="gate"),
+            StateMutation(entity_id="ivo", attribute="location", value="gate"),
+        ],
+    )
+    replacement = proposal(
+        verb="prepares", effects=[StateMutation(
+            entity_id="mara", attribute="situation", value="ready to leave",
+        )],
+    )
+
+    class Provider:
+        def generate_structured(self, **_kwargs):
+            return original.model_copy(deep=True)
+
+    class Reviewer:
+        def review(self, *_args, **_kwargs):
+            return _positive_rejection(replacement.model_copy(deep=True))
+
+    events = []
+    planner = CpnPlanner(
+        Provider(), CpnValidator(context.world, context.characters),
+        max_retries=0, reviewer=Reviewer(),
+        emit=lambda kind, message, **details: events.append((kind, message, details)),
+    )
+    result = planner.plan_slot(context, graph)
+
+    assert result.accepted
+    assert result.candidate == original
+    assert result.review is not None
+    assert result.review.accepted
+    assert result.review.aligns_with_cen
+    assert result.review.revised is None
+    assert [kind for kind, _message, _details in events].count(
+        "review_replacement_discarded"
+    ) == 1
+
+
+def test_final_cpn_does_not_fallback_when_original_is_not_cen_ready() -> None:
+    from asg_top_down.storyline import CpnPlanner
+    from asg_top_down.storyline.cpn import CpnAttemptsExhausted
+
+    context, graph = _two_character_final_cpn_context(must_move_now=False)
+    original = proposal(verb="prepares", effects=[StateMutation(
+        entity_id="mara", attribute="situation", value="almost ready",
+    )])
+    replacement = proposal(verb="organizes", effects=[StateMutation(
+        entity_id="mara", attribute="situation", value="fully organized",
+    )])
+
+    class Provider:
+        def generate_structured(self, **_kwargs):
+            return original.model_copy(deep=True)
+
+    class Reviewer:
+        def review(self, *_args, **_kwargs):
+            return _positive_rejection(replacement.model_copy(deep=True))
+
+    planner = CpnPlanner(
+        Provider(), CpnValidator(context.world, context.characters),
+        max_retries=0, reviewer=Reviewer(),
+    )
+    with pytest.raises(CpnAttemptsExhausted) as captured:
+        planner.plan_slot(context, graph)
+
+    assert captured.value.attempts[0].candidate == replacement
+    assert captured.value.attempts[0].review is not None
+    assert captured.value.attempts[0].review.revised == replacement
+    assert {item.code for item in captured.value.attempts[0].issues} == {
+        "FINAL_CEN_ALIGNMENT",
+    }
+
+
 def test_owned_object_inherits_owner_location_in_preconditions() -> None:
     graph = NarrativeEntityGraph(world(), cast().storyline_cast())
     snapshot = graph.snapshot()
@@ -992,3 +1217,17 @@ def test_craft_alignment_error_reports_extra_ids() -> None:
             CraftAlignment(entries=entries), views, compact_ledger, compact_arcs,
             cycles, chapters(), story,
         )
+
+
+def test_craft_alignment_drops_only_redundant_parent_promise_ids() -> None:
+    compact_ledger = ledger()
+    alignment = CraftAlignment(entries=[
+        CraftAlignmentEntry(craft_id="p1", chapter_id="c1", node_ids=["n1"]),
+        CraftAlignmentEntry(craft_id="p1-o", chapter_id="c1", node_ids=["n1"]),
+        CraftAlignmentEntry(craft_id="invented-id", chapter_id="c1", node_ids=["n1"]),
+    ])
+
+    removed = normalize_craft_alignment(alignment, compact_ledger)
+
+    assert removed == ["p1"]
+    assert [item.craft_id for item in alignment.entries] == ["p1-o", "invented-id"]

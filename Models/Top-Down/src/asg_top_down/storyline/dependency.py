@@ -351,7 +351,7 @@ class CpnValidator:
                 and movement_destination != location_bridge.get("required_next_location")):
             issues.append(self._issue(
                 "REQUIRED_LOCATION_BRIDGE",
-                "candidate must move the ending subject from "
+                "candidate must move the required CEN entity from "
                 f"{location_bridge.get('current_location')} to adjacent "
                 f"{location_bridge.get('required_next_location')} in this slot",
             ))

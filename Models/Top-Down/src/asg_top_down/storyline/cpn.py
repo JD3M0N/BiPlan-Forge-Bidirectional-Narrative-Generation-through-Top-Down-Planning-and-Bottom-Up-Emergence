@@ -124,7 +124,7 @@ class CpnPlanner:
             "ILLEGAL_MOVEMENT": "Move through one adjacent location only.",
             "NO_OP_EFFECT": "Produce a new observable state value.",
             "CEN_EFFECT_RESERVED": "Create an intermediate change; leave the exact CEN effect untouched.",
-            "REQUIRED_LOCATION_BRIDGE": "Move the ending subject to required_next_location now.",
+            "REQUIRED_LOCATION_BRIDGE": "Move the required CEN entity to required_next_location now.",
             "UNREACHABLE_CEN_LOCATION": "The chapter anchors must be regenerated with a reachable ending.",
             "DUPLICATE_SVO": "Use a different subject-verb-object event.",
             "INVALID_TAXONOMY_REFERENCE": "Use one supplied movement pair or leave both taxonomy fields empty.",
@@ -191,8 +191,11 @@ class CpnPlanner:
                 f"ending. {ending_rule} Taxonomy is a flexible palette, never a checklist. An object can "
                 "only participate where its current state says it is located or owned. A movement event "
                 "happens at the actor's current source location; represent the adjacent destination only "
-                "as a location effect. If REQUIRED LOCATION BRIDGE says must_move_now, move its subject "
-                "to required_next_location. Never repeat a forbidden SVO. Return internal text in English."
+                "as a location effect. If REQUIRED LOCATION BRIDGE says must_move_now, move its subject_id "
+                "entity to required_next_location. That entity may be any character required by the CEN "
+                "or the physical ending object; use a character present at an object's source to transport "
+                "it, and do not strand a pending ending object without a carrier. Never repeat a forbidden "
+                "SVO. Return internal text in English."
             ),
             prompt=(
                 f"CHAPTER:\n{_json(context.chapter)}\n\nBEGIN ANCHOR:\n{_json(context.anchor)}"
@@ -366,6 +369,12 @@ class CpnPlanner:
                         context, attempt,
                     )
 
+            original_ready_for_cen = (
+                context.slot == context.maximum
+                and self.validator.cen_ready(
+                    proposal, context.snapshot, context.anchor,
+                )
+            )
             candidate = review.revised or proposal
             if self.validator.normalize_movement_origin(candidate, context.snapshot):
                 self._emit(
@@ -385,6 +394,28 @@ class CpnPlanner:
             ready_for_cen = self.validator.cen_ready(
                 candidate, context.snapshot, context.anchor,
             )
+            dramatic_checks = (
+                review.causal, review.intentional, review.conflict_present,
+                review.continuous, review.novel, review.advances_ending,
+                review.world_consistent, review.emotionally_effective,
+            )
+            if (
+                review.revised is not None
+                and original_ready_for_cen
+                and all(dramatic_checks)
+                and (not post.passed or not ready_for_cen)
+            ):
+                candidate = proposal
+                post = deterministic
+                ready_for_cen = True
+                review.revised = None
+                review.accepted = True
+                review.issues = []
+                self._emit(
+                    "review_replacement_discarded",
+                    "reemplazo del revisor descartado; la propuesta original conserva el puente CEN",
+                    context, attempt,
+                )
             if context.slot >= context.minimum:
                 review.aligns_with_cen = ready_for_cen
             if review.revised is not None and post.passed:

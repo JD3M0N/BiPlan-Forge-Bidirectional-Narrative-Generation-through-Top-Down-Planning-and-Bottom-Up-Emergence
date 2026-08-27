@@ -65,7 +65,15 @@ class StorylineState:
         known = {item.id for item in self.nodes}
         if node.id in known:
             raise ValueError(f"duplicate storyline node: {node.id}")
-        if self._signature(node) in {self._signature(item) for item in self.nodes}:
+        repeated = [
+            item for item in self.nodes if self._signature(item) == self._signature(node)
+        ]
+        repeated_cross_chapter_cbn = (
+            node.node_type == "CBN"
+            and repeated
+            and all(item.chapter_id != node.chapter_id for item in repeated)
+        )
+        if repeated and not repeated_cross_chapter_cbn:
             raise ValueError("storyline event repeats an accepted SVO")
         dependencies = set(node.depends_on_node_ids)
         if dependencies - known:
@@ -283,27 +291,66 @@ class IncrementalPlotPlanner:
     def _location_bridge(self, world: WorldArtifact, anchor, snapshot,
                          slot: int, maximum: int) -> dict:
         entities = {item.id: item for item in snapshot.entities}
-        subject = entities.get(anchor.end_subject.id)
-        current = subject.state.get("location") if subject else None
-        pre_cen_location = next((
+        end_subject_location = next((
             item.value for item in anchor.end_preconditions
             if item.entity_id == anchor.end_subject.id
             and item.attribute == "location" and item.operator == "equals"
         ), None) or anchor.end_location_id
-        path = self._shortest_location_path(
-            world, current, pre_cen_location,
-        ) if current else []
+        targets = {anchor.end_subject.id: end_subject_location}
+        for predicate in anchor.end_preconditions:
+            entity = entities.get(predicate.entity_id)
+            if (predicate.attribute == "location" and predicate.operator == "equals"
+                    and entity is not None and entity.kind == "character"):
+                targets[predicate.entity_id] = predicate.value
+        end_object_ref = getattr(anchor, "end_object", None)
+        end_object = entities.get(end_object_ref.id) if end_object_ref else None
+        epistemic_end = any(
+            item.entity_id == anchor.end_subject.id and item.attribute == "knowledge"
+            for item in getattr(anchor, "end_effects", [])
+        )
+        if (end_object is not None and end_object.kind == "object" and not epistemic_end
+                and not end_object.state.get("owner")):
+            targets[end_object.id] = anchor.end_location_id
+
+        requirements = []
+        for subject_id, target in targets.items():
+            subject = entities.get(subject_id)
+            current = subject.state.get("location") if subject else None
+            path = self._shortest_location_path(world, current, target) if current else []
+            requirements.append({
+                "subject_id": subject_id,
+                "entity_kind": subject.kind if subject else None,
+                "current_location": current,
+                "target_location": target,
+                "shortest_path": path,
+                "steps": max(0, len(path) - 1),
+                "reachable": current is None or current == target or bool(path),
+            })
+
+        pending = [item for item in requirements if item["steps"] > 0]
+        primary = max(
+            pending,
+            key=lambda item: (item["steps"], item["entity_kind"] == "object"),
+        ) if pending else requirements[0]
         remaining_slots = maximum - slot + 1
+        must_move_now = bool(pending) and (
+            primary["entity_kind"] == "object"
+            or sum(item["steps"] for item in pending) >= remaining_slots
+        )
         return {
-            "subject_id": anchor.end_subject.id,
-            "current_location": current,
-            "pre_cen_location": pre_cen_location,
+            "subject_id": primary["subject_id"],
+            "current_location": primary["current_location"],
+            "pre_cen_location": primary["target_location"],
             "post_cen_location": anchor.end_location_id,
-            "shortest_path": path,
-            "reachable": current is None or current == pre_cen_location or bool(path),
+            "shortest_path": primary["shortest_path"],
+            "reachable": all(item["reachable"] for item in requirements),
             "remaining_cpn_slots": remaining_slots,
-            "must_move_now": len(path) > 1 and len(path) - 1 >= remaining_slots,
-            "required_next_location": path[1] if len(path) > 1 else None,
+            "must_move_now": must_move_now,
+            "required_next_location": (
+                primary["shortest_path"][1] if must_move_now else None
+            ),
+            "pending_character_movements": pending,
+            "pending_entity_movements": pending,
         }
 
     def _normalize_movement_origin(self, proposal: PlotNodeProposal, snapshot,
