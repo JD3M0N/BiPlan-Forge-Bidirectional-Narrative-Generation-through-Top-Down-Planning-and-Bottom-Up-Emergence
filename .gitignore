@@ -13,5 +13,6 @@ Stories/
 docs/*
 !docs/evaluation_metrics.md
 !docs/como_se_crea_una_historia_top_down.md
+!docs/pipeline_top_down_caso_dinosaurios.md
 .cache/
 story-comparison.html

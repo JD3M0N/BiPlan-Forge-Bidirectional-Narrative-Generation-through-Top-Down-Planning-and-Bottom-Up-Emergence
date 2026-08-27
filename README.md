@@ -194,3 +194,36 @@ generadores y ver todos los detalles.
 ```powershell
 python -m pytest UI_telegram/tests
 ```
+
+### Despliegue del bot en Railway
+
+El `Dockerfile` de la raíz construye una imagen Python 3.11 dedicada al bot.
+Instala únicamente `asg-evaluation`, `asg-top-down` y `asg-telegram`, sin los
+extras de desarrollo ni los paquetes Bottom-Up y UI Console. Railway detecta
+el archivo automáticamente, por lo que no debe usar Railpack para este
+servicio.
+
+Configura el servicio de Railway de esta forma:
+
+- Root Directory, Build Command y Start Command: vacíos.
+- Una réplica, Serverless desactivado y política de reinicio `On Failure`.
+- Sin dominio público; el bot recibe actualizaciones mediante long polling.
+- Un volumen persistente montado en `/app/Stories` para la cola SQLite y las
+  historias generadas.
+- Las variables enumeradas en `.env.example`, en particular
+  `TELEGRAM_BOT_TOKEN`, `GEMINI_API_KEY` y `STORY_GENERATOR=top-down`.
+
+No añadas `RAILPACK_PYTHON_VERSION`: la versión de Python se define en la
+imagen. Tampoco copies `.env` al repositorio o al contenedor; Railway inyecta
+las variables durante la ejecución.
+
+Para validar la imagen en un equipo con Docker:
+
+```powershell
+docker build -t biplan-telegram .
+docker run --rm --entrypoint python biplan-telegram -c "import asg_evaluation, asg_top_down, asg_telegram"
+```
+
+En el log de construcción de Railway debe aparecer `Using detected
+Dockerfile!`. Al iniciar, el servicio debe registrar `Iniciando bot con el
+generador Top-Down` y permanecer activo.
