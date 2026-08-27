@@ -9,6 +9,7 @@ htmlcov/
 dist/
 build/
 .venv/
+.railway/
 Stories/
 docs/*
 !docs/evaluation_metrics.md
