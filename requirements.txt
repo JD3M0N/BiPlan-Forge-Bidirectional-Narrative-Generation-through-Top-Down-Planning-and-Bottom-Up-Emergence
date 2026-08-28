@@ -1,5 +1,6 @@
--e ./Models/Evaluation[dev]
--e ./Models/Top-Down[dev]
--e ./Models/Bottom-Up/escape-room[dev]
--e ./UI_Console[dev]
--e ./UI_telegram[dev]
+-e ./packages/core
+-e ./packages/evaluation
+-e ./packages/top_down
+-e ./packages/escape_room
+-e ./apps/console
+-e ./apps/telegram

@@ -39,6 +39,7 @@ $remoteRoot = "/app/Stories/Top-Down"
 $localRoot = Join-Path $PSScriptRoot "Stories\Top-Down"
 $stagingRoot = Join-Path $PSScriptRoot "Stories\.railway-sync"
 
+# Return the first matching property value from a flexible CLI object.
 function Get-PropertyValue {
     param(
         [Parameter(Mandatory = $true)]$InputObject,
@@ -53,6 +54,7 @@ function Get-PropertyValue {
     return $null
 }
 
+# Normalize supported Railway JSON wrappers into an entry collection.
 function Get-EntryCollection {
     param([Parameter(Mandatory = $true)]$JsonData)
 
@@ -69,6 +71,7 @@ function Get-EntryCollection {
     return @($JsonData)
 }
 
+# Extract and normalize the final path segment for a remote entry.
 function Get-EntryName {
     param([Parameter(Mandatory = $true)]$Entry)
 
@@ -88,6 +91,7 @@ function Get-EntryName {
     return ($normalized -split "/")[-1]
 }
 
+# Determine whether a Railway file entry represents a directory.
 function Test-DirectoryEntry {
     param([Parameter(Mandatory = $true)]$Entry)
 
@@ -116,6 +120,7 @@ function Test-DirectoryEntry {
     return $true
 }
 
+# Reject remote directory names that could escape the local target.
 function Assert-SafeDirectoryName {
     param([Parameter(Mandatory = $true)][string]$Name)
 

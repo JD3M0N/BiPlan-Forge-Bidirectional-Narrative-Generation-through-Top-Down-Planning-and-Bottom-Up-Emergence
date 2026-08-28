@@ -1,0 +1,14 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "asg-evaluation"
+version = "0.2.0"
+description = "Shared human-evaluation storage for ASG stories"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["asg-core>=0.1.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/asg_evaluation"]

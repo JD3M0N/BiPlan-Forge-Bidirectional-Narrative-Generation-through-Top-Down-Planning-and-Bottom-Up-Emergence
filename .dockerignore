@@ -18,14 +18,12 @@ build/
 dist/
 
 Stories/
-Testing/
-Taxonomies/
 docs/
-Models/Bottom-Up/
-UI_Console/
+packages/escape_room/
+apps/console/
 **/tests/
 
 commands.md
 requirements.txt
-todo
+TODO.md
 venv.ps1

@@ -23,14 +23,14 @@ python -m venv .venv
 .\venv.ps1
 ```
 
-### Install all project packages
+### Install all project packages and development tools
 
 ```powershell
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
 ```
 
-Installs both the Top-Down and Bottom-Up packages in editable mode, including
-their development dependencies. Editable mode means source changes are
+Installs the applications and packages in editable mode plus pytest and Ruff.
+Editable mode means source changes are
 available immediately without reinstalling the packages.
 
 The installation exposes these commands:
@@ -39,7 +39,10 @@ The installation exposes these commands:
 | --- | --- |
 | `asg-console` | Open the unified interactive console. |
 | `generate-story` | Run the Top-Down story generator directly. |
+| `compare-story-runs` | Compare two generated story runs. |
 | `run-escape-room` | Run the Bottom-Up escape-room simulation directly. |
+| `asg-telegram` | Launch the Telegram bot in a separate Windows console. |
+| `asg-telegram-run` | Run the Telegram bot in the current console. |
 
 
 ## Top-Down
@@ -60,7 +63,7 @@ Stories/Top-Down/<timestamp>-<story-title>/
 ### Run Top-Down tests
 
 ```powershell
-python -m pytest Models/Top-Down/tests
+python -m pytest packages/top_down/tests
 ```
 
 Runs only the Top-Down unit and integration tests. These tests use a fake
@@ -115,7 +118,7 @@ seconds. A completed visual run saves the same artifacts as
 ### Run unified-console tests
 
 ```powershell
-python -m pytest UI_Console/tests
+python -m pytest apps/console/tests
 ```
 
 Tests menu navigation, input validation, rendering, fog of war, keyboard
@@ -155,7 +158,7 @@ Runs a reproducible simulation using seed `7`, three agents, and a maximum of
 ### Select a map
 
 ```powershell
-run-escape-room --map "Models/Bottom-Up/escape-room/maps/minimal_room.json"
+run-escape-room --map "packages/escape_room/maps/minimal_room.json"
 ```
 
 Loads the specified room instead of the default map. The chosen map must
@@ -208,16 +211,16 @@ Displays all supported command-line options:
 ### Run Bottom-Up tests
 
 ```powershell
-python -m pytest Models/Bottom-Up/escape-room/tests
+python -m pytest packages/escape_room/tests
 ```
 
 Runs map validation, movement, inventory, puzzle, cooperation,
-reproducibility, narration, storage, and Top-Down adapter tests.
+reproducibility, narration, storage, and action-resolution tests.
 
 ## Run All Tests
 
 ```powershell
-python -m pytest Models/Evaluation/tests Models/Top-Down/tests Models/Bottom-Up/escape-room/tests UI_Console/tests
+python -m pytest -q -p no:cacheprovider
 ```
 
 Runs the complete automated test suite for evaluation and both approaches.
@@ -225,7 +228,7 @@ Runs the complete automated test suite for evaluation and both approaches.
 Use concise output:
 
 ```powershell
-python -m pytest Models/Top-Down/tests Models/Bottom-Up/escape-room/tests -q
+python -m pytest packages/top_down/tests packages/escape_room/tests -q -p no:cacheprovider
 ```
 
 The `-q` flag reduces pytest output while still showing failures and the final

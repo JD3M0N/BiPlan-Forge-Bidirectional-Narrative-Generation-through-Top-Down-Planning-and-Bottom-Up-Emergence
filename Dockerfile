@@ -6,16 +6,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Copy the local packages before installing them so pip can resolve the
-# monorepo dependencies without relying on Railpack's dependency layer.
-COPY Models/Evaluation/ ./Models/Evaluation/
-COPY Models/Top-Down/ ./Models/Top-Down/
-COPY UI_telegram/ ./UI_telegram/
+# Copy local packages before installing them so pip resolves monorepo dependencies.
+COPY packages/core/ ./packages/core/
+COPY packages/evaluation/ ./packages/evaluation/
+COPY packages/top_down/ ./packages/top_down/
+COPY apps/telegram/ ./apps/telegram/
 
 RUN python -m pip install --no-cache-dir \
-        ./Models/Evaluation \
-        ./Models/Top-Down \
-        ./UI_telegram \
+        ./packages/core \
+        ./packages/evaluation \
+        ./packages/top_down \
+        ./apps/telegram \
     && mkdir -p /app/Stories/Top-Down
 
 CMD ["asg-telegram-run"]

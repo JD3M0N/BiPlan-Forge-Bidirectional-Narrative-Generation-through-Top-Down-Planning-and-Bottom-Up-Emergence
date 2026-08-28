@@ -10,7 +10,7 @@
             "cwd": "${workspaceFolder}",
             "envFile": "${workspaceFolder}\\.env",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}\\Models\\Top-Down\\src;${workspaceFolder}\\Models\\Evaluation\\src"
+                "PYTHONPATH": "${workspaceFolder}\\packages\\core\\src;${workspaceFolder}\\packages\\evaluation\\src;${workspaceFolder}\\packages\\top_down\\src"
             },
             "console": "integratedTerminal",
             "stopOnEntry": true,
