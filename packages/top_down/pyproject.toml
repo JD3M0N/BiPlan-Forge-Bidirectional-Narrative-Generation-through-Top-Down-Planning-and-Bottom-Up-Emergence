@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "asg-top-down"
-version = "5.1.0"
+dynamic = ["version"]
 description = "Modular Top-Down automatic story generation"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -19,6 +19,9 @@ dependencies = [
 [project.scripts]
 generate-story = "asg_top_down.cli:main"
 compare-story-runs = "asg_top_down.compare:main"
+
+[tool.hatch.version]
+path = "src/asg_top_down/version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/asg_top_down"]

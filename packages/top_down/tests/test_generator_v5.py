@@ -164,6 +164,7 @@ def test_complete_pipeline_saves_small_v5_artifact_set(tmp_path) -> None:
     assert created == [run.run_dir]
     assert run.story_path.read_text(encoding="utf-8").startswith("# El precio")
     expected = {
+        "generator_version.json",
         "request.json",
         "world.json",
         "characters.json",

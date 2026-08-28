@@ -4,6 +4,8 @@ Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
 ## [5.1.0] - 2026-08-27
 
+- Added `generator_version.json` to every run so generated stories retain the
+  exact generator release separately from the pipeline artifact version.
 - Separated the public facade, stage orchestrator, and length audits.
 - Shared paths, safe names, and atomic writes through `asg-core`.
 - Moved the package into the monorepo layout and normalized English docstrings.

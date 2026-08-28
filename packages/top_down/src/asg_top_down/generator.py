@@ -9,6 +9,7 @@ from pathlib import Path
 from .pipeline import StoryPipeline
 from .progress import PipelineEventCallback, ProgressCallback
 from .schemas import StoryRequest
+from .version import PIPELINE_VERSION
 
 
 class StoryRun:
@@ -19,8 +20,13 @@ class StoryRun:
         self.run_dir = Path(run_dir)
         metadata_path = self.run_dir / "metadata.json"
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-        if metadata.get("status") != "completed" or metadata.get("pipeline_version") != "5.0":
-            raise ValueError("Only completed Top-Down 5.0 runs can be opened as StoryRun")
+        if (
+            metadata.get("status") != "completed"
+            or metadata.get("pipeline_version") != PIPELINE_VERSION
+        ):
+            raise ValueError(
+                f"Only completed Top-Down {PIPELINE_VERSION} runs can be opened as StoryRun"
+            )
 
     @property
     def story_path(self) -> Path:

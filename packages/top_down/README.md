@@ -29,6 +29,7 @@ Telegram.
 Cada ejecución nueva guarda únicamente:
 
 ```text
+generator_version.json
 request.json
 world.json
 characters.json
@@ -43,6 +44,11 @@ llm_usage.json
 pipeline_manifest.json
 story.md
 ```
+
+`generator_version.json` distingue la versión del software generador
+(`generator_version`) de la versión del contrato de artefactos
+(`pipeline_version`). La primera permite comparar resultados entre releases;
+la segunda determina compatibilidad al abrir runs.
 
 El primer plan estructuralmente inválido se conserva con su diagnóstico y se
 reemplaza una sola vez. Si ambos intentos fallan, el run termina con

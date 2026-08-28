@@ -7,6 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from .version import GENERATOR_NAME, GENERATOR_VERSION, PIPELINE_VERSION
+
 ID_PATTERN = r"^[a-z0-9][a-z0-9_-]*$"
 
 
@@ -226,6 +228,14 @@ class ErrorReport(BaseModel):
     recommendations: list[str] = Field(default_factory=list)
 
 
+class GeneratorVersionArtifact(BaseModel):
+    """Identify the generator release and artifact contract used by one run."""
+
+    generator: str = GENERATOR_NAME
+    generator_version: str = Field(default=GENERATOR_VERSION, pattern=r"^\d+\.\d+\.\d+$")
+    pipeline_version: str = Field(default=PIPELINE_VERSION, pattern=r"^\d+\.\d+$")
+
+
 class LLMUsageRecord(BaseModel):
     """Represent LLMUsageRecord data and behavior."""
 
@@ -270,4 +280,4 @@ class RunMetadata(BaseModel):
     error_code: str | None = None
     error_stage: str | None = None
     warnings: list[str] = Field(default_factory=list)
-    pipeline_version: str = "5.0"
+    pipeline_version: str = PIPELINE_VERSION

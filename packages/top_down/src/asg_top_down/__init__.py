@@ -1,4 +1,4 @@
-"""Top-Down 5.0 public API."""
+"""Top-Down public API."""
 
 from .generator import StoryGenerator, StoryRun
 from .progress import (
@@ -12,17 +12,20 @@ from .schemas import (
     ChapterPlan,
     CharactersArtifact,
     EventDependency,
+    GeneratorVersionArtifact,
     PlotEvent,
     StoryPlan,
     StoryRequest,
     StoryReview,
     WorldArtifact,
 )
+from .version import __version__
 
 __all__ = [
     "ChapterPlan",
     "CharactersArtifact",
     "EventDependency",
+    "GeneratorVersionArtifact",
     "PipelineEvent",
     "PipelineEventCallback",
     "PlotEvent",
@@ -34,5 +37,6 @@ __all__ = [
     "StoryReview",
     "StoryRun",
     "WorldArtifact",
+    "__version__",
     "format_progress",
 ]

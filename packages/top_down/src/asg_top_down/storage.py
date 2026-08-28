@@ -12,7 +12,8 @@ from asg_core import atomic_write_text, slugify
 from pydantic import BaseModel
 
 from .errors import ASGError
-from .schemas import ErrorReport, LLMUsageRecord, RunMetadata
+from .schemas import ErrorReport, GeneratorVersionArtifact, LLMUsageRecord, RunMetadata
+from .version import PIPELINE_VERSION
 
 
 class ArtifactRepository:
@@ -43,16 +44,17 @@ class ArtifactRepository:
             created_at=now,
             updated_at=now,
             status="running",
-            pipeline_version="5.0",
+            pipeline_version=PIPELINE_VERSION,
         )
         self.manifest: dict = {
-            "pipeline_version": "5.0",
+            "pipeline_version": PIPELINE_VERSION,
             "run_id": run_dir.name,
             "completed_stages": [],
             "artifacts": {},
         }
         self._write_metadata()
         self._write_manifest()
+        self.save_json("generator_version.json", GeneratorVersionArtifact())
 
     def _record(self, filename: str, content: str) -> None:
         """Handle the record operation for ArtifactRepository."""
