@@ -1,5 +1,4 @@
-"""Carga de configuración y resolución de rutas del proyecto.
-La idea es cambiar el modelo o la API key sin modificar los agentes."""
+"""Configuration loading for Top-Down 5.0."""
 
 import os
 from dataclasses import dataclass
@@ -22,9 +21,6 @@ class Settings:
     max_retry_delay: int = 120
     request_timeout_ms: int = 120_000
     default_target_words: int = 1500
-    embedding_model: str = "gemini-embedding-2"
-    max_cpn_retries: int = 2
-    max_artifact_retries: int = 2
 
 
 def find_project_root(start: Path | None = None) -> Path:
@@ -35,6 +31,16 @@ def find_project_root(start: Path | None = None) -> Path:
     return Path(__file__).resolve().parents[4]
 
 
+def _integer(name: str, default: int, *, minimum: int = 0) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError as exc:
+        raise ConfigurationError(f"{name} debe ser un número entero.") from exc
+    if value < minimum:
+        raise ConfigurationError(f"{name} debe ser al menos {minimum}.")
+    return value
+
+
 def load_settings(start: Path | None = None) -> Settings:
     root = find_project_root(start)
     load_dotenv(root / ".env")
@@ -43,30 +49,19 @@ def load_settings(start: Path | None = None) -> Settings:
         raise ConfigurationError(
             "Falta GEMINI_API_KEY. Añádela al archivo .env de la raíz."
         )
-    try:
-        default_target_words = int(os.getenv("STORY_DEFAULT_WORDS", "1500"))
-    except ValueError as exc:
-        raise ConfigurationError(
-            "STORY_DEFAULT_WORDS debe ser un número entero."
-        ) from exc
-    if not 300 <= default_target_words <= 20_000:
-        raise ConfigurationError(
-            "STORY_DEFAULT_WORDS debe estar entre 300 y 20000."
-        )
+    default_target_words = _integer("STORY_DEFAULT_WORDS", 1500, minimum=300)
+    if default_target_words > 20_000:
+        raise ConfigurationError("STORY_DEFAULT_WORDS debe estar entre 300 y 20000.")
     return Settings(
         api_key=api_key,
         model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
         or "gemini-3.5-flash-lite",
         output_root=root / "Stories" / "Top-Down",
-        rpm_limit=max(1, int(os.getenv("GEMINI_RPM_LIMIT", "15"))),
-        rpm_reserve=max(0, int(os.getenv("GEMINI_RPM_RESERVE", "1"))),
-        tpm_limit=max(0, int(os.getenv("GEMINI_TPM_LIMIT", "0"))),
-        max_retries=max(1, int(os.getenv("GEMINI_MAX_RETRIES", "3"))),
-        max_retry_delay=max(1, int(os.getenv("GEMINI_MAX_RETRY_DELAY", "120"))),
-        request_timeout_ms=max(5_000, int(os.getenv("GEMINI_REQUEST_TIMEOUT_MS", "120000"))),
+        rpm_limit=_integer("GEMINI_RPM_LIMIT", 15, minimum=1),
+        rpm_reserve=_integer("GEMINI_RPM_RESERVE", 1),
+        tpm_limit=_integer("GEMINI_TPM_LIMIT", 0),
+        max_retries=_integer("GEMINI_MAX_RETRIES", 3),
+        max_retry_delay=_integer("GEMINI_MAX_RETRY_DELAY", 120, minimum=1),
+        request_timeout_ms=_integer("GEMINI_REQUEST_TIMEOUT_MS", 120_000, minimum=5_000),
         default_target_words=default_target_words,
-        embedding_model=os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-2").strip()
-        or "gemini-embedding-2",
-        max_cpn_retries=max(0, int(os.getenv("STORY_MAX_CPN_RETRIES", "2"))),
-        max_artifact_retries=max(0, int(os.getenv("STORY_MAX_ARTIFACT_RETRIES", "2"))),
     )

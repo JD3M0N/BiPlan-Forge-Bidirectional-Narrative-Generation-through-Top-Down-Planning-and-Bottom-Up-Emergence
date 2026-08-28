@@ -1,21 +1,21 @@
-# Pipeline Top-Down 4.1
+# Pipeline Top-Down 5.0
 
 ```text
-FACTUAL
-Request → normalized AgentStorySpec → StoryFrame → World + Character profiles
-→ StorylineCast (sin sliders) → Outline → CBN/CEN → reviewed CPN
-→ deterministic dependency checks → STORYLINE DAG + NEKG → FREEZE
-
-CRAFT (solo lectura de STORYLINE)
-PromiseLedger ─┐
-Character arcs ├→ CraftAlignment → ChapterCraftView → sanitized brief
-Try-fail cycles┘
-→ writer(state-before) → chapter audit → selective repair → final parse → story.md
+StoryRequest
+  → WorldArtifact
+  → CharactersArtifact
+  → StoryPlanDraft
+  → validación local + orden topológico
+  → StoryPlan
+  → capítulos con contexto anterior acotado
+  → StoryReview
+  → edición única
+  → story.md
 ```
 
-La frontera es `CraftAlignment`. STORYLINE no importa `craft_models`, no recibe
-PPP, sliders ni try-fail y no ofrece una ruta de regeneración desde craft.
-Los predicados y mutaciones tipados son la autoridad del estado factual.
+El grafo contiene `PlotEvent` y `EventDependency`. El contenido narrativo es
+responsabilidad de los agentes; IDs, referencias, presupuestos, dirección de
+dependencias y aciclicidad son responsabilidad del código determinista.
 
-Los checkpoints preparan recuperación futura, pero 4.1 no simula `resume`: un
-run incompleto queda explícitamente como `recovery_pending`.
+No existe reanudación de runs incompletos. La persistencia atómica, el
+manifiesto, las cuotas y la telemetría se mantienen como infraestructura común.

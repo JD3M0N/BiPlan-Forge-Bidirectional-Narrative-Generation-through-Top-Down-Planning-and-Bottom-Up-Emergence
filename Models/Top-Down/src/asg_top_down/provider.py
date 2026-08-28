@@ -37,7 +37,7 @@ def _safe_provider_error(exc: Exception) -> ProviderError:
         recommendation = "Revisa el esquema indicado y la compatibilidad del modelo configurado."
     elif status == 404:
         summary = "Gemini no encontró el modelo o recurso configurado."
-        recommendation = "Comprueba GEMINI_MODEL y GEMINI_EMBEDDING_MODEL."
+        recommendation = "Comprueba GEMINI_MODEL."
     elif any(token in message for token in ("quota", "rate limit", "resource_exhausted", "429")):
         summary = "Gemini rechazó la solicitud por cuota o límite de uso."
         recommendation = "Espera unos minutos o revisa la cuota del proyecto de Gemini."
@@ -92,11 +92,6 @@ class LanguageModelProvider(Protocol):
 
     def generate_text(self, *, system_instruction: str, prompt: str) -> str: ...
 
-    def embed_query(self, text: str) -> list[float]: ...
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]: ...
-
-
 class GeminiProvider:
     """Adaptador pequeño que contiene todo el acoplamiento con google-genai."""
 
@@ -104,14 +99,12 @@ class GeminiProvider:
                  rpm_reserve: int = 1, tpm_limit: int = 0,
                  max_retries: int = 3, max_retry_delay: int = 120,
                  request_timeout_ms: int = 120_000,
-                 structured_validation_retries: int = 2,
-                 embedding_model: str = "gemini-embedding-2",
+                 structured_validation_retries: int = 1,
                  generation_profiles: dict[str, float] | None = None) -> None:
         from google import genai
         from google.genai import types
 
         self.model_name = model_name
-        self.embedding_model_name = embedding_model
         self.tpm_limit = tpm_limit
         self._token_limiter = TokenWindowLimiter(tpm_limit) if tpm_limit else None
         self.max_retries = max_retries
@@ -132,58 +125,25 @@ class GeminiProvider:
         self.usage_records: list[LLMUsageRecord] = []
         defaults = {
             "extraction": 0.15, "review": 0.2, "planning": 0.5,
-            "proposal": 0.85, "prose": 0.9, "rewrite": 0.35,
+            "prose": 0.9, "rewrite": 0.35,
         }
         self.generation_profiles = {**defaults, **(generation_profiles or {})}
 
     def _temperature(self, operation: str, system_instruction: str = "") -> float:
         text = f"{operation} {system_instruction}".casefold()
-        if "rewrite" in text:
+        if "rewrite" in text or "edit" in text:
             profile = "rewrite"
         elif any(word in text for word in ("review", "critic", "analyst")):
             profile = "review" if "analyst" not in text else "extraction"
-        elif any(word in text for word in ("proposal", "plotnodeproposal", "chapter body")):
-            profile = "proposal"
         elif operation == "text":
             profile = "prose"
         else:
             profile = "planning"
         defaults = {
             "extraction": 0.15, "review": 0.2, "planning": 0.5,
-            "proposal": 0.85, "prose": 0.9, "rewrite": 0.35,
+            "prose": 0.9, "rewrite": 0.35,
         }
         return float(getattr(self, "generation_profiles", defaults).get(profile, defaults[profile]))
-
-    def _embed(self, texts: list[str], prefix: str) -> list[list[float]]:
-        """Embed a batch using the asymmetric retrieval format recommended by Gemini."""
-        try:
-            contents = [f"{prefix}{text}" for text in texts]
-            # Embeddings 2 aggregates multiple contents into one multimodal vector;
-            # submit text documents independently so each catalog row keeps its vector.
-            if self.embedding_model_name.endswith("-2") and len(contents) > 1:
-                return [self._embed([content.removeprefix(prefix)], prefix)[0] for content in contents]
-            operation = f"embedding:{self.embedding_model_name}"
-            response = self._generate(
-                operation,
-                lambda: self._client.models.embed_content(
-                    model=self.embedding_model_name, contents=contents,
-                ),
-            )
-            embeddings = getattr(response, "embeddings", None)
-            if embeddings is None:
-                single = getattr(response, "embedding", None)
-                embeddings = [single] if single is not None else []
-            return [list(item.values) for item in embeddings]
-        except ProviderError:
-            raise
-        except Exception as exc:
-            raise _safe_provider_error(exc) from exc
-
-    def embed_query(self, text: str) -> list[float]:
-        return self._embed([text], "task: search result | query: ")[0]
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return self._embed(texts, "title: narrative schema | text: ")
 
     def _preflight_tokens(self, prompt: str, system_instruction: str) -> None:
         if not getattr(self, "_token_limiter", None):
@@ -214,8 +174,7 @@ class GeminiProvider:
         self._emit_record(LLMUsageRecord(
             call_id=uuid.uuid4().hex, operation=operation, stage=operation,
             attempt=1, status=status, error_code=error_code,
-            model=(self.embedding_model_name if operation.startswith("embedding:")
-                   else self.model_name),
+            model=self.model_name,
             timestamp=datetime.now(timezone.utc),
             duration_seconds=time.monotonic() - started,
         ))
@@ -226,8 +185,7 @@ class GeminiProvider:
         record = LLMUsageRecord(
             call_id=uuid.uuid4().hex, operation=operation, stage=operation,
             attempt=retries + 1, status="succeeded",
-            model=(self.embedding_model_name if operation.startswith("embedding:")
-                   else self.model_name),
+            model=self.model_name,
             timestamp=datetime.now(timezone.utc),
             duration_seconds=time.monotonic() - started,
             prompt_tokens=value("prompt_token_count"),
@@ -244,8 +202,7 @@ class GeminiProvider:
         self._emit_record(LLMUsageRecord(
             call_id=uuid.uuid4().hex, operation=operation, stage=operation,
             attempt=attempt + 1, status="failed", error_code=error_code,
-            model=(self.embedding_model_name if operation.startswith("embedding:")
-                   else self.model_name),
+            model=self.model_name,
             timestamp=datetime.now(timezone.utc),
             duration_seconds=time.monotonic() - started, wait_seconds=waited,
             retries=attempt,

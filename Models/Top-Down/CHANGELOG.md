@@ -2,6 +2,19 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [5.0.0] - 2026-08-27
+
+- Sustituida la planificación incremental por un único DAG de eventos genéricos
+  con dependencias causales o temporales y orden topológico calculado localmente.
+- Reducido el pipeline a solicitud, mundo, personajes, plan, capítulos, crítica
+  y una edición final con fallback seguro al borrador.
+- Eliminados los subsistemas de nodos tipados, memoria factual, craft,
+  taxonomías, base SQLite y recuperación semántica.
+- Simplificados contratos, configuración, artefactos, API pública y UIs; los
+  runs nuevos usan `pipeline_version` 5.0 y no reanudan versiones anteriores.
+- Reemplazadas las suites anteriores por pruebas del DAG, replanificación única,
+  pipeline completo, fallback editorial e integración real opt-in.
+
 ## [4.1.0] - 2026-08-26
 
 - Extraido el ciclo pseudo-CPN a contratos de contexto, resultado y planificador

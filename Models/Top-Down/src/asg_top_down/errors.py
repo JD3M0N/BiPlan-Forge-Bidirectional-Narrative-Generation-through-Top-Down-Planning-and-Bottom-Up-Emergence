@@ -56,9 +56,9 @@ class ArtifactValidationError(ASGError):
         self.stage = stage
 
 
-class StorylinePlanningError(ASGError):
-    code = "STORYLINE_PLANNING_FAILED"
-    stage = "storyline"
+class PlotValidationError(ASGError):
+    code = "PLOT_VALIDATION_FAILED"
+    stage = "planning"
 
 
 class GeminiRPMError(ProviderError):

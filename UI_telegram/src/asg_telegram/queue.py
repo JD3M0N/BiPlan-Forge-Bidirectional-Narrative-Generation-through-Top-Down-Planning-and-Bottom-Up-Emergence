@@ -111,8 +111,7 @@ class QueueRepository:
                     "SELECT id FROM jobs WHERE status='running'"
                 ).fetchall()
             }
-            # TODO(recovery-4.x): rebuild STORYLINE/NEKG from the final checkpoint,
-            # continue the first pending provider call, and deliver to the original user.
+            # Interrupted runs are deliberately not resumed across process restarts.
             db.execute("""UPDATE jobs SET status='recovery_pending',
                 recovery_count=recovery_count+1, error_code='RECOVERY_NOT_IMPLEMENTED'
                 WHERE status='running'""")

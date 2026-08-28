@@ -36,14 +36,10 @@ class TopDownGenerator:
             tpm_limit=settings.tpm_limit, max_retries=settings.max_retries,
             max_retry_delay=settings.max_retry_delay,
             request_timeout_ms=settings.request_timeout_ms,
-            structured_validation_retries=settings.max_artifact_retries,
-            embedding_model=settings.embedding_model,
         )
         return StoryGenerator(
             provider, settings.output_root,
             default_target_words=settings.default_target_words,
-            max_cpn_retries=settings.max_cpn_retries,
-            max_artifact_retries=settings.max_artifact_retries,
         ).run(
             prompt, on_progress=on_progress, on_run_created=on_run_created,
             on_event=on_event,

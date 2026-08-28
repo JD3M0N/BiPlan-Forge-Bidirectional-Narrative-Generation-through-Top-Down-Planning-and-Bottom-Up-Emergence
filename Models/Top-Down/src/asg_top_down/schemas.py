@@ -1,95 +1,167 @@
-"""Public Top-Down 4.1 contracts.
-
-The module is intentionally a compatibility façade for consumers.  Factual
-domain, STORYLINE, and post-STORYLINE craft types live in separate modules so
-their dependency direction can be tested.
-"""
+"""Data contracts for the small Top-Down 5.0 pipeline."""
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from .craft_models import *  # noqa: F403 - public compatibility surface
-from .domain import *  # noqa: F403 - public compatibility surface
-from .storyline.models import *  # noqa: F403 - public compatibility surface
+
+ID_PATTERN = r"^[a-z0-9][a-z0-9_-]*$"
 
 
-AuditVerdict = Literal["pass", "fail", "not_applicable"]
+class StoryRequest(BaseModel):
+    original_prompt: str
+    processed_prompt: str = ""
+    title: str = Field(min_length=1)
+    language: str = "Spanish"
+    genre: str
+    tone: str
+    target_words: int = Field(default=1500, ge=300, le=20_000)
+    requested_chapters: int | None = Field(default=None, ge=1, le=80)
+    premise: str
+    constraints: list[str] = Field(default_factory=list)
+
+    def agent_spec(self) -> dict:
+        """Return trusted downstream data without replaying the raw prompt."""
+        return self.model_dump(mode="json", exclude={"original_prompt"})
 
 
-class CraftAuditAnswer(BaseModel):
-    question_id: str
-    category: Literal[
-        "promise", "chapter_craft", "character", "try_fail", "constraint",
-        "taxonomy", "language", "coherence", "pacing", "engagement",
-        "satisfaction", "global",
-    ]
-    subject_id: str
-    question: str
-    chapter_ids: list[str] = Field(default_factory=list)
-    blocking: bool = True
-    verdict: AuditVerdict
-    evidence: str
-    issue: str = ""
-    revision_instruction: str = ""
+class Location(BaseModel):
+    id: str = Field(pattern=ID_PATTERN)
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+
+
+class StoryObject(BaseModel):
+    id: str = Field(pattern=ID_PATTERN)
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+
+
+class WorldArtifact(BaseModel):
+    setting: str
+    time_period: str
+    rules: list[str] = Field(min_length=1)
+    locations: list[Location] = Field(min_length=1)
+    objects: list[StoryObject] = Field(default_factory=list)
+    atmosphere: str
 
     @model_validator(mode="after")
-    def failures_are_actionable(self) -> "CraftAuditAnswer":
-        if self.verdict == "fail" and (
-            not self.issue.strip() or not self.revision_instruction.strip()
-        ):
-            raise ValueError("failed audit answers require an issue and revision instruction")
+    def ids_are_unique(self) -> "WorldArtifact":
+        location_ids = [item.id for item in self.locations]
+        object_ids = [item.id for item in self.objects]
+        if len(location_ids) != len(set(location_ids)):
+            raise ValueError("world location ids must be unique")
+        if len(object_ids) != len(set(object_ids)):
+            raise ValueError("world object ids must be unique")
         return self
 
 
-class CraftAuditArtifact(BaseModel):
-    answers: list[CraftAuditAnswer]
-    summary: str
-
-    @property
-    def failed_blocking_ids(self) -> list[str]:
-        return [
-            answer.question_id for answer in self.answers
-            if answer.blocking and answer.verdict == "fail"
-        ]
-
-    @property
-    def passed(self) -> bool:
-        return not self.failed_blocking_ids
-
-    @property
-    def revision_instructions(self) -> list[str]:
-        return [answer.revision_instruction for answer in self.answers if answer.verdict == "fail"]
-
-    @property
-    def affected_chapter_ids(self) -> list[str]:
-        return sorted({
-            chapter_id for answer in self.answers if answer.verdict == "fail"
-            for chapter_id in answer.chapter_ids
-        })
+class CharacterProfile(BaseModel):
+    id: str = Field(pattern=ID_PATTERN)
+    name: str = Field(min_length=1)
+    role: str
+    goal: str
+    motivation: str
+    conflict: str
+    arc: str
+    voice: str
 
 
-class CraftRevisionAttempt(BaseModel):
-    attempt: int = Field(ge=0)
-    text_file: str
-    audit_file: str
+class CharacterRelationship(BaseModel):
+    source_character_id: str = Field(pattern=ID_PATTERN)
+    target_character_id: str = Field(pattern=ID_PATTERN)
+    description: str = Field(min_length=1)
+
+
+class CharactersArtifact(BaseModel):
+    characters: list[CharacterProfile] = Field(min_length=1)
+    relationships: list[CharacterRelationship] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def references_are_valid(self) -> "CharactersArtifact":
+        ids = [item.id for item in self.characters]
+        names = [item.name.casefold().strip() for item in self.characters]
+        if len(ids) != len(set(ids)) or len(names) != len(set(names)):
+            raise ValueError("character ids and names must be unique")
+        known = set(ids)
+        for relationship in self.relationships:
+            refs = {
+                relationship.source_character_id,
+                relationship.target_character_id,
+            }
+            if refs - known:
+                raise ValueError("character relationships reference unknown characters")
+            if len(refs) != 2:
+                raise ValueError("character relationships cannot be self-referential")
+        return self
+
+
+class ChapterDraft(BaseModel):
+    id: str = Field(pattern=ID_PATTERN)
+    order: int = Field(ge=1)
+    title: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+
+
+class ChapterPlan(ChapterDraft):
+    target_words: int = Field(ge=200)
+
+
+class PlotEvent(BaseModel):
+    id: str = Field(pattern=ID_PATTERN)
+    order: int = Field(ge=1)
+    chapter_id: str = Field(pattern=ID_PATTERN)
+    title: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    purpose: str = Field(min_length=1)
+    character_ids: list[str] = Field(default_factory=list)
+    location_id: str | None = None
+    object_ids: list[str] = Field(default_factory=list)
+    effects: list[str] = Field(default_factory=list)
+
+
+class EventDependency(BaseModel):
+    source_event_id: str = Field(pattern=ID_PATTERN)
+    target_event_id: str = Field(pattern=ID_PATTERN)
+    relation: Literal["causal", "temporal"]
+
+
+class StoryPlanDraft(BaseModel):
+    logline: str
+    theme: str
+    ending: str
+    chapters: list[ChapterDraft] = Field(min_length=1)
+    events: list[PlotEvent] = Field(min_length=1)
+    dependencies: list[EventDependency] = Field(default_factory=list)
+
+
+class StoryPlan(BaseModel):
+    logline: str
+    theme: str
+    ending: str
+    chapters: list[ChapterPlan] = Field(min_length=1)
+    events: list[PlotEvent] = Field(min_length=1)
+    dependencies: list[EventDependency] = Field(default_factory=list)
+    topological_order: list[str] = Field(default_factory=list)
+
+
+class ConstraintCheck(BaseModel):
+    constraint: str
     passed: bool
-    repaired_chapter_ids: list[str] = Field(default_factory=list)
-    failed_blocking_ids: list[str] = Field(default_factory=list)
-    failed_advisory_ids: list[str] = Field(default_factory=list)
+    notes: str = ""
 
 
-class CraftRevisionHistory(BaseModel):
-    selected_attempt: int = Field(ge=0)
-    exhausted: bool
-    attempts: list[CraftRevisionAttempt] = Field(default_factory=list)
+class StoryReview(BaseModel):
+    strengths: list[str] = Field(default_factory=list)
+    issues: list[str] = Field(default_factory=list)
+    constraint_checks: list[ConstraintCheck] = Field(default_factory=list)
+    revision_instructions: list[str] = Field(default_factory=list)
 
 
 class LengthAuditEntry(BaseModel):
-    chapter_id: str | None = None
     target_words: int
     minimum_words: int
     maximum_words: int
@@ -97,37 +169,41 @@ class LengthAuditEntry(BaseModel):
     within_tolerance: bool
 
 
+class ChapterLengthAudit(LengthAuditEntry):
+    chapter_id: str
+
+
 class LengthAuditArtifact(BaseModel):
-    chapters: list[LengthAuditEntry] = Field(default_factory=list)
+    chapters: list[ChapterLengthAudit]
     total: LengthAuditEntry
 
 
 class ErrorReport(BaseModel):
-    run_id: str
     code: str
     stage: str
+    run_id: str
     summary: str
-    details: dict[str, Any] = Field(default_factory=dict)
+    details: dict = Field(default_factory=dict)
     recommendations: list[str] = Field(default_factory=list)
 
 
 class LLMUsageRecord(BaseModel):
     call_id: str
     operation: str
-    stage: str = "unknown"
-    attempt: int = Field(default=1, ge=1)
-    status: Literal["succeeded", "failed"] = "succeeded"
-    error_code: str | None = None
+    stage: str
+    attempt: int
+    status: Literal["succeeded", "failed"]
     model: str
-    timestamp: datetime = Field(default_factory=datetime.now)
+    timestamp: datetime
     duration_seconds: float = 0
     prompt_tokens: int = 0
     candidate_tokens: int = 0
     thoughts_tokens: int = 0
     cached_tokens: int = 0
     total_tokens: int = 0
-    wait_seconds: float = 0
     retries: int = 0
+    wait_seconds: float = 0
+    error_code: str | None = None
 
 
 class LLMUsageArtifact(BaseModel):
@@ -143,10 +219,10 @@ class RunMetadata(BaseModel):
     model: str
     created_at: datetime
     updated_at: datetime
-    status: Literal["running", "completed", "failed", "recovery_pending"] = "running"
+    status: Literal["running", "completed", "failed"]
     completed_stages: list[str] = Field(default_factory=list)
     error: str | None = None
     error_code: str | None = None
     error_stage: str | None = None
     warnings: list[str] = Field(default_factory=list)
-    pipeline_version: str = "4.1"
+    pipeline_version: str = "5.0"

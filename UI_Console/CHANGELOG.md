@@ -2,6 +2,11 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [1.5.0] - 2026-08-27
+
+- Adaptada la generación Top-Down al constructor y configuración mínimos de 5.0.
+- Retiradas opciones sin uso del pipeline anterior.
+
 ## [1.4.0] - 2026-08-20
 
 - Actualizada la dependencia a ASG Top-Down 4.0 y mantenida la interfaz pública

@@ -73,8 +73,6 @@ def test_top_down_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
             "default_target_words": 1500, "rpm_limit": 10, "rpm_reserve": 2,
             "tpm_limit": 3000, "max_retries": 4, "max_retry_delay": 30,
             "request_timeout_ms": 45000,
-            "embedding_model": "embed", "max_cpn_retries": 5,
-            "max_artifact_retries": 6,
         },
     )()
     monkeypatch.setattr(app, "load_top_down_settings", lambda: settings)
@@ -87,7 +85,7 @@ def test_top_down_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
     menu.run()
     assert captured["prompt"] == "Una historia"
     assert captured["provider_options"]["max_retries"] == 4
-    assert captured["generator_options"]["max_cpn_retries"] == 5
+    assert captured["generator_options"] == {"default_target_words": 1500}
 
 
 def test_normal_bottom_up_uses_selected_options(maps_dir, monkeypatch) -> None:

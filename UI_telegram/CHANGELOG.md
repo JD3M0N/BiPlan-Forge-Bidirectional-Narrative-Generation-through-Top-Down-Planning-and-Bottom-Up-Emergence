@@ -2,6 +2,11 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [1.5.0] - 2026-08-27
+
+- Adaptado el generador Top-Down al contrato 5.0 sin opciones retiradas.
+- Aclarado que los trabajos interrumpidos no se reanudan automáticamente.
+
 ## [1.4.0] - 2026-08-20
 
 - Actualizada la dependencia a ASG Top-Down 4.0.

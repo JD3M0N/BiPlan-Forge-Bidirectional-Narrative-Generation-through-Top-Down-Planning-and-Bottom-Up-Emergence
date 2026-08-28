@@ -4,44 +4,18 @@
 > tarea terminada cambiando `[ ]` por `[x]`.
 
 - [ ] TODO: Generar audio de las historias con un modelo gratuito.
-  - Terminado cuando: una historia generada puede convertirse en un archivo de
-    audio sin depender de un servicio de pago.
+  - Terminado cuando una historia puede convertirse en audio sin un servicio de pago.
 
 - [ ] TODO: Permitir generar historias mediante la voz.
-  - Terminado cuando: el usuario puede proporcionar por voz la solicitud de una
-    historia y el sistema la utiliza como entrada del pipeline.
-
-- [x] TODO: Integrar la mejora automática de prompts en el analista Top-Down.
-  - El analista conserva el original y produce una especificación enriquecida
-    en inglés antes de planificar la historia.
+  - Terminado cuando una solicitud hablada puede alimentar el pipeline.
 
 - [x] TODO: Crear un bot de Telegram.
-  - Terminado cuando: el bot recibe solicitudes, ejecuta la generación de
-    historias y devuelve el resultado al usuario.
-
-- [x] TODO: Agregarle rating a las historias
-  - Terminado cuando: `Stories` guarda un json con mettricas de evaluacion.
-
-- [x] TODO: Crear db de esquemas de historias
-  - SQLite reproducible desde migraciones y semillas, recuperación híbrida,
-    caché de embeddings y validaciones integradas en Top-Down.
-- [x] TODO: Crear directo que haga story beats into scenes
-  - El planificador incremental instancia beats como CPN y el escritor los
-    dramatiza por capítulo sin exponer la taxonomía en la prosa.
-- [x] TODO: Verificar los story beats con The CPC Method and Greedy Cycle-breaking para asegurar que no haya ciclos.
-- [ ] TODO: Comentarle a piad la idea de un grafo (mapa) de lugares donde guardar la posicion de los personajes
-- [x] TODO: Usar un modelo de embeding para reconocimiento lexico del prompt del usuario para la taxonomia
-  - Recuperación híbrida con embeddings Gemini cacheados y fallback léxico.
-- [ ] TODO: Ver si tiene sentido ver las situaciones dramaticas de polti para el gestor de drama
-- [x] TODO: Modificar Control de palabras por capítulo (±10 %) y global (±5 %)
-- [x] TODO: Annadir versionado a todo
-- [ ] TODO: Revisar la implementacion completa del flujo de STORYTELLER
-- [ ] TODO: Hacer que la consola de telegram te muestre la cola y lo que se esta haciendo
-- [ ] TODO: Validar los JSON que devuelve gemini para que no den error
-- [ ] TODO: Verificar que los personajes tengan dos stadisticas altas y una baja
-- [x] TODO: Revisar si que el schema del analista este en espannol influye en algo
-  - Los campos procesados y los artefactos internos están en inglés; el idioma
-    final de la ficción se conserva por separado.
-- [x] TODO: En algun lugar debe haber un chequeo de los constraints del usuario
-  - Cada constraint explícito genera una pregunta bloqueante en la auditoría.
-  - [ ]TODO: Los constraints que sean en ingles
+- [x] TODO: Guardar evaluaciones humanas de las historias.
+- [x] TODO: Versionar paquetes y runs.
+- [x] TODO: Modelar la trama Top-Down como un DAG de eventos genéricos.
+  - Python valida referencias y aciclicidad y calcula el orden topológico.
+- [x] TODO: Validar las respuestas estructuradas de Gemini.
+  - El proveedor hace una corrección de esquema y el plan permite un reemplazo completo.
+- [x] TODO: Controlar la extensión por capítulo y de forma global.
+- [ ] TODO: Mostrar en la consola de Telegram la cola y la etapa actual.
+- [ ] TODO: Evaluar si un mapa de lugares aporta valor antes de añadir estado dinámico.

@@ -193,27 +193,3 @@ def test_client_error_preserves_safe_status_diagnostics() -> None:
     assert error.details["status"] == 400
     assert error.details["status_name"] == "INVALID_ARGUMENT"
     assert "esquema" in error.summary
-
-
-def test_embedding_transport_error_is_retried(monkeypatch) -> None:
-    class ConnectError(Exception):
-        pass
-
-    class FlakyEmbeddingModels(FakeModels):
-        def embed_content(self, **kwargs):
-            self.generate_calls.append(kwargs)
-            if len(self.generate_calls) == 1:
-                raise ConnectError("temporary DNS failure")
-            return SimpleNamespace(
-                embeddings=[SimpleNamespace(values=[0.1, 0.2])], usage_metadata=None,
-            )
-
-    provider = provider_with()
-    provider.embedding_model_name = "fake-embedding"
-    provider.max_retries = 2
-    provider._client.models = FlakyEmbeddingModels()
-    monkeypatch.setattr(provider_module, "retry_delay", lambda attempt, details: 0)
-    monkeypatch.setattr(provider_module, "countdown_wait", lambda *args: None)
-    assert provider.embed_query("query") == [0.1, 0.2]
-    assert len(provider._client.models.generate_calls) == 2
-    assert provider.usage_records[-1].model == "fake-embedding"

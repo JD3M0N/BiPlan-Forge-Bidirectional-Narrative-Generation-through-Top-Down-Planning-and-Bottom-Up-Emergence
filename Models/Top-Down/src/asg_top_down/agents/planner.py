@@ -1,27 +1,36 @@
+"""One-shot planning of chapters and generic events."""
+
 from .base import Agent, json_text
-from ..narrative_db import NarrativeBlueprint
-from ..schemas import StoryPlanArtifact, StoryRequest
+from ..schemas import CharactersArtifact, StoryPlanDraft, StoryRequest, WorldArtifact
 
 
-class PlannerAgent(Agent[StoryPlanArtifact]):
-    name = "planner"
+class PlotPlannerAgent(Agent[StoryPlanDraft]):
+    name = "plot_planner"
 
     def run(
-        self, request: StoryRequest, blueprint: NarrativeBlueprint,
+        self,
+        request: StoryRequest,
+        world: WorldArtifact,
+        characters: CharactersArtifact,
+        chapter_count: int,
         repair_feedback: str = "",
-    ) -> StoryPlanArtifact:
+    ) -> StoryPlanDraft:
         return self.provider.generate_structured(
             system_instruction=(
-                "Design a causal story plan and a complete TaxonomyApplication in English from the "
-                "request and retrieved taxonomy candidates. Select one primary taxonomy. Select at "
-                "most one accent only when the candidate has explicit prompt evidence. Choose a small "
-                "subset of option IDs: preserve selected reader promises, but treat roles, movements, "
-                "complications, twists, and conclusions as a flexible palette that may be merged, "
-                "reordered, reinterpreted, or omitted. A twist is never mandatory. The protagonist's "
-                "goal, mistaken belief or conviction, active opposition, irreversible choices, climax, "
-                "and ending must form one causal argument. All planning text must be English."
+                "Plan a complete story as generic events connected by causal or temporal dependencies. "
+                "Create exactly the requested number of chapters and at least one event in every chapter. "
+                "Chapter and event orders must be consecutive from 1. Dependencies may only point from an "
+                "earlier event to a later event. Use only canonical character, location, and object IDs. "
+                "Keep the graph purposeful but do not force every event into a single chain. Chapter titles "
+                "must use the requested fiction language; all other planning text must be English. Use "
+                "only the generic event and dependency fields defined by the response schema."
             ),
-            prompt=(f"NORMALIZED SPECIFICATION:\n{json_text(request.agent_spec())}\n\nBLUEPRINT:\n{json_text(blueprint.model_context())}"
-                    f"{repair_feedback}"),
-            schema=StoryPlanArtifact,
+            prompt=(
+                f"STORY SPECIFICATION:\n{json_text(request.agent_spec())}"
+                f"\n\nREQUIRED CHAPTER COUNT: {chapter_count}"
+                f"\n\nWORLD:\n{json_text(world)}"
+                f"\n\nCHARACTERS:\n{json_text(characters)}"
+                f"{repair_feedback}"
+            ),
+            schema=StoryPlanDraft,
         )
