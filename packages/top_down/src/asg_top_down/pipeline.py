@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import TypeVar
@@ -10,23 +11,34 @@ from asg_evaluation import create_evaluation_template
 
 from .agents import (
     AnalystAgent,
-    ChapterWriterAgent,
     CharacterDesignerAgent,
+    DrafterAgent,
+    DramaCriticAgent,
+    PlanCriticAgent,
     PlotPlannerAgent,
-    StoryCriticAgent,
-    StoryEditorAgent,
     WorldBuilderAgent,
+    WriterAgent,
 )
 from .audit import audit_chapter, audit_story, canonical_chapter
 from .errors import PlotValidationError
-from .graph import chapter_word_budgets, materialize_plan
+from .graph import (
+    chapter_event_budgets,
+    materialize_plan,
+    relevant_prior_events,
+)
 from .progress import PipelineEvent, PipelineEventCallback, ProgressCallback, ProgressUpdate
 from .schemas import (
     ChapterLengthAudit,
+    ChapterPlan,
     CharactersArtifact,
     LLMUsageArtifact,
+    PlotEvent,
+    RevisionNote,
     StoryPlan,
+    StoryPlanDraft,
+    StoryPresentation,
     StoryRequest,
+    StoryReview,
     WorldArtifact,
 )
 from .storage import ArtifactRepository
@@ -62,16 +74,29 @@ class StoryPipeline:
         """Run all story stages and return the completed run directory."""
         self.usage_start = len(getattr(self.provider, "usage_records", []))
         request = self._analyze_request(request)
-        chapter_count = len(chapter_word_budgets(request))
+        event_budgets = chapter_event_budgets(request)
         self.repository = self._create_repository(request)
         self._configure_provider_callbacks()
         try:
             self._save_request(request)
             world = self._build_world(request)
             characters = self._build_characters(request, world)
-            plan = self._build_plan(request, world, characters, chapter_count)
-            draft, chapter_audits = self._write_chapters(request, world, characters, plan)
-            story = self._review_and_edit(request, plan, draft)
+            plan = self._build_plan(request, world, characters, event_budgets)
+            presentation, draft_bodies, draft, chapter_audits = self._draft_chapters(
+                request,
+                world,
+                characters,
+                plan,
+            )
+            story = self._critique_and_revise(
+                request,
+                world,
+                characters,
+                plan,
+                presentation,
+                draft_bodies,
+                draft,
+            )
             self._finalize(request, plan, story, chapter_audits)
             return self.repository.run_dir
         except Exception as exc:
@@ -202,13 +227,14 @@ class StoryPipeline:
         request: StoryRequest,
         world: WorldArtifact,
         characters: CharactersArtifact,
-        chapter_count: int,
+        event_budgets: list[int],
     ) -> StoryPlan:
-        """Generate, validate, and persist a replacement-safe story plan."""
+        """Generate, validate, critique, and optionally refine the story plan."""
         assert self.repository is not None
         self._notify(38, "planning", "Planificando capítulos y eventos")
         feedback = ""
         validation_errors: list[str] = []
+        plan: StoryPlan | None = None
         for attempt in range(1, 3):
 
             def generate_plan(feedback_snapshot: str = feedback):
@@ -217,7 +243,7 @@ class StoryPipeline:
                     request,
                     world,
                     characters,
-                    chapter_count,
+                    event_budgets,
                     feedback_snapshot,
                 )
 
@@ -230,18 +256,89 @@ class StoryPipeline:
             except ValueError as exc:
                 feedback = self._record_rejected_plan(draft, attempt, exc, validation_errors)
                 continue
-            self.repository.save_json("story_plan.json", plan)
-            self.repository.complete_stage("planning")
-            return plan
-        raise PlotValidationError(
-            "No se obtuvo un DAG de eventos válido después de dos intentos.",
-            details={"attempts": 2, "validation_errors": validation_errors},
-            recommendations=["Revisa los intentos guardados bajo planning/."],
-        )
+            break
+        if plan is None:
+            raise PlotValidationError(
+                "No se obtuvo un DAG de eventos válido después de dos intentos.",
+                details={"attempts": 2, "validation_errors": validation_errors},
+                recommendations=["Revisa los intentos guardados bajo planning/."],
+            )
+        plan = self._critique_plan(request, world, characters, event_budgets, plan)
+        self.repository.save_json("story_plan.json", plan)
+        self.repository.complete_stage("planning")
+        return plan
+
+    def _critique_plan(
+        self,
+        request: StoryRequest,
+        world: WorldArtifact,
+        characters: CharactersArtifact,
+        event_budgets: list[int],
+        original_plan: StoryPlan,
+    ) -> StoryPlan:
+        """Apply one bounded plan-critique round without risking a valid plan."""
+        assert self.repository is not None
+        self._notify(46, "plan_review", "Revisando la calidad dramática del plan")
+        try:
+
+            def critique_plan():
+                """Critique the bound validated plan."""
+                return PlanCriticAgent(self.provider).run(
+                    request,
+                    world,
+                    characters,
+                    original_plan,
+                )
+
+            review = self._call_agent("plan_critic", critique_plan)
+            self.repository.save_json("plan_review.json", review)
+            self._validate_note_references(review.notes, original_plan)
+            self.repository.complete_stage("plan_review")
+            if review.approved:
+                return original_plan
+
+            def refine_plan():
+                """Return one complete plan replacement guided by the critique."""
+                return PlotPlannerAgent(self.provider).run(
+                    request,
+                    world,
+                    characters,
+                    event_budgets,
+                    plan_review=review,
+                )
+
+            candidate = self._call_agent("plot_planner", refine_plan)
+            self.repository.save_json("planning/refined-candidate.json", candidate)
+            try:
+                refined = materialize_plan(candidate, request, world, characters)
+            except ValueError as exc:
+                issue = str(exc).strip() or type(exc).__name__
+                self.repository.save_data(
+                    "planning/refined-candidate-validation.json",
+                    {"issue": issue},
+                )
+                warning = (
+                    "La revisión del plan produjo un reemplazo estructuralmente inválido; "
+                    "se conservó el primer plan válido."
+                )
+                self.repository.add_warning(warning)
+                self._emit("plan_refinement_fallback", warning, stage="plan_review")
+                return original_plan
+            self._emit("plan_refined", "plan refinado tras la crítica", stage="plan_review")
+            return refined
+        except Exception as exc:
+            warning = (
+                "La crítica del plan no pudo completarse; se conservó el primer plan "
+                f"estructuralmente válido ({type(exc).__name__})."
+            )
+            self.repository.add_warning(warning)
+            self._emit("plan_review_fallback", warning, stage="plan_review")
+            self.repository.complete_stage("plan_review")
+            return original_plan
 
     def _record_rejected_plan(
         self,
-        draft,
+        draft: StoryPlanDraft,
         attempt: int,
         error: ValueError,
         validation_errors: list[str],
@@ -262,107 +359,330 @@ class StoryPipeline:
             stage="planning",
             attempt=attempt,
         )
+        payoff_rules = self._payoff_reference_rules(draft)
         return (
-            "\n\nRETURN A COMPLETE REPLACEMENT PLAN. Fix this structural error: "
-            f"{issue}. Previous candidate:\n{draft.model_dump_json(indent=2)}"
+            "\n\nSTRUCTURAL REPAIR REQUIRED. RETURN A COMPLETE REPLACEMENT PLAN. "
+            f"Fix this structural error: {issue}. "
+            "For payoff_of, use only an exact event_id listed in allowed_earlier_event_ids "
+            "for that event. Never copy object IDs, character IDs, location IDs, names, or "
+            "prose into payoff_of; use [] when there is no valid earlier setup.\n"
+            f"PAYOFF_OF REFERENCE MATRIX:\n{payoff_rules}\n"
+            f"REJECTED CANDIDATE:\n{draft.model_dump_json(indent=2)}"
         )
 
-    def _write_chapters(
+    @staticmethod
+    def _payoff_reference_rules(draft: StoryPlanDraft) -> str:
+        """Describe the exact payoff references allowed by one rejected candidate."""
+        ordered = sorted(draft.events, key=lambda event: event.order)
+        rules = [
+            {
+                "event_id": event.id,
+                "current_payoff_of": event.payoff_of,
+                "allowed_earlier_event_ids": [
+                    candidate.id for candidate in ordered if candidate.order < event.order
+                ],
+            }
+            for event in ordered
+        ]
+        return json.dumps(rules, ensure_ascii=False, indent=2)
+
+    def _draft_chapters(
         self,
         request: StoryRequest,
         world: WorldArtifact,
         characters: CharactersArtifact,
         plan: StoryPlan,
-    ) -> tuple[str, list[ChapterLengthAudit]]:
-        """Write every planned chapter and return the assembled draft."""
+    ) -> tuple[StoryPresentation, list[str], str, list[ChapterLengthAudit]]:
+        """Use Drafter to localize titles and create the first story."""
         assert self.repository is not None
-        writer = ChapterWriterAgent(self.provider)
+        drafter = DrafterAgent(self.provider)
+
+        def create_presentation():
+            """Create localized story and chapter titles."""
+            return drafter.presentation(request, plan)
+
+        presentation = self._call_agent("drafter", create_presentation)
+        self._validate_presentation(plan, presentation)
+        self.repository.save_json("draft_presentation.json", presentation)
         event_by_id = {item.id: item for item in plan.events}
         bodies: list[str] = []
         audits: list[ChapterLengthAudit] = []
         for index, chapter in enumerate(plan.chapters, 1):
-            self._notify_chapter(index, len(plan.chapters))
+            self._notify_draft_chapter(index, len(plan.chapters))
             events = [
                 event_by_id[event_id]
                 for event_id in plan.topological_order
                 if event_by_id[event_id].chapter_id == chapter.id
             ]
+            history = relevant_prior_events(plan, {event.id for event in events})
             character_ids = {item for event in events for item in event.character_ids}
             relevant = [item for item in characters.characters if item.id in character_ids]
 
-            def write_chapter(
+            def draft_chapter(
                 character_snapshot=relevant or characters.characters,
                 chapter_snapshot=chapter,
                 event_snapshot=events,
+                history_snapshot=history,
                 previous_body: str = bodies[-1] if bodies else "",
             ):
-                """Write one chapter with loop values bound to this iteration."""
-                return writer.run(
+                """Draft one chapter with loop values bound to this iteration."""
+                return drafter.run(
                     request,
                     world,
                     character_snapshot,
                     plan,
+                    presentation,
                     chapter_snapshot,
                     event_snapshot,
+                    history_snapshot,
                     previous_body,
                 )
 
-            body = self._call_agent(
-                "chapter_writer",
-                write_chapter,
-            ).strip()
+            body = self._call_agent("drafter", draft_chapter).strip()
             self.repository.save_text(f"chapters/chapter-{index:03d}.md", body)
             bodies.append(body)
             audits.append(audit_chapter(chapter, body))
-        self.repository.complete_stage("writing")
-        draft = f"# {request.title}\n\n" + "\n\n".join(
-            canonical_chapter(chapter.title, body)
+        self.repository.complete_stage("drafting")
+        draft = self._assemble_story(plan, presentation, bodies)
+        self.repository.save_text("draft.md", draft)
+        return presentation, bodies, draft, audits
+
+    @staticmethod
+    def _validate_presentation(plan: StoryPlan, presentation: StoryPresentation) -> None:
+        """Require one localized title for every canonical chapter, in order."""
+        expected = [chapter.id for chapter in plan.chapters]
+        received = [chapter.chapter_id for chapter in presentation.chapters]
+        if received != expected:
+            raise ValueError("localized presentation must follow the canonical chapter order")
+
+    @staticmethod
+    def _assemble_story(
+        plan: StoryPlan,
+        presentation: StoryPresentation,
+        bodies: list[str],
+    ) -> str:
+        """Assemble canonical Markdown without delegating ordering to an LLM."""
+        titles = {chapter.chapter_id: chapter.title for chapter in presentation.chapters}
+        return f"# {presentation.title}\n\n" + "\n\n".join(
+            canonical_chapter(titles[chapter.id], body)
             for chapter, body in zip(plan.chapters, bodies, strict=True)
         )
-        self.repository.save_text("draft.md", draft)
-        return draft, audits
 
-    def _notify_chapter(self, index: int, total: int) -> None:
-        """Report progress for the chapter currently being written."""
-        percent = 50 + (index - 1) * 30 // total
+    def _notify_draft_chapter(self, index: int, total: int) -> None:
+        """Report progress for the chapter currently being drafted."""
+        percent = 52 + (index - 1) * 24 // total
         self._notify(
             percent,
-            "writing",
-            f"Escribiendo capítulo {index} de {total}",
+            "drafting",
+            f"Redactando borrador del capítulo {index} de {total}",
             index,
             total,
         )
 
-    def _review_and_edit(self, request: StoryRequest, plan: StoryPlan, draft: str) -> str:
-        """Run the optional quality pass and safely fall back to the draft."""
+    def _critique_and_revise(
+        self,
+        request: StoryRequest,
+        world: WorldArtifact,
+        characters: CharactersArtifact,
+        plan: StoryPlan,
+        presentation: StoryPresentation,
+        draft_bodies: list[str],
+        draft: str,
+    ) -> str:
+        """Critique the complete draft, then let Writer revise chapter by chapter."""
         assert self.repository is not None
-        self._notify(85, "review", "Revisando el borrador completo")
+        self._notify(78, "critique", "Analizando el drama del borrador completo")
         try:
 
-            def review_story():
-                """Review the bound complete story draft."""
-                return StoryCriticAgent(self.provider).run(request, plan, draft)
+            def critique_story():
+                """Critique the bound complete story draft."""
+                return DramaCriticAgent(self.provider).run(
+                    request,
+                    world,
+                    characters,
+                    plan,
+                    presentation,
+                    draft,
+                )
 
-            review = self._call_agent("story_critic", review_story)
+            review = self._call_agent("drama_critic", critique_story)
             self.repository.save_json("review.json", review)
-            self.repository.complete_stage("review")
-            self._notify(92, "editing", "Aplicando una edición final")
-
-            def edit_story():
-                """Edit the bound draft using its completed review."""
-                return StoryEditorAgent(self.provider).run(request, plan, draft, review)
-
-            story = self._call_agent("story_editor", edit_story).strip()
-            self.repository.complete_stage("editing")
-            return story
+            self._validate_note_references(review.notes, plan)
+            self.repository.complete_stage("critique")
         except Exception as exc:
             warning = (
-                "La revisión o edición final no pudo completarse; se entregó el borrador "
+                "La crítica dramática no pudo completarse; se entregó el borrador "
                 f"por capítulos ({type(exc).__name__})."
             )
             self.repository.add_warning(warning)
             self._emit("quality_fallback", warning, stage=self.progress["stage"])
             return draft
+        return self._revise_chapters(
+            request,
+            plan,
+            presentation,
+            draft_bodies,
+            review,
+        )
+
+    @staticmethod
+    def _validate_note_references(notes: list[RevisionNote], plan: StoryPlan) -> None:
+        """Reject critic notes that point outside the canonical plan."""
+        chapter_ids = {chapter.id for chapter in plan.chapters}
+        event_ids = {event.id for event in plan.events}
+        for note in notes:
+            if set(note.chapter_ids) - chapter_ids:
+                raise ValueError(f"revision note {note.id} references unknown chapters")
+            if set(note.event_ids) - event_ids:
+                raise ValueError(f"revision note {note.id} references unknown events")
+
+    def _revise_chapters(
+        self,
+        request: StoryRequest,
+        plan: StoryPlan,
+        presentation: StoryPresentation,
+        draft_bodies: list[str],
+        review: StoryReview,
+    ) -> str:
+        """Run Writer for every chapter with one bounded corrective retry."""
+        assert self.repository is not None
+        writer = WriterAgent(self.provider)
+        event_by_id = {event.id: event for event in plan.events}
+        revised_bodies: list[str] = []
+        for index, (chapter, draft_body) in enumerate(
+            zip(plan.chapters, draft_bodies, strict=True),
+            1,
+        ):
+            percent = 84 + (index - 1) * 12 // len(plan.chapters)
+            self._notify(
+                percent,
+                "revision",
+                f"Corrigiendo capítulo {index} de {len(plan.chapters)}",
+                index,
+                len(plan.chapters),
+            )
+            events = [
+                event_by_id[event_id]
+                for event_id in plan.topological_order
+                if event_by_id[event_id].chapter_id == chapter.id
+            ]
+            notes = self._notes_for_chapter(review.notes, chapter, events)
+            accepted = self._revise_one_chapter(
+                writer,
+                request,
+                plan,
+                presentation,
+                chapter,
+                events,
+                notes,
+                draft_body,
+                revised_bodies[-1] if revised_bodies else "",
+                index,
+            )
+            revised_bodies.append(accepted)
+            self.repository.save_text(f"revisions/chapter-{index:03d}.md", accepted)
+        self.repository.complete_stage("revision")
+        return self._assemble_story(plan, presentation, revised_bodies)
+
+    @staticmethod
+    def _notes_for_chapter(
+        notes: list[RevisionNote],
+        chapter: ChapterPlan,
+        events: list[PlotEvent],
+    ) -> list[RevisionNote]:
+        """Select global notes and notes that target this chapter or its events."""
+        event_ids = {event.id for event in events}
+        return [
+            note
+            for note in notes
+            if (
+                not note.chapter_ids
+                or chapter.id in note.chapter_ids
+                or bool(event_ids.intersection(note.event_ids))
+            )
+        ]
+
+    def _revise_one_chapter(
+        self,
+        writer: WriterAgent,
+        request: StoryRequest,
+        plan: StoryPlan,
+        presentation: StoryPresentation,
+        chapter: ChapterPlan,
+        events: list[PlotEvent],
+        notes: list[RevisionNote],
+        draft_body: str,
+        previous_revised: str,
+        chapter_index: int,
+    ) -> str:
+        """Return the first valid Writer candidate or the safe original fallback."""
+        assert self.repository is not None
+        retry_feedback = ""
+        for attempt in range(1, 3):
+            try:
+
+                def revise_chapter(feedback_snapshot: str = retry_feedback):
+                    """Rewrite the bound chapter with this attempt's feedback."""
+                    return writer.run(
+                        request,
+                        plan,
+                        presentation,
+                        chapter,
+                        events,
+                        notes,
+                        draft_body,
+                        previous_revised,
+                        feedback_snapshot,
+                    )
+
+                candidate = self._call_agent("writer", revise_chapter).strip()
+            except Exception as exc:
+                warning = (
+                    f"Writer no pudo corregir el capítulo {chapter_index}; se conservó "
+                    f"su borrador ({type(exc).__name__})."
+                )
+                self.repository.add_warning(warning)
+                self._emit("writer_fallback", warning, stage="revision")
+                return draft_body
+            issue = self._writer_candidate_issue(candidate, draft_body, chapter, notes)
+            if issue is None:
+                return candidate
+            prefix = f"writer/chapter-{chapter_index:03d}-attempt-{attempt:03d}"
+            self.repository.save_text(f"{prefix}.md", candidate)
+            self.repository.save_data(
+                f"{prefix}-validation.json",
+                {"attempt": attempt, "issue": issue},
+            )
+            retry_feedback = (
+                "\n\nRETRY CORRECTION:\nThe previous rewrite was rejected because "
+                f"{issue}. Return a complete corrected chapter body."
+            )
+        warning = (
+            f"Writer no produjo una revisión válida para el capítulo {chapter_index}; "
+            "se conservó el borrador."
+        )
+        self.repository.add_warning(warning)
+        self._emit("writer_fallback", warning, stage="revision")
+        return draft_body
+
+    @staticmethod
+    def _writer_candidate_issue(
+        candidate: str,
+        draft_body: str,
+        chapter: ChapterPlan,
+        notes: list[RevisionNote],
+    ) -> str | None:
+        """Explain why a Writer candidate cannot replace the draft."""
+        if not candidate.strip():
+            return "the chapter body is empty"
+        if any(line.lstrip().startswith("#") for line in candidate.splitlines()):
+            return "the chapter body contains Markdown headings"
+        if not audit_chapter(chapter, candidate).within_tolerance:
+            return "the chapter word count is outside the 90-120 percent tolerance"
+        significant = any(note.priority in {"critical", "major"} for note in notes)
+        if significant and candidate.strip() == draft_body.strip():
+            return "the text is unchanged despite critical or major revision notes"
+        return None
 
     def _finalize(
         self,

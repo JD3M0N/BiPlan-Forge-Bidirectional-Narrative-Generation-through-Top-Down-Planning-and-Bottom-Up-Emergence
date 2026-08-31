@@ -10,11 +10,14 @@ from .progress import (
 )
 from .schemas import (
     ChapterPlan,
+    ChapterPresentation,
     CharactersArtifact,
     EventDependency,
     GeneratorVersionArtifact,
+    PlanReview,
     PlotEvent,
     StoryPlan,
+    StoryPresentation,
     StoryRequest,
     StoryReview,
     WorldArtifact,
@@ -23,9 +26,11 @@ from .version import __version__
 
 __all__ = [
     "ChapterPlan",
+    "ChapterPresentation",
     "CharactersArtifact",
     "EventDependency",
     "GeneratorVersionArtifact",
+    "PlanReview",
     "PipelineEvent",
     "PipelineEventCallback",
     "PlotEvent",
@@ -33,6 +38,7 @@ __all__ = [
     "ProgressUpdate",
     "StoryGenerator",
     "StoryPlan",
+    "StoryPresentation",
     "StoryRequest",
     "StoryReview",
     "StoryRun",

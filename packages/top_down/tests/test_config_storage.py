@@ -75,3 +75,20 @@ def test_story_run_rejects_old_or_incomplete_metadata(tmp_path) -> None:
     )
     with pytest.raises(ValueError, match="5.0"):
         StoryRun(run_dir)
+
+    compatible = tmp_path / "compatible"
+    compatible.mkdir()
+    (compatible / "metadata.json").write_text(
+        json.dumps({"status": "completed", "pipeline_version": "5.0"}),
+        encoding="utf-8",
+    )
+    assert StoryRun(compatible).run_dir == compatible
+
+    incomplete = tmp_path / "incomplete"
+    incomplete.mkdir()
+    (incomplete / "metadata.json").write_text(
+        json.dumps({"status": "running", "pipeline_version": "5.1"}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="completed"):
+        StoryRun(incomplete)

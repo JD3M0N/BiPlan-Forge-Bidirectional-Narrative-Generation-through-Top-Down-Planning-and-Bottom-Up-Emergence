@@ -188,7 +188,7 @@ class GeminiProvider:
             profile = "rewrite"
         elif any(word in text for word in ("review", "critic", "analyst")):
             profile = "review" if "analyst" not in text else "extraction"
-        elif operation == "text":
+        elif operation == "text" or "drafter" in text:
             profile = "prose"
         else:
             profile = "planning"

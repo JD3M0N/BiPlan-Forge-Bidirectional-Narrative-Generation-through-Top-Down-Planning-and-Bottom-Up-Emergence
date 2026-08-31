@@ -1,4 +1,4 @@
-"""Configuration loading for Top-Down 5.0."""
+"""Configuration loading for Top-Down 5.x."""
 
 import os
 from dataclasses import dataclass

@@ -2,6 +2,23 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [5.2.0] - 2026-08-29
+
+- Enriquecido el análisis de solicitudes breves con un brief inglés y direcciones
+  creativas separadas de los requisitos explícitos.
+- Añadidos presupuestos exactos de eventos, conectividad causal, precondiciones,
+  efectos, función dramática y referencias de setup/payoff.
+- Aclarado y reforzado que `payoff_of` solo acepta IDs de eventos anteriores,
+  con diagnósticos y feedback de reparación que enumeran las referencias válidas.
+- Incorporada una crítica acotada del plan con reemplazo único y fallback al
+  primer DAG válido.
+- Sustituidos los agentes finales por `Drafter → Drama Critic → Writer`, con
+  contexto de ancestros del DAG, notas globales/locales y revisión por capítulos.
+- Añadidos reintentos auditables de Writer, fallbacks aislados y los artefactos
+  `plan_review.json`, `draft_presentation.json` y `revisions/`.
+- Publicado el contrato de artefactos 5.1 manteniendo lectura de runs 5.0, sin
+  avanzar a una versión 6.
+
 ## [5.1.0] - 2026-08-27
 
 - Added `generator_version.json` to every run so generated stories retain the

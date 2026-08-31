@@ -9,11 +9,11 @@ from pathlib import Path
 from .pipeline import StoryPipeline
 from .progress import PipelineEventCallback, ProgressCallback
 from .schemas import StoryRequest
-from .version import PIPELINE_VERSION
+from .version import SUPPORTED_PIPELINE_VERSIONS
 
 
 class StoryRun:
-    """Represent a completed Top-Down 5.0-compatible run."""
+    """Represent a completed compatible Top-Down 5.x run."""
 
     def __init__(self, run_dir: Path) -> None:
         """Validate and open a completed run directory."""
@@ -22,10 +22,12 @@ class StoryRun:
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         if (
             metadata.get("status") != "completed"
-            or metadata.get("pipeline_version") != PIPELINE_VERSION
+            or metadata.get("pipeline_version") not in SUPPORTED_PIPELINE_VERSIONS
         ):
+            supported = ", ".join(sorted(SUPPORTED_PIPELINE_VERSIONS))
             raise ValueError(
-                f"Only completed Top-Down {PIPELINE_VERSION} runs can be opened as StoryRun"
+                f"Only completed Top-Down runs with pipeline versions {supported} "
+                "can be opened as StoryRun"
             )
 
     @property

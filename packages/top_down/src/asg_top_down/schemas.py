@@ -1,4 +1,4 @@
-"""Data contracts for the small Top-Down 5.0 pipeline."""
+"""Data contracts for the Top-Down 5.1 artifact pipeline."""
 
 from __future__ import annotations
 
@@ -25,6 +25,7 @@ class StoryRequest(BaseModel):
     requested_chapters: int | None = Field(default=None, ge=1, le=80)
     premise: str
     constraints: list[str] = Field(default_factory=list)
+    creative_directions: list[str] = Field(default_factory=list)
 
     def agent_spec(self) -> dict:
         """Return trusted downstream data without replaying the raw prompt."""
@@ -123,6 +124,10 @@ class ChapterDraft(BaseModel):
     order: int = Field(ge=1)
     title: str = Field(min_length=1)
     summary: str = Field(min_length=1)
+    dramatic_goal: str = Field(min_length=1)
+    opening_state: str = Field(min_length=1)
+    turning_point: str = Field(min_length=1)
+    closing_state: str = Field(min_length=1)
 
 
 class ChapterPlan(ChapterDraft):
@@ -140,10 +145,31 @@ class PlotEvent(BaseModel):
     title: str = Field(min_length=1)
     description: str = Field(min_length=1)
     purpose: str = Field(min_length=1)
+    dramatic_function: str = Field(min_length=1)
+    conflict: str = Field(min_length=1)
+    outcome: str = Field(min_length=1)
+    preconditions: list[str] = Field(
+        default_factory=list,
+        description="Plain-English story-state conditions, not entity or event IDs.",
+    )
     character_ids: list[str] = Field(default_factory=list)
     location_id: str | None = None
-    object_ids: list[str] = Field(default_factory=list)
-    effects: list[str] = Field(default_factory=list)
+    object_ids: list[str] = Field(
+        default_factory=list,
+        description="Canonical StoryObject IDs used in this event.",
+    )
+    effects: list[str] = Field(
+        min_length=1,
+        description="Plain-English story-state changes caused by this event, not IDs.",
+    )
+    payoff_of: list[str] = Field(
+        default_factory=list,
+        description=(
+            "PlotEvent IDs for setups paid off by this event. Every value must be the ID "
+            "of an earlier event; never use object, character, location, or prose values. "
+            "Use an empty list when this event pays off no earlier event."
+        ),
+    )
 
 
 class EventDependency(BaseModel):
@@ -160,6 +186,9 @@ class StoryPlanDraft(BaseModel):
     logline: str
     theme: str
     ending: str
+    narrative_structure: str = Field(min_length=1)
+    dramatic_question: str = Field(min_length=1)
+    stakes: str = Field(min_length=1)
     chapters: list[ChapterDraft] = Field(min_length=1)
     events: list[PlotEvent] = Field(min_length=1)
     dependencies: list[EventDependency] = Field(default_factory=list)
@@ -171,6 +200,9 @@ class StoryPlan(BaseModel):
     logline: str
     theme: str
     ending: str
+    narrative_structure: str = Field(min_length=1)
+    dramatic_question: str = Field(min_length=1)
+    stakes: str = Field(min_length=1)
     chapters: list[ChapterPlan] = Field(min_length=1)
     events: list[PlotEvent] = Field(min_length=1)
     dependencies: list[EventDependency] = Field(default_factory=list)
@@ -185,13 +217,75 @@ class ConstraintCheck(BaseModel):
     notes: str = ""
 
 
+class RevisionNote(BaseModel):
+    """One actionable English-language instruction for plan or prose revision."""
+
+    id: str = Field(pattern=ID_PATTERN)
+    priority: Literal["critical", "major", "minor"]
+    category: Literal[
+        "user_constraint",
+        "causal_continuity",
+        "world_continuity",
+        "character_motivation",
+        "agency",
+        "dramatic_structure",
+        "pacing",
+        "setup_payoff",
+        "originality",
+        "voice_style",
+        "language",
+    ]
+    evidence: str = Field(min_length=1)
+    instruction: str = Field(min_length=1)
+    chapter_ids: list[str] = Field(default_factory=list)
+    event_ids: list[str] = Field(default_factory=list)
+
+
+class PlanReview(BaseModel):
+    """Structured critique of a validated candidate story plan."""
+
+    approved: bool
+    strengths: list[str] = Field(default_factory=list)
+    notes: list[RevisionNote] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def approval_matches_notes(self) -> PlanReview:
+        """Reject contradictory approvals that still contain actionable notes."""
+        if self.approved and self.notes:
+            raise ValueError("an approved plan review cannot contain revision notes")
+        if not self.approved and not self.notes:
+            raise ValueError("a rejected plan review must contain revision notes")
+        return self
+
+
+class ChapterPresentation(BaseModel):
+    """Localized public title for one internally planned chapter."""
+
+    chapter_id: str = Field(pattern=ID_PATTERN)
+    title: str = Field(min_length=1)
+
+
+class StoryPresentation(BaseModel):
+    """Localized titles created when the drafting phase begins."""
+
+    title: str = Field(min_length=1)
+    chapters: list[ChapterPresentation] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def chapter_ids_are_unique(self) -> StoryPresentation:
+        """Require one unambiguous localized title per chapter."""
+        identifiers = [item.chapter_id for item in self.chapters]
+        if len(identifiers) != len(set(identifiers)):
+            raise ValueError("presentation chapter ids must be unique")
+        return self
+
+
 class StoryReview(BaseModel):
     """Represent StoryReview data and behavior."""
 
     strengths: list[str] = Field(default_factory=list)
-    issues: list[str] = Field(default_factory=list)
+    notes: list[RevisionNote] = Field(default_factory=list)
     constraint_checks: list[ConstraintCheck] = Field(default_factory=list)
-    revision_instructions: list[str] = Field(default_factory=list)
 
 
 class LengthAuditEntry(BaseModel):

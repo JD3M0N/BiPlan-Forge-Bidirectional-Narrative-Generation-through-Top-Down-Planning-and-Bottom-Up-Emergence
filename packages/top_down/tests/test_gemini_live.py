@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from asg_top_down import StoryGenerator
+from asg_top_down.agents import AnalystAgent
 from asg_top_down.config import load_settings
 from asg_top_down.provider import GeminiProvider
 
@@ -63,8 +64,11 @@ def test_real_gemini_smoke_run() -> None:
         "request.json",
         "world.json",
         "characters.json",
+        "plan_review.json",
         "story_plan.json",
+        "draft_presentation.json",
         "draft.md",
+        "review.json",
         "length_audit.json",
         "llm_calls.jsonl",
         "llm_usage.json",
@@ -77,3 +81,24 @@ def test_real_gemini_smoke_run() -> None:
         content = artifact.read_bytes()
         assert len(content) == recorded["bytes"]
         assert hashlib.sha256(content).hexdigest() == recorded["sha256"]
+
+
+def test_real_analyst_enriches_a_sparse_request() -> None:
+    settings = load_settings()
+    provider = GeminiProvider(
+        settings.api_key,
+        settings.model,
+        rpm_limit=settings.rpm_limit,
+        rpm_reserve=settings.rpm_reserve,
+        tpm_limit=settings.tpm_limit,
+        max_retries=settings.max_retries,
+        max_retry_delay=settings.max_retry_delay,
+        request_timeout_ms=settings.request_timeout_ms,
+    )
+    prompt = "Crea una historia de un caballero que salva a una princesa de un dragón"
+    request = AnalystAgent(provider, settings.default_target_words).run(prompt)
+    assert request.original_prompt == prompt
+    assert request.language == "Spanish"
+    assert request.processed_prompt
+    assert len(request.processed_prompt.split()) > len(prompt.split())
+    assert request.creative_directions
