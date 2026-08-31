@@ -90,6 +90,19 @@ class ArtifactRepository:
         if self.on_artifact:
             self.on_artifact(filename.replace("\\", "/"), created)
 
+    def register_existing(self, filename: str) -> None:
+        """Register an existing binary or externally written artifact."""
+        path = self.run_dir / filename
+        content = path.read_bytes()
+        normalized = filename.replace("\\", "/")
+        self.manifest["artifacts"][normalized] = {
+            "sha256": hashlib.sha256(content).hexdigest(),
+            "bytes": len(content),
+        }
+        self._write_manifest()
+        if self.on_artifact:
+            self.on_artifact(normalized, True)
+
     def append_llm_call(self, record: LLMUsageRecord) -> None:
         """Append llm call."""
         path = self.run_dir / "llm_calls.jsonl"

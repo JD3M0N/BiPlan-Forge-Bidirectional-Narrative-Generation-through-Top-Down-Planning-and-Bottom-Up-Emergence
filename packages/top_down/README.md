@@ -1,6 +1,6 @@
-# ASG Top-Down 5.3
+# ASG Top-Down 5.4
 
-Top-Down 5.3 genera historias con el contrato de artefactos 5.2:
+Top-Down 5.4 genera historias con el contrato de artefactos 5.3:
 
 ```text
 Analyst → World → Characters → Plot Planner → Plan Critic
@@ -17,6 +17,7 @@ from asg_top_down import StoryGenerator
 
 run = StoryGenerator(provider, output_root).run(prompt)
 print(run.story_path)
+print(run.audio_path)
 ```
 
 `generate()` y `run()` también aceptan un `StoryRequest` interno ya
@@ -67,12 +68,15 @@ llm_calls.jsonl
 llm_usage.json
 pipeline_manifest.json
 story.md
+story.mp3
+audio.json
 ```
 
 Todos los intentos del Writer quedan archivados con su validación estructurada.
-Los runs nuevos usan `pipeline_version: 5.2`; `StoryRun` puede abrir runs
-terminados 5.0, 5.1 y 5.2. `compare-story-runs` continúa aceptando cualquier
-run con `story.md`.
+Los runs nuevos usan `pipeline_version: 5.3`; `StoryRun` puede abrir runs
+terminados 5.0, 5.1, 5.2 y 5.3. El MP3 se registra en el manifiesto, pero un
+fallo de TTS solo añade `AUDIO_GENERATION_FAILED`: `story.md` continúa válido.
+`compare-story-runs` continúa aceptando cualquier run con `story.md`.
 
 ```powershell
 python -m pytest packages/top_down/tests

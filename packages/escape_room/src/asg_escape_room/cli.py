@@ -7,7 +7,7 @@ import secrets
 import sys
 from pathlib import Path
 
-from asg_core import find_project_root
+from asg_core import AudioGenerationError, create_story_audio_sync, find_project_root
 from asg_evaluation import create_evaluation_template
 
 from .config import load_settings
@@ -48,6 +48,19 @@ def room_with_agents(path: Path, count: int):
     return room.model_copy(update={"agents": room.agents[:count]}, deep=True)
 
 
+def create_run_audio(repository: RunRepository) -> Path | None:
+    """Create optional narration for a completed Bottom-Up story."""
+    try:
+        artifact = create_story_audio_sync(repository.run_dir / "story.md")
+    except AudioGenerationError:
+        repository.record_audio_failure()
+        return None
+    repository.metadata["audio_status"] = "completed"
+    repository.metadata["audio_error"] = None
+    repository.complete_stage("audio")
+    return artifact.path
+
+
 def run_one(args: argparse.Namespace) -> Path:
     """Handle the run one operation for component."""
     settings = load_settings()
@@ -82,6 +95,7 @@ def run_one(args: argparse.Namespace) -> Path:
         repository.save_text("story.md", story)
         create_evaluation_template(repository.run_dir)
         repository.complete_stage("narrative")
+        create_run_audio(repository)
         repository.complete(narrator, error)
         return repository.run_dir
     except Exception as exc:
@@ -107,6 +121,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         output = run_batch(args) if args.batch else run_one(args)
         print(f"Resultado guardado en: {output}")
+        audio_path = output / "story.mp3"
+        if audio_path.is_file():
+            print(f"Audio disponible en: {audio_path}")
+        elif not args.batch:
+            print("Advertencia: la historia se guardó, pero no fue posible crear el audio.")
         return 0
     except (OSError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)

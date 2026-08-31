@@ -6,6 +6,7 @@ import asyncio
 import logging
 from pathlib import Path
 
+from asg_core import AudioGenerationError, create_story_audio
 from telegram.constants import ParseMode
 from telegram.error import BadRequest, NetworkError, TelegramError
 
@@ -14,6 +15,7 @@ from .prompts import telegram_story_chunks
 
 LOGGER = logging.getLogger(__name__)
 DOCUMENT_RETRY_DELAYS = (1, 2, 4)
+AUDIO_RETRY_DELAYS = (1, 2, 4)
 
 
 class TelegramDelivery:
@@ -29,6 +31,13 @@ class TelegramDelivery:
         ):
             return False
         story = await asyncio.to_thread(story_path.read_text, encoding="utf-8")
+        await self._deliver_audio(
+            context=context,
+            chat_id=chat_id,
+            user=user,
+            story_path=story_path,
+            story=story,
+        )
         chunks = telegram_story_chunks(story)
         for index, chunk in enumerate(chunks, start=1):
             try:
@@ -66,6 +75,116 @@ class TelegramDelivery:
             category="éxito",
         )
         return True
+
+    async def _deliver_audio(
+        self,
+        *,
+        context,
+        chat_id: int,
+        user,
+        story_path: Path,
+        story: str,
+    ) -> bool:
+        """Ensure and send narration without blocking the story workflow."""
+        try:
+            artifact = await create_story_audio(story_path)
+        except AudioGenerationError:
+            log_user_action(
+                LOGGER,
+                user_id=user.id,
+                username=user.username or user.full_name,
+                action="No se pudo crear el audio; la entrega de texto continuará",
+                category="advertencia",
+                level=logging.WARNING,
+                exc_info=True,
+            )
+            await self._safe_notice(
+                context,
+                chat_id,
+                "La historia está lista, pero no pude crear su audio. "
+                "Continuaré con el texto y la evaluación.",
+                user,
+            )
+            return False
+
+        delivered = await self._send_audio_with_retry(
+            context=context,
+            chat_id=chat_id,
+            user=user,
+            audio_path=artifact.path,
+            title=self._story_title(story),
+            language=artifact.language,
+            voice=artifact.voice,
+        )
+        if not delivered:
+            await self._safe_notice(
+                context,
+                chat_id,
+                "La historia y su audio permanecen guardados, pero Telegram no pudo "
+                "recibir el MP3. Continuaré con el texto y la evaluación.",
+                user,
+            )
+        return delivered
+
+    async def _send_audio_with_retry(
+        self,
+        *,
+        context,
+        chat_id: int,
+        user,
+        audio_path: Path,
+        title: str,
+        language: str,
+        voice: str,
+    ) -> bool:
+        """Send an MP3 with bounded retries for temporary network errors."""
+        attempts = len(AUDIO_RETRY_DELAYS) + 1
+        for attempt in range(1, attempts + 1):
+            try:
+                with audio_path.open("rb") as audio:
+                    await context.bot.send_audio(
+                        chat_id=chat_id,
+                        audio=audio,
+                        filename=audio_path.name,
+                        title=title[:64],
+                        performer="ASG",
+                        caption=f"Narración {language} · {voice}",
+                    )
+                log_user_action(
+                    LOGGER,
+                    user_id=user.id,
+                    username=user.username or user.full_name,
+                    action="Audio entregado por Telegram",
+                    category="éxito",
+                )
+                return True
+            except BadRequest:
+                break
+            except NetworkError:
+                if attempt == attempts:
+                    break
+                await asyncio.sleep(AUDIO_RETRY_DELAYS[attempt - 1])
+            except TelegramError:
+                break
+        log_user_action(
+            LOGGER,
+            user_id=user.id,
+            username=user.username or user.full_name,
+            action="Telegram no pudo recibir el audio",
+            category="advertencia",
+            level=logging.WARNING,
+            exc_info=True,
+        )
+        return False
+
+    @staticmethod
+    def _story_title(story: str) -> str:
+        """Extract a compact title from the first Markdown heading."""
+        for line in story.splitlines():
+            title = line.lstrip("#").strip() if line.lstrip().startswith("#") else ""
+            if title:
+                return title
+        return "Historia narrada"
 
     async def _send_document_with_retry(
         self,

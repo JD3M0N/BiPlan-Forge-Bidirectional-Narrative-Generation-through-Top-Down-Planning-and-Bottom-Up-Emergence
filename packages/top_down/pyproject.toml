@@ -9,7 +9,7 @@ description = "Modular Top-Down automatic story generation"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-  "asg-core>=0.1.0",
+  "asg-core>=0.2.0",
   "asg-evaluation>=0.2.0",
   "google-genai>=1.0",
   "pydantic>=2.7",

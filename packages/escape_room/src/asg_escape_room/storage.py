@@ -36,6 +36,8 @@ class RunRepository:
             "completed_stages": [],
             "narrator": None,
             "narrative_error": None,
+            "audio_status": None,
+            "audio_error": None,
             "error": None,
         }
         self._metadata()
@@ -65,6 +67,14 @@ class RunRepository:
     def complete(self, narrator: str, narrative_error: str | None) -> None:
         """Mark the requested value."""
         self.metadata.update(status="completed", narrator=narrator, narrative_error=narrative_error)
+        self._metadata()
+
+    def record_audio_failure(self) -> None:
+        """Record a non-fatal narration failure."""
+        self.metadata.update(
+            audio_status="failed",
+            audio_error="AUDIO_GENERATION_FAILED",
+        )
         self._metadata()
 
     def fail(self, error: str) -> None:

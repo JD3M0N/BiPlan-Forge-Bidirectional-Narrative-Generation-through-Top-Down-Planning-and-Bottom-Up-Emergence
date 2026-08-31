@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "asg-core"
-version = "0.1.0"
+version = "0.2.0"
 description = "Shared infrastructure for the ASG monorepo"
 readme = "README.md"
 requires-python = ">=3.11"
+dependencies = ["edge-tts>=7.2.8,<8", "langdetect>=1.0.9,<2"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/asg_core"]
-

@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from asg_core import find_project_root
-from asg_escape_room.cli import room_with_agents, run_batch, run_one
+from asg_escape_room.cli import create_run_audio, room_with_agents, run_batch, run_one
 from asg_escape_room.config import load_settings as load_bottom_up_settings
 from asg_escape_room.engine import EscapeRoomModel
 from asg_escape_room.narrative import GeminiNarrativeProvider, generate_story
@@ -59,6 +59,7 @@ class BottomUpMenu:
         """Run and persist one standard simulation."""
         output = run_one(self._simulation_options())
         self.output(f"Resultado guardado en: {output}")
+        self._report_audio(output)
 
     def _batch(self) -> None:
         """Run and persist the fixed-size batch experiment."""
@@ -97,6 +98,7 @@ class BottomUpMenu:
         status = "escape exitoso" if result and result.success else "límite alcanzado"
         self.output(f"Simulación terminada: {status}.")
         self.output(f"Resultado guardado en: {output}")
+        self._report_audio(output)
         self.input("Pulsa Enter para volver al menú...")
 
     def _save_visual(self, *, args, seed, room, model) -> Path:
@@ -120,11 +122,20 @@ class BottomUpMenu:
             repository.save_text("story.md", story)
             create_evaluation_template(repository.run_dir)
             repository.complete_stage("narrative")
+            create_run_audio(repository)
             repository.complete(narrator, error)
             return repository.run_dir
         except Exception as exc:
             repository.fail(str(exc))
             raise
+
+    def _report_audio(self, output: Path) -> None:
+        """Report whether narration was available for a completed story."""
+        audio_path = output / "story.mp3"
+        if audio_path.is_file():
+            self.output(f"Audio disponible en: {audio_path}")
+        else:
+            self.output("La historia se guardó, pero no fue posible crear el audio.")
 
     @staticmethod
     def _save_visual_configuration(repository, args, seed, room) -> None:

@@ -74,3 +74,8 @@ class TopDownMenu:
             output = generator.run(prompt)
         output_dir = output.run_dir if hasattr(output, "run_dir") else output
         self.output(f"Historia terminada: {output_dir / 'story.md'}")
+        audio_path = output_dir / "story.mp3"
+        if audio_path.is_file():
+            self.output(f"Audio disponible en: {audio_path}")
+        else:
+            self.output("La historia se guardó, pero no fue posible crear el audio.")

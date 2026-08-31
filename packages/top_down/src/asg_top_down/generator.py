@@ -35,6 +35,11 @@ class StoryRun:
         """Return the canonical final story path."""
         return self.run_dir / "story.md"
 
+    @property
+    def audio_path(self) -> Path:
+        """Return the optional MP3 narration path."""
+        return self.run_dir / "story.mp3"
+
     def __fspath__(self) -> str:
         """Expose the run directory through the filesystem path protocol."""
         return str(self.run_dir)

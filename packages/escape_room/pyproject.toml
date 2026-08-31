@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "asg-escape-room"
-version = "1.1.0"
+version = "1.2.0"
 description = "Bottom-Up multi-agent narrative simulation"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["asg-core>=0.1.0", "asg-evaluation>=0.2.0", "google-genai>=1.0", "pydantic>=2.7", "python-dotenv>=1.0"]
+dependencies = ["asg-core>=0.2.0", "asg-evaluation>=0.2.0", "google-genai>=1.0", "pydantic>=2.7", "python-dotenv>=1.0"]
 
 [project.scripts]
 run-escape-room = "asg_escape_room.cli:main"

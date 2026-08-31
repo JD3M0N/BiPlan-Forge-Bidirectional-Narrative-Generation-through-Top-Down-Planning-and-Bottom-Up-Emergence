@@ -1,6 +1,5 @@
 import argparse
 import json
-from pathlib import Path
 
 from asg_console import bottom_up as bottom_up_module
 from asg_console import evaluation as evaluation_module
@@ -96,12 +95,17 @@ def test_top_down_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
     assert captured["generator_options"] == {"default_target_words": 1500}
 
 
-def test_normal_bottom_up_uses_selected_options(maps_dir, monkeypatch) -> None:
+def test_normal_bottom_up_uses_selected_options(tmp_path, maps_dir, monkeypatch) -> None:
     captured = {}
+
+    def run(args):
+        captured["args"] = args
+        return tmp_path
+
     monkeypatch.setattr(
         bottom_up_module,
         "run_one",
-        lambda args: captured.setdefault("args", args) or Path(),
+        run,
     )
     menu = BottomUpMenu(
         input_fn=input_sequence([str(maps_dir / "minimal_room.json"), "2", "42", "50", "n"]),
@@ -168,6 +172,8 @@ def test_completed_visual_run_saves_all_artifacts(tmp_path, room, maps_dir, monk
         "result.json",
         "metrics.json",
         "story.md",
+        "story.mp3",
+        "audio.json",
         "evaluation.json",
         "metadata.json",
     } <= {path.name for path in output.iterdir()}

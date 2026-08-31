@@ -77,6 +77,10 @@ def main(argv: list[str] | None = None) -> int:
             on_event=report_event,
         )
         print(f"\nHistoria terminada: {output.story_path}")
+        if output.audio_path.is_file():
+            print(f"Audio disponible en: {output.audio_path}")
+        else:
+            print("Advertencia: la historia se guardó, pero no fue posible crear el audio.")
         return 0
     except (ASGError, KeyboardInterrupt) as exc:
         message = exc.public_message() if isinstance(exc, ASGError) else "operación cancelada"

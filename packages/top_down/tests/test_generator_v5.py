@@ -1,7 +1,9 @@
 import json
 
 import pytest
+from asg_core import AudioGenerationError
 from asg_top_down import StoryGenerator
+from asg_top_down import pipeline as pipeline_module
 from asg_top_down.agents import AnalystAgent
 from asg_top_down.audit import parse_chapter_bodies
 from asg_top_down.errors import PlotValidationError
@@ -246,7 +248,7 @@ class FakeProvider:
         return prose(f"borrador{self.draft_number}-")
 
 
-def test_complete_pipeline_saves_v52_artifacts_and_agent_order(tmp_path) -> None:
+def test_complete_pipeline_saves_v53_artifacts_and_agent_order(tmp_path) -> None:
     provider = FakeProvider()
     progress = []
     events = []
@@ -268,10 +270,12 @@ def test_complete_pipeline_saves_v52_artifacts_and_agent_order(tmp_path) -> None
         "story_plan.json",
         "draft_presentation.json",
         "draft.md",
-            "review.json",
-            "revision_report.json",
+        "review.json",
+        "revision_report.json",
         "length_audit.json",
         "story.md",
+        "story.mp3",
+        "audio.json",
         "metadata.json",
         "pipeline_manifest.json",
         "llm_usage.json",
@@ -281,8 +285,11 @@ def test_complete_pipeline_saves_v52_artifacts_and_agent_order(tmp_path) -> None
         assert (run.run_dir / directory / "chapter-001.md").is_file()
         assert (run.run_dir / directory / "chapter-002.md").is_file()
     metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
-    assert metadata["pipeline_version"] == "5.2"
+    assert metadata["pipeline_version"] == "5.3"
     assert metadata["status"] == "completed"
+    assert run.audio_path.is_file()
+    manifest = json.loads((run.run_dir / "pipeline_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["artifacts"]["story.mp3"]["bytes"] == len(b"fake-mp3")
     report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
     assert [chapter["final_source"] for chapter in report["chapters"]] == [
         "revision",
@@ -305,6 +312,32 @@ def test_complete_pipeline_saves_v52_artifacts_and_agent_order(tmp_path) -> None
         "writer",
         "writer",
     ]
+
+
+def test_audio_failure_keeps_top_down_run_completed(tmp_path, monkeypatch) -> None:
+    def fail_audio(story_path):
+        (story_path.parent / "audio.json").write_text(
+            json.dumps(
+                {
+                    "status": "failed",
+                    "language": "es",
+                    "voice": "fallback",
+                    "error": "OSError",
+                }
+            ),
+            encoding="utf-8",
+        )
+        raise AudioGenerationError("tts unavailable")
+
+    monkeypatch.setattr(pipeline_module, "create_story_audio_sync", fail_audio)
+
+    run = StoryGenerator(FakeProvider(), tmp_path).run(make_request())
+
+    metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["status"] == "completed"
+    assert any("[AUDIO_GENERATION_FAILED]" in warning for warning in metadata["warnings"])
+    assert not run.audio_path.exists()
+    assert (run.run_dir / "audio.json").is_file()
 
 
 def test_invalid_initial_plan_is_replaced_once(tmp_path) -> None:

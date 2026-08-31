@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+from asg_core import AudioGenerationError
 from asg_telegram import delivery as delivery_module
 from asg_telegram import generation as generation_module
 from asg_telegram.app import TelegramStoryBot, _evaluator_name, build_application
@@ -44,16 +45,30 @@ class FakeBot:
     def __init__(self):
         self.messages = []
         self.documents = []
+        self.audios = []
         self.edits = []
+        self.events = []
 
     async def send_message(self, **kwargs):
         self.messages.append(kwargs)
+        if kwargs.get("parse_mode") == "HTML":
+            self.events.append("fragment")
 
     async def send_document(self, **kwargs):
+        self.events.append("document")
         self.documents.append(
             {
                 **kwargs,
                 "content": kwargs["document"].read().decode("utf-8"),
+            }
+        )
+
+    async def send_audio(self, **kwargs):
+        self.events.append("audio")
+        self.audios.append(
+            {
+                **kwargs,
+                "content": kwargs["audio"].read(),
             }
         )
 
@@ -65,6 +80,17 @@ def make_story(tmp_path, text="# Historia\n\nContenido"):
     directory = tmp_path / "story"
     directory.mkdir()
     (directory / "story.md").write_text(text, encoding="utf-8")
+    (directory / "story.mp3").write_bytes(b"fake-mp3")
+    (directory / "audio.json").write_text(
+        json.dumps(
+            {
+                "status": "completed",
+                "language": "es",
+                "voice": "es-MX-FakeNeural",
+            }
+        ),
+        encoding="utf-8",
+    )
     return directory
 
 
@@ -88,6 +114,9 @@ def test_generation_delivers_messages_document_and_starts_evaluation(tmp_path):
 
     assert generator.prompts == ["Una historia"]
     assert fake_bot.documents[0]["content"] == (story / "story.md").read_bytes().decode("utf-8")
+    assert fake_bot.audios[0]["content"] == b"fake-mp3"
+    assert fake_bot.audios[0]["title"] == "Historia"
+    assert fake_bot.events[:3] == ["document", "audio", "fragment"]
     assert (story / "story.md").read_text(encoding="utf-8") == ("# Historia\n\nContenido")
     assert fake_bot.messages[0]["parse_mode"] == "HTML"
     assert context.user_data["state"] == "evaluating"
@@ -288,6 +317,19 @@ class RetryingDocumentBot(FakeBot):
         await super().send_document(**kwargs)
 
 
+class RetryingAudioBot(FakeBot):
+    def __init__(self, failures):
+        super().__init__()
+        self.failures = list(failures)
+        self.audio_attempts = 0
+
+    async def send_audio(self, **kwargs):
+        self.audio_attempts += 1
+        if self.failures:
+            raise self.failures.pop(0)
+        await super().send_audio(**kwargs)
+
+
 def test_document_retries_temporary_network_errors(tmp_path, monkeypatch):
     story = make_story(tmp_path)
     handler = TelegramStoryBot(FakeGenerator(story))
@@ -349,6 +391,78 @@ def test_permanent_document_error_is_not_retried(tmp_path):
 
     assert not delivered
     assert bot.document_attempts == 1
+
+
+def test_audio_retries_temporary_network_errors(tmp_path, monkeypatch):
+    story = make_story(tmp_path)
+    handler = TelegramStoryBot(FakeGenerator(story))
+    bot = RetryingAudioBot([TimedOut(), TimedOut()])
+    context = SimpleNamespace(bot=bot, user_data={})
+    user = SimpleNamespace(id=1, username="ana", full_name="Ana")
+    monkeypatch.setattr(delivery_module, "AUDIO_RETRY_DELAYS", (0, 0, 0))
+
+    delivered = asyncio.run(
+        handler._deliver_audio(
+            context=context,
+            chat_id=2,
+            user=user,
+            story_path=story / "story.md",
+            story=(story / "story.md").read_text(encoding="utf-8"),
+        )
+    )
+
+    assert delivered
+    assert bot.audio_attempts == 3
+    assert bot.audios[0]["content"] == b"fake-mp3"
+
+
+def test_audio_rejection_does_not_block_evaluation(tmp_path):
+    story = make_story(tmp_path)
+    handler = TelegramStoryBot(FakeGenerator(story))
+    bot = RetryingAudioBot([BadRequest("audio rechazado")])
+    context = SimpleNamespace(bot=bot, user_data={})
+    user = SimpleNamespace(id=1, username="ana", full_name="Ana")
+
+    asyncio.run(
+        handler._generate_and_deliver(
+            context=context,
+            chat_id=2,
+            user=user,
+            prompt="Historia",
+        )
+    )
+
+    assert bot.audio_attempts == 1
+    assert any("Telegram no pudo recibir el MP3" in message["text"] for message in bot.messages)
+    assert context.user_data["state"] == "evaluating"
+
+
+def test_audio_generation_failure_does_not_block_evaluation(tmp_path, monkeypatch):
+    story = make_story(tmp_path)
+    (story / "story.mp3").unlink()
+    (story / "audio.json").unlink()
+
+    async def fail_audio(story_path):
+        raise AudioGenerationError("tts unavailable")
+
+    monkeypatch.setattr(delivery_module, "create_story_audio", fail_audio)
+    handler = TelegramStoryBot(FakeGenerator(story))
+    bot = FakeBot()
+    context = SimpleNamespace(bot=bot, user_data={})
+    user = SimpleNamespace(id=1, username="ana", full_name="Ana")
+
+    asyncio.run(
+        handler._generate_and_deliver(
+            context=context,
+            chat_id=2,
+            user=user,
+            prompt="Historia",
+        )
+    )
+
+    assert not bot.audios
+    assert any("no pude crear su audio" in message["text"] for message in bot.messages)
+    assert context.user_data["state"] == "evaluating"
 
 
 class FragmentTimeoutBot(FakeBot):

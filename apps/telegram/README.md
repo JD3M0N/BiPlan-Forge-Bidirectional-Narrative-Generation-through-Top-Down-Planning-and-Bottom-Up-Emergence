@@ -14,6 +14,7 @@ TELEGRAM_BOT_TOKEN=token_entregado_por_BotFather
 STORY_GENERATOR=top-down
 GEMINI_API_KEY=tu_clave
 GEMINI_MODEL=gemini-2.5-flash
+TTS_FALLBACK_VOICE=
 ```
 
 3. Desde la raíz instala las dependencias y ejecuta:
@@ -39,10 +40,10 @@ El proceso utiliza polling y no requiere dominio ni webhook.
 ### Entrega de historias
 
 Las historias se generan en paralelo, pero se entregan de una en una para no
-saturar la conexión con Telegram. El archivo `story.md` se envía primero y se
-reintenta automáticamente ante fallos temporales. Los mensajes formateados se
-envían después; si uno falla, el usuario conserva el archivo completo y puede
-continuar con la evaluación sin regenerar la historia.
+saturar la conexión con Telegram. La entrega usa el orden `story.md`,
+`story.mp3`, fragmentos formateados y evaluación. Tanto el documento como el
+audio se reintentan ante fallos temporales. Si la síntesis o el envío del MP3
+falla, el bot informa al usuario y continúa con el texto y la evaluación.
 
 ## Cambiar el generador
 
