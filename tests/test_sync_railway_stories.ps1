@@ -17,6 +17,44 @@ function Assert-True {
     }
 }
 
+# Create one fake run whose manifest hashes match its on-disk artifacts.
+function New-TestRun {
+    param(
+        [string]$Root,
+        [string]$Name,
+        [string]$Status = "completed",
+        [switch]$CorruptHash,
+        [switch]$OmitManifest
+    )
+
+    $run = Join-Path $Root $Name
+    New-Item -ItemType Directory -Path $run -Force | Out-Null
+    $metadataPath = Join-Path $run "metadata.json"
+    [pscustomobject]@{ run_id = $Name; status = $Status; pipeline_version = "5.2" } |
+        ConvertTo-Json |
+        Set-Content -LiteralPath $metadataPath -Encoding UTF8
+    if ($Status -eq "completed") {
+        Set-Content -LiteralPath (Join-Path $run "story.md") -Value "story for $Name" -Encoding UTF8
+    }
+    elseif ($Status -eq "failed") {
+        Set-Content -LiteralPath (Join-Path $run "error_report.json") -Value "{}" -Encoding UTF8
+    }
+    if (-not $OmitManifest) {
+        $artifacts = [ordered]@{}
+        foreach ($file in (Get-ChildItem -LiteralPath $run -File)) {
+            $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($CorruptHash -and $file.Name -eq "story.md") {
+                $hash = "0" * 64
+            }
+            $artifacts[$file.Name] = [ordered]@{ sha256 = $hash; bytes = $file.Length }
+        }
+        [ordered]@{ run_id = $Name; artifacts = $artifacts } |
+            ConvertTo-Json -Depth 5 |
+            Set-Content -LiteralPath (Join-Path $run "pipeline_manifest.json") -Encoding UTF8
+    }
+    return $run
+}
+
 # Run the sync script and return its expected nonzero exit code.
 function Invoke-SyncExpectFailure {
     param([string]$PowerShellPath, [string]$ScriptPath)
@@ -82,52 +120,106 @@ if ($command -match '^service files download ') {
     Write-Output '{"ok":true}'
     exit 0
 }
+if ($command -match '^service files delete ') {
+    $remotePath = $CliArgs[3]
+    $name = ($remotePath.Replace('\', '/') -split '/')[-1]
+    Add-Content -LiteralPath $env:FAKE_RAILWAY_DELETE_LOG -Value $name
+    if ($name -eq $env:FAKE_RAILWAY_DELETE_FAIL_NAME) { exit 7 }
+    Remove-Item -LiteralPath (Join-Path $env:FAKE_RAILWAY_SOURCE $name) -Recurse -Force
+    Write-Output '{"ok":true}'
+    exit 0
+}
 exit 2
 '@
     Set-Content -LiteralPath (Join-Path $fakeBin "railway.ps1") `
         -Value $fakeRailway -Encoding UTF8
 
-    $existing = Join-Path $testRepo "Stories\Top-Down\existing-run"
-    $existingRemote = Join-Path $fakeRemote "existing-run"
-    $newRemote = Join-Path $fakeRemote "new-run"
-    New-Item -ItemType Directory -Path $existing, $existingRemote, $newRemote -Force | Out-Null
+    $localRuns = Join-Path $testRepo "Stories\Top-Down"
+    New-Item -ItemType Directory -Path $localRuns -Force | Out-Null
+    $existing = New-TestRun -Root $localRuns -Name "existing-run"
+    $existingRemote = New-TestRun -Root $fakeRemote -Name "existing-run"
+    $newRemote = New-TestRun -Root $fakeRemote -Name "new-run"
     Set-Content -LiteralPath (Join-Path $existing "local-marker.txt") -Value "local"
-    Set-Content -LiteralPath (Join-Path $existingRemote "story.md") -Value "remote story"
-    Set-Content -LiteralPath (Join-Path $newRemote "story.md") -Value "new story"
 
     $env:PATH = "$fakeBin;$originalPath"
     $env:FAKE_RAILWAY_SOURCE = $fakeRemote
     $env:FAKE_RAILWAY_LOG = Join-Path $testRoot "downloads.log"
+    $env:FAKE_RAILWAY_DELETE_LOG = Join-Path $testRoot "deletes.log"
     $env:FAKE_RAILWAY_MODE = ""
     $env:FAKE_RAILWAY_FAIL_NAME = ""
+    $env:FAKE_RAILWAY_DELETE_FAIL_NAME = ""
 
-    & $powershellExe -NoProfile -ExecutionPolicy Bypass -File `
-        (Join-Path $testRepo "sync-railway-stories.ps1")
+    & $powershellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $testRepo "sync-railway-stories.ps1")
     Assert-True ($LASTEXITCODE -eq 0) "La sincronización inicial falló."
     Assert-True (Test-Path (Join-Path $testRepo "Stories\Top-Down\new-run\story.md")) `
         "No se descargó la ejecución nueva."
     Assert-True ((Get-Content (Join-Path $existing "local-marker.txt")) -eq "local") `
         "Se modificó una ejecución local existente."
+    Assert-True (-not (Test-Path $existingRemote)) "No se borró la ejecución remota ya archivada."
+    Assert-True (-not (Test-Path $newRemote)) "No se borró la ejecución recién descargada."
+    Assert-True (@(Get-Content $env:FAKE_RAILWAY_DELETE_LOG).Count -eq 2) "No se registraron los dos borrados remotos esperados."
     Assert-True (-not (Test-Path (Join-Path $testRepo "Stories\.railway-sync"))) `
         "No se limpió el staging después del éxito."
 
-    & $powershellExe -NoProfile -ExecutionPolicy Bypass -File `
-        (Join-Path $testRepo "sync-railway-stories.ps1")
+    $secondOutput = @(
+        & $powershellExe -NoProfile -ExecutionPolicy Bypass -File (
+            Join-Path $testRepo "sync-railway-stories.ps1"
+        )
+    )
     Assert-True ($LASTEXITCODE -eq 0) "La segunda sincronización falló."
-    Assert-True (@(Get-Content $env:FAKE_RAILWAY_LOG).Count -eq 1) `
-        "Se volvió a descargar una ejecución existente."
+    Assert-True (@(Get-Content $env:FAKE_RAILWAY_LOG).Count -eq 1) "Se volvió a descargar una ejecución existente."
+    Assert-True (($secondOutput -join [Environment]::NewLine) -match "0 descargadas, 0 ya locales, 0 borradas") "El resumen no sustituyó correctamente sus contadores."
 
-    $failedRemote = Join-Path $fakeRemote "failed-run"
-    New-Item -ItemType Directory -Path $failedRemote -Force | Out-Null
-    Set-Content -LiteralPath (Join-Path $failedRemote "story.md") -Value "partial"
+    $deleteFailRemote = New-TestRun -Root $fakeRemote -Name "delete-fail-run"
+    $env:FAKE_RAILWAY_DELETE_FAIL_NAME = "delete-fail-run"
+    & $powershellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $testRepo "sync-railway-stories.ps1")
+    Assert-True ($LASTEXITCODE -eq 1) "Un borrado fallido no devolvió código 1."
+    Assert-True (Test-Path (Join-Path $localRuns "delete-fail-run\story.md")) "Se perdió la copia local tras fallar el borrado."
+    Assert-True (Test-Path $deleteFailRemote) "Se eliminó la copia remota pese al fallo simulado."
+    $downloadsBeforeRetry = @(Get-Content $env:FAKE_RAILWAY_LOG).Count
+    $env:FAKE_RAILWAY_DELETE_FAIL_NAME = ""
+    & $powershellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $testRepo "sync-railway-stories.ps1")
+    Assert-True ($LASTEXITCODE -eq 0) "El reintento del borrado falló."
+    Assert-True (@(Get-Content $env:FAKE_RAILWAY_LOG).Count -eq $downloadsBeforeRetry) "El reintento volvió a descargar la ejecución."
+    Assert-True (-not (Test-Path $deleteFailRemote)) "El reintento no borró la copia remota."
+
+    $failedRemote = New-TestRun -Root $fakeRemote -Name "failed-run"
     $env:FAKE_RAILWAY_FAIL_NAME = "failed-run"
-    & $powershellExe -NoProfile -ExecutionPolicy Bypass -File `
-        (Join-Path $testRepo "sync-railway-stories.ps1")
+    & $powershellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $testRepo "sync-railway-stories.ps1")
     Assert-True ($LASTEXITCODE -eq 1) "Una descarga fallida no devolvió código 1."
-    Assert-True (-not (Test-Path (Join-Path $testRepo "Stories\Top-Down\failed-run"))) `
-        "Una descarga fallida dejó una carpeta final incompleta."
+    Assert-True (-not (Test-Path (Join-Path $localRuns "failed-run"))) "Una descarga fallida dejó una carpeta final incompleta."
+    Assert-True (Test-Path $failedRemote) "Una descarga fallida borró la copia remota."
+    Remove-Item -LiteralPath $failedRemote -Recurse -Force
 
     $env:FAKE_RAILWAY_FAIL_NAME = ""
+    $corruptRemote = New-TestRun -Root $fakeRemote -Name "corrupt-run" -CorruptHash
+    & $powershellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $testRepo "sync-railway-stories.ps1")
+    Assert-True ($LASTEXITCODE -eq 1) "Un hash incorrecto no devolvió código 1."
+    Assert-True (-not (Test-Path (Join-Path $localRuns "corrupt-run"))) "Se archivó una ejecución con hash incorrecto."
+    Assert-True (Test-Path $corruptRemote) "Se borró una ejecución remota con hash incorrecto."
+    Remove-Item -LiteralPath $corruptRemote -Recurse -Force
+
+    $missingManifest = New-TestRun -Root $fakeRemote -Name "missing-manifest" -OmitManifest
+    & $powershellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $testRepo "sync-railway-stories.ps1")
+    Assert-True ($LASTEXITCODE -eq 1) "Un manifiesto ausente no devolvió código 1."
+    Assert-True (-not (Test-Path (Join-Path $localRuns "missing-manifest"))) "Se archivó una ejecución sin manifiesto."
+    Assert-True (Test-Path $missingManifest) "Se borró una ejecución remota sin manifiesto."
+    Remove-Item -LiteralPath $missingManifest -Recurse -Force
+
+    $runningRemote = New-TestRun -Root $fakeRemote -Name "running-run" -Status "running"
+    & $powershellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $testRepo "sync-railway-stories.ps1")
+    Assert-True ($LASTEXITCODE -eq 0) "Una ejecución activa produjo un fallo."
+    Assert-True (-not (Test-Path (Join-Path $localRuns "running-run"))) "Se archivó una ejecución todavía activa."
+    Assert-True (Test-Path $runningRemote) "Se borró una ejecución todavía activa."
+    Remove-Item -LiteralPath $runningRemote -Recurse -Force
+
+    $keptRemote = New-TestRun -Root $fakeRemote -Name "kept-run"
+    & $powershellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $testRepo "sync-railway-stories.ps1") -KeepRemote
+    Assert-True ($LASTEXITCODE -eq 0) "-KeepRemote produjo un fallo."
+    Assert-True (Test-Path (Join-Path $localRuns "kept-run\story.md")) "-KeepRemote no descargó la ejecución."
+    Assert-True (Test-Path $keptRemote) "-KeepRemote borró la ejecución remota."
+    Remove-Item -LiteralPath $keptRemote -Recurse -Force
+
     $env:FAKE_RAILWAY_MODE = "invalid-json"
     $failureCode = Invoke-SyncExpectFailure -PowerShellPath $powershellExe `
         -ScriptPath (Join-Path $testRepo "sync-railway-stories.ps1")
@@ -154,8 +246,10 @@ finally {
     $env:PATH = $originalPath
     Remove-Item Env:FAKE_RAILWAY_SOURCE -ErrorAction SilentlyContinue
     Remove-Item Env:FAKE_RAILWAY_LOG -ErrorAction SilentlyContinue
+    Remove-Item Env:FAKE_RAILWAY_DELETE_LOG -ErrorAction SilentlyContinue
     Remove-Item Env:FAKE_RAILWAY_MODE -ErrorAction SilentlyContinue
     Remove-Item Env:FAKE_RAILWAY_FAIL_NAME -ErrorAction SilentlyContinue
+    Remove-Item Env:FAKE_RAILWAY_DELETE_FAIL_NAME -ErrorAction SilentlyContinue
     if (Test-Path -LiteralPath $testRoot) {
         $resolvedTestRoot = (Resolve-Path -LiteralPath $testRoot).Path
         $resolvedTempRoot = (Resolve-Path -LiteralPath ([System.IO.Path]::GetTempPath())).Path

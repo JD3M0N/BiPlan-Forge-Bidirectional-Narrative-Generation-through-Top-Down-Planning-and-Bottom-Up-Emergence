@@ -347,7 +347,7 @@ class GenerationCoordinator(TelegramDelivery):
         await self._report_warnings(context, chat_id, user, story_directory)
 
     async def _report_warnings(self, context, chat_id: int, user, story_directory: Path) -> None:
-        """Send the first persisted quality warning for a completed run."""
+        """Send one consolidated, actionable warning summary for a completed run."""
         metadata_path = story_directory / "metadata.json"
         if not metadata_path.is_file():
             return
@@ -356,6 +356,29 @@ class GenerationCoordinator(TelegramDelivery):
             warnings = metadata.get("warnings", [])
             if not warnings:
                 return
+            details = self._revision_warning_details(story_directory)
+            writer_warning = any(
+                str(warning).startswith("[WRITER_REVISION_REJECTED]") for warning in warnings
+            )
+            remaining = [
+                str(warning)
+                for warning in warnings
+                if not (
+                    details
+                    and str(warning).startswith("[WRITER_REVISION_REJECTED]")
+                )
+            ]
+            if details:
+                remaining = details + remaining
+            elif not writer_warning:
+                remaining = [str(warning) for warning in warnings]
+            message = (
+                "La historia se completó, pero la revisión automática dejó "
+                "estas advertencias:\n- "
+                + "\n- ".join(remaining)
+            )
+            if len(message) > 3500:
+                message = message[:3440].rstrip() + "\n- Consulta revision_report.json para más detalles."
             log_user_action(
                 LOGGER,
                 user_id=user.id,
@@ -367,12 +390,70 @@ class GenerationCoordinator(TelegramDelivery):
             await self._safe_notice(
                 context,
                 chat_id,
-                "La historia se completó, pero la revisión automática dejó esta "
-                f"advertencia: {warnings[0]}",
+                message,
                 user,
             )
         except (OSError, ValueError, TypeError):
             LOGGER.warning("No se pudieron leer las advertencias de la ejecución")
+
+    @staticmethod
+    def _revision_warning_details(story_directory: Path) -> list[str]:
+        """Format structured Writer fallbacks and the final length impact."""
+        report_path = story_directory / "revision_report.json"
+        if not report_path.is_file():
+            return []
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        details: list[str] = []
+        for chapter in report.get("chapters", []):
+            if chapter.get("warning_code") != "WRITER_REVISION_REJECTED":
+                continue
+            attempts = chapter.get("attempts", [])
+            diagnostics = [
+                attempt.get("diagnostic")
+                for attempt in attempts
+                if attempt.get("status") == "rejected" and attempt.get("diagnostic")
+            ]
+            if diagnostics and all(
+                diagnostic.get("code") == "WORD_COUNT_OUT_OF_RANGE"
+                for diagnostic in diagnostics
+            ):
+                counts = " y ".join(
+                    str(diagnostic.get("actual_words", "?")) for diagnostic in diagnostics
+                )
+                latest = diagnostics[-1]
+                details.append(
+                    f"Capítulo {chapter.get('chapter_index')}: {len(diagnostics)} "
+                    f"revisiones descartadas por longitud ({counts} palabras; rango válido "
+                    f"{latest.get('minimum_words')}-{latest.get('maximum_words')}). "
+                    f"Se entregó el borrador de {chapter.get('draft_words')} palabras. "
+                    "Código: WRITER_REVISION_REJECTED."
+                )
+                continue
+            failed = [
+                attempt.get("exception_type", "error interno")
+                for attempt in attempts
+                if attempt.get("status") == "failed"
+            ]
+            reasons = [
+                diagnostic.get("code", "RECHAZO_DESCONOCIDO")
+                for diagnostic in diagnostics
+            ] + failed
+            details.append(
+                f"Capítulo {chapter.get('chapter_index')}: no hubo una revisión válida "
+                f"({', '.join(reasons) or 'sin diagnóstico'}). Se entregó el borrador de "
+                f"{chapter.get('draft_words')} palabras. Código: WRITER_REVISION_REJECTED."
+            )
+
+        audit_path = story_directory / "length_audit.json"
+        if details and audit_path.is_file():
+            audit = json.loads(audit_path.read_text(encoding="utf-8"))
+            total = audit.get("total", {})
+            if total and not total.get("within_tolerance", True):
+                details.append(
+                    f"Longitud final: {total.get('actual_words')} palabras; mínimo esperado "
+                    f"{total.get('minimum_words')} y objetivo {total.get('target_words')}."
+                )
+        return details
 
     async def _deliver_completed_run(
         self,

@@ -19,7 +19,7 @@ from .agents import (
     WorldBuilderAgent,
     WriterAgent,
 )
-from .audit import audit_chapter, audit_story, canonical_chapter
+from .audit import audit_chapter, audit_story, canonical_chapter, word_bounds, word_count
 from .errors import PlotValidationError
 from .graph import (
     chapter_event_budgets,
@@ -30,16 +30,20 @@ from .progress import PipelineEvent, PipelineEventCallback, ProgressCallback, Pr
 from .schemas import (
     ChapterLengthAudit,
     ChapterPlan,
+    ChapterRevisionAttempt,
+    ChapterRevisionResult,
     CharactersArtifact,
     LLMUsageArtifact,
     PlotEvent,
     RevisionNote,
+    RevisionReport,
     StoryPlan,
     StoryPlanDraft,
     StoryPresentation,
     StoryRequest,
     StoryReview,
     WorldArtifact,
+    WriterCandidateDiagnostic,
 )
 from .storage import ArtifactRepository
 
@@ -549,6 +553,7 @@ class StoryPipeline:
         writer = WriterAgent(self.provider)
         event_by_id = {event.id: event for event in plan.events}
         revised_bodies: list[str] = []
+        revision_results: list[ChapterRevisionResult] = []
         for index, (chapter, draft_body) in enumerate(
             zip(plan.chapters, draft_bodies, strict=True),
             1,
@@ -567,7 +572,7 @@ class StoryPipeline:
                 if event_by_id[event_id].chapter_id == chapter.id
             ]
             notes = self._notes_for_chapter(review.notes, chapter, events)
-            accepted = self._revise_one_chapter(
+            accepted, result = self._revise_one_chapter(
                 writer,
                 request,
                 plan,
@@ -580,7 +585,12 @@ class StoryPipeline:
                 index,
             )
             revised_bodies.append(accepted)
+            revision_results.append(result)
             self.repository.save_text(f"revisions/chapter-{index:03d}.md", accepted)
+            self.repository.save_json(
+                "revision_report.json",
+                RevisionReport(chapters=revision_results),
+            )
         self.repository.complete_stage("revision")
         return self._assemble_story(plan, presentation, revised_bodies)
 
@@ -614,11 +624,15 @@ class StoryPipeline:
         draft_body: str,
         previous_revised: str,
         chapter_index: int,
-    ) -> str:
+    ) -> tuple[str, ChapterRevisionResult]:
         """Return the first valid Writer candidate or the safe original fallback."""
         assert self.repository is not None
+        minimum, maximum = word_bounds(chapter.target_words)
+        draft_words = word_count(draft_body)
+        attempts: list[ChapterRevisionAttempt] = []
         retry_feedback = ""
         for attempt in range(1, 3):
+            prefix = f"writer/chapter-{chapter_index:03d}-attempt-{attempt:03d}"
             try:
 
                 def revise_chapter(feedback_snapshot: str = retry_feedback):
@@ -637,33 +651,78 @@ class StoryPipeline:
 
                 candidate = self._call_agent("writer", revise_chapter).strip()
             except Exception as exc:
+                attempt_result = ChapterRevisionAttempt(
+                    attempt=attempt,
+                    status="failed",
+                    exception_type=type(exc).__name__,
+                )
+                attempts.append(attempt_result)
+                self.repository.save_json(f"{prefix}-validation.json", attempt_result)
                 warning = (
-                    f"Writer no pudo corregir el capítulo {chapter_index}; se conservó "
-                    f"su borrador ({type(exc).__name__})."
+                    "[WRITER_REVISION_REJECTED] Writer no pudo corregir el capítulo "
+                    f"{chapter_index}; el intento {attempt} falló con "
+                    f"{type(exc).__name__} y se conservó el borrador de {draft_words} "
+                    "palabras."
                 )
                 self.repository.add_warning(warning)
                 self._emit("writer_fallback", warning, stage="revision")
-                return draft_body
-            issue = self._writer_candidate_issue(candidate, draft_body, chapter, notes)
-            if issue is None:
-                return candidate
-            prefix = f"writer/chapter-{chapter_index:03d}-attempt-{attempt:03d}"
+                return draft_body, ChapterRevisionResult(
+                    chapter_id=chapter.id,
+                    chapter_index=chapter_index,
+                    note_ids=[note.id for note in notes],
+                    draft_words=draft_words,
+                    target_words=chapter.target_words,
+                    minimum_words=minimum,
+                    maximum_words=maximum,
+                    attempts=attempts,
+                    final_source="draft",
+                    final_words=draft_words,
+                    warning_code="WRITER_REVISION_REJECTED",
+                )
             self.repository.save_text(f"{prefix}.md", candidate)
-            self.repository.save_data(
-                f"{prefix}-validation.json",
-                {"attempt": attempt, "issue": issue},
+            diagnostic = self._writer_candidate_issue(candidate, draft_body, chapter, notes)
+            attempt_result = ChapterRevisionAttempt(
+                attempt=attempt,
+                status="accepted" if diagnostic is None else "rejected",
+                artifact=f"{prefix}.md",
+                diagnostic=diagnostic,
             )
+            attempts.append(attempt_result)
+            self.repository.save_json(f"{prefix}-validation.json", attempt_result)
+            if diagnostic is None:
+                return candidate, ChapterRevisionResult(
+                    chapter_id=chapter.id,
+                    chapter_index=chapter_index,
+                    note_ids=[note.id for note in notes],
+                    draft_words=draft_words,
+                    target_words=chapter.target_words,
+                    minimum_words=minimum,
+                    maximum_words=maximum,
+                    attempts=attempts,
+                    final_source="revision",
+                    final_words=word_count(candidate),
+                )
             retry_feedback = (
                 "\n\nRETRY CORRECTION:\nThe previous rewrite was rejected because "
-                f"{issue}. Return a complete corrected chapter body."
+                f"{diagnostic.message}. {diagnostic.retry_instruction} "
+                "Return a complete corrected chapter body."
             )
-        warning = (
-            f"Writer no produjo una revisión válida para el capítulo {chapter_index}; "
-            "se conservó el borrador."
-        )
+        warning = self._writer_fallback_warning(chapter_index, draft_words, attempts)
         self.repository.add_warning(warning)
         self._emit("writer_fallback", warning, stage="revision")
-        return draft_body
+        return draft_body, ChapterRevisionResult(
+            chapter_id=chapter.id,
+            chapter_index=chapter_index,
+            note_ids=[note.id for note in notes],
+            draft_words=draft_words,
+            target_words=chapter.target_words,
+            minimum_words=minimum,
+            maximum_words=maximum,
+            attempts=attempts,
+            final_source="draft",
+            final_words=draft_words,
+            warning_code="WRITER_REVISION_REJECTED",
+        )
 
     @staticmethod
     def _writer_candidate_issue(
@@ -671,18 +730,85 @@ class StoryPipeline:
         draft_body: str,
         chapter: ChapterPlan,
         notes: list[RevisionNote],
-    ) -> str | None:
+    ) -> WriterCandidateDiagnostic | None:
         """Explain why a Writer candidate cannot replace the draft."""
+        audit = audit_chapter(chapter, candidate)
+        common = {
+            "actual_words": audit.actual_words,
+            "target_words": audit.target_words,
+            "minimum_words": audit.minimum_words,
+            "maximum_words": audit.maximum_words,
+        }
         if not candidate.strip():
-            return "the chapter body is empty"
+            return WriterCandidateDiagnostic(
+                code="EMPTY_CHAPTER_BODY",
+                message="the chapter body is empty",
+                retry_instruction=(
+                    f"Write between {audit.minimum_words} and {audit.maximum_words} words."
+                ),
+                required_delta_words=audit.minimum_words,
+                **common,
+            )
         if any(line.lstrip().startswith("#") for line in candidate.splitlines()):
-            return "the chapter body contains Markdown headings"
-        if not audit_chapter(chapter, candidate).within_tolerance:
-            return "the chapter word count is outside the 90-120 percent tolerance"
+            return WriterCandidateDiagnostic(
+                code="MARKDOWN_HEADINGS",
+                message="the chapter body contains Markdown headings",
+                retry_instruction="Remove every Markdown heading while preserving the prose body.",
+                **common,
+            )
+        if not audit.within_tolerance:
+            delta = (
+                audit.minimum_words - audit.actual_words
+                if audit.actual_words < audit.minimum_words
+                else audit.maximum_words - audit.actual_words
+            )
+            action = "Add at least" if delta > 0 else "Remove at least"
+            return WriterCandidateDiagnostic(
+                code="WORD_COUNT_OUT_OF_RANGE",
+                message=(
+                    f"the chapter has {audit.actual_words} words; the accepted range is "
+                    f"{audit.minimum_words}-{audit.maximum_words}"
+                ),
+                retry_instruction=(
+                    f"{action} {abs(delta)} words and keep the complete rewrite between "
+                    f"{audit.minimum_words} and {audit.maximum_words} words."
+                ),
+                required_delta_words=delta,
+                **common,
+            )
         significant = any(note.priority in {"critical", "major"} for note in notes)
         if significant and candidate.strip() == draft_body.strip():
-            return "the text is unchanged despite critical or major revision notes"
+            return WriterCandidateDiagnostic(
+                code="UNCHANGED_SIGNIFICANT_NOTES",
+                message="the text is unchanged despite critical or major revision notes",
+                retry_instruction="Apply every critical and major note with visible prose changes.",
+                **common,
+            )
         return None
+
+    @staticmethod
+    def _writer_fallback_warning(
+        chapter_index: int,
+        draft_words: int,
+        attempts: list[ChapterRevisionAttempt],
+    ) -> str:
+        """Build a concise Spanish warning from the structured rejection trail."""
+        diagnostics = [item.diagnostic for item in attempts if item.diagnostic is not None]
+        if diagnostics and all(item.code == "WORD_COUNT_OUT_OF_RANGE" for item in diagnostics):
+            counts = " y ".join(str(item.actual_words) for item in diagnostics)
+            latest = diagnostics[-1]
+            return (
+                "[WRITER_REVISION_REJECTED] Capítulo "
+                f"{chapter_index}: {len(diagnostics)} revisiones descartadas por longitud "
+                f"({counts} palabras; rango válido {latest.minimum_words}-"
+                f"{latest.maximum_words}). Se entregó el borrador de {draft_words} palabras."
+            )
+        codes = ", ".join(item.code for item in diagnostics) or "WRITER_EXCEPTION"
+        return (
+            "[WRITER_REVISION_REJECTED] Capítulo "
+            f"{chapter_index}: no hubo una revisión válida tras {len(attempts)} intentos "
+            f"({codes}). Se entregó el borrador de {draft_words} palabras."
+        )
 
     def _finalize(
         self,

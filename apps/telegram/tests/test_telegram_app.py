@@ -152,6 +152,80 @@ def test_generation_notifies_quality_warning_and_still_starts_evaluation(tmp_pat
     assert bot.documents
 
 
+def test_generation_summarizes_structured_revision_warning(tmp_path):
+    story = make_story(tmp_path)
+    (story / "metadata.json").write_text(
+        json.dumps({"warnings": ["[WRITER_REVISION_REJECTED] fallback"]}),
+        encoding="utf-8",
+    )
+    (story / "revision_report.json").write_text(
+        json.dumps(
+            {
+                "chapters": [
+                    {
+                        "chapter_index": 1,
+                        "draft_words": 470,
+                        "warning_code": "WRITER_REVISION_REJECTED",
+                        "attempts": [
+                            {
+                                "status": "rejected",
+                                "diagnostic": {
+                                    "code": "WORD_COUNT_OUT_OF_RANGE",
+                                    "actual_words": 499,
+                                    "minimum_words": 675,
+                                    "maximum_words": 900,
+                                },
+                            },
+                            {
+                                "status": "rejected",
+                                "diagnostic": {
+                                    "code": "WORD_COUNT_OUT_OF_RANGE",
+                                    "actual_words": 550,
+                                    "minimum_words": 675,
+                                    "maximum_words": 900,
+                                },
+                            },
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    (story / "length_audit.json").write_text(
+        json.dumps(
+            {
+                "total": {
+                    "actual_words": 1295,
+                    "minimum_words": 1350,
+                    "target_words": 1500,
+                    "within_tolerance": False,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    handler = TelegramStoryBot(FakeGenerator(story))
+    bot = FakeBot()
+    context = SimpleNamespace(bot=bot, user_data={})
+    user = SimpleNamespace(id=12, username="ana", full_name="Ana")
+
+    asyncio.run(
+        handler._generate_and_deliver(
+            context=context,
+            chat_id=20,
+            user=user,
+            prompt="Una historia",
+        )
+    )
+
+    warning = next(message["text"] for message in bot.messages if "Código:" in message["text"])
+    assert "499 y 550 palabras" in warning
+    assert "borrador de 470 palabras" in warning
+    assert "Longitud final: 1295 palabras" in warning
+    assert "mínimo esperado 1350" in warning
+
+
 def test_generation_reports_actionable_safe_error() -> None:
     handler = TelegramStoryBot(FailingGenerator())
     bot = FakeBot()

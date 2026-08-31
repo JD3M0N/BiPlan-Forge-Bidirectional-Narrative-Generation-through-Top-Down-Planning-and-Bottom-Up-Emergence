@@ -1,6 +1,6 @@
-# ASG Top-Down 5.2
+# ASG Top-Down 5.3
 
-Top-Down 5.2 genera historias con el contrato de artefactos 5.1:
+Top-Down 5.3 genera historias con el contrato de artefactos 5.2:
 
 ```text
 Analyst → World → Characters → Plot Planner → Plan Critic
@@ -40,8 +40,9 @@ primer plan válido. Después de congelar el plan, los únicos agentes son
 
 `Writer` corrige por capítulos y dispone de un reintento cuando devuelve texto
 idéntico pese a notas importantes, introduce encabezados o incumple el rango de
-longitud del 90–120 %. Un fallo tardío conserva el capítulo o borrador disponible
-y queda registrado en `metadata.json.warnings`.
+longitud del 90–120 %. El reintento recibe conteos y límites exactos. Un fallo
+tardío conserva el capítulo o borrador disponible, queda resumido en
+`metadata.json.warnings` y detallado en `revision_report.json`.
 
 ## Artefactos
 
@@ -59,6 +60,7 @@ chapters/chapter-*.md
 draft.md
 review.json
 writer/chapter-*-attempt-*
+revision_report.json
 revisions/chapter-*.md
 length_audit.json
 llm_calls.jsonl
@@ -67,9 +69,10 @@ pipeline_manifest.json
 story.md
 ```
 
-Los artefactos de intentos solo aparecen cuando son necesarios. Los runs nuevos
-usan `pipeline_version: 5.1`; `StoryRun` puede abrir runs terminados 5.0 y
-5.1. `compare-story-runs` continúa aceptando cualquier run con `story.md`.
+Todos los intentos del Writer quedan archivados con su validación estructurada.
+Los runs nuevos usan `pipeline_version: 5.2`; `StoryRun` puede abrir runs
+terminados 5.0, 5.1 y 5.2. `compare-story-runs` continúa aceptando cualquier
+run con `story.md`.
 
 ```powershell
 python -m pytest packages/top_down/tests

@@ -4,18 +4,25 @@ Descarga desde Railway las ejecuciones Top-Down que no existen localmente.
 
 .DESCRIPTION
 Compara las carpetas de /app/Stories/Top-Down del servicio Railway enlazado
-con Stories/Top-Down del repositorio. Descarga solamente las carpetas ausentes,
-sin sobrescribir contenido local ni modificar archivos remotos.
+con Stories/Top-Down del repositorio. Archiva cada ejecución terminal, valida
+su manifiesto y elimina la copia remota solamente después de comprobar la
+integridad local.
 
 .PARAMETER Concurrency
 Cantidad máxima de archivos que Railway descarga simultáneamente. El valor
 predeterminado es 8.
+
+.PARAMETER KeepRemote
+Conserva las carpetas remotas después de descargarlas y validarlas.
 
 .EXAMPLE
 .\sync-railway-stories.ps1
 
 .EXAMPLE
 .\sync-railway-stories.ps1 -Concurrency 16
+
+.EXAMPLE
+.\sync-railway-stories.ps1 -KeepRemote
 
 .NOTES
 Preparación inicial:
@@ -29,7 +36,9 @@ Al enlazar el repositorio, selecciona el servicio biplan-telegram.
 [CmdletBinding()]
 param(
     [ValidateRange(1, 128)]
-    [int]$Concurrency = 8
+    [int]$Concurrency = 8,
+
+    [switch]$KeepRemote
 )
 
 Set-StrictMode -Version Latest
@@ -131,6 +140,119 @@ function Assert-SafeDirectoryName {
     }
 }
 
+# Validate a complete local archive before allowing removal of its remote copy.
+function Test-ArchivedRun {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$ExpectedRunId
+    )
+
+    try {
+        if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+            throw "No existe el directorio local esperado."
+        }
+        $reparsePoint = Get-ChildItem -LiteralPath $Path -Recurse -Force |
+            Where-Object {
+                ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0
+            } |
+            Select-Object -First 1
+        if ($null -ne $reparsePoint) {
+            throw "El archivo '$($reparsePoint.FullName)' es un enlace o reparse point."
+        }
+
+        $metadataPath = Join-Path $Path "metadata.json"
+        $manifestPath = Join-Path $Path "pipeline_manifest.json"
+        if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) {
+            throw "Falta metadata.json."
+        }
+        if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+            throw "Falta pipeline_manifest.json."
+        }
+
+        $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+        $runId = Get-PropertyValue -InputObject $metadata -Names @("run_id")
+        if ([string]$runId -cne $ExpectedRunId) {
+            throw "metadata.json declara run_id '$runId', no '$ExpectedRunId'."
+        }
+        $status = [string](Get-PropertyValue -InputObject $metadata -Names @("status"))
+        if ($status -eq "running") {
+            return [pscustomobject]@{
+                State = "pending"
+                Message = "La ejecución todavía está activa."
+            }
+        }
+        if ($status -notin @("completed", "failed")) {
+            throw "El estado '$status' no es terminal."
+        }
+
+        $requiredArtifact = if ($status -eq "completed") { "story.md" } else { "error_report.json" }
+        if (-not (Test-Path -LiteralPath (Join-Path $Path $requiredArtifact) -PathType Leaf)) {
+            throw "La ejecución '$status' no contiene $requiredArtifact."
+        }
+
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        $manifestRunId = Get-PropertyValue -InputObject $manifest -Names @("run_id")
+        if ([string]$manifestRunId -cne $ExpectedRunId) {
+            throw "pipeline_manifest.json declara run_id '$manifestRunId', no '$ExpectedRunId'."
+        }
+        $artifacts = Get-PropertyValue -InputObject $manifest -Names @("artifacts")
+        if ($null -eq $artifacts -or @($artifacts.PSObject.Properties).Count -eq 0) {
+            throw "El manifiesto no declara artefactos."
+        }
+
+        $archiveRoot = [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+        foreach ($artifact in $artifacts.PSObject.Properties) {
+            $relative = ([string]$artifact.Name).Replace('\', '/')
+            $segments = @($relative -split '/')
+            if ([System.IO.Path]::IsPathRooted($relative) -or
+                $segments -contains '..' -or $segments -contains '.' -or
+                [string]::IsNullOrWhiteSpace($relative)) {
+                throw "El manifiesto contiene una ruta insegura: '$relative'."
+            }
+            $artifactPath = [System.IO.Path]::GetFullPath(
+                (Join-Path $archiveRoot ($relative.Replace('/', '\')))
+            )
+            if (-not $artifactPath.StartsWith(
+                $archiveRoot + [System.IO.Path]::DirectorySeparatorChar,
+                [System.StringComparison]::OrdinalIgnoreCase
+            )) {
+                throw "El artefacto '$relative' escapa de la carpeta archivada."
+            }
+            if (-not (Test-Path -LiteralPath $artifactPath -PathType Leaf)) {
+                throw "Falta el artefacto '$relative'."
+            }
+            $expectedHash = Get-PropertyValue -InputObject $artifact.Value -Names @('sha256')
+            if ([string]::IsNullOrWhiteSpace([string]$expectedHash)) {
+                throw "El artefacto '$relative' no tiene SHA-256."
+            }
+            $actualHash = (Get-FileHash -LiteralPath $artifactPath -Algorithm SHA256).Hash
+            if ($actualHash -cne ([string]$expectedHash).ToUpperInvariant()) {
+                throw "El SHA-256 de '$relative' no coincide con el manifiesto."
+            }
+        }
+
+        return [pscustomobject]@{
+            State = 'valid'
+            Message = 'Archivo local íntegro.'
+        }
+    }
+    catch {
+        return [pscustomobject]@{
+            State = 'invalid'
+            Message = $_.Exception.Message
+        }
+    }
+}
+
+function Remove-RemoteRun {
+    param([Parameter(Mandatory = $true)][string]$RemotePath)
+
+    & railway service files delete $RemotePath --yes --json | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Railway CLI terminó con código $LASTEXITCODE al borrar."
+    }
+}
+
 if ($null -eq (Get-Command railway -ErrorAction SilentlyContinue)) {
     Write-Error (
         "No se encontró Railway CLI. Instálalo con: " +
@@ -189,45 +311,104 @@ try {
     New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
 
     $downloaded = 0
-    $skipped = 0
-    $failed = 0
+    $existingLocal = 0
+    $deleted = 0
+    $pending = 0
+    $integrityFailures = 0
+    $downloadFailures = 0
+    $deleteFailures = 0
 
     foreach ($name in $remoteNames) {
         $destination = Join-Path $localRoot $name
-        if (Test-Path -LiteralPath $destination) {
-            Write-Host "[omitida] $name"
-            $skipped++
-            continue
-        }
-
-        $partialName = "$name.partial-$([Guid]::NewGuid().ToString('N'))"
-        $partialPath = Join-Path $stagingRoot $partialName
         $remotePath = "$remoteRoot/$name"
+        $archiveReady = $false
 
-        try {
-            Write-Host "[descargando] $name"
-            & railway service files download $remotePath $partialPath `
-                --concurrency $Concurrency --json | Out-Null
-            if ($LASTEXITCODE -ne 0) {
-                throw "Railway CLI terminó con código $LASTEXITCODE."
+        if (Test-Path -LiteralPath $destination) {
+            $existingLocal++
+            $validation = Test-ArchivedRun -Path $destination -ExpectedRunId $name
+            if ($validation.State -eq "pending") {
+                Write-Host "[pendiente] $($name): $($validation.Message)"
+                $pending++
+                continue
             }
-            if (-not (Test-Path -LiteralPath $partialPath -PathType Container)) {
-                throw "Railway no creó el directorio local esperado."
+            if ($validation.State -ne "valid") {
+                Write-Warning "No se borrará '$name': $($validation.Message)"
+                $integrityFailures++
+                continue
             }
-            if (Test-Path -LiteralPath $destination) {
-                throw "La carpeta local apareció durante la descarga; no se sobrescribirá."
+            Write-Host "[ya local] $name"
+            $archiveReady = $true
+        }
+        else {
+            $partialName = "$name.partial-$([Guid]::NewGuid().ToString('N'))"
+            $partialPath = Join-Path $stagingRoot $partialName
+
+            try {
+                Write-Host "[descargando] $name"
+                & railway service files download $remotePath $partialPath `
+                    --concurrency $Concurrency --json | Out-Null
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Railway CLI terminó con código $LASTEXITCODE."
+                }
+                if (-not (Test-Path -LiteralPath $partialPath -PathType Container)) {
+                    throw "Railway no creó el directorio local esperado."
+                }
+                if (Test-Path -LiteralPath $destination) {
+                    throw "La carpeta local apareció durante la descarga; no se sobrescribirá."
+                }
+            }
+            catch {
+                if (Test-Path -LiteralPath $partialPath) {
+                    Remove-Item -LiteralPath $partialPath -Recurse -Force
+                }
+                Write-Warning "No se pudo descargar '$name': $($_.Exception.Message)"
+                $downloadFailures++
+                continue
             }
 
-            Move-Item -LiteralPath $partialPath -Destination $destination
+            $validation = Test-ArchivedRun -Path $partialPath -ExpectedRunId $name
+            if ($validation.State -eq "pending") {
+                Remove-Item -LiteralPath $partialPath -Recurse -Force
+                Write-Host "[pendiente] $($name): $($validation.Message)"
+                $pending++
+                continue
+            }
+            if ($validation.State -ne "valid") {
+                Remove-Item -LiteralPath $partialPath -Recurse -Force
+                Write-Warning "La descarga de '$name' no pasó integridad: $($validation.Message)"
+                $integrityFailures++
+                continue
+            }
+
+            try {
+                Move-Item -LiteralPath $partialPath -Destination $destination
+            }
+            catch {
+                if (Test-Path -LiteralPath $partialPath) {
+                    Remove-Item -LiteralPath $partialPath -Recurse -Force
+                }
+                Write-Warning "No se pudo archivar '$name': $($_.Exception.Message)"
+                $downloadFailures++
+                continue
+            }
             Write-Host "[descargada] $name"
             $downloaded++
+            $archiveReady = $true
         }
-        catch {
-            if (Test-Path -LiteralPath $partialPath) {
-                Remove-Item -LiteralPath $partialPath -Recurse -Force
+
+        if ($archiveReady -and -not $KeepRemote) {
+            try {
+                Remove-RemoteRun -RemotePath $remotePath
+                Write-Host "[borrada] $name"
+                $deleted++
             }
-            Write-Warning "No se pudo descargar '$name': $($_.Exception.Message)"
-            $failed++
+            catch {
+                Write-Warning "La copia local de '$name' está íntegra, pero Railway no pudo borrarla: $($_.Exception.Message)"
+                $deleteFailures++
+            }
+        }
+        elseif ($archiveReady) {
+            Write-Host "[conservada remota] $name"
         }
     }
 
@@ -238,11 +419,21 @@ try {
 
     Write-Host ""
     Write-Host (
-        "Sincronización terminada: {0} descargadas, {1} omitidas, {2} fallidas." -f
-        $downloaded, $skipped, $failed
+        (
+            "Sincronización terminada: {0} descargadas, {1} ya locales, {2} borradas, " +
+            "{3} pendientes, {4} fallos de integridad, {5} fallos de descarga y " +
+            "{6} fallos de borrado."
+        ) -f
+        $downloaded,
+        $existingLocal,
+        $deleted,
+        $pending,
+        $integrityFailures,
+        $downloadFailures,
+        $deleteFailures
     )
 
-    if ($failed -gt 0) {
+    if (($integrityFailures + $downloadFailures + $deleteFailures) -gt 0) {
         exit 1
     }
     exit 0

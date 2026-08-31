@@ -1,4 +1,4 @@
-"""Data contracts for the Top-Down 5.1 artifact pipeline."""
+"""Data contracts for the Top-Down 5.2 artifact pipeline."""
 
 from __future__ import annotations
 
@@ -309,6 +309,56 @@ class LengthAuditArtifact(BaseModel):
 
     chapters: list[ChapterLengthAudit]
     total: LengthAuditEntry
+
+
+class WriterCandidateDiagnostic(BaseModel):
+    """Explain why one Writer candidate was rejected and how to correct it."""
+
+    code: Literal[
+        "EMPTY_CHAPTER_BODY",
+        "MARKDOWN_HEADINGS",
+        "WORD_COUNT_OUT_OF_RANGE",
+        "UNCHANGED_SIGNIFICANT_NOTES",
+    ]
+    message: str
+    retry_instruction: str
+    actual_words: int
+    target_words: int
+    minimum_words: int
+    maximum_words: int
+    required_delta_words: int = 0
+
+
+class ChapterRevisionAttempt(BaseModel):
+    """Record the auditable outcome of one bounded Writer call."""
+
+    attempt: int = Field(ge=1)
+    status: Literal["accepted", "rejected", "failed"]
+    artifact: str | None = None
+    diagnostic: WriterCandidateDiagnostic | None = None
+    exception_type: str | None = None
+
+
+class ChapterRevisionResult(BaseModel):
+    """Summarize every Writer attempt and the chapter body ultimately delivered."""
+
+    chapter_id: str = Field(pattern=ID_PATTERN)
+    chapter_index: int = Field(ge=1)
+    note_ids: list[str] = Field(default_factory=list)
+    draft_words: int
+    target_words: int
+    minimum_words: int
+    maximum_words: int
+    attempts: list[ChapterRevisionAttempt] = Field(default_factory=list)
+    final_source: Literal["revision", "draft"]
+    final_words: int
+    warning_code: Literal["WRITER_REVISION_REJECTED"] | None = None
+
+
+class RevisionReport(BaseModel):
+    """Persist the complete chapter-level Writer decision trail."""
+
+    chapters: list[ChapterRevisionResult] = Field(default_factory=list)
 
 
 class ErrorReport(BaseModel):

@@ -2,6 +2,13 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [1.7.0] - 2026-08-31
+
+- Mostrados resúmenes consolidados de los fallos de revisión con intentos,
+  longitudes, fallback aplicado e impacto sobre la longitud final.
+- Conservada la lectura de advertencias antiguas cuando no existe
+  revision_report.json.
+
 ## [1.6.0] - 2026-08-27
 
 - Split handlers, generation coordination, and delivery retries.

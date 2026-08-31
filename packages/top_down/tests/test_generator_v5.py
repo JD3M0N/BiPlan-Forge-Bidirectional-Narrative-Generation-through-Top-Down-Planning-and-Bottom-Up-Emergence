@@ -5,8 +5,10 @@ from asg_top_down import StoryGenerator
 from asg_top_down.agents import AnalystAgent
 from asg_top_down.audit import parse_chapter_bodies
 from asg_top_down.errors import PlotValidationError
+from asg_top_down.pipeline import StoryPipeline
 from asg_top_down.schemas import (
     ChapterDraft,
+    ChapterPlan,
     ChapterPresentation,
     CharacterProfile,
     CharactersArtifact,
@@ -182,6 +184,7 @@ class FakeProvider:
         story_review: StoryReview | None = None,
         writer_identical_once=False,
         fail_writer_call: int | None = None,
+        writer_outputs: list[str] | None = None,
     ) -> None:
         self.plans = list(plans or [valid_plan()])
         self.fail_quality = fail_quality
@@ -189,6 +192,7 @@ class FakeProvider:
         self.story_review = story_review or StoryReview(strengths=["Clear progression"])
         self.writer_identical_once = writer_identical_once
         self.fail_writer_call = fail_writer_call
+        self.writer_outputs = list(writer_outputs) if writer_outputs is not None else None
         self.usage_records = []
         self.usage_callback = None
         self.wait_callback = None
@@ -235,12 +239,14 @@ class FakeProvider:
             )[0]
             if self.writer_identical_once and self.writer_number == 1:
                 return original
+            if self.writer_outputs is not None:
+                return self.writer_outputs.pop(0)
             return prose(f"revisado{self.writer_number}-")
         self.draft_number += 1
         return prose(f"borrador{self.draft_number}-")
 
 
-def test_complete_pipeline_saves_v51_artifacts_and_agent_order(tmp_path) -> None:
+def test_complete_pipeline_saves_v52_artifacts_and_agent_order(tmp_path) -> None:
     provider = FakeProvider()
     progress = []
     events = []
@@ -262,7 +268,8 @@ def test_complete_pipeline_saves_v51_artifacts_and_agent_order(tmp_path) -> None
         "story_plan.json",
         "draft_presentation.json",
         "draft.md",
-        "review.json",
+            "review.json",
+            "revision_report.json",
         "length_audit.json",
         "story.md",
         "metadata.json",
@@ -274,8 +281,18 @@ def test_complete_pipeline_saves_v51_artifacts_and_agent_order(tmp_path) -> None
         assert (run.run_dir / directory / "chapter-001.md").is_file()
         assert (run.run_dir / directory / "chapter-002.md").is_file()
     metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
-    assert metadata["pipeline_version"] == "5.1"
+    assert metadata["pipeline_version"] == "5.2"
     assert metadata["status"] == "completed"
+    report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
+    assert [chapter["final_source"] for chapter in report["chapters"]] == [
+        "revision",
+        "revision",
+    ]
+    for index in (1, 2):
+        attempt = run.run_dir / "writer" / f"chapter-{index:03d}-attempt-001.md"
+        validation = attempt.with_name(attempt.stem + "-validation.json")
+        assert attempt.is_file()
+        assert json.loads(validation.read_text(encoding="utf-8"))["status"] == "accepted"
     assert progress[-1].percent == 100
     agent_names = [
         event.message.rsplit(" ", 1)[-1] for event in events if event.kind == "agent_called"
@@ -379,6 +396,71 @@ def test_writer_retries_unchanged_major_revision_and_saves_attempt(tmp_path) -> 
     assert "RETRY CORRECTION" in writer_calls[1][1]
 
 
+@pytest.mark.parametrize(
+    ("candidate", "expected_code", "expected_delta"),
+    [
+        ("", "EMPTY_CHAPTER_BODY", 270),
+        ("# Encabezado\n\n" + prose("texto-", 300), "MARKDOWN_HEADINGS", 0),
+        (prose("corto-", 100), "WORD_COUNT_OUT_OF_RANGE", 170),
+        (prose("largo-", 500), "WORD_COUNT_OUT_OF_RANGE", -140),
+    ],
+)
+def test_writer_candidate_diagnostics_are_structured(
+    candidate,
+    expected_code,
+    expected_delta,
+) -> None:
+    planned = ChapterPlan(**chapter("chapter-1", 1, "The Archive").model_dump(), target_words=300)
+    diagnostic = StoryPipeline._writer_candidate_issue(
+        candidate,
+        prose("original-", 300),
+        planned,
+        [],
+    )
+    assert diagnostic is not None
+    assert diagnostic.code == expected_code
+    assert diagnostic.actual_words == len(candidate.split())
+    assert diagnostic.minimum_words == 270
+    assert diagnostic.maximum_words == 360
+    assert diagnostic.required_delta_words == expected_delta
+    assert diagnostic.retry_instruction
+
+
+def test_writer_reports_unchanged_significant_revision() -> None:
+    planned = ChapterPlan(**chapter("chapter-1", 1, "The Archive").model_dump(), target_words=300)
+    draft = prose("original-", 300)
+    diagnostic = StoryPipeline._writer_candidate_issue(
+        draft,
+        draft,
+        planned,
+        major_story_review().notes,
+    )
+    assert diagnostic is not None
+    assert diagnostic.code == "UNCHANGED_SIGNIFICANT_NOTES"
+
+
+def test_writer_length_fallback_records_counts_and_exact_retry(tmp_path) -> None:
+    provider = FakeProvider(
+        writer_outputs=[
+            prose("corto-a-", 100),
+            prose("corto-b-", 120),
+            prose("válido-", 300),
+        ]
+    )
+    run = StoryGenerator(provider, tmp_path).run(make_request())
+    report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
+    first = report["chapters"][0]
+    assert first["final_source"] == "draft"
+    assert first["warning_code"] == "WRITER_REVISION_REJECTED"
+    assert [attempt["diagnostic"]["actual_words"] for attempt in first["attempts"]] == [100, 120]
+    assert all(attempt["status"] == "rejected" for attempt in first["attempts"])
+    writer_calls = [item for item in provider.text_calls if "final Writer" in item[0]]
+    assert "Add at least 170 words" in writer_calls[1][1]
+    metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert "[WRITER_REVISION_REJECTED]" in metadata["warnings"][0]
+    assert "100 y 120 palabras" in metadata["warnings"][0]
+
+
 def test_writer_failure_is_isolated_to_its_chapter(tmp_path) -> None:
     provider = FakeProvider(fail_writer_call=2)
     run = StoryGenerator(provider, tmp_path).run(make_request())
@@ -391,6 +473,11 @@ def test_writer_failure_is_isolated_to_its_chapter(tmp_path) -> None:
     assert final_bodies[0] != draft_bodies[0]
     assert final_bodies[1] == draft_bodies[1]
     assert "capítulo 2" in metadata["warnings"][0]
+    report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
+    failed = report["chapters"][1]
+    assert failed["final_source"] == "draft"
+    assert failed["attempts"][0]["status"] == "failed"
+    assert failed["attempts"][0]["exception_type"] == "RuntimeError"
 
 
 def test_analyst_prompt_separates_explicit_constraints_and_inferences() -> None:

@@ -2,6 +2,15 @@
 
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
+## [5.3.0] - 2026-08-31
+
+- Añadidos diagnósticos estructurados del Writer con códigos, conteos, límites y
+  correcciones cuantificadas para el reintento.
+- Archivados todos los intentos y su decisión en revision_report.json.
+- Enriquecidos los fallbacks con resúmenes accionables sin perder compatibilidad
+  con metadata.json.warnings.
+- Publicado el contrato de artefactos 5.2 manteniendo lectura de runs 5.0 y 5.1.
+
 ## [5.2.0] - 2026-08-29
 
 - Enriquecido el análisis de solicitudes breves con un brief inglés y direcciones
