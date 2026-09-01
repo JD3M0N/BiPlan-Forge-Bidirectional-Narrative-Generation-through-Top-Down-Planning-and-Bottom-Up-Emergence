@@ -72,27 +72,35 @@ def _detect_language(text: str) -> str:
 
 async def _voice_for_language(language: str, fallback: str) -> str:
     global _VOICE_MANAGER
+
+    # Español de España, nunca español de Argentina
+    if language.lower().split("-", 1)[0] == "es":
+        return "es-ES-ElviraNeural"
+        # Alternativa masculina: "es-ES-AlvaroNeural"
+
     if language == "und":
         return fallback
+
     try:
         if _VOICE_MANAGER is None:
             _VOICE_MANAGER = await VoicesManager.create()
-        
-        # If language is Spanish use es-ES   
-        if language.lower().startswith("es"):
-                candidates = _VOICE_MANAGER.find(Language="es", Region="ES")
-        if not candidates:
-            candidates = _VOICE_MANAGER.find(Language="es")
-        else:
-            candidates = _VOICE_MANAGER.find(Language=language.split("-", 1)[0].lower())
+
+        candidates = _VOICE_MANAGER.find(
+            Language=language.split("-", 1)[0].lower()
+        )
     except Exception:
         return fallback
+
     if not candidates:
         return fallback
 
     def priority(voice: dict[str, Any]) -> tuple[int, str]:
         categories = voice.get("VoiceTag", {}).get("ContentCategories", [])
-        rank = 0 if "Novel" in categories else 1 if "General" in categories else 2
+        rank = (
+            0 if "Novel" in categories
+            else 1 if "General" in categories
+            else 2
+        )
         return rank, str(voice.get("ShortName", voice.get("Name", "")))
 
     selected = min(candidates, key=priority)
