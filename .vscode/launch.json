@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Crear historia Top-Down paso a paso (Gemini)",
+            "name": "Debug historia Top-Down — perfil Desarrollada (Gemini)",
             "type": "debugpy",
             "request": "launch",
             "module": "asg_top_down.cli",
@@ -15,7 +15,10 @@
             "console": "integratedTerminal",
             "stopOnEntry": true,
             "justMyCode": true,
-            "subProcess": false
+            "subProcess": false,
+            "args": [
+                "Perfil narrativo: Desarrollada. Escribe en español un relato de fantasía épica. Sir Aldren, un caballero veterano atormentado por el fracaso de una misión anterior, debe entrar en una fortaleza levantada sobre un volcán para rescatar a la princesa Elara de un dragón ancestral. Elara no debe ser una víctima pasiva: debe investigar su cautiverio, tomar decisiones arriesgadas y contribuir de forma decisiva a su propia liberación. El dragón debe tener una motivación comprensible relacionada con una antigua promesa rota por el reino, y no ser simplemente un monstruo malvado. Desarrolla una cadena causal clara desde la llegada del caballero hasta el enfrentamiento final; prepara con antelación cualquier objeto, conocimiento o habilidad que resulte decisivo. Mantén la continuidad de lugares, heridas, información y relaciones. Usa un tono aventurero y emotivo, incluye un dilema moral que obligue a Aldren a elegir entre obedecer al rey y hacer lo correcto, y termina con un desenlace cerrado y esperanzador. Evita el deus ex machina, las profecías que resuelven el conflicto por sí solas y las explicaciones sobre el proceso de escritura."
+            ]
         }
     ]
 }
