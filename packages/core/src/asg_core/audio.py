@@ -77,7 +77,14 @@ async def _voice_for_language(language: str, fallback: str) -> str:
     try:
         if _VOICE_MANAGER is None:
             _VOICE_MANAGER = await VoicesManager.create()
-        candidates = _VOICE_MANAGER.find(Language=language.split("-", 1)[0].lower())
+        
+        # If language is Spanish use es-ES   
+        if language.lower().startswith("es"):
+                candidates = _VOICE_MANAGER.find(Language="es", Region="ES")
+        if not candidates:
+            candidates = _VOICE_MANAGER.find(Language="es")
+        else:
+            candidates = _VOICE_MANAGER.find(Language=language.split("-", 1)[0].lower())
     except Exception:
         return fallback
     if not candidates:
