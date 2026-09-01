@@ -1,12 +1,13 @@
-"""Data contracts for the Top-Down 5.2 artifact pipeline."""
+"""Data contracts for the Top-Down 6.0 artifact pipeline."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .profiles import NarrativeProfile
 from .version import GENERATOR_NAME, GENERATOR_VERSION, PIPELINE_VERSION
 
 ID_PATTERN = r"^[a-z0-9][a-z0-9_-]*$"
@@ -15,14 +16,15 @@ ID_PATTERN = r"^[a-z0-9][a-z0-9_-]*$"
 class StoryRequest(BaseModel):
     """Represent StoryRequest data and behavior."""
 
+    model_config = ConfigDict(extra="forbid")
+
     original_prompt: str
     processed_prompt: str = ""
     title: str = Field(min_length=1)
     language: str = "Spanish"
     genre: str
     tone: str
-    target_words: int = Field(default=1500, ge=300, le=20_000)
-    requested_chapters: int | None = Field(default=None, ge=1, le=80)
+    narrative_profile: NarrativeProfile
     premise: str
     constraints: list[str] = Field(default_factory=list)
     creative_directions: list[str] = Field(default_factory=list)
@@ -132,8 +134,6 @@ class ChapterDraft(BaseModel):
 
 class ChapterPlan(ChapterDraft):
     """Represent ChapterPlan data and behavior."""
-
-    target_words: int = Field(ge=200)
 
 
 class PlotEvent(BaseModel):
@@ -288,27 +288,22 @@ class StoryReview(BaseModel):
     constraint_checks: list[ConstraintCheck] = Field(default_factory=list)
 
 
-class LengthAuditEntry(BaseModel):
-    """Represent LengthAuditEntry data and behavior."""
+class ChapterMetrics(BaseModel):
+    """Record observed chapter size without defining a target."""
 
-    target_words: int
-    minimum_words: int
-    maximum_words: int
-    actual_words: int
-    within_tolerance: bool
+    chapter_id: str = Field(pattern=ID_PATTERN)
+    words: int = Field(ge=0)
+    events: int = Field(ge=0)
 
 
-class ChapterLengthAudit(LengthAuditEntry):
-    """Represent ChapterLengthAudit data and behavior."""
+class StoryMetrics(BaseModel):
+    """Record observed story characteristics without budget compliance."""
 
-    chapter_id: str
-
-
-class LengthAuditArtifact(BaseModel):
-    """Represent LengthAuditArtifact data and behavior."""
-
-    chapters: list[ChapterLengthAudit]
-    total: LengthAuditEntry
+    narrative_profile: NarrativeProfile
+    words: int = Field(ge=0)
+    chapters: int = Field(ge=0)
+    events: int = Field(ge=0)
+    chapter_metrics: list[ChapterMetrics] = Field(default_factory=list)
 
 
 class WriterCandidateDiagnostic(BaseModel):
@@ -317,16 +312,11 @@ class WriterCandidateDiagnostic(BaseModel):
     code: Literal[
         "EMPTY_CHAPTER_BODY",
         "MARKDOWN_HEADINGS",
-        "WORD_COUNT_OUT_OF_RANGE",
         "UNCHANGED_SIGNIFICANT_NOTES",
     ]
     message: str
     retry_instruction: str
     actual_words: int
-    target_words: int
-    minimum_words: int
-    maximum_words: int
-    required_delta_words: int = 0
 
 
 class ChapterRevisionAttempt(BaseModel):
@@ -346,9 +336,6 @@ class ChapterRevisionResult(BaseModel):
     chapter_index: int = Field(ge=1)
     note_ids: list[str] = Field(default_factory=list)
     draft_words: int
-    target_words: int
-    minimum_words: int
-    maximum_words: int
     attempts: list[ChapterRevisionAttempt] = Field(default_factory=list)
     final_source: Literal["revision", "draft"]
     final_words: int

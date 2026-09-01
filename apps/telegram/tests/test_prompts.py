@@ -18,7 +18,7 @@ def guided_values():
         "conflict": "las estrellas desaparecen",
         "setting": "una estación orbital",
         "tone": "melancólico",
-        "target_words": "1500",
+        "narrative_profile": "developed",
         "constraints": "ninguna",
     }
 
@@ -26,17 +26,38 @@ def guided_values():
 def test_guided_prompt_contains_every_answer():
     prompt = build_guided_prompt(guided_values())
     assert prompt == (
-        "Escribe una historia en español de aproximadamente 1500 palabras. "
+        "Escribe una historia en español. Perfil narrativo: Desarrollada. "
         "Género: fantasía. Protagonista: una cartógrafa. Conflicto principal: "
         "las estrellas desaparecen. Ambientación: una estación orbital. "
         "Tono: melancólico. Restricciones: Sin restricciones adicionales."
     )
 
 
-@pytest.mark.parametrize("value", ["299", "20001", "mil", ""])
-def test_target_words_are_validated(value):
+@pytest.mark.parametrize("value", ["corta", "mil", ""])
+def test_narrative_profile_is_validated(value):
     with pytest.raises(ValueError):
-        validate_guided_value("target_words", value)
+        validate_guided_value("narrative_profile", value)
+
+
+@pytest.mark.parametrize(
+    ("answer", "canonical"),
+    [
+        ("Esencial", "essential"),
+        ("Desarrollada", "developed"),
+        ("Expansiva", "expansive"),
+        ("Automático", "automatic"),
+    ],
+)
+def test_all_guided_profile_paths_are_supported(answer, canonical):
+    assert validate_guided_value("narrative_profile", answer) == canonical
+    values = guided_values()
+    values["narrative_profile"] = canonical
+    prompt = build_guided_prompt(values)
+    if canonical == "automatic":
+        assert "Perfil narrativo:" not in prompt
+    else:
+        assert "Perfil narrativo:" in prompt
+    assert not any(token in prompt for token in (" palabras", " capítulos"))
 
 
 def test_all_evaluation_metrics_have_spanish_explanations():

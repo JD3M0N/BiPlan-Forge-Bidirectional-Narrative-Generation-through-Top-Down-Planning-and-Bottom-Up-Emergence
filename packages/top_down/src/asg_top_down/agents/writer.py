@@ -1,5 +1,6 @@
 """First-draft generation and note-driven chapter rewriting."""
 
+from ..profiles import profile_guidance
 from ..schemas import (
     ChapterPlan,
     CharacterProfile,
@@ -58,11 +59,12 @@ class DrafterAgent(Agent[str]):
                 f"You are the Drafter. Write only this first-draft fiction chapter body in "
                 f"{request.language}, without a heading or process "
                 "notes. Dramatize the supplied events in order, make causes and consequences visible, and "
-                "respect world rules, character intentions, continuity, and the approximate word budget. "
+                "respect world rules, character intentions, continuity, and the qualitative narrative profile. "
                 "Do not expose internal IDs or planning terminology."
             ),
             prompt=(
                 f"STORY SPECIFICATION:\n{json_text(request.agent_spec())}"
+                f"\n\nNARRATIVE PROFILE CONTRACT:\n{profile_guidance(request.narrative_profile)}"
                 f"\n\nWORLD:\n{json_text(world)}"
                 f"\n\nRELEVANT CHARACTERS:\n{json_text(characters)}"
                 f"\n\nGLOBAL PLAN:\n{json_text(plan_context)}"
@@ -97,11 +99,13 @@ class WriterAgent(Agent[str]):
             system_instruction=(
                 f"You are the final Writer. Rewrite only this chapter body in {request.language}; return no "
                 "heading, commentary, note IDs, or process language. Apply every supplied global and local "
-                "revision note, preserve correct material, planned causality, continuity, and the approximate "
-                "word budget. Coordinate the opening with the previously revised chapter."
+                "revision note, preserve correct material, planned causality, and continuity, and honor the "
+                "depth and pacing of the qualitative narrative profile. Coordinate the opening with the "
+                "previously revised chapter."
             ),
             prompt=(
                 f"STORY SPECIFICATION:\n{json_text(request.agent_spec())}"
+                f"\n\nNARRATIVE PROFILE CONTRACT:\n{profile_guidance(request.narrative_profile)}"
                 f"\n\nPLAN:\n{json_text(plan)}"
                 f"\n\nLOCALIZED PRESENTATION:\n{json_text(presentation)}"
                 f"\n\nCURRENT CHAPTER:\n{json_text(chapter)}"

@@ -1,5 +1,16 @@
 # Historial de cambios
 
+## 6.0.0
+
+- Sustituidos los presupuestos de palabras, capítulos y eventos por los perfiles
+  cualitativos Esencial, Desarrollada y Expansiva.
+- El planificador decide libremente la forma del DAG y conserva únicamente sus
+  invariantes objetivas de referencias, conectividad, causalidad y orden.
+- Reemplazado `length_audit.json` por `story_metrics.json`, que registra
+  conteos observados sin objetivos ni tolerancias.
+- Eliminados `default_target_words`, `STORY_DEFAULT_WORDS` y los rechazos del
+  Writer basados en longitud; el contrato de pipeline pasa a 6.0.
+
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
 ## [5.3.0] - 2026-08-31

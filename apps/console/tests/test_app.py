@@ -73,7 +73,6 @@ def test_top_down_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
             "api_key": "test",
             "model": "fake",
             "output_root": tmp_path,
-            "default_target_words": 1500,
             "rpm_limit": 10,
             "rpm_reserve": 2,
             "tpm_limit": 3000,
@@ -92,7 +91,7 @@ def test_top_down_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
     menu.run()
     assert captured["prompt"] == "Una historia"
     assert captured["provider_options"]["max_retries"] == 4
-    assert captured["generator_options"] == {"default_target_words": 1500}
+    assert captured["generator_options"] == {}
 
 
 def test_normal_bottom_up_uses_selected_options(tmp_path, maps_dir, monkeypatch) -> None:

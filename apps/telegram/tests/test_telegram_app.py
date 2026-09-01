@@ -255,6 +255,50 @@ def test_generation_summarizes_structured_revision_warning(tmp_path):
     assert "mínimo esperado 1350" in warning
 
 
+def test_v60_revision_warning_never_adds_numeric_budget_language(tmp_path):
+    story = make_story(tmp_path)
+    (story / "revision_report.json").write_text(
+        json.dumps(
+            {
+                "chapters": [
+                    {
+                        "chapter_index": 1,
+                        "draft_words": 470,
+                        "warning_code": "WRITER_REVISION_REJECTED",
+                        "attempts": [
+                            {
+                                "status": "rejected",
+                                "diagnostic": {
+                                    "code": "MARKDOWN_HEADINGS",
+                                    "actual_words": 499,
+                                },
+                            }
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    (story / "story_metrics.json").write_text(
+        json.dumps(
+            {
+                "narrative_profile": "developed",
+                "words": 1295,
+                "chapters": 2,
+                "events": 5,
+            }
+        ),
+        encoding="utf-8",
+    )
+    details = TelegramStoryBot._revision_warning_details(story)
+    assert details
+    rendered = " ".join(details).casefold()
+    assert "rango" not in rendered
+    assert "objetivo" not in rendered
+    assert "mínimo esperado" not in rendered
+
+
 def test_generation_reports_actionable_safe_error() -> None:
     handler = TelegramStoryBot(FailingGenerator())
     bot = FakeBot()

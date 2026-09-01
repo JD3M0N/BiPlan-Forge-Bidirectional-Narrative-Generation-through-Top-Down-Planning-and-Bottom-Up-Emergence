@@ -1,6 +1,7 @@
 """Top-Down public API."""
 
 from .generator import StoryGenerator, StoryRun
+from .profiles import NarrativeProfile
 from .progress import (
     PipelineEvent,
     PipelineEventCallback,
@@ -9,6 +10,7 @@ from .progress import (
     format_progress,
 )
 from .schemas import (
+    ChapterMetrics,
     ChapterPlan,
     ChapterPresentation,
     ChapterRevisionAttempt,
@@ -19,6 +21,7 @@ from .schemas import (
     PlanReview,
     PlotEvent,
     RevisionReport,
+    StoryMetrics,
     StoryPlan,
     StoryPresentation,
     StoryRequest,
@@ -29,6 +32,7 @@ from .schemas import (
 from .version import __version__
 
 __all__ = [
+    "ChapterMetrics",
     "ChapterPlan",
     "ChapterPresentation",
     "ChapterRevisionAttempt",
@@ -36,6 +40,7 @@ __all__ = [
     "CharactersArtifact",
     "EventDependency",
     "GeneratorVersionArtifact",
+    "NarrativeProfile",
     "PlanReview",
     "PipelineEvent",
     "PipelineEventCallback",
@@ -44,6 +49,7 @@ __all__ = [
     "ProgressUpdate",
     "RevisionReport",
     "StoryGenerator",
+    "StoryMetrics",
     "StoryPlan",
     "StoryPresentation",
     "StoryRequest",

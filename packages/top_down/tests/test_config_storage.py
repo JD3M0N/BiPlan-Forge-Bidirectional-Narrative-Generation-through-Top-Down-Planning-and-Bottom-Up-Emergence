@@ -19,9 +19,7 @@ def project(tmp_path):
 def test_settings_are_reduced_to_runtime_generation_values(tmp_path, monkeypatch) -> None:
     root = project(tmp_path)
     monkeypatch.setenv("GEMINI_API_KEY", "secret")
-    monkeypatch.setenv("STORY_DEFAULT_WORDS", "1200")
     settings = load_settings(root)
-    assert settings.default_target_words == 1200
     assert set(settings.__dataclass_fields__) == {
         "api_key",
         "model",
@@ -32,7 +30,6 @@ def test_settings_are_reduced_to_runtime_generation_values(tmp_path, monkeypatch
         "max_retries",
         "max_retry_delay",
         "request_timeout_ms",
-        "default_target_words",
     }
 
 
@@ -43,7 +40,7 @@ def test_missing_api_key_is_actionable(tmp_path, monkeypatch) -> None:
         load_settings(root)
 
 
-def test_repository_versions_new_runs_as_5(tmp_path) -> None:
+def test_repository_versions_new_runs_as_6(tmp_path) -> None:
     repository = ArtifactRepository(tmp_path, "model", "Historia")
     metadata = json.loads((repository.run_dir / "metadata.json").read_text(encoding="utf-8"))
     generator = json.loads(

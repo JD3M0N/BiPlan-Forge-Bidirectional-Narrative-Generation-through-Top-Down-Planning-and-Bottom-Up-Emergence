@@ -1,4 +1,4 @@
-"""Configuration loading for Top-Down 5.x."""
+"""Configuration loading for Top-Down 6.x."""
 
 import os
 from dataclasses import dataclass
@@ -23,7 +23,6 @@ class Settings:
     max_retries: int = 3
     max_retry_delay: int = 120
     request_timeout_ms: int = 120_000
-    default_target_words: int = 1500
 
 
 def _integer(name: str, default: int, *, minimum: int = 0) -> int:
@@ -44,9 +43,6 @@ def load_settings(start: Path | None = None) -> Settings:
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise ConfigurationError("Falta GEMINI_API_KEY. Añádela al archivo .env de la raíz.")
-    default_target_words = _integer("STORY_DEFAULT_WORDS", 1500, minimum=300)
-    if default_target_words > 20_000:
-        raise ConfigurationError("STORY_DEFAULT_WORDS debe estar entre 300 y 20000.")
     return Settings(
         api_key=api_key,
         model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip() or "gemini-3.5-flash-lite",
@@ -57,5 +53,4 @@ def load_settings(start: Path | None = None) -> Settings:
         max_retries=_integer("GEMINI_MAX_RETRIES", 3),
         max_retry_delay=_integer("GEMINI_MAX_RETRY_DELAY", 120, minimum=1),
         request_timeout_ms=_integer("GEMINI_REQUEST_TIMEOUT_MS", 120_000, minimum=5_000),
-        default_target_words=default_target_words,
     )

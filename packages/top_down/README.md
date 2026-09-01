@@ -1,10 +1,10 @@
-# ASG Top-Down 5.4
+# ASG Top-Down 6.0
 
-Top-Down 5.4 genera historias con el contrato de artefactos 5.3:
+Top-Down 6.0 genera historias con el contrato de artefactos 6.0:
 
 ```text
 Analyst → World → Characters → Plot Planner → Plan Critic
-→ Drafter → Drama Critic → Writer → auditorías locales
+→ Drafter → Drama Critic → Writer → métricas observadas
 ```
 
 Todos los prompts y artefactos internos permanecen en inglés. El idioma pedido
@@ -26,9 +26,11 @@ normalizado en inglés. Se conservan los callbacks `on_progress`,
 
 ## Plan y garantías
 
-Python calcula los presupuestos de palabras y eventos, valida referencias,
-payoffs dirigidos hacia eventos anteriores, conectividad, causalidad,
-aciclicidad y el orden topológico. Gemini decide el contenido creativo.
+El usuario expresa la profundidad mediante Esencial, Desarrollada o Expansiva.
+El perfil reemplaza los objetivos de palabras, capítulos y eventos; el
+planificador decide la forma necesaria sin rangos numéricos. Python valida
+referencias, payoffs dirigidos hacia eventos anteriores, conectividad,
+causalidad, aciclicidad y el orden topológico. Gemini decide el contenido creativo.
 `payoff_of` admite exclusivamente IDs exactos de eventos anteriores; los
 objetos pertenecen a `object_ids` y las condiciones o cambios narrativos se
 expresan como texto en `preconditions` y `effects`. Cuando no existe un setup
@@ -40,9 +42,8 @@ primer plan válido. Después de congelar el plan, los únicos agentes son
 `Drafter`, `Drama Critic` y `Writer`.
 
 `Writer` corrige por capítulos y dispone de un reintento cuando devuelve texto
-idéntico pese a notas importantes, introduce encabezados o incumple el rango de
-longitud del 90–120 %. El reintento recibe conteos y límites exactos. Un fallo
-tardío conserva el capítulo o borrador disponible, queda resumido en
+idéntico pese a notas importantes o introduce encabezados. Ningún candidato se
+rechaza por longitud. Un fallo tardío conserva el capítulo o borrador disponible, queda resumido en
 `metadata.json.warnings` y detallado en `revision_report.json`.
 
 ## Artefactos
@@ -63,7 +64,7 @@ review.json
 writer/chapter-*-attempt-*
 revision_report.json
 revisions/chapter-*.md
-length_audit.json
+story_metrics.json
 llm_calls.jsonl
 llm_usage.json
 pipeline_manifest.json
@@ -73,8 +74,10 @@ audio.json
 ```
 
 Todos los intentos del Writer quedan archivados con su validación estructurada.
-Los runs nuevos usan `pipeline_version: 5.3`; `StoryRun` puede abrir runs
-terminados 5.0, 5.1, 5.2 y 5.3. El MP3 se registra en el manifiesto, pero un
+`story_metrics.json` registra palabras, capítulos y eventos observados, sin
+objetivos ni indicadores de cumplimiento. Los runs nuevos usan
+`pipeline_version: 6.0`; `StoryRun` puede abrir runs terminados 5.0, 5.1, 5.2,
+5.3 y 6.0. El MP3 se registra en el manifiesto, pero un
 fallo de TTS solo añade `AUDIO_GENERATION_FAILED`: `story.md` continúa válido.
 `compare-story-runs` continúa aceptando cualquier run con `story.md`.
 

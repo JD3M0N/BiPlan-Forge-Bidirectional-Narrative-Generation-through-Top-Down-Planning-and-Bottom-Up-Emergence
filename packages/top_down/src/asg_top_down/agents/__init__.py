@@ -1,4 +1,4 @@
-"""Specialized agents used by Top-Down 5.2."""
+"""Specialized agents used by Top-Down 6.x."""
 
 from .analyst import AnalystAgent
 from .characters import CharacterDesignerAgent

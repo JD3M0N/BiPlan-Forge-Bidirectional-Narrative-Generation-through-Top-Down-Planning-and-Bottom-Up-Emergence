@@ -53,7 +53,6 @@ class TopDownMenu:
         generator = StoryGenerator(
             provider,
             settings.output_root,
-            default_target_words=settings.default_target_words,
         )
         if "on_progress" in inspect.signature(generator.run).parameters:
 

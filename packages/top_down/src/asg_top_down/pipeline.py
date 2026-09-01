@@ -20,16 +20,11 @@ from .agents import (
     WorldBuilderAgent,
     WriterAgent,
 )
-from .audit import audit_chapter, audit_story, canonical_chapter, word_bounds, word_count
+from .audit import canonical_chapter, story_metrics, word_count
 from .errors import PlotValidationError
-from .graph import (
-    chapter_event_budgets,
-    materialize_plan,
-    relevant_prior_events,
-)
+from .graph import materialize_plan, relevant_prior_events
 from .progress import PipelineEvent, PipelineEventCallback, ProgressCallback, ProgressUpdate
 from .schemas import (
-    ChapterLengthAudit,
     ChapterPlan,
     ChapterRevisionAttempt,
     ChapterRevisionResult,
@@ -58,7 +53,6 @@ class StoryPipeline:
         self,
         provider,
         output_root: Path,
-        default_target_words: int,
         *,
         on_progress: ProgressCallback | None = None,
         on_run_created: Callable[[Path], None] | None = None,
@@ -67,7 +61,6 @@ class StoryPipeline:
         """Store pipeline dependencies and optional lifecycle callbacks."""
         self.provider = provider
         self.output_root = Path(output_root)
-        self.default_target_words = default_target_words
         self.on_progress = on_progress
         self.on_run_created = on_run_created
         self.on_event = on_event
@@ -79,15 +72,14 @@ class StoryPipeline:
         """Run all story stages and return the completed run directory."""
         self.usage_start = len(getattr(self.provider, "usage_records", []))
         request = self._analyze_request(request)
-        event_budgets = chapter_event_budgets(request)
         self.repository = self._create_repository(request)
         self._configure_provider_callbacks()
         try:
             self._save_request(request)
             world = self._build_world(request)
             characters = self._build_characters(request, world)
-            plan = self._build_plan(request, world, characters, event_budgets)
-            presentation, draft_bodies, draft, chapter_audits = self._draft_chapters(
+            plan = self._build_plan(request, world, characters)
+            presentation, draft_bodies, draft = self._draft_chapters(
                 request,
                 world,
                 characters,
@@ -102,7 +94,7 @@ class StoryPipeline:
                 draft_bodies,
                 draft,
             )
-            self._finalize(request, plan, story, chapter_audits)
+            self._finalize(request, plan, story)
             return self.repository.run_dir
         except Exception as exc:
             self._record_failure(exc)
@@ -118,7 +110,7 @@ class StoryPipeline:
 
         def analyze_request():
             """Analyze the bound free-form request into a story contract."""
-            return AnalystAgent(self.provider, self.default_target_words).run(request)
+            return AnalystAgent(self.provider).run(request)
 
         return self._call_agent("analyst", analyze_request)
 
@@ -232,7 +224,6 @@ class StoryPipeline:
         request: StoryRequest,
         world: WorldArtifact,
         characters: CharactersArtifact,
-        event_budgets: list[int],
     ) -> StoryPlan:
         """Generate, validate, critique, and optionally refine the story plan."""
         assert self.repository is not None
@@ -248,7 +239,6 @@ class StoryPipeline:
                     request,
                     world,
                     characters,
-                    event_budgets,
                     feedback_snapshot,
                 )
 
@@ -257,7 +247,7 @@ class StoryPipeline:
                 generate_plan,
             )
             try:
-                plan = materialize_plan(draft, request, world, characters)
+                plan = materialize_plan(draft, world, characters)
             except ValueError as exc:
                 feedback = self._record_rejected_plan(draft, attempt, exc, validation_errors)
                 continue
@@ -268,7 +258,7 @@ class StoryPipeline:
                 details={"attempts": 2, "validation_errors": validation_errors},
                 recommendations=["Revisa los intentos guardados bajo planning/."],
             )
-        plan = self._critique_plan(request, world, characters, event_budgets, plan)
+        plan = self._critique_plan(request, world, characters, plan)
         self.repository.save_json("story_plan.json", plan)
         self.repository.complete_stage("planning")
         return plan
@@ -278,7 +268,6 @@ class StoryPipeline:
         request: StoryRequest,
         world: WorldArtifact,
         characters: CharactersArtifact,
-        event_budgets: list[int],
         original_plan: StoryPlan,
     ) -> StoryPlan:
         """Apply one bounded plan-critique round without risking a valid plan."""
@@ -308,14 +297,13 @@ class StoryPipeline:
                     request,
                     world,
                     characters,
-                    event_budgets,
                     plan_review=review,
                 )
 
             candidate = self._call_agent("plot_planner", refine_plan)
             self.repository.save_json("planning/refined-candidate.json", candidate)
             try:
-                refined = materialize_plan(candidate, request, world, characters)
+                refined = materialize_plan(candidate, world, characters)
             except ValueError as exc:
                 issue = str(exc).strip() or type(exc).__name__
                 self.repository.save_data(
@@ -397,7 +385,7 @@ class StoryPipeline:
         world: WorldArtifact,
         characters: CharactersArtifact,
         plan: StoryPlan,
-    ) -> tuple[StoryPresentation, list[str], str, list[ChapterLengthAudit]]:
+    ) -> tuple[StoryPresentation, list[str], str]:
         """Use Drafter to localize titles and create the first story."""
         assert self.repository is not None
         drafter = DrafterAgent(self.provider)
@@ -411,7 +399,6 @@ class StoryPipeline:
         self.repository.save_json("draft_presentation.json", presentation)
         event_by_id = {item.id: item for item in plan.events}
         bodies: list[str] = []
-        audits: list[ChapterLengthAudit] = []
         for index, chapter in enumerate(plan.chapters, 1):
             self._notify_draft_chapter(index, len(plan.chapters))
             events = [
@@ -446,11 +433,10 @@ class StoryPipeline:
             body = self._call_agent("drafter", draft_chapter).strip()
             self.repository.save_text(f"chapters/chapter-{index:03d}.md", body)
             bodies.append(body)
-            audits.append(audit_chapter(chapter, body))
         self.repository.complete_stage("drafting")
         draft = self._assemble_story(plan, presentation, bodies)
         self.repository.save_text("draft.md", draft)
-        return presentation, bodies, draft, audits
+        return presentation, bodies, draft
 
     @staticmethod
     def _validate_presentation(plan: StoryPlan, presentation: StoryPresentation) -> None:
@@ -628,7 +614,6 @@ class StoryPipeline:
     ) -> tuple[str, ChapterRevisionResult]:
         """Return the first valid Writer candidate or the safe original fallback."""
         assert self.repository is not None
-        minimum, maximum = word_bounds(chapter.target_words)
         draft_words = word_count(draft_body)
         attempts: list[ChapterRevisionAttempt] = []
         retry_feedback = ""
@@ -672,16 +657,13 @@ class StoryPipeline:
                     chapter_index=chapter_index,
                     note_ids=[note.id for note in notes],
                     draft_words=draft_words,
-                    target_words=chapter.target_words,
-                    minimum_words=minimum,
-                    maximum_words=maximum,
                     attempts=attempts,
                     final_source="draft",
                     final_words=draft_words,
                     warning_code="WRITER_REVISION_REJECTED",
                 )
             self.repository.save_text(f"{prefix}.md", candidate)
-            diagnostic = self._writer_candidate_issue(candidate, draft_body, chapter, notes)
+            diagnostic = self._writer_candidate_issue(candidate, draft_body, notes)
             attempt_result = ChapterRevisionAttempt(
                 attempt=attempt,
                 status="accepted" if diagnostic is None else "rejected",
@@ -696,9 +678,6 @@ class StoryPipeline:
                     chapter_index=chapter_index,
                     note_ids=[note.id for note in notes],
                     draft_words=draft_words,
-                    target_words=chapter.target_words,
-                    minimum_words=minimum,
-                    maximum_words=maximum,
                     attempts=attempts,
                     final_source="revision",
                     final_words=word_count(candidate),
@@ -716,9 +695,6 @@ class StoryPipeline:
             chapter_index=chapter_index,
             note_ids=[note.id for note in notes],
             draft_words=draft_words,
-            target_words=chapter.target_words,
-            minimum_words=minimum,
-            maximum_words=maximum,
             attempts=attempts,
             final_source="draft",
             final_words=draft_words,
@@ -729,53 +705,23 @@ class StoryPipeline:
     def _writer_candidate_issue(
         candidate: str,
         draft_body: str,
-        chapter: ChapterPlan,
         notes: list[RevisionNote],
     ) -> WriterCandidateDiagnostic | None:
         """Explain why a Writer candidate cannot replace the draft."""
-        audit = audit_chapter(chapter, candidate)
-        common = {
-            "actual_words": audit.actual_words,
-            "target_words": audit.target_words,
-            "minimum_words": audit.minimum_words,
-            "maximum_words": audit.maximum_words,
-        }
+        actual_words = word_count(candidate)
         if not candidate.strip():
             return WriterCandidateDiagnostic(
                 code="EMPTY_CHAPTER_BODY",
                 message="the chapter body is empty",
-                retry_instruction=(
-                    f"Write between {audit.minimum_words} and {audit.maximum_words} words."
-                ),
-                required_delta_words=audit.minimum_words,
-                **common,
+                retry_instruction="Write a complete chapter body that fulfills the planned events.",
+                actual_words=actual_words,
             )
         if any(line.lstrip().startswith("#") for line in candidate.splitlines()):
             return WriterCandidateDiagnostic(
                 code="MARKDOWN_HEADINGS",
                 message="the chapter body contains Markdown headings",
                 retry_instruction="Remove every Markdown heading while preserving the prose body.",
-                **common,
-            )
-        if not audit.within_tolerance:
-            delta = (
-                audit.minimum_words - audit.actual_words
-                if audit.actual_words < audit.minimum_words
-                else audit.maximum_words - audit.actual_words
-            )
-            action = "Add at least" if delta > 0 else "Remove at least"
-            return WriterCandidateDiagnostic(
-                code="WORD_COUNT_OUT_OF_RANGE",
-                message=(
-                    f"the chapter has {audit.actual_words} words; the accepted range is "
-                    f"{audit.minimum_words}-{audit.maximum_words}"
-                ),
-                retry_instruction=(
-                    f"{action} {abs(delta)} words and keep the complete rewrite between "
-                    f"{audit.minimum_words} and {audit.maximum_words} words."
-                ),
-                required_delta_words=delta,
-                **common,
+                actual_words=actual_words,
             )
         significant = any(note.priority in {"critical", "major"} for note in notes)
         if significant and candidate.strip() == draft_body.strip():
@@ -783,7 +729,7 @@ class StoryPipeline:
                 code="UNCHANGED_SIGNIFICANT_NOTES",
                 message="the text is unchanged despite critical or major revision notes",
                 retry_instruction="Apply every critical and major note with visible prose changes.",
-                **common,
+                actual_words=actual_words,
             )
         return None
 
@@ -795,15 +741,6 @@ class StoryPipeline:
     ) -> str:
         """Build a concise Spanish warning from the structured rejection trail."""
         diagnostics = [item.diagnostic for item in attempts if item.diagnostic is not None]
-        if diagnostics and all(item.code == "WORD_COUNT_OUT_OF_RANGE" for item in diagnostics):
-            counts = " y ".join(str(item.actual_words) for item in diagnostics)
-            latest = diagnostics[-1]
-            return (
-                "[WRITER_REVISION_REJECTED] Capítulo "
-                f"{chapter_index}: {len(diagnostics)} revisiones descartadas por longitud "
-                f"({counts} palabras; rango válido {latest.minimum_words}-"
-                f"{latest.maximum_words}). Se entregó el borrador de {draft_words} palabras."
-            )
         codes = ", ".join(item.code for item in diagnostics) or "WRITER_EXCEPTION"
         return (
             "[WRITER_REVISION_REJECTED] Capítulo "
@@ -816,13 +753,12 @@ class StoryPipeline:
         request: StoryRequest,
         plan: StoryPlan,
         story: str,
-        chapter_audits: list[ChapterLengthAudit],
     ) -> None:
-        """Persist final audits, evaluation template, metadata, and story."""
+        """Persist observed metrics, evaluation template, metadata, and story."""
         assert self.repository is not None
         self.repository.save_json(
-            "length_audit.json",
-            audit_story(request, plan, story, chapter_audits),
+            "story_metrics.json",
+            story_metrics(request, plan, story),
         )
         self._notify(98, "saving", "Guardando la historia")
         self.repository.save_text("story.md", story)

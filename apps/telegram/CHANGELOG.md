@@ -1,5 +1,12 @@
 # Historial de cambios
 
+## 2.0.0
+
+- Reemplazada la pregunta guiada de palabras por la selección opcional de perfil
+  Esencial, Desarrollada, Expansiva o Automático.
+- Adoptada la API Top-Down 6.0 sin `default_target_words`.
+- Conservada la lectura de advertencias numéricas pertenecientes a runs 5.x.
+
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
 ## [1.7.0] - 2026-08-31

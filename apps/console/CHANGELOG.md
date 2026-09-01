@@ -1,5 +1,10 @@
 # Historial de cambios
 
+## 2.0.0
+
+- Adoptada la API Top-Down 6.0 basada en perfiles narrativos y eliminada la
+  configuración `default_target_words`.
+
 Las versiones nuevas deben agregarse siempre encima de las versiones anteriores.
 
 ## [1.6.0] - 2026-08-27

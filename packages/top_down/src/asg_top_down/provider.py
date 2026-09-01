@@ -33,6 +33,29 @@ _LIMITERS: dict[tuple[int, int], SlidingWindowLimiter] = {}
 _LIMITERS_LOCK = threading.Lock()
 
 
+def _gemini_response_schema(schema: type[BaseModel]) -> dict:
+    """Return a Gemini-compatible copy of a Pydantic JSON schema.
+
+    Gemini validates the requested structure, while Pydantic remains the
+    authority for stricter local rules such as ``extra="forbid"``. Some
+    Gemini models reject the JSON Schema ``additionalProperties`` keyword,
+    so it must not cross the provider boundary.
+    """
+
+    def sanitize(value):
+        if isinstance(value, dict):
+            return {
+                key: sanitize(item)
+                for key, item in value.items()
+                if key != "additionalProperties"
+            }
+        if isinstance(value, list):
+            return [sanitize(item) for item in value]
+        return value
+
+    return sanitize(schema.model_json_schema())
+
+
 def _safe_provider_error(exc: Exception) -> ProviderError:
     """Classify provider failures without exposing request or credential data."""
     message = str(exc).casefold()
@@ -380,7 +403,7 @@ class GeminiProvider:
                         config=types.GenerateContentConfig(
                             system_instruction=system_instruction,
                             response_mime_type="application/json",
-                            response_schema=schema,
+                            response_schema=_gemini_response_schema(schema),
                             temperature=self._temperature(schema.__name__, system_instruction),
                         ),
                     )

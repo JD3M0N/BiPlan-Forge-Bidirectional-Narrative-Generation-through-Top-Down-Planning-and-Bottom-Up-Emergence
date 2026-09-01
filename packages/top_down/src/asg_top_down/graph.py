@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from operator import attrgetter
 
 from .schemas import (
@@ -11,39 +10,17 @@ from .schemas import (
     PlotEvent,
     StoryPlan,
     StoryPlanDraft,
-    StoryRequest,
     WorldArtifact,
 )
 
 
-def chapter_word_budgets(request: StoryRequest) -> list[int]:
-    """Calculate exact chapter budgets without delegating arithmetic to an LLM."""
-    if request.requested_chapters:
-        count = request.requested_chapters
-        if request.target_words < count * 200:
-            raise ValueError("explicit chapter count requires at least 200 words per chapter")
-    else:
-        count = max(1, math.ceil(request.target_words / 900))
-    base, remainder = divmod(request.target_words, count)
-    return [base + (1 if index < remainder else 0) for index in range(count)]
-
-
-def chapter_event_budgets(request: StoryRequest) -> list[int]:
-    """Derive an exact, length-aware event count for every chapter."""
-    return [max(1, math.ceil(words / 450)) for words in chapter_word_budgets(request)]
-
-
 def materialize_plan(
     draft: StoryPlanDraft,
-    request: StoryRequest,
     world: WorldArtifact,
     characters: CharactersArtifact,
 ) -> StoryPlan:
-    """Add local word budgets, validate the graph, and compute its only trusted order."""
-    budgets = chapter_word_budgets(request)
+    """Validate the qualitative plan and compute its only trusted event order."""
     chapters = sorted(draft.chapters, key=attrgetter("order"))
-    if len(chapters) != len(budgets):
-        raise ValueError(f"plan must contain exactly {len(budgets)} chapters")
     plan = StoryPlan(
         logline=draft.logline,
         theme=draft.theme,
@@ -51,14 +28,10 @@ def materialize_plan(
         narrative_structure=draft.narrative_structure,
         dramatic_question=draft.dramatic_question,
         stakes=draft.stakes,
-        chapters=[
-            ChapterPlan(**chapter.model_dump(), target_words=budget)
-            for chapter, budget in zip(chapters, budgets, strict=True)
-        ],
+        chapters=[ChapterPlan(**chapter.model_dump()) for chapter in chapters],
         events=draft.events,
         dependencies=draft.dependencies,
     )
-    _validate_event_budgets(plan)
     plan.topological_order = validate_story_plan(plan, world, characters)
     return plan
 
@@ -70,7 +43,6 @@ def validate_story_plan(
 ) -> list[str]:
     """Validate only objective structural invariants and return a stable Kahn order."""
     chapter_order_by_id = _validate_chapters(plan)
-    _validate_event_budgets(plan)
     event_ids, order_by_id = _validate_events(plan, world, characters, chapter_order_by_id)
     incoming, outgoing = _dependency_graph(plan, event_ids)
     _validate_dependency_shape(plan, event_ids, outgoing)
@@ -97,24 +69,6 @@ def relevant_prior_events(
                 pending.append(source)
     by_id = {event.id: event for event in plan.events}
     return [by_id[event_id] for event_id in plan.topological_order if event_id in ancestors]
-
-
-def _validate_event_budgets(plan: StoryPlan) -> None:
-    """Require the deterministic number of events implied by each chapter budget."""
-    counts = {chapter.id: 0 for chapter in plan.chapters}
-    for event in plan.events:
-        if event.chapter_id in counts:
-            counts[event.chapter_id] += 1
-    expected = {
-        chapter.id: max(1, math.ceil(chapter.target_words / 450)) for chapter in plan.chapters
-    }
-    mismatches = [
-        f"{chapter_id}: expected {expected[chapter_id]}, received {counts[chapter_id]}"
-        for chapter_id in expected
-        if counts[chapter_id] != expected[chapter_id]
-    ]
-    if mismatches:
-        raise ValueError("invalid chapter event budgets: " + "; ".join(mismatches))
 
 
 def _validate_chapters(plan: StoryPlan) -> dict[str, int]:

@@ -62,7 +62,6 @@ class TopDownGenerator:
             StoryGenerator(
                 provider,
                 settings.output_root,
-                default_target_words=settings.default_target_words,
             )
             .run(
                 prompt,

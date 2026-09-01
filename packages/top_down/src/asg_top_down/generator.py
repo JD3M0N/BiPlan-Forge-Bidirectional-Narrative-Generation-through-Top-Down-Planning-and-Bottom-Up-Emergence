@@ -13,7 +13,7 @@ from .version import SUPPORTED_PIPELINE_VERSIONS
 
 
 class StoryRun:
-    """Represent a completed compatible Top-Down 5.x run."""
+    """Represent a completed compatible Top-Down run."""
 
     def __init__(self, run_dir: Path) -> None:
         """Validate and open a completed run directory."""
@@ -52,14 +52,10 @@ class StoryGenerator:
         self,
         provider,
         output_root: Path,
-        default_target_words: int = 1500,
     ) -> None:
         """Configure a generator with its provider and output directory."""
-        if not 300 <= default_target_words <= 20_000:
-            raise ValueError("default_target_words must be between 300 and 20000")
         self.provider = provider
         self.output_root = Path(output_root)
-        self.default_target_words = default_target_words
 
     def generate(
         self,
@@ -72,7 +68,6 @@ class StoryGenerator:
         pipeline = StoryPipeline(
             self.provider,
             self.output_root,
-            self.default_target_words,
             on_progress=on_progress,
             on_run_created=on_run_created,
             on_event=on_event,

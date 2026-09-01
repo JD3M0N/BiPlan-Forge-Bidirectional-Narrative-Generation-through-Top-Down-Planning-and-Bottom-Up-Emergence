@@ -48,13 +48,13 @@ def test_real_gemini_smoke_run() -> None:
     )
     run = StoryGenerator(provider, settings.output_root).run(CANONICAL_PROMPT)
     assert run.story_path.is_file()
-    assert len(run.story_path.read_text(encoding="utf-8").split()) >= 300
+    assert run.story_path.read_text(encoding="utf-8").strip()
 
     request = json.loads((run.run_dir / "request.json").read_text(encoding="utf-8"))
     metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
     manifest = json.loads((run.run_dir / "pipeline_manifest.json").read_text(encoding="utf-8"))
     assert request["original_prompt"] == CANONICAL_PROMPT
-    assert request["target_words"] == 2500
+    assert request["narrative_profile"] in {"essential", "developed", "expansive"}
     assert metadata["status"] == "completed"
     assert metadata["model"] == settings.model
     assert (run.run_dir / "evaluation.json").is_file()
@@ -69,7 +69,7 @@ def test_real_gemini_smoke_run() -> None:
         "draft_presentation.json",
         "draft.md",
         "review.json",
-        "length_audit.json",
+        "story_metrics.json",
         "llm_calls.jsonl",
         "llm_usage.json",
         "metadata.json",
@@ -96,7 +96,7 @@ def test_real_analyst_enriches_a_sparse_request() -> None:
         request_timeout_ms=settings.request_timeout_ms,
     )
     prompt = "Crea una historia de un caballero que salva a una princesa de un dragón"
-    request = AnalystAgent(provider, settings.default_target_words).run(prompt)
+    request = AnalystAgent(provider).run(prompt)
     assert request.original_prompt == prompt
     assert request.language == "Spanish"
     assert request.processed_prompt

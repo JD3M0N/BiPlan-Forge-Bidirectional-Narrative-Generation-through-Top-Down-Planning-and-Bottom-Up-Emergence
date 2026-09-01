@@ -2,7 +2,7 @@ import json
 
 import pytest
 from asg_core import AudioGenerationError
-from asg_top_down import StoryGenerator
+from asg_top_down import NarrativeProfile, StoryGenerator
 from asg_top_down import pipeline as pipeline_module
 from asg_top_down.agents import AnalystAgent
 from asg_top_down.audit import parse_chapter_bodies
@@ -10,7 +10,6 @@ from asg_top_down.errors import PlotValidationError
 from asg_top_down.pipeline import StoryPipeline
 from asg_top_down.schemas import (
     ChapterDraft,
-    ChapterPlan,
     ChapterPresentation,
     CharacterProfile,
     CharactersArtifact,
@@ -25,20 +24,20 @@ from asg_top_down.schemas import (
     StoryReview,
     WorldArtifact,
 )
+from pydantic import ValidationError
 
 
 def make_request() -> StoryRequest:
     return StoryRequest(
-        original_prompt="Escribe 600 palabras en dos capítulos",
-        processed_prompt="Write a two-chapter story about a difficult truth.",
+        original_prompt="Escribe una historia con perfil narrativo Desarrollada",
+        processed_prompt="Write a developed story about a difficult truth.",
         title="The Price of Truth",
         language="Spanish",
         genre="drama",
         tone="tense",
-        target_words=600,
-        requested_chapters=2,
+        narrative_profile="developed",
         premise="Ana discovers a dangerous truth.",
-        constraints=["The story must have two chapters"],
+        constraints=[],
         creative_directions=["Give Ana an earned, hopeful resolution"],
     )
 
@@ -187,6 +186,7 @@ class FakeProvider:
         writer_identical_once=False,
         fail_writer_call: int | None = None,
         writer_outputs: list[str] | None = None,
+        analyzed_request: StoryRequest | None = None,
     ) -> None:
         self.plans = list(plans or [valid_plan()])
         self.fail_quality = fail_quality
@@ -195,6 +195,7 @@ class FakeProvider:
         self.writer_identical_once = writer_identical_once
         self.fail_writer_call = fail_writer_call
         self.writer_outputs = list(writer_outputs) if writer_outputs is not None else None
+        self.analyzed_request = analyzed_request or make_request()
         self.usage_records = []
         self.usage_callback = None
         self.wait_callback = None
@@ -226,7 +227,7 @@ class FakeProvider:
                 raise RuntimeError("review unavailable")
             return self.story_review
         if schema is StoryRequest:
-            return make_request()
+            return self.analyzed_request
         raise AssertionError(schema)
 
     def generate_text(self, *, system_instruction, prompt):
@@ -248,7 +249,7 @@ class FakeProvider:
         return prose(f"borrador{self.draft_number}-")
 
 
-def test_complete_pipeline_saves_v53_artifacts_and_agent_order(tmp_path) -> None:
+def test_complete_pipeline_saves_v60_artifacts_and_agent_order(tmp_path) -> None:
     provider = FakeProvider()
     progress = []
     events = []
@@ -272,7 +273,7 @@ def test_complete_pipeline_saves_v53_artifacts_and_agent_order(tmp_path) -> None
         "draft.md",
         "review.json",
         "revision_report.json",
-        "length_audit.json",
+        "story_metrics.json",
         "story.md",
         "story.mp3",
         "audio.json",
@@ -285,7 +286,7 @@ def test_complete_pipeline_saves_v53_artifacts_and_agent_order(tmp_path) -> None
         assert (run.run_dir / directory / "chapter-001.md").is_file()
         assert (run.run_dir / directory / "chapter-002.md").is_file()
     metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
-    assert metadata["pipeline_version"] == "5.3"
+    assert metadata["pipeline_version"] == "6.0"
     assert metadata["status"] == "completed"
     assert run.audio_path.is_file()
     manifest = json.loads((run.run_dir / "pipeline_manifest.json").read_text(encoding="utf-8"))
@@ -295,6 +296,14 @@ def test_complete_pipeline_saves_v53_artifacts_and_agent_order(tmp_path) -> None
         "revision",
         "revision",
     ]
+    metrics = json.loads((run.run_dir / "story_metrics.json").read_text(encoding="utf-8"))
+    assert metrics["narrative_profile"] == "developed"
+    assert metrics["chapters"] == 2
+    assert metrics["events"] == 2
+    assert metrics["words"] > 0
+    assert {item["events"] for item in metrics["chapter_metrics"]} == {1}
+    assert "target_words" not in json.dumps(metrics)
+    assert "within_tolerance" not in json.dumps(metrics)
     for index in (1, 2):
         attempt = run.run_dir / "writer" / f"chapter-{index:03d}-attempt-001.md"
         validation = attempt.with_name(attempt.stem + "-validation.json")
@@ -430,68 +439,57 @@ def test_writer_retries_unchanged_major_revision_and_saves_attempt(tmp_path) -> 
 
 
 @pytest.mark.parametrize(
-    ("candidate", "expected_code", "expected_delta"),
+    ("candidate", "expected_code"),
     [
-        ("", "EMPTY_CHAPTER_BODY", 270),
-        ("# Encabezado\n\n" + prose("texto-", 300), "MARKDOWN_HEADINGS", 0),
-        (prose("corto-", 100), "WORD_COUNT_OUT_OF_RANGE", 170),
-        (prose("largo-", 500), "WORD_COUNT_OUT_OF_RANGE", -140),
+        ("", "EMPTY_CHAPTER_BODY"),
+        ("# Encabezado\n\n" + prose("texto-", 300), "MARKDOWN_HEADINGS"),
     ],
 )
 def test_writer_candidate_diagnostics_are_structured(
     candidate,
     expected_code,
-    expected_delta,
 ) -> None:
-    planned = ChapterPlan(**chapter("chapter-1", 1, "The Archive").model_dump(), target_words=300)
     diagnostic = StoryPipeline._writer_candidate_issue(
         candidate,
         prose("original-", 300),
-        planned,
         [],
     )
     assert diagnostic is not None
     assert diagnostic.code == expected_code
     assert diagnostic.actual_words == len(candidate.split())
-    assert diagnostic.minimum_words == 270
-    assert diagnostic.maximum_words == 360
-    assert diagnostic.required_delta_words == expected_delta
     assert diagnostic.retry_instruction
 
 
 def test_writer_reports_unchanged_significant_revision() -> None:
-    planned = ChapterPlan(**chapter("chapter-1", 1, "The Archive").model_dump(), target_words=300)
     draft = prose("original-", 300)
     diagnostic = StoryPipeline._writer_candidate_issue(
         draft,
         draft,
-        planned,
         major_story_review().notes,
     )
     assert diagnostic is not None
     assert diagnostic.code == "UNCHANGED_SIGNIFICANT_NOTES"
 
 
-def test_writer_length_fallback_records_counts_and_exact_retry(tmp_path) -> None:
+def test_writer_accepts_different_lengths_without_budget_retries(tmp_path) -> None:
     provider = FakeProvider(
         writer_outputs=[
             prose("corto-a-", 100),
-            prose("corto-b-", 120),
-            prose("válido-", 300),
+            prose("largo-", 500),
         ]
     )
     run = StoryGenerator(provider, tmp_path).run(make_request())
     report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
-    first = report["chapters"][0]
-    assert first["final_source"] == "draft"
-    assert first["warning_code"] == "WRITER_REVISION_REJECTED"
-    assert [attempt["diagnostic"]["actual_words"] for attempt in first["attempts"]] == [100, 120]
-    assert all(attempt["status"] == "rejected" for attempt in first["attempts"])
+    assert [chapter["final_source"] for chapter in report["chapters"]] == [
+        "revision",
+        "revision",
+    ]
+    assert [chapter["final_words"] for chapter in report["chapters"]] == [100, 500]
+    assert all(chapter["attempts"][0]["status"] == "accepted" for chapter in report["chapters"])
     writer_calls = [item for item in provider.text_calls if "final Writer" in item[0]]
-    assert "Add at least 170 words" in writer_calls[1][1]
+    assert len(writer_calls) == 2
     metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
-    assert "[WRITER_REVISION_REJECTED]" in metadata["warnings"][0]
-    assert "100 y 120 palabras" in metadata["warnings"][0]
+    assert not any("longitud" in warning.casefold() for warning in metadata["warnings"])
 
 
 def test_writer_failure_is_isolated_to_its_chapter(tmp_path) -> None:
@@ -514,15 +512,55 @@ def test_writer_failure_is_isolated_to_its_chapter(tmp_path) -> None:
 
 
 def test_analyst_prompt_separates_explicit_constraints_and_inferences() -> None:
-    provider = FakeProvider()
-    raw = "Crea una historia de un caballero que salva a una princesa de un dragón"
-    result = AnalystAgent(provider, default_target_words=1500).run(raw)
+    analyzed = make_request().model_copy(
+        update={
+            "processed_prompt": "Write a story of 1500 words in 5 chapters.",
+            "premise": "A revelation unfolds across 5 chapters.",
+            "constraints": ["Use 1500 words", "Keep the hopeful ending"],
+            "creative_directions": ["Develop the conflict across 5 chapters"],
+        }
+    )
+    provider = FakeProvider(analyzed_request=analyzed)
+    raw = (
+        "Perfil narrativo: Expansiva. Crea una historia de 1500 palabras y 5 capítulos "
+        "sobre un caballero."
+    )
+    result = AnalystAgent(provider).run(raw)
     call = next(item for item in provider.structured_calls if item[0] == "StoryRequest")
     assert result.original_prompt == raw
     assert result.language == "Spanish"
+    assert result.narrative_profile.value == "expansive"
+    downstream = json.dumps(result.agent_spec())
+    assert "1500" not in downstream
+    assert "5 chapters" not in downstream
+    assert result.constraints == ["Keep the hopeful ending"]
     assert "creative_directions" in call[1]
-    assert "constraints must contain only requirements explicitly stated" in call[1]
+    assert "constraints contain only explicit requirements" in call[1]
     assert "working title" in call[1]
+    assert "when ambiguous use developed" in call[1]
+
+
+@pytest.mark.parametrize(
+    ("profile", "raw"),
+    [
+        ("essential", "Un conflicto central directo y sin subtramas."),
+        ("developed", "Una historia con arco completo y complicaciones."),
+        ("expansive", "Una saga coral con subtramas y varios arcos."),
+    ],
+)
+def test_analyst_preserves_inferred_profile(profile, raw) -> None:
+    analyzed = make_request().model_copy(
+        update={"narrative_profile": NarrativeProfile(profile)}
+    )
+    result = AnalystAgent(FakeProvider(analyzed_request=analyzed)).run(raw)
+    assert result.narrative_profile.value == profile
+
+
+def test_programmatic_request_rejects_legacy_numeric_fields() -> None:
+    values = make_request().model_dump()
+    values["target_words"] = 1500
+    with pytest.raises(ValidationError, match="target_words"):
+        StoryRequest.model_validate(values)
 
 
 def test_internal_agents_use_english_until_drafting(tmp_path) -> None:
@@ -532,12 +570,16 @@ def test_internal_agents_use_english_until_drafting(tmp_path) -> None:
     plan = json.loads((run.run_dir / "story_plan.json").read_text(encoding="utf-8"))
     presentation = json.loads((run.run_dir / "draft_presentation.json").read_text(encoding="utf-8"))
     assert request["title"] == "The Price of Truth"
+    assert request["narrative_profile"] == "developed"
     assert [item["title"] for item in plan["chapters"]] == ["The Archive", "The Choice"]
     assert presentation["title"] == "El precio de la verdad"
     critic_system = next(
         system for name, system, _ in provider.structured_calls if name == "StoryReview"
     )
     assert "return coordinated revision notes in English" in critic_system
+    all_calls = json.dumps(provider.structured_calls) + json.dumps(provider.text_calls)
+    assert "EXACT EVENT COUNTS" not in all_calls
+    assert "word budget" not in all_calls
     assert all(
         "Spanish" in system
         for system, _ in provider.text_calls

@@ -10,7 +10,7 @@ from .progress import format_progress
 from .provider import GeminiProvider
 
 EXAMPLE_PROMPT = (
-    "Escribe un relato de ciencia ficción de unas 1800 palabras. Una cartógrafa "
+    "Escribe un relato de ciencia ficción con perfil narrativo Desarrollada. Una cartógrafa "
     "descubre que las estrellas están cambiando de posición para formar un "
     "mensaje. Tono melancólico, ambientado en una estación orbital decadente y "
     "con un final esperanzador."
@@ -56,11 +56,7 @@ def main(argv: list[str] | None = None) -> int:
             max_retry_delay=settings.max_retry_delay,
             request_timeout_ms=settings.request_timeout_ms,
         )
-        generator = StoryGenerator(
-            provider,
-            settings.output_root,
-            default_target_words=settings.default_target_words,
-        )
+        generator = StoryGenerator(provider, settings.output_root)
 
         def report_progress(update) -> None:
             """Print one formatted pipeline progress update."""

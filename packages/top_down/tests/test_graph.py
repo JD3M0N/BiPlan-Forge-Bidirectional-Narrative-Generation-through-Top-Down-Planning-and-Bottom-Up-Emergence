@@ -1,7 +1,5 @@
 import pytest
 from asg_top_down.graph import (
-    chapter_event_budgets,
-    chapter_word_budgets,
     materialize_plan,
     validate_story_plan,
 )
@@ -15,22 +13,8 @@ from asg_top_down.schemas import (
     PlotEvent,
     StoryPlan,
     StoryPlanDraft,
-    StoryRequest,
     WorldArtifact,
 )
-
-
-def request(**changes) -> StoryRequest:
-    values = {
-        "original_prompt": "Una historia",
-        "title": "Historia",
-        "genre": "drama",
-        "tone": "tense",
-        "target_words": 600,
-        "premise": "A choice has consequences",
-    }
-    values.update(changes)
-    return StoryRequest(**values)
 
 
 def world() -> WorldArtifact:
@@ -95,7 +79,6 @@ def plan(dependencies: list[EventDependency]) -> StoryPlan:
                 opening_state="Ana trusts the official account",
                 turning_point="She finds contradictory evidence",
                 closing_state="Ana decides to investigate",
-                target_words=1000,
             )
         ],
         events=[event("event-1", 1), event("event-2", 2), event("event-3", 3)],
@@ -169,10 +152,9 @@ def test_every_chapter_requires_an_event() -> None:
             opening_state="Ana faces opposition",
             turning_point="The evidence becomes public",
             closing_state="The town accepts the cost",
-            target_words=200,
         )
     )
-    with pytest.raises(ValueError, match="event budgets"):
+    with pytest.raises(ValueError, match="chapters without events"):
         validate_story_plan(candidate, world(), characters())
 
 
@@ -188,7 +170,6 @@ def test_global_event_order_must_follow_chapter_order() -> None:
             opening_state="Ana faces opposition",
             turning_point="The evidence becomes public",
             closing_state="The town accepts the cost",
-            target_words=200,
         )
     )
     candidate.events.append(event("event-4", 4, "chapter-2"))
@@ -199,16 +180,7 @@ def test_global_event_order_must_follow_chapter_order() -> None:
         validate_story_plan(candidate, world(), characters())
 
 
-def test_automatic_and_explicit_chapter_budgets() -> None:
-    assert chapter_word_budgets(request(target_words=1800)) == [900, 900]
-    assert chapter_word_budgets(request(target_words=601, requested_chapters=2)) == [301, 300]
-    with pytest.raises(ValueError, match="200 words"):
-        chapter_word_budgets(request(target_words=300, requested_chapters=2))
-    assert chapter_event_budgets(request(target_words=1800)) == [2, 2]
-    assert chapter_event_budgets(request(target_words=601, requested_chapters=2)) == [1, 1]
-
-
-def test_materialize_plan_adds_budgets_and_trusted_order() -> None:
+def test_materialize_plan_accepts_qualitative_size_and_adds_trusted_order() -> None:
     draft = StoryPlanDraft(
         logline="Ana chooses",
         theme="Truth",
@@ -231,9 +203,23 @@ def test_materialize_plan_adds_budgets_and_trusted_order() -> None:
         events=[event("event-1", 1), event("event-2", 2)],
         dependencies=[dependency("event-1", "event-2")],
     )
-    result = materialize_plan(draft, request(), world(), characters())
-    assert result.chapters[0].target_words == 600
+    result = materialize_plan(draft, world(), characters())
+    assert len(result.chapters) == 1
     assert result.topological_order == ["event-1", "event-2"]
+
+
+def test_same_profile_accepts_different_valid_graph_sizes() -> None:
+    compact = plan([dependency("event-1", "event-2"), dependency("event-2", "event-3")])
+    validate_story_plan(compact, world(), characters())
+    expanded = compact.model_copy(deep=True)
+    expanded.events.append(event("event-4", 4))
+    expanded.dependencies.append(dependency("event-3", "event-4"))
+    assert validate_story_plan(expanded, world(), characters()) == [
+        "event-1",
+        "event-2",
+        "event-3",
+        "event-4",
+    ]
 
 
 def test_disconnected_or_noncausal_graph_is_rejected() -> None:

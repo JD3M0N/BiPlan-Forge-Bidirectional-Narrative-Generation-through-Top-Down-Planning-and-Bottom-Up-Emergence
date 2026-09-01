@@ -1,5 +1,6 @@
 """Plan and complete-draft criticism."""
 
+from ..profiles import profile_guidance
 from ..schemas import (
     CharactersArtifact,
     PlanReview,
@@ -29,7 +30,8 @@ class PlanCriticAgent(Agent[PlanReview]):
             system_instruction=(
                 "You are the Plan Critic. Review a structurally valid story plan for fidelity to explicit "
                 "constraints, causal coherence, originality, agency, character motivation, escalation, "
-                "world continuity, pacing, and setup/payoff. Flexible creative directions may be adapted "
+                "world continuity, pacing, setup/payoff, and qualitative narrative-profile compliance. "
+                "Flexible creative directions may be adapted "
                 "but must not override constraints. Return every field in English. Do not score the plan. "
                 "If no material change is needed, approve it with no notes. Otherwise reject it and provide "
                 "specific notes with unique lowercase IDs, evidence, instructions, and valid chapter/event "
@@ -37,6 +39,7 @@ class PlanCriticAgent(Agent[PlanReview]):
             ),
             prompt=(
                 f"STORY SPECIFICATION:\n{json_text(request.agent_spec())}"
+                f"\n\nNARRATIVE PROFILE CONTRACT:\n{profile_guidance(request.narrative_profile)}"
                 f"\n\nWORLD:\n{json_text(world)}"
                 f"\n\nCHARACTERS:\n{json_text(characters)}"
                 f"\n\nVALIDATED PLAN:\n{json_text(plan)}"
@@ -65,13 +68,15 @@ class DramaCriticAgent(Agent[StoryReview]):
                 "You are the Drama Critic. Read the complete draft and return coordinated revision notes "
                 "in English; never rewrite the story. Check every explicit constraint plus causal and world "
                 "continuity, character motivation and agency, dramatic structure, pacing and tension, "
-                "setup/payoff, originality, voice, requested-language consistency, and stray anglicisms. "
+                "setup/payoff, qualitative narrative-profile compliance, originality, voice, "
+                "requested-language consistency, and stray anglicisms. "
                 "Use empty chapter_ids for global notes and exact canonical chapter IDs for local notes. "
                 "Each note needs a unique lowercase ID, priority, category, evidence, and a concrete "
                 "instruction the Writer can apply. Do not score the story or invent user requirements."
             ),
             prompt=(
                 f"STORY SPECIFICATION:\n{json_text(request.agent_spec())}"
+                f"\n\nNARRATIVE PROFILE CONTRACT:\n{profile_guidance(request.narrative_profile)}"
                 f"\n\nWORLD:\n{json_text(world)}"
                 f"\n\nCHARACTERS:\n{json_text(characters)}"
                 f"\n\nPLAN:\n{json_text(plan)}"

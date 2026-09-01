@@ -6,6 +6,8 @@ import html
 import re
 from dataclasses import dataclass
 
+from asg_top_down.profiles import PROFILE_LABELS, NarrativeProfile
+
 GUIDED_FIELDS = (
     ("language", "¿En qué idioma quieres la historia?"),
     ("genre", "¿Cuál será el género?"),
@@ -13,12 +15,28 @@ GUIDED_FIELDS = (
     ("conflict", "¿Cuál es el conflicto principal?"),
     ("setting", "¿Dónde y cuándo ocurre?"),
     ("tone", "¿Qué tono debe tener?"),
-    ("target_words", "¿Cuántas palabras aproximadamente? (300–20000)"),
+    (
+        "narrative_profile",
+        "¿Qué perfil narrativo prefieres? Esencial, Desarrollada, Expansiva o Automático.",
+    ),
     (
         "constraints",
         "Indica restricciones adicionales o escribe «ninguna».",
     ),
 )
+
+PROFILE_CHOICES = {
+    "esencial": NarrativeProfile.ESSENTIAL,
+    "essential": NarrativeProfile.ESSENTIAL,
+    "desarrollada": NarrativeProfile.DEVELOPED,
+    "developed": NarrativeProfile.DEVELOPED,
+    "expansiva": NarrativeProfile.EXPANSIVE,
+    "expansive": NarrativeProfile.EXPANSIVE,
+    "automático": None,
+    "automatico": None,
+    "automatic": None,
+    "auto": None,
+}
 
 
 @dataclass(frozen=True)
@@ -87,14 +105,14 @@ def validate_guided_value(field: str, value: str) -> str:
     normalized = value.strip()
     if not normalized:
         raise ValueError("La respuesta no puede estar vacía.")
-    if field == "target_words":
+    if field == "narrative_profile":
         try:
-            words = int(normalized)
-        except ValueError as exc:
-            raise ValueError("Introduce un número entero entre 300 y 20000.") from exc
-        if not 300 <= words <= 20_000:
-            raise ValueError("Introduce un número entero entre 300 y 20000.")
-        return str(words)
+            profile = PROFILE_CHOICES[normalized.casefold()]
+        except KeyError as exc:
+            raise ValueError(
+                "Elige Esencial, Desarrollada, Expansiva o Automático."
+            ) from exc
+        return profile.value if profile else "automatic"
     return normalized
 
 
@@ -103,9 +121,14 @@ def build_guided_prompt(values: dict[str, str]) -> str:
     constraints = values["constraints"]
     if constraints.casefold() == "ninguna":
         constraints = "Sin restricciones adicionales."
+    profile = values["narrative_profile"]
+    profile_text = (
+        ""
+        if profile == "automatic"
+        else f" Perfil narrativo: {PROFILE_LABELS[NarrativeProfile(profile)]}."
+    )
     return (
-        f"Escribe una historia en {values['language']} de aproximadamente "
-        f"{values['target_words']} palabras. Género: {values['genre']}. "
+        f"Escribe una historia en {values['language']}.{profile_text} Género: {values['genre']}. "
         f"Protagonista: {values['protagonist']}. Conflicto principal: "
         f"{values['conflict']}. Ambientación: {values['setting']}. "
         f"Tono: {values['tone']}. Restricciones: {constraints}"

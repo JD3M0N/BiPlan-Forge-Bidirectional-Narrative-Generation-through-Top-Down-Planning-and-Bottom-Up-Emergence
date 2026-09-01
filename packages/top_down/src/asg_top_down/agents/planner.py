@@ -1,5 +1,6 @@
 """DAG planning and bounded plan refinement."""
 
+from ..profiles import profile_guidance
 from ..schemas import (
     CharactersArtifact,
     PlanReview,
@@ -20,7 +21,6 @@ class PlotPlannerAgent(Agent[StoryPlanDraft]):
         request: StoryRequest,
         world: WorldArtifact,
         characters: CharactersArtifact,
-        event_budgets: list[int],
         repair_feedback: str = "",
         plan_review: PlanReview | None = None,
     ) -> StoryPlanDraft:
@@ -28,8 +28,8 @@ class PlotPlannerAgent(Agent[StoryPlanDraft]):
         return self.provider.generate_structured(
             system_instruction=(
                 "Plan a complete story as generic events connected by causal or temporal dependencies. "
-                "Create exactly the requested number of chapters and exactly the event count assigned to "
-                "each chapter. "
+                "Choose the chapters and events required to fulfill the qualitative narrative profile; "
+                "do not target or infer numeric story-size budgets. "
                 "Chapter and event orders must be consecutive from 1. Dependencies may only point from an "
                 "earlier event to a later event. Use only canonical character, location, and object IDs. "
                 "Build a weakly connected graph with a causal backbone, while allowing branches and joins. "
@@ -43,7 +43,7 @@ class PlotPlannerAgent(Agent[StoryPlanDraft]):
             ),
             prompt=(
                 f"STORY SPECIFICATION:\n{json_text(request.agent_spec())}"
-                f"\n\nEXACT EVENT COUNTS BY CHAPTER ORDER: {json_text(event_budgets)}"
+                f"\n\nNARRATIVE PROFILE CONTRACT:\n{profile_guidance(request.narrative_profile)}"
                 f"\n\nWORLD:\n{json_text(world)}"
                 f"\n\nCHARACTERS:\n{json_text(characters)}"
                 f"\n\nPLAN REVIEW TO APPLY:\n{json_text(plan_review) if plan_review else 'none'}"

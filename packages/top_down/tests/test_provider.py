@@ -9,7 +9,7 @@ from asg_top_down.errors import (
     ProviderError,
     StructuredResponseError,
 )
-from asg_top_down.provider import GeminiProvider
+from asg_top_down.provider import GeminiProvider, _gemini_response_schema
 from asg_top_down.schemas import StoryRequest
 
 
@@ -40,6 +40,22 @@ def provider_with(response=None, error: Exception | None = None) -> GeminiProvid
     return provider
 
 
+def test_gemini_schema_omits_unsupported_additional_properties() -> None:
+    schema = _gemini_response_schema(StoryRequest)
+
+    def contains_additional_properties(value) -> bool:
+        if isinstance(value, dict):
+            return "additionalProperties" in value or any(
+                contains_additional_properties(item) for item in value.values()
+            )
+        if isinstance(value, list):
+            return any(contains_additional_properties(item) for item in value)
+        return False
+
+    assert not contains_additional_properties(schema)
+    assert schema["properties"]["narrative_profile"]["$ref"] == "#/$defs/NarrativeProfile"
+
+
 def test_structured_generation_rejects_invalid_json() -> None:
     provider = provider_with(SimpleNamespace(parsed=None, text="{invalid"))
     with pytest.raises(StructuredResponseError):
@@ -52,6 +68,7 @@ def test_structured_generation_retries_validation_once_then_succeeds() -> None:
         title="Título",
         genre="fantasía",
         tone="tenso",
+        narrative_profile="developed",
         premise="Una promesa",
     ).model_dump_json()
     provider = provider_with(
