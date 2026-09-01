@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
 Descarga desde Railway las ejecuciones Top-Down que no existen localmente.
 
@@ -15,6 +15,13 @@ predeterminado es 8.
 .PARAMETER KeepRemote
 Conserva las carpetas remotas después de descargarlas y validarlas.
 
+.PARAMETER DownloadRetryAttempts
+Cantidad máxima de intentos para reparar cada artefacto que Railway no pudo
+descargar correctamente. El valor predeterminado es 3.
+
+.PARAMETER RetryDelaySeconds
+Espera entre reintentos de un artefacto. El valor predeterminado es 2 segundos.
+
 .EXAMPLE
 .\sync-railway-stories.ps1
 
@@ -23,6 +30,9 @@ Conserva las carpetas remotas después de descargarlas y validarlas.
 
 .EXAMPLE
 .\sync-railway-stories.ps1 -KeepRemote
+
+.EXAMPLE
+.\sync-railway-stories.ps1 -DownloadRetryAttempts 5 -RetryDelaySeconds 1
 
 .NOTES
 Preparación inicial:
@@ -38,7 +48,13 @@ param(
     [ValidateRange(1, 128)]
     [int]$Concurrency = 8,
 
-    [switch]$KeepRemote
+    [switch]$KeepRemote,
+
+    [ValidateRange(1, 10)]
+    [int]$DownloadRetryAttempts = 3,
+
+    [ValidateRange(0, 60)]
+    [int]$RetryDelaySeconds = 2
 )
 
 Set-StrictMode -Version Latest
@@ -244,12 +260,205 @@ function Test-ArchivedRun {
     }
 }
 
-function Remove-RemoteRun {
-    param([Parameter(Mandatory = $true)][string]$RemotePath)
+function Invoke-RailwayDownload {
+    param(
+        [string]$RemotePath,
+        [string]$LocalPath,
+        [int]$TransferConcurrency = 0,
+        [switch]$Overwrite
+    )
+    $arguments = @("service", "files", "download", $RemotePath, $LocalPath, "--json")
+    if ($Overwrite) { $arguments += "--overwrite" }
+    if ($TransferConcurrency -gt 0) {
+        $arguments += @("--concurrency", [string]$TransferConcurrency)
+    }
+    $oldPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $output = @(& railway @arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $oldPreference }
+    [pscustomobject]@{
+        Succeeded = ($exitCode -eq 0)
+        ExitCode = $exitCode
+        Message = (($output | ForEach-Object { [string]$_ }) -join "`n").Trim()
+    }
+}
 
-    & railway service files delete $RemotePath --yes --json | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Railway CLI terminó con código $LASTEXITCODE al borrar."
+function Get-SafeArtifactDescriptor {
+    param(
+        [string]$ArchivePath,
+        $Artifact
+    )
+    $relative = ([string]$Artifact.Name).Replace('\', '/')
+    $segments = @($relative -split '/')
+    if ([System.IO.Path]::IsPathRooted($relative) -or
+        $segments -contains '..' -or $segments -contains '.' -or
+        [string]::IsNullOrWhiteSpace($relative)) {
+        throw "El manifiesto contiene una ruta insegura: '$relative'."
+    }
+    $archiveRoot = [System.IO.Path]::GetFullPath($ArchivePath).TrimEnd('\', '/')
+    $artifactPath = [System.IO.Path]::GetFullPath(
+        (Join-Path $archiveRoot ($relative.Replace('/', '\')))
+    )
+    if (-not $artifactPath.StartsWith(
+        $archiveRoot + [System.IO.Path]::DirectorySeparatorChar,
+        [System.StringComparison]::OrdinalIgnoreCase
+    )) {
+        throw "El artefacto '$relative' escapa de la carpeta archivada."
+    }
+    $expectedHash = Get-PropertyValue -InputObject $Artifact.Value -Names @('sha256')
+    if ([string]::IsNullOrWhiteSpace([string]$expectedHash)) {
+        throw "El artefacto '$relative' no tiene SHA-256."
+    }
+    [pscustomobject]@{
+        RelativePath = $relative
+        LocalPath = $artifactPath
+        ExpectedHash = ([string]$expectedHash).ToUpperInvariant()
+    }
+}
+
+function Repair-PartialRun {
+    param(
+        [string]$PartialPath,
+        [string]$RemotePath,
+        [string]$ExpectedRunId,
+        [int]$Attempts,
+        [int]$DelaySeconds
+    )
+    try {
+        New-Item -ItemType Directory -Path $PartialPath -Force | Out-Null
+        foreach ($controlFile in @("metadata.json", "pipeline_manifest.json")) {
+            $localControlPath = Join-Path $PartialPath $controlFile
+            $controlReady = $false
+            for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+                Write-Host "[reparando $attempt/$Attempts] $ExpectedRunId/$controlFile"
+                $result = Invoke-RailwayDownload `
+                    -RemotePath "$RemotePath/$controlFile" `
+                    -LocalPath $localControlPath `
+                    -Overwrite
+                if ($result.Succeeded -and
+                    (Test-Path -LiteralPath $localControlPath -PathType Leaf)) {
+                    $controlReady = $true
+                    break
+                }
+                if ($attempt -lt $Attempts -and $DelaySeconds -gt 0) {
+                    Start-Sleep -Seconds $DelaySeconds
+                }
+            }
+            if (-not $controlReady) {
+                throw "No se pudo recuperar $controlFile. $($result.Message)"
+            }
+        }
+
+        $metadata = Get-Content -LiteralPath (Join-Path $PartialPath "metadata.json") -Raw |
+            ConvertFrom-Json
+        $metadataRunId = Get-PropertyValue -InputObject $metadata -Names @("run_id")
+        if ([string]$metadataRunId -cne $ExpectedRunId) {
+            throw "metadata.json declara run_id '$metadataRunId', no '$ExpectedRunId'."
+        }
+        $manifest = Get-Content -LiteralPath (Join-Path $PartialPath "pipeline_manifest.json") -Raw |
+            ConvertFrom-Json
+        $manifestRunId = Get-PropertyValue -InputObject $manifest -Names @("run_id")
+        if ([string]$manifestRunId -cne $ExpectedRunId) {
+            throw "pipeline_manifest.json declara run_id '$manifestRunId', no '$ExpectedRunId'."
+        }
+        $artifacts = Get-PropertyValue -InputObject $manifest -Names @("artifacts")
+        if ($null -eq $artifacts -or @($artifacts.PSObject.Properties).Count -eq 0) {
+            throw "El manifiesto no declara artefactos."
+        }
+
+        $repairTargets = @(
+            foreach ($artifact in $artifacts.PSObject.Properties) {
+                $descriptor = Get-SafeArtifactDescriptor `
+                    -ArchivePath $PartialPath `
+                    -Artifact $artifact
+                $needsRepair = -not (Test-Path -LiteralPath $descriptor.LocalPath -PathType Leaf)
+                if (-not $needsRepair) {
+                    $actualHash = (Get-FileHash -LiteralPath $descriptor.LocalPath -Algorithm SHA256).Hash
+                    $needsRepair = $actualHash -cne $descriptor.ExpectedHash
+                }
+                if ($needsRepair) { $descriptor }
+            }
+        )
+        if ($repairTargets.Count -gt 0) {
+            Write-Host "[reparación] $($ExpectedRunId): $($repairTargets.Count) artefacto(s) incompleto(s)."
+        }
+        foreach ($target in $repairTargets) {
+            New-Item -ItemType Directory -Path (Split-Path -Parent $target.LocalPath) -Force |
+                Out-Null
+            $repaired = $false
+            for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+                Write-Host "[reparando $attempt/$Attempts] $ExpectedRunId/$($target.RelativePath)"
+                $result = Invoke-RailwayDownload `
+                    -RemotePath "$RemotePath/$($target.RelativePath)" `
+                    -LocalPath $target.LocalPath `
+                    -Overwrite
+                if ($result.Succeeded -and
+                    (Test-Path -LiteralPath $target.LocalPath -PathType Leaf)) {
+                    $actualHash = (Get-FileHash -LiteralPath $target.LocalPath -Algorithm SHA256).Hash
+                    if ($actualHash -ceq $target.ExpectedHash) {
+                        $repaired = $true
+                        break
+                    }
+                }
+                if ($attempt -lt $Attempts -and $DelaySeconds -gt 0) {
+                    Start-Sleep -Seconds $DelaySeconds
+                }
+            }
+            if (-not $repaired) {
+                throw "No se pudo reparar '$($target.RelativePath)'. $($result.Message)"
+            }
+        }
+        [pscustomobject]@{ Succeeded = $true; Message = "Descarga parcial reparada." }
+    }
+    catch {
+        [pscustomobject]@{ Succeeded = $false; Message = $_.Exception.Message }
+    }
+}
+
+function New-ManualDeleteCommand {
+    param(
+        [string]$RemotePath,
+        [string]$ServiceName
+    )
+    $escapedServiceName = $ServiceName.Replace("'", "''")
+    $escapedRemotePath = $RemotePath.Replace("'", "''")
+    "railway service '$escapedServiceName' files delete '$escapedRemotePath' --yes"
+}
+
+function Invoke-RemoteRunDeletion {
+    param(
+        [string]$RemotePath,
+        [string]$ServiceName
+    )
+    $oldPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $output = @(& railway service files delete $RemotePath --yes --json 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $oldPreference }
+
+    $message = (($output | ForEach-Object { [string]$_ }) -join "`n").Trim()
+    $manualCommand = New-ManualDeleteCommand `
+        -RemotePath $RemotePath `
+        -ServiceName $ServiceName
+    if ($exitCode -eq 0) {
+        return [pscustomobject]@{ State = "deleted"; Message = $message; Command = $null }
+    }
+    if ($message -match "agents cannot delete files") {
+        return [pscustomobject]@{
+            State = "agent-blocked"
+            Message = $message
+            Command = $manualCommand
+        }
+    }
+    [pscustomobject]@{
+        State = "failed"
+        Message = "Railway CLI terminó con código $exitCode al borrar. $message"
+        Command = $manualCommand
     }
 }
 
@@ -292,6 +501,14 @@ try {
     catch {
         throw "Railway devolvió una lista JSON inválida: $($_.Exception.Message)"
     }
+    $serviceData = Get-PropertyValue -InputObject $jsonData -Names @("service")
+    $remoteServiceName = if ($null -ne $serviceData) {
+        [string](Get-PropertyValue -InputObject $serviceData -Names @("name"))
+    }
+    else { "" }
+    if ([string]::IsNullOrWhiteSpace($remoteServiceName)) {
+        $remoteServiceName = "biplan-telegram"
+    }
 
     $remoteNames = @(
         foreach ($entry in (Get-EntryCollection -JsonData $jsonData)) {
@@ -317,6 +534,9 @@ try {
     $integrityFailures = 0
     $downloadFailures = 0
     $deleteFailures = 0
+    $manualDeletes = 0
+    $remoteDeletionBlocked = $false
+    $manualDeleteCommands = New-Object System.Collections.Generic.List[string]
 
     foreach ($name in $remoteNames) {
         $destination = Join-Path $localRoot $name
@@ -343,25 +563,39 @@ try {
             $partialName = "$name.partial-$([Guid]::NewGuid().ToString('N'))"
             $partialPath = Join-Path $stagingRoot $partialName
 
-            try {
-                Write-Host "[descargando] $name"
-                & railway service files download $remotePath $partialPath `
-                    --concurrency $Concurrency --json | Out-Null
-                if ($LASTEXITCODE -ne 0) {
-                    throw "Railway CLI terminó con código $LASTEXITCODE."
-                }
-                if (-not (Test-Path -LiteralPath $partialPath -PathType Container)) {
-                    throw "Railway no creó el directorio local esperado."
-                }
-                if (Test-Path -LiteralPath $destination) {
-                    throw "La carpeta local apareció durante la descarga; no se sobrescribirá."
+            Write-Host "[descargando] $name"
+            $bulkResult = Invoke-RailwayDownload `
+                -RemotePath $remotePath `
+                -LocalPath $partialPath `
+                -TransferConcurrency $Concurrency
+            if (-not $bulkResult.Succeeded) {
+                Write-Warning (
+                    "La descarga completa de '$name' falló; se repararán solamente " +
+                    "los artefactos incompletos. $($bulkResult.Message)"
+                )
+                $repair = Repair-PartialRun `
+                    -PartialPath $partialPath `
+                    -RemotePath $remotePath `
+                    -ExpectedRunId $name `
+                    -Attempts $DownloadRetryAttempts `
+                    -DelaySeconds $RetryDelaySeconds
+                if (-not $repair.Succeeded) {
+                    if (Test-Path -LiteralPath $partialPath) {
+                        Remove-Item -LiteralPath $partialPath -Recurse -Force
+                    }
+                    Write-Warning "No se pudo descargar '$name': $($repair.Message)"
+                    $downloadFailures++
+                    continue
                 }
             }
-            catch {
-                if (Test-Path -LiteralPath $partialPath) {
-                    Remove-Item -LiteralPath $partialPath -Recurse -Force
-                }
-                Write-Warning "No se pudo descargar '$name': $($_.Exception.Message)"
+            if (-not (Test-Path -LiteralPath $partialPath -PathType Container)) {
+                Write-Warning "No se pudo descargar '$name': Railway no creó el directorio esperado."
+                $downloadFailures++
+                continue
+            }
+            if (Test-Path -LiteralPath $destination) {
+                Remove-Item -LiteralPath $partialPath -Recurse -Force
+                Write-Warning "La carpeta local '$name' apareció durante la descarga; no se sobrescribirá."
                 $downloadFailures++
                 continue
             }
@@ -397,14 +631,37 @@ try {
         }
 
         if ($archiveReady -and -not $KeepRemote) {
-            try {
-                Remove-RemoteRun -RemotePath $remotePath
-                Write-Host "[borrada] $name"
-                $deleted++
+            if ($remoteDeletionBlocked) {
+                $manualDeleteCommands.Add(
+                    (New-ManualDeleteCommand `
+                        -RemotePath $remotePath `
+                        -ServiceName $remoteServiceName)
+                )
+                $manualDeletes++
+                Write-Host "[borrado manual pendiente] $name"
             }
-            catch {
-                Write-Warning "La copia local de '$name' está íntegra, pero Railway no pudo borrarla: $($_.Exception.Message)"
-                $deleteFailures++
+            else {
+                $deleteResult = Invoke-RemoteRunDeletion `
+                    -RemotePath $remotePath `
+                    -ServiceName $remoteServiceName
+                if ($deleteResult.State -eq "deleted") {
+                    Write-Host "[borrada] $name"
+                    $deleted++
+                }
+                elseif ($deleteResult.State -eq "agent-blocked") {
+                    $remoteDeletionBlocked = $true
+                    $manualDeleteCommands.Add($deleteResult.Command)
+                    $manualDeletes++
+                    Write-Warning (
+                        "Railway bloqueó el borrado desde esta terminal marcada como agente. " +
+                        "Las descargas continuarán y los comandos manuales se mostrarán al final."
+                    )
+                    Write-Host "[borrado manual pendiente] $name"
+                }
+                else {
+                    Write-Warning "Railway no pudo borrar '$name': $($deleteResult.Message)"
+                    $deleteFailures++
+                }
             }
         }
         elseif ($archiveReady) {
@@ -417,12 +674,23 @@ try {
         Remove-Item -LiteralPath $stagingRoot -Force
     }
 
+    if ($manualDeleteCommands.Count -gt 0) {
+        Write-Host ""
+        Write-Warning (
+            "Hay $manualDeletes copia(s) remota(s) validadas cuyo borrado requiere " +
+            "un PowerShell externo no marcado como agente. Ejecuta:"
+        )
+        foreach ($command in $manualDeleteCommands) {
+            Write-Host "  $command"
+        }
+    }
+
     Write-Host ""
     Write-Host (
         (
             "Sincronización terminada: {0} descargadas, {1} ya locales, {2} borradas, " +
             "{3} pendientes, {4} fallos de integridad, {5} fallos de descarga y " +
-            "{6} fallos de borrado."
+            "{6} fallos de borrado; {7} borrados manuales pendientes."
         ) -f
         $downloaded,
         $existingLocal,
@@ -430,7 +698,8 @@ try {
         $pending,
         $integrityFailures,
         $downloadFailures,
-        $deleteFailures
+        $deleteFailures,
+        $manualDeletes
     )
 
     if (($integrityFailures + $downloadFailures + $deleteFailures) -gt 0) {
