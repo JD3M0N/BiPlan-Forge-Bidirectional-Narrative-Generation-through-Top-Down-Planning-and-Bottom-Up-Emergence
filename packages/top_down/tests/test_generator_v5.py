@@ -722,6 +722,17 @@ def test_internal_agents_use_english_until_drafting(tmp_path) -> None:
     )
 
 
+def test_drama_critic_checks_scene_space_event_by_event(tmp_path) -> None:
+    provider = FakeProvider()
+    StoryGenerator(provider, tmp_path).run(make_request())
+    critic_system = next(
+        system for name, system, _ in provider.structured_calls if name == "StoryReview"
+    )
+    assert "examine every planned event of each chapter individually" in critic_system
+    assert "does not by itself satisfy the profile" in critic_system
+    assert "never a word-count or length instruction" in critic_system
+
+
 def test_final_chapter_parser_requires_every_heading() -> None:
     story = "# Título\n\n## Uno\n\nPrimero.\n\n## Dos\n\nSegundo."
     assert parse_chapter_bodies(story, 2) == ["Primero.", "Segundo."]

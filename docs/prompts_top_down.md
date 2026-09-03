@@ -1,6 +1,6 @@
 # Prompts canónicos para probar el pipeline Top-Down
 
-Este catálogo contiene seis solicitudes narrativas estables para observar cómo
+Este catálogo contiene siete solicitudes narrativas estables para observar cómo
 cambia el resultado cuando se modifica el pipeline. Los casos usan perfiles
 cualitativos y dejan que el planificador decida los capítulos sin presupuestos
 numéricos de palabras. Desarrollada y Expansiva aplican mínimos estructurales de
@@ -106,6 +106,36 @@ Escribe en español una historia de ciencia ficción con perfil narrativo Desarr
 <!-- PROMPT_06_EXPANSIVE_START -->
 Escribe en español una historia de ciencia ficción con perfil narrativo Expansiva sobre un mundo gobernado por dinosaurios que nunca se extinguieron y desarrollaron suficiente inteligencia para dominar el mundo. Narra cómo descubrieron e inventaron los mismos inventos que los humanos, pero adaptados a sus posibilidades y limitaciones físicas; por ejemplo, un dinosaurio de cuello largo no podría manejar una máquina pequeña, pero podría realizar otras tareas acordes con su anatomía. Juega con los distintos tipos y especies de dinosaurios, incorporando hechos reales de ese mundo.
 <!-- PROMPT_06_EXPANSIVE_END -->
+
+## 7. Misterio — la subasta de la falsificación
+
+**Uso:** segunda comparación controlada de la extensión y la profundidad producidas por
+los perfiles Esencial, Desarrollada y Expansiva mediante tres ejecuciones
+independientes del pipeline completo, con una premisa distinta a la del prompt 6 para
+que la calibración de perfiles no dependa de un único contenido.
+
+**Qué pone a prueba:** reparto de especialidades dentro de un mismo equipo, pistas
+materiales de una falsificación, presión de un plazo cerrado y capacidad de cada
+perfil para ampliar la historia con subtramas y complicaciones significativas en
+lugar de solo alargar la prosa.
+
+### Variante Esencial
+
+<!-- PROMPT_07_ESSENTIAL_START -->
+Escribe en español una historia de misterio con perfil narrativo Esencial sobre un equipo de restauradores de arte que descubre, la noche antes de una subasta millonaria, que el cuadro estrella ha sido sustituido por una falsificación casi perfecta. Deben investigar quién hizo el cambio y recuperar el original antes del amanecer sin alertar a la casa de subastas ni a la policía, porque uno de los restauradores tiene una razón personal para evitar que se abra una investigación oficial. Juega con las distintas especialidades del equipo —autenticación, restauración química, logística y seguridad— y con las pistas materiales que deja una falsificación de calidad.
+<!-- PROMPT_07_ESSENTIAL_END -->
+
+### Variante Desarrollada
+
+<!-- PROMPT_07_DEVELOPED_START -->
+Escribe en español una historia de misterio con perfil narrativo Desarrollada sobre un equipo de restauradores de arte que descubre, la noche antes de una subasta millonaria, que el cuadro estrella ha sido sustituido por una falsificación casi perfecta. Deben investigar quién hizo el cambio y recuperar el original antes del amanecer sin alertar a la casa de subastas ni a la policía, porque uno de los restauradores tiene una razón personal para evitar que se abra una investigación oficial. Juega con las distintas especialidades del equipo —autenticación, restauración química, logística y seguridad— y con las pistas materiales que deja una falsificación de calidad.
+<!-- PROMPT_07_DEVELOPED_END -->
+
+### Variante Expansiva
+
+<!-- PROMPT_07_EXPANSIVE_START -->
+Escribe en español una historia de misterio con perfil narrativo Expansiva sobre un equipo de restauradores de arte que descubre, la noche antes de una subasta millonaria, que el cuadro estrella ha sido sustituido por una falsificación casi perfecta. Deben investigar quién hizo el cambio y recuperar el original antes del amanecer sin alertar a la casa de subastas ni a la policía, porque uno de los restauradores tiene una razón personal para evitar que se abra una investigación oficial. Juega con las distintas especialidades del equipo —autenticación, restauración química, logística y seguridad— y con las pistas materiales que deja una falsificación de calidad.
+<!-- PROMPT_07_EXPANSIVE_END -->
 
 ## Lectura esperada de los resultados
 

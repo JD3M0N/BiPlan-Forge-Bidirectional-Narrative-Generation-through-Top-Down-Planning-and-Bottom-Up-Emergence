@@ -8,9 +8,9 @@ para sostener la tesis y la operación; `P2` es refactorización que reduce el c
 anterior sin cambiar el comportamiento observable.
 
 **Orden sugerido:** primero las siete tareas `P0` (línea base de calidad, política de voz,
-calibración de perfiles, plan entregado sin validar, trabajos bloqueados y fugas de la cola);
-después `P1`, empezando por integración continua y el lector de evaluaciones; y por último
-`P2`, empezando por la división de `pipeline.py`, que es la que abarata todas las demás.
+extensión de las historias Expansivas, plan entregado sin validar, trabajos bloqueados y fugas
+de la cola); después `P1`, empezando por integración continua y el lector de evaluaciones; y por
+último `P2`, empezando por la división de `pipeline.py`, que es la que abarata todas las demás.
 
 **Estado medido el 2026-09-03 sobre `1bea0f1`:** 168 pruebas colectadas, `ruff check .` sin
 errores, `ruff format --check .` reformatearía 8 archivos, una prueba fallando por docstrings
@@ -109,18 +109,24 @@ ausentes. La comparación de perfiles con este código está en `docs/calibracio
   revalidación de todo el corpus distingue explícitamente entre runs anteriores al contrato y
   runs que lo incumplen.
 
-- [ ] **`P0` Terminar la calibración de los perfiles en la historia entregada.** La ejecución
-  de control del 2026-09-03 con el código actual (`docs/calibracion_perfiles.md`) demuestra que
-  los mínimos estructurales funcionan en el plan —4, 6 y 9 eventos y otras tantas dependencias
-  causales, monótonos por perfil— pero no en el texto: Esencial y Desarrollada difieren en 78
-  palabras (2 127 frente a 2 205, un 3,7 %), y la Expansiva gana estructura comprimiendo
-  escenas, con las palabras por evento cayendo de 532 a 368 y a 321. Es la indistinguibilidad
-  de 6.0.0 desplazada del plan a la prosa, y contradice el propio contrato del perfil Expansivo,
-  que pide espacio de escena suficiente por evento
-  (`packages/top_down/src/asg_top_down/profiles.py:44-46`). **Finalizada cuando:** con el mismo
-  prompt, una historia Expansiva se distingue de una Esencial por desarrollo de escena y no
-  solo por el número de nodos del plan, y la diferencia queda documentada sobre más de una
-  ejecución por perfil.
+- [ ] **`P0` Mejorar la extensión real de las historias Expansivas.** El arreglo cualitativo del
+  `DramaCriticAgent` (verificación evento por evento, documentado en `docs/calibracion_perfiles.md`)
+  revirtió la compresión de eventos frente a la Esencial: la Expansiva ya no es la menos densa por
+  evento. Pero su extensión absoluta sigue por debajo de lo esperable para 9 eventos con escena
+  completa: tres ejecuciones sobre tres prompts distintos del catálogo dieron 3171, 3763 y 4102
+  palabras (`el-dominio-saurio`, `la-falsificacion-perfecta`, `las-cenizas-del-pacto`), ninguna
+  por encima de las ~5000 palabras que cabría esperar. El propio dato correlaciona extensión con
+  número de capítulos: la única ejecución con 5 capítulos (`las-cenizas-del-pacto`) alcanzó 456
+  palabras por evento y el máximo de palabras total; las de 3 capítulos se quedaron en 352 y 418.
+  Además, de las cinco ejecuciones Expansivas intentadas en esta sesión, dos (40 %) agotaron los
+  dos intentos estructurales permitidos y fallaron por completo con `PLOT_VALIDATION_FAILED`; de
+  los nueve intentos estructurales individuales realizados en total, seis (67 %) fueron
+  rechazados por `validate_profile_structure`, casi siempre por quedarse a un solo evento del
+  mínimo de 9 — el planificador tampoco converge con facilidad hacia un plan de 9 eventos bien
+  distribuido. **Finalizada cuando:** una muestra de ejecuciones Expansivas alcanza de forma
+  consistente una extensión perceptiblemente mayor —coherente con el reparto de capítulos que
+  fije la tarea de segmentación siguiente— y la tasa de fallos de planificación baja de forma
+  medible respecto al 40 % de ejecuciones y 67 % de intentos observados aquí.
 
 - [ ] **`P0` Gobernar la segmentación en capítulos.**
   `packages/top_down/src/asg_top_down/profiles.py:51-55` solo fija un suelo de eventos; el
