@@ -27,10 +27,12 @@ normalizado en inglés. Se conservan los callbacks `on_progress`,
 ## Plan y garantías
 
 El usuario expresa la profundidad mediante Esencial, Desarrollada o Expansiva.
-El perfil reemplaza los objetivos de palabras, capítulos y eventos; el
-planificador decide la forma necesaria sin rangos numéricos. Python valida
-referencias, payoffs dirigidos hacia eventos anteriores, conectividad,
-causalidad, aciclicidad y el orden topológico. Gemini decide el contenido creativo.
+El perfil reemplaza los objetivos de palabras y capítulos. Esencial conserva una
+forma compacta sin un mínimo adicional; Desarrollada exige al menos seis eventos
+y Expansiva al menos nueve, con una bifurcación y reunión causal. Python valida
+estos mínimos junto con referencias, payoffs dirigidos hacia eventos anteriores,
+conectividad, causalidad, aciclicidad y el orden topológico. Gemini decide el
+contenido creativo de cada evento.
 `payoff_of` admite exclusivamente IDs exactos de eventos anteriores; los
 objetos pertenecen a `object_ids` y las condiciones o cambios narrativos se
 expresan como texto en `preconditions` y `effects`. Cuando no existe un setup

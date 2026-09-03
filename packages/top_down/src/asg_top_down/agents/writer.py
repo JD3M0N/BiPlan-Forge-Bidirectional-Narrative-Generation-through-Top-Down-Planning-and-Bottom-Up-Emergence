@@ -59,6 +59,9 @@ class DrafterAgent(Agent[str]):
                 f"You are the Drafter. Write only this first-draft fiction chapter body in "
                 f"{request.language}, without a heading or process "
                 "notes. Dramatize the supplied events in order, make causes and consequences visible, and "
+                "render every supplied event as a distinct narrative development instead of compressing "
+                "multiple events into summary. Expand Developed and Expansive stories through meaningful "
+                "action, reaction, and consequence rather than repetition or decorative filler. "
                 "respect world rules, character intentions, continuity, and the qualitative narrative profile. "
                 "Do not expose internal IDs or planning terminology."
             ),
@@ -100,7 +103,9 @@ class WriterAgent(Agent[str]):
                 f"You are the final Writer. Rewrite only this chapter body in {request.language}; return no "
                 "heading, commentary, note IDs, or process language. Apply every supplied global and local "
                 "revision note, preserve correct material, planned causality, and continuity, and honor the "
-                "depth and pacing of the qualitative narrative profile. Coordinate the opening with the "
+                "depth and pacing of the qualitative narrative profile. Preserve every distinct planned "
+                "event and expand through meaningful action, reaction, and consequence rather than summary, "
+                "repetition, or decorative filler. Coordinate the opening with the "
                 "previously revised chapter."
             ),
             prompt=(

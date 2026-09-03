@@ -29,13 +29,13 @@ from pydantic import ValidationError
 
 def make_request() -> StoryRequest:
     return StoryRequest(
-        original_prompt="Escribe una historia con perfil narrativo Desarrollada",
-        processed_prompt="Write a developed story about a difficult truth.",
+        original_prompt="Escribe una historia con perfil narrativo Esencial",
+        processed_prompt="Write an essential story about a difficult truth.",
         title="The Price of Truth",
         language="Spanish",
         genre="drama",
         tone="tense",
-        narrative_profile="developed",
+        narrative_profile="essential",
         premise="Ana discovers a dangerous truth.",
         constraints=[],
         creative_directions=["Give Ana an earned, hopeful resolution"],
@@ -123,6 +123,45 @@ def valid_plan(*, ending: str = "The town chooses to rebuild together") -> Story
             )
         ],
     )
+
+
+def sized_plan(event_count: int, *, branch_and_join: bool = False) -> StoryPlanDraft:
+    """Build a two-chapter plan with a requested valid event count."""
+    candidate = valid_plan()
+    first_chapter_events = event_count // 2
+    candidate.events = [
+        plot_event(
+            f"event-{order}",
+            order,
+            "chapter-1" if order <= first_chapter_events else "chapter-2",
+        )
+        for order in range(1, event_count + 1)
+    ]
+    if branch_and_join:
+        candidate.dependencies = [
+            EventDependency(source_event_id="event-1", target_event_id="event-2", relation="causal"),
+            EventDependency(source_event_id="event-1", target_event_id="event-3", relation="causal"),
+            EventDependency(source_event_id="event-2", target_event_id="event-4", relation="causal"),
+            EventDependency(source_event_id="event-3", target_event_id="event-4", relation="causal"),
+            *[
+                EventDependency(
+                    source_event_id=f"event-{order}",
+                    target_event_id=f"event-{order + 1}",
+                    relation="causal",
+                )
+                for order in range(4, event_count)
+            ],
+        ]
+    else:
+        candidate.dependencies = [
+            EventDependency(
+                source_event_id=f"event-{order}",
+                target_event_id=f"event-{order + 1}",
+                relation="causal",
+            )
+            for order in range(1, event_count)
+        ]
+    return candidate
 
 
 def invalid_plan() -> StoryPlanDraft:
@@ -297,7 +336,7 @@ def test_complete_pipeline_saves_v60_artifacts_and_agent_order(tmp_path) -> None
         "revision",
     ]
     metrics = json.loads((run.run_dir / "story_metrics.json").read_text(encoding="utf-8"))
-    assert metrics["narrative_profile"] == "developed"
+    assert metrics["narrative_profile"] == "essential"
     assert metrics["chapters"] == 2
     assert metrics["events"] == 2
     assert metrics["words"] > 0
@@ -563,6 +602,102 @@ def test_programmatic_request_rejects_legacy_numeric_fields() -> None:
         StoryRequest.model_validate(values)
 
 
+def test_developed_plan_below_event_floor_is_replanned(tmp_path) -> None:
+    request = make_request().model_copy(
+        update={"narrative_profile": NarrativeProfile.DEVELOPED}
+    )
+    provider = FakeProvider(plans=[valid_plan(), sized_plan(6)])
+    run = StoryGenerator(provider, tmp_path).run(request)
+    plan = json.loads((run.run_dir / "story_plan.json").read_text(encoding="utf-8"))
+    validation = json.loads(
+        (run.run_dir / "planning/attempt-001-validation.json").read_text(encoding="utf-8")
+    )
+    assert len(plan["events"]) == 6
+    assert validation["issue"] == "developed profile requires at least 6 events; got 2"
+    planner_prompts = [
+        prompt for name, _, prompt in provider.structured_calls if name == "StoryPlanDraft"
+    ]
+    assert "Fix this structural error" in planner_prompts[1]
+    assert "at least six causally meaningful events" in planner_prompts[1]
+
+
+def test_two_profile_invalid_plans_fail_before_critique_or_drafting(tmp_path) -> None:
+    request = make_request().model_copy(
+        update={"narrative_profile": NarrativeProfile.EXPANSIVE}
+    )
+    provider = FakeProvider(
+        plans=[
+            sized_plan(9, branch_and_join=False),
+            sized_plan(9, branch_and_join=False),
+        ]
+    )
+    created = []
+    with pytest.raises(PlotValidationError) as captured:
+        StoryGenerator(provider, tmp_path).run(request, on_run_created=created.append)
+    assert captured.value.code == "PLOT_VALIDATION_FAILED"
+    assert not any(name == "PlanReview" for name, _, _ in provider.structured_calls)
+    assert provider.text_calls == []
+    metadata = json.loads((created[0] / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["status"] == "failed"
+
+
+def test_profile_invalid_refinement_falls_back_to_valid_plan(tmp_path) -> None:
+    request = make_request().model_copy(
+        update={"narrative_profile": NarrativeProfile.DEVELOPED}
+    )
+    provider = FakeProvider(
+        plans=[sized_plan(6), valid_plan()],
+        plan_review=rejected_plan_review(),
+    )
+    run = StoryGenerator(provider, tmp_path).run(request)
+    plan = json.loads((run.run_dir / "story_plan.json").read_text(encoding="utf-8"))
+    validation = json.loads(
+        (run.run_dir / "planning/refined-candidate-validation.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert len(plan["events"]) == 6
+    assert validation["issue"] == "developed profile requires at least 6 events; got 2"
+    assert any("primer plan" in warning for warning in metadata["warnings"])
+
+
+def test_profile_guidance_reaches_world_characters_and_prose_agents(tmp_path) -> None:
+    request = make_request().model_copy(
+        update={"narrative_profile": NarrativeProfile.DEVELOPED}
+    )
+    provider = FakeProvider(plans=[sized_plan(6)])
+    StoryGenerator(provider, tmp_path).run(request)
+    structured = {
+        name: (system, prompt) for name, system, prompt in provider.structured_calls
+    }
+    assert "scaled to the qualitative narrative profile" in structured["WorldArtifact"][0]
+    assert "supporting characters" in structured["CharactersArtifact"][0]
+    assert "at least six causally meaningful events" in structured["WorldArtifact"][1]
+    assert "at least six causally meaningful events" in structured["CharactersArtifact"][1]
+    assert any(
+        "at least six causally meaningful events" in prompt
+        for _, prompt in provider.text_calls
+    )
+
+
+def test_expansive_guidance_resists_event_compression(tmp_path) -> None:
+    request = make_request().model_copy(
+        update={"narrative_profile": NarrativeProfile.EXPANSIVE}
+    )
+    provider = FakeProvider(plans=[sized_plan(9, branch_and_join=True)])
+    StoryGenerator(provider, tmp_path).run(request)
+    structured_prompts = [prompt for _, _, prompt in provider.structured_calls]
+    prose_prompts = [prompt for _, prompt in provider.text_calls]
+    expected = "do not pack several planned events into a brief summary passage"
+    assert any(expected in prompt for prompt in structured_prompts)
+    assert any(expected in prompt for prompt in prose_prompts)
+    planner_system = next(
+        system for name, system, _ in provider.structured_calls if name == "StoryPlanDraft"
+    )
+    assert "independent parallel roots are not a branch" in planner_system
+
+
 def test_internal_agents_use_english_until_drafting(tmp_path) -> None:
     provider = FakeProvider()
     run = StoryGenerator(provider, tmp_path).run(make_request())
@@ -570,7 +705,7 @@ def test_internal_agents_use_english_until_drafting(tmp_path) -> None:
     plan = json.loads((run.run_dir / "story_plan.json").read_text(encoding="utf-8"))
     presentation = json.loads((run.run_dir / "draft_presentation.json").read_text(encoding="utf-8"))
     assert request["title"] == "The Price of Truth"
-    assert request["narrative_profile"] == "developed"
+    assert request["narrative_profile"] == "essential"
     assert [item["title"] for item in plan["chapters"]] == ["The Archive", "The Choice"]
     assert presentation["title"] == "El precio de la verdad"
     critic_system = next(

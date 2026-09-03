@@ -1,5 +1,15 @@
 # Historial de cambios
 
+## 6.1.0
+
+- Conservado el perfil Esencial sin un mínimo adicional de eventos.
+- Exigidos al menos seis eventos para Desarrollada y nueve para Expansiva; los
+  planes Expansivos requieren además una bifurcación y reunión causal.
+- Hechos sensibles al perfil los agentes de mundo, personajes, planificación,
+  crítica y redacción para ampliar mediante cambios narrativos en vez de relleno.
+- Mantenido el contrato de artefactos 6.0 y la ausencia de presupuestos de
+  palabras o capítulos.
+
 ## 6.0.0
 
 - Sustituidos los presupuestos de palabras, capítulos y eventos por los perfiles

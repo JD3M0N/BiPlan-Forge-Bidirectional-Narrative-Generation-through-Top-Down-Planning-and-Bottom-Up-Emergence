@@ -1,8 +1,10 @@
 import pytest
 from asg_top_down.graph import (
     materialize_plan,
+    validate_profile_structure,
     validate_story_plan,
 )
+from asg_top_down.profiles import NarrativeProfile
 from asg_top_down.schemas import (
     ChapterDraft,
     ChapterPlan,
@@ -220,6 +222,64 @@ def test_same_profile_accepts_different_valid_graph_sizes() -> None:
         "event-3",
         "event-4",
     ]
+
+
+def profile_plan(event_count: int) -> StoryPlan:
+    """Build a valid linear plan with the requested number of events."""
+    candidate = plan(
+        [dependency("event-1", "event-2"), dependency("event-2", "event-3")]
+    )
+    for order in range(4, event_count + 1):
+        identifier = f"event-{order}"
+        candidate.events.append(event(identifier, order))
+        candidate.dependencies.append(dependency(f"event-{order - 1}", identifier))
+    validate_story_plan(candidate, world(), characters())
+    return candidate
+
+
+def test_essential_profile_keeps_compact_plan_valid() -> None:
+    validate_profile_structure(profile_plan(3), NarrativeProfile.ESSENTIAL)
+
+
+@pytest.mark.parametrize(
+    ("profile", "minimum", "actual"),
+    [
+        (NarrativeProfile.DEVELOPED, 6, 5),
+        (NarrativeProfile.EXPANSIVE, 9, 8),
+    ],
+)
+def test_larger_profiles_reject_too_few_events(profile, minimum, actual) -> None:
+    with pytest.raises(
+        ValueError,
+        match=rf"{profile.value} profile requires at least {minimum} events; got {actual}",
+    ):
+        validate_profile_structure(profile_plan(actual), profile)
+
+
+def test_developed_profile_accepts_six_meaningful_events() -> None:
+    validate_profile_structure(profile_plan(6), NarrativeProfile.DEVELOPED)
+
+
+def test_expansive_profile_requires_a_causal_branch_and_later_join() -> None:
+    with pytest.raises(ValueError, match="causal dependency branch"):
+        validate_profile_structure(profile_plan(9), NarrativeProfile.EXPANSIVE)
+
+
+def test_expansive_profile_accepts_a_causal_branch_and_later_join() -> None:
+    candidate = profile_plan(9)
+    candidate.dependencies = [
+        dependency("event-1", "event-2"),
+        dependency("event-1", "event-3"),
+        dependency("event-2", "event-4"),
+        dependency("event-3", "event-4"),
+        dependency("event-4", "event-5"),
+        dependency("event-5", "event-6"),
+        dependency("event-6", "event-7"),
+        dependency("event-7", "event-8"),
+        dependency("event-8", "event-9"),
+    ]
+    validate_story_plan(candidate, world(), characters())
+    validate_profile_structure(candidate, NarrativeProfile.EXPANSIVE)
 
 
 def test_disconnected_or_noncausal_graph_is_rejected() -> None:

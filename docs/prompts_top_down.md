@@ -1,9 +1,10 @@
 # Prompts canónicos para probar el pipeline Top-Down
 
-Este catálogo contiene cinco solicitudes narrativas estables para observar cómo
+Este catálogo contiene seis solicitudes narrativas estables para observar cómo
 cambia el resultado cuando se modifica el pipeline. Los casos usan perfiles
-cualitativos y dejan que el planificador decida capítulos y eventos sin
-presupuestos numéricos.
+cualitativos y dejan que el planificador decida los capítulos sin presupuestos
+numéricos de palabras. Desarrollada y Expansiva aplican mínimos estructurales de
+eventos para que la profundidad no se limite a producir escenas más largas.
 
 El prompt 1 es el caso canónico de regresión con Gemini. La prueba live lee su
 texto directamente entre los marcadores `PROMPT_01_START` y `PROMPT_01_END`;
@@ -74,6 +75,37 @@ continuidad espacial, manejo de información desconocida y cierre temático.
 <!-- PROMPT_05_START -->
 Escribe en español un relato de ciencia ficción con perfil narrativo Desarrollada. Irena Sol, cartógrafa de una estación orbital envejecida, descubre que varias estrellas parecen cambiar de posición para formar un mensaje que solo es visible desde la órbita de un planeta abandonado. La estación perderá su soporte vital en cuarenta y ocho horas y su comandante quiere usar el último combustible para evacuar, mientras Irena cree que comprender el mensaje puede revelar por qué fracasó la antigua colonia. Establece reglas claras y plausibles para la observación astronómica, las comunicaciones y las limitaciones de combustible; cualquier solución final debe basarse en tecnología o datos presentados previamente. Incluye a un técnico que discrepe honestamente de Irena y cuya relación con ella cambie por las consecuencias de sus decisiones. Mantén consistentes el tiempo disponible, las distancias, los recursos y la información conocida. Usa un tono melancólico y de asombro, combina el descubrimiento científico con un conflicto humano y termina de forma esperanzadora sin viaje temporal, intervención mágica ni rescate externo inesperado.
 <!-- PROMPT_05_END -->
+
+## 6. Ciencia ficción — dinosaurios que no se extinguieron
+
+**Uso:** comparación controlada de la extensión y la profundidad producidas por
+los perfiles Esencial, Desarrollada y Expansiva mediante tres ejecuciones
+independientes del pipeline completo.
+
+**Qué pone a prueba:** adaptación tecnológica a anatomías distintas, variedad
+de especies, coherencia física interna, construcción de hechos propios del mundo
+y capacidad de cada perfil para ampliar la historia con contenido significativo.
+La expresión «hechos reales de ese mundo» se refiere a hechos coherentes y
+establecidos dentro del mundo narrativo; no exige que todos sean datos
+paleontológicos del mundo real.
+
+### Variante Esencial
+
+<!-- PROMPT_06_ESSENTIAL_START -->
+Escribe en español una historia de ciencia ficción con perfil narrativo Esencial sobre un mundo gobernado por dinosaurios que nunca se extinguieron y desarrollaron suficiente inteligencia para dominar el mundo. Narra cómo descubrieron e inventaron los mismos inventos que los humanos, pero adaptados a sus posibilidades y limitaciones físicas; por ejemplo, un dinosaurio de cuello largo no podría manejar una máquina pequeña, pero podría realizar otras tareas acordes con su anatomía. Juega con los distintos tipos y especies de dinosaurios, incorporando hechos reales de ese mundo.
+<!-- PROMPT_06_ESSENTIAL_END -->
+
+### Variante Desarrollada
+
+<!-- PROMPT_06_DEVELOPED_START -->
+Escribe en español una historia de ciencia ficción con perfil narrativo Desarrollada sobre un mundo gobernado por dinosaurios que nunca se extinguieron y desarrollaron suficiente inteligencia para dominar el mundo. Narra cómo descubrieron e inventaron los mismos inventos que los humanos, pero adaptados a sus posibilidades y limitaciones físicas; por ejemplo, un dinosaurio de cuello largo no podría manejar una máquina pequeña, pero podría realizar otras tareas acordes con su anatomía. Juega con los distintos tipos y especies de dinosaurios, incorporando hechos reales de ese mundo.
+<!-- PROMPT_06_DEVELOPED_END -->
+
+### Variante Expansiva
+
+<!-- PROMPT_06_EXPANSIVE_START -->
+Escribe en español una historia de ciencia ficción con perfil narrativo Expansiva sobre un mundo gobernado por dinosaurios que nunca se extinguieron y desarrollaron suficiente inteligencia para dominar el mundo. Narra cómo descubrieron e inventaron los mismos inventos que los humanos, pero adaptados a sus posibilidades y limitaciones físicas; por ejemplo, un dinosaurio de cuello largo no podría manejar una máquina pequeña, pero podría realizar otras tareas acordes con su anatomía. Juega con los distintos tipos y especies de dinosaurios, incorporando hechos reales de ese mundo.
+<!-- PROMPT_06_EXPANSIVE_END -->
 
 ## Lectura esperada de los resultados
 

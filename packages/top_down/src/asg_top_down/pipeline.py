@@ -22,7 +22,7 @@ from .agents import (
 )
 from .audit import canonical_chapter, story_metrics, word_count
 from .errors import PlotValidationError
-from .graph import materialize_plan, relevant_prior_events
+from .graph import materialize_plan, relevant_prior_events, validate_profile_structure
 from .progress import PipelineEvent, PipelineEventCallback, ProgressCallback, ProgressUpdate
 from .schemas import (
     ChapterPlan,
@@ -248,7 +248,9 @@ class StoryPipeline:
             )
             try:
                 plan = materialize_plan(draft, world, characters)
+                validate_profile_structure(plan, request.narrative_profile)
             except ValueError as exc:
+                plan = None
                 feedback = self._record_rejected_plan(draft, attempt, exc, validation_errors)
                 continue
             break
@@ -304,6 +306,7 @@ class StoryPipeline:
             self.repository.save_json("planning/refined-candidate.json", candidate)
             try:
                 refined = materialize_plan(candidate, world, characters)
+                validate_profile_structure(refined, request.narrative_profile)
             except ValueError as exc:
                 issue = str(exc).strip() or type(exc).__name__
                 self.repository.save_data(

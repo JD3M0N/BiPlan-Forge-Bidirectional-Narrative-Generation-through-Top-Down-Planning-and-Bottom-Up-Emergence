@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from operator import attrgetter
 
+from .profiles import NarrativeProfile, profile_min_events
 from .schemas import (
     ChapterPlan,
     CharactersArtifact,
@@ -49,6 +50,40 @@ def validate_story_plan(
     result = _stable_topological_order(event_ids, order_by_id, incoming, outgoing)
     _validate_dependency_directions(plan, order_by_id)
     return result
+
+
+def validate_profile_structure(
+    plan: StoryPlan,
+    profile: NarrativeProfile,
+) -> None:
+    """Reject plans that do not meet the selected profile's structural floor."""
+    minimum = profile_min_events(profile)
+    actual = len(plan.events)
+    if minimum is not None and actual < minimum:
+        raise ValueError(
+            f"{profile.value} profile requires at least {minimum} events; got {actual}"
+        )
+    if profile is not NarrativeProfile.EXPANSIVE:
+        return
+
+    event_order = {event.id: event.order for event in plan.events}
+    incoming = dict.fromkeys(event_order, 0)
+    outgoing = dict.fromkeys(event_order, 0)
+    for dependency in plan.dependencies:
+        if dependency.relation != "causal":
+            continue
+        outgoing[dependency.source_event_id] += 1
+        incoming[dependency.target_event_id] += 1
+    branch_orders = [
+        event_order[event_id] for event_id, count in outgoing.items() if count >= 2
+    ]
+    join_orders = [
+        event_order[event_id] for event_id, count in incoming.items() if count >= 2
+    ]
+    if not any(branch < join for branch in branch_orders for join in join_orders):
+        raise ValueError(
+            "expansive profile requires a causal dependency branch followed by a causal join"
+        )
 
 
 def relevant_prior_events(
