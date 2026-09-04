@@ -1,5 +1,7 @@
+import sqlite3
 from pathlib import Path
 
+import pytest
 from asg_telegram.queue import QueueRepository
 
 
@@ -67,3 +69,30 @@ def test_estimate_requires_ten_completed_stories(tmp_path: Path) -> None:
                 ),
             )
     assert queue.average_duration() is None
+
+
+def test_every_operation_closes_its_connection(tmp_path: Path, monkeypatch) -> None:
+    opened: list[sqlite3.Connection] = []
+    original_connect = sqlite3.connect
+
+    def tracking_connect(*args, **kwargs):
+        connection = original_connect(*args, **kwargs)
+        opened.append(connection)
+        return connection
+
+    monkeypatch.setattr(sqlite3, "connect", tracking_connect)
+
+    queue = QueueRepository(tmp_path / "queue.sqlite3")
+    job = queue.enqueue(user_id=1, username="uno", chat_id=10, prompt="a")
+    queue.active()
+    queue.get(job.id)
+    queue.mark_running(job.id)
+    queue.finish(job.id, "completed")
+    queue.cancel_user(2)
+    queue.recovery_pending()
+    queue.average_duration()
+
+    assert opened
+    for connection in opened:
+        with pytest.raises(sqlite3.ProgrammingError):
+            connection.execute("SELECT 1")

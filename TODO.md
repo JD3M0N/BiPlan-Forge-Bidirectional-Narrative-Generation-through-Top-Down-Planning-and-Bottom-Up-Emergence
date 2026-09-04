@@ -162,14 +162,6 @@ ausentes. La comparación de perfiles con este código está en `docs/calibracio
   **Finalizada cuando:** los errores de cuota y de configuración abortan de inmediato con su
   código, solo se degradan los fallos realmente recuperables, y hay pruebas para ambos casos.
 
-- [ ] **`P1` Corregir el registro de etapas.** `plan_review` se marca completada
-  (`pipeline.py:292`) antes que `planning` (`pipeline.py:265`), de forma que
-  `metadata.completed_stages` publica un orden que no ocurrió; además la etapa de progreso
-  `saving` (`pipeline.py:766`) no coincide con el checkpoint `story` (`:769`) y `rate_limit`
-  es una pseudoetapa con un caso especial (`:814`). **Finalizada cuando:** el orden registrado
-  coincide con el de ejecución, los nombres de progreso y de checkpoint proceden de una única
-  definición, y una prueba lo verifica.
-
 - [ ] **`P1` Definir una política segura para ejecuciones interrumpidas.** Medir primero si hay
   un caso de uso que justifique reanudar desde los checkpoints existentes; mientras no exista
   reanudación segura, permitir reiniciar, notificar o descartar explícitamente los trabajos
@@ -252,12 +244,6 @@ ausentes. La comparación de perfiles con este código está en `docs/calibracio
   de `StoryPipeline`. **Finalizada cuando:** los callbacks se pasan por llamada, la telemetría
   se obtiene por una interfaz declarada, y el tipo del proveedor está anotado en las fachadas.
 
-- [ ] **`P2` Evitar que `StoryRun` lance excepciones que el CLI no captura.** `generator.py:22`
-  y `:28` pueden lanzar `FileNotFoundError`, `JSONDecodeError` o `ValueError`, mientras que
-  `cli.py:81` solo captura `ASGError` y `KeyboardInterrupt`: el usuario recibe una traza cruda.
-  **Finalizada cuando:** un `metadata.json` ausente, corrupto o con versión no soportada produce
-  un `ASGError` con mensaje público y código de salida 1.
-
 ## Telegram
 
 - [ ] **`P0` Desbloquear los trabajos irrecuperables.** `queue.py:178-199` marca los trabajos
@@ -269,15 +255,6 @@ ausentes. La comparación de perfiles con este código está en `docs/calibracio
   cuando:** existe una transición explícita —reencolar, descartar o notificar— para cada
   trabajo `recovery_pending`, el operador puede cancelar un trabajo en ejecución, y hay pruebas
   de reinicio que lo demuestran.
-
-- [ ] **`P0` Cerrar las conexiones SQLite.** Todos los métodos usan `with self._connect()`
-  (`queue.py:53-57`), y el gestor de contexto de `sqlite3.Connection` confirma o revierte la
-  transacción pero no cierra la conexión: cada `enqueue`, `active`, `position`, `finish` o
-  `average_duration` deja una abierta hasta que la recoja el recolector de basura, y
-  `_refresh_queue` (`generation.py:528-548`) llama a dos de ellos en cada transición.
-  **Finalizada cuando:** las conexiones se cierran de forma determinista, la disciplina de
-  cerrojos es la misma para lectores y escritores (hoy solo los escritores toman `self._lock`)
-  y una prueba verifica que no quedan conexiones abiertas tras una tanda de operaciones.
 
 - [ ] **`P1` Versionar y mantener la cola persistente.** Incorporar migraciones compatibles para
   `telegram_queue.sqlite3` y definir cuánto tiempo se conservan trabajos terminados, errores y
@@ -301,13 +278,6 @@ ausentes. La comparación de perfiles con este código está en `docs/calibracio
   mensaje de Telegram (`generation.py:575-579`) detiene la generación. **Finalizada cuando:**
   el progreso se entrega sin bloquear la generación, una edición lenta o fallida no detiene el
   pipeline, y existe una prueba con una edición que nunca responde.
-
-- [ ] **`P1` No registrar credenciales en los diagnósticos.** `_redact_diagnostic`
-  (`console.py:29-37`) solo oculta claves `AIza…` y asignaciones con `key`, `token` o
-  `authorization`; un token de bot de Telegram con la forma `\d+:[A-Za-z0-9_-]{35}` aparecería
-  íntegro, y `console.py:69` registra trazas completas para las excepciones que no son
-  `ASGError`. **Finalizada cuando:** los formatos de credencial usados por el proyecto están
-  cubiertos por pruebas y ninguna traza registrada los contiene.
 
 - [ ] **`P1` Aceptar solicitudes de historias mediante notas de voz.** Descargar y transcribir
   el audio recibido, mostrar el texto resultante para que el usuario lo confirme o corrija y
@@ -363,14 +333,6 @@ ausentes. La comparación de perfiles con este código está en `docs/calibracio
   `docs/prompts_top_down.md`, y `story_metrics.json` más `llm_usage.json` aportan la parte
   automática; falta el procedimiento y el recolector. Ninguno de los runs con perfil registrado
   tiene todavía una evaluación humana rellenada.
-
-- [ ] **`P2` Permitir comparar más de dos ejecuciones.** `compare-story-runs`
-  (`compare.py:31-41`) solo acepta dos runs, así que una comparación de tres perfiles obliga a
-  encadenar informes. El artefacto
-  `Stories/Top-Down/comparacion-densidad-borrador-final-v2.0.4.html` es de agosto, compara dos
-  versiones que difieren en una palabra y tiene la sección de notas vacía. **Finalizada
-  cuando:** la comparación ciega acepta N ejecuciones y el informe obsoleto está sustituido o
-  marcado como histórico.
 
 ## Documentación y despliegue
 

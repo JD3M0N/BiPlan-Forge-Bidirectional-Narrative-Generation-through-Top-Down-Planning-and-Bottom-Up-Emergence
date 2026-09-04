@@ -78,6 +78,13 @@ class PlotValidationError(ASGError):
     stage = "planning"
 
 
+class RunArtifactError(ASGError):
+    """Represent RunArtifactError data and behavior."""
+
+    code = "RUN_ARTIFACT_INVALID"
+    stage = "loading"
+
+
 class GeminiRPMError(ProviderError):
     """Represent GeminiRPMError data and behavior."""
 

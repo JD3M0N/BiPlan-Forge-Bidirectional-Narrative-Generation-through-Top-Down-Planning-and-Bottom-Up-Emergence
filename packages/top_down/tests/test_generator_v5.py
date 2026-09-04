@@ -328,6 +328,10 @@ def test_complete_pipeline_saves_v60_artifacts_and_agent_order(tmp_path) -> None
     assert metadata["pipeline_version"] == "6.0"
     assert metadata["status"] == "completed"
     assert run.audio_path.is_file()
+    completed_stages = metadata["completed_stages"]
+    assert completed_stages == sorted(completed_stages, key=pipeline_module.CHECKPOINT_STAGES.index)
+    assert completed_stages.index("planning") < completed_stages.index("plan_review")
+    assert any(update.stage == "story" for update in progress)
     manifest = json.loads((run.run_dir / "pipeline_manifest.json").read_text(encoding="utf-8"))
     assert manifest["artifacts"]["story.mp3"]["bytes"] == len(b"fake-mp3")
     report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))

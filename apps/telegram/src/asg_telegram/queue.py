@@ -5,6 +5,8 @@ from __future__ import annotations
 import sqlite3
 import threading
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -50,11 +52,16 @@ class QueueRepository:
                 )"""
             )
 
-    def _connect(self) -> sqlite3.Connection:
-        """Return a configured connection to the queue database."""
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        """Yield a configured connection, closing it deterministically."""
         db = sqlite3.connect(self.path, timeout=10)
         db.row_factory = sqlite3.Row
-        return db
+        try:
+            with db:
+                yield db
+        finally:
+            db.close()
 
     @staticmethod
     def _job(row: sqlite3.Row) -> QueueJob:
@@ -107,7 +114,7 @@ class QueueRepository:
 
     def active(self) -> list[QueueJob]:
         """Return running and queued jobs in their effective FIFO order."""
-        with self._connect() as db:
+        with self._lock, self._connect() as db:
             rows = db.execute(
                 "SELECT * FROM jobs WHERE status IN ('running','queued') "
                 "ORDER BY CASE status WHEN 'running' THEN 0 ELSE 1 END, enqueued_at"
@@ -116,7 +123,7 @@ class QueueRepository:
 
     def get(self, job_id: str) -> QueueJob | None:
         """Return a job by identifier, or None when it does not exist."""
-        with self._connect() as db:
+        with self._lock, self._connect() as db:
             row = db.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
         return self._job(row) if row else None
 
@@ -192,7 +199,7 @@ class QueueRepository:
 
     def recovery_pending(self) -> list[QueueJob]:
         """Return interrupted jobs waiting for an explicit recovery policy."""
-        with self._connect() as db:
+        with self._lock, self._connect() as db:
             rows = db.execute(
                 "SELECT * FROM jobs WHERE status='recovery_pending' ORDER BY enqueued_at"
             ).fetchall()
@@ -200,7 +207,7 @@ class QueueRepository:
 
     def average_duration(self) -> float | None:
         """Average the ten most recent completed jobs when available."""
-        with self._connect() as db:
+        with self._lock, self._connect() as db:
             rows = db.execute(
                 "SELECT duration_seconds FROM jobs WHERE status='completed' "
                 "AND duration_seconds IS NOT NULL ORDER BY finished_at DESC LIMIT 10"

@@ -72,3 +72,15 @@ def test_console_formatter_redacts_unexpected_traceback_credentials():
     assert "Traza" in result
     assert "super-secret" not in result
     assert "[REDACTED]" in result
+
+
+def test_console_formatter_redacts_telegram_bot_tokens():
+    bot_token = "123456789:AA" + "a" * 33
+    try:
+        raise ValueError(f"no se pudo notificar con el token {bot_token}")
+    except ValueError:
+        record = make_record(level=logging.ERROR, message="falló la generación")
+        record.exc_info = sys.exc_info()
+    result = ConsoleFormatter().format(record)
+    assert bot_token not in result
+    assert "[REDACTED]" in result

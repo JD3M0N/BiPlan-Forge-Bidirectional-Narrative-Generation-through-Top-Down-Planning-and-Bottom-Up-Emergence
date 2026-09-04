@@ -6,6 +6,7 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
+from .errors import RunArtifactError
 from .pipeline import StoryPipeline
 from .progress import PipelineEventCallback, ProgressCallback
 from .schemas import StoryRequest
@@ -19,13 +20,18 @@ class StoryRun:
         """Validate and open a completed run directory."""
         self.run_dir = Path(run_dir)
         metadata_path = self.run_dir / "metadata.json"
-        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except FileNotFoundError as exc:
+            raise RunArtifactError(f"No se encontró metadata.json en {self.run_dir}.") from exc
+        except json.JSONDecodeError as exc:
+            raise RunArtifactError(f"metadata.json en {self.run_dir} no es JSON válido.") from exc
         if (
             metadata.get("status") != "completed"
             or metadata.get("pipeline_version") not in SUPPORTED_PIPELINE_VERSIONS
         ):
             supported = ", ".join(sorted(SUPPORTED_PIPELINE_VERSIONS))
-            raise ValueError(
+            raise RunArtifactError(
                 f"Only completed Top-Down runs with pipeline versions {supported} "
                 "can be opened as StoryRun"
             )

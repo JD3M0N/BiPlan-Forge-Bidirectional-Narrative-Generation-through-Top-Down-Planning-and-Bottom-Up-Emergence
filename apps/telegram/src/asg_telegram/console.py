@@ -34,6 +34,7 @@ def _redact_diagnostic(value: str) -> str:
         r"\1[REDACTED]",
         value,
     )
+    value = re.sub(r"\d+:[A-Za-z0-9_-]{35}", "[REDACTED]", value)
     return value
 
 

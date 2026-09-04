@@ -45,6 +45,21 @@ from .storage import ArtifactRepository
 
 T = TypeVar("T")
 
+# Canonical order of pipeline checkpoint stages, shared by every _notify/complete_stage
+# pair below; "rate_limit" is intentionally excluded (see _notify).
+CHECKPOINT_STAGES = (
+    "analysis",
+    "world",
+    "characters",
+    "planning",
+    "plan_review",
+    "drafting",
+    "critique",
+    "revision",
+    "story",
+    "audio",
+)
+
 
 class StoryPipeline:
     """Execute one Top-Down request through explicit, testable stages."""
@@ -260,9 +275,9 @@ class StoryPipeline:
                 details={"attempts": 2, "validation_errors": validation_errors},
                 recommendations=["Revisa los intentos guardados bajo planning/."],
             )
+        self.repository.complete_stage("planning")
         plan = self._critique_plan(request, world, characters, plan)
         self.repository.save_json("story_plan.json", plan)
-        self.repository.complete_stage("planning")
         return plan
 
     def _critique_plan(
@@ -765,7 +780,7 @@ class StoryPipeline:
             "story_metrics.json",
             story_metrics(request, plan, story),
         )
-        self._notify(98, "saving", "Guardando la historia")
+        self._notify(98, "story", "Guardando la historia")
         self.repository.save_text("story.md", story)
         create_evaluation_template(self.repository.run_dir)
         self.repository.complete_stage("story")
@@ -813,6 +828,8 @@ class StoryPipeline:
         total: int | None = None,
     ) -> None:
         """Update internal progress and invoke the external progress callback."""
+        # "rate_limit" is a transient wait notification, not a pipeline checkpoint, so it
+        # must not overwrite the real in-progress stage reported by _record_failure.
         if stage != "rate_limit":
             self.progress.update(percent=percent, stage=stage)
         if self.on_progress:

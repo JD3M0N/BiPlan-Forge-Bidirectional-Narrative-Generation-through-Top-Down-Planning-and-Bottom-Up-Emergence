@@ -4,7 +4,7 @@ from importlib.metadata import version
 import pytest
 from asg_top_down import __version__
 from asg_top_down.config import load_settings
-from asg_top_down.errors import ConfigurationError
+from asg_top_down.errors import ConfigurationError, RunArtifactError
 from asg_top_down.generator import StoryRun
 from asg_top_down.storage import ArtifactRepository
 from asg_top_down.version import GENERATOR_NAME, GENERATOR_VERSION, PIPELINE_VERSION
@@ -70,7 +70,7 @@ def test_story_run_rejects_old_or_incomplete_metadata(tmp_path) -> None:
         json.dumps({"status": "completed", "pipeline_version": "4.1"}),
         encoding="utf-8",
     )
-    with pytest.raises(ValueError, match="5.0"):
+    with pytest.raises(RunArtifactError, match="5.0"):
         StoryRun(run_dir)
 
     compatible = tmp_path / "compatible"
@@ -87,5 +87,18 @@ def test_story_run_rejects_old_or_incomplete_metadata(tmp_path) -> None:
         json.dumps({"status": "running", "pipeline_version": "5.1"}),
         encoding="utf-8",
     )
-    with pytest.raises(ValueError, match="completed"):
+    with pytest.raises(RunArtifactError, match="completed"):
         StoryRun(incomplete)
+
+
+def test_story_run_rejects_missing_or_corrupt_metadata(tmp_path) -> None:
+    missing = tmp_path / "missing"
+    missing.mkdir()
+    with pytest.raises(RunArtifactError, match="metadata.json"):
+        StoryRun(missing)
+
+    corrupt = tmp_path / "corrupt"
+    corrupt.mkdir()
+    (corrupt / "metadata.json").write_text("{not valid json", encoding="utf-8")
+    with pytest.raises(RunArtifactError, match="metadata.json"):
+        StoryRun(corrupt)

@@ -39,7 +39,7 @@ The installation exposes these commands:
 | --- | --- |
 | `asg-console` | Open the unified interactive console. |
 | `generate-story` | Run the Top-Down story generator directly. |
-| `compare-story-runs` | Compare two generated story runs. |
+| `compare-story-runs` | Compare two or more generated story runs. |
 | `run-escape-room` | Run the Bottom-Up escape-room simulation directly. |
 | `asg-telegram` | Launch the Telegram bot in a separate Windows console. |
 | `asg-telegram-run` | Run the Telegram bot in the current console. |
