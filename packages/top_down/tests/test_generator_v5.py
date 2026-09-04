@@ -379,13 +379,20 @@ def test_audio_failure_keeps_top_down_run_completed(tmp_path, monkeypatch) -> No
 
     monkeypatch.setattr(pipeline_module, "create_story_audio_sync", fail_audio)
 
-    run = StoryGenerator(FakeProvider(), tmp_path).run(make_request())
+    progress = []
+    run = StoryGenerator(FakeProvider(), tmp_path).run(make_request(), on_progress=progress.append)
 
     metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["status"] == "completed"
-    assert any("[AUDIO_GENERATION_FAILED]" in warning for warning in metadata["warnings"])
+    assert (
+        "[AUDIO_GENERATION_FAILED] No se pudo crear story.mp3; story.md permanece válido."
+        in metadata["warnings"]
+    )
     assert not run.audio_path.exists()
     assert (run.run_dir / "audio.json").is_file()
+    audio_updates = [update for update in progress if update.stage == "audio"]
+    assert audio_updates
+    assert audio_updates[0].description == "Generando narración de la historia"
 
 
 def test_invalid_initial_plan_is_replaced_once(tmp_path) -> None:

@@ -44,13 +44,6 @@ ausentes. La comparación de perfiles con este código está en `docs/calibracio
   nunca. **Finalizada cuando:** la regla está activa, las 82 líneas que hoy superan los 100
   caracteres están corregidas y una línea larga nueva falla la comprobación.
 
-- [ ] **`P1` Impedir que una prueba opcional rompa la colección.**
-  `packages/top_down/tests/test_gemini_live.py:29` lee `docs/prompts_top_down.md` durante el
-  import, es decir antes de que se aplique su `skipif`; si el documento cambia de formato, toda
-  la suite deja de colectarse aunque las pruebas en vivo estén desactivadas. **Finalizada
-  cuando:** con `RUN_GEMINI_LIVE` sin definir y el documento ausente o alterado, la suite
-  completa se colecta y las dos pruebas en vivo se omiten.
-
 - [ ] **`P2` Sustituir el gate artesanal de docstrings por reglas del linter.** La prueba solo
   comprueba presencia y ASCII (`tests/test_source_documentation.py:25-27`), lo que ha producido
   decenas de docstrings tautológicas (`"Save json."`, `"Calculate details."`,
@@ -219,12 +212,6 @@ ausentes. La comparación de perfiles con este código está en `docs/calibracio
   prompt altera la temperatura en silencio. **Finalizada cuando:** cada agente declara su perfil
   de generación explícitamente y una prueba fija la temperatura esperada por agente.
 
-- [ ] **`P2` Corregir la detección de estado HTTP por expresión regular.** `quota.py:85` busca
-  cualquier número de tres dígitos entre 400 y 599 en el texto del error, de modo que un
-  identificador o un recuento de tokens puede interpretarse como estado y activar la ruta de
-  cuota equivocada. **Finalizada cuando:** el estado se obtiene del objeto de error cuando
-  existe y las pruebas cubren mensajes que contienen números confusos.
-
 - [ ] **`P2` Abaratar la escritura de artefactos.** `append_llm_call` (`storage.py:106-115`) lee
   y reescribe `llm_calls.jsonl` completo en cada llamada y vuelve a calcular su SHA-256 para el
   manifiesto; `llm_usage.json` se reescribe entero por llamada (`pipeline.py:162-177`); y el
@@ -244,14 +231,17 @@ ausentes. La comparación de perfiles con este código está en `docs/calibracio
   eliminación va acompañada de la prueba que demuestra que nada dependía de ella, y el contrato
   de artefactos documenta si `topological_order` se conserva por compatibilidad.
 
-- [ ] **`P2` Reparar los mensajes corruptos y aclarar la frontera de idiomas.**
-  `pipeline.py:778` y `:783` contienen bytes corruptos (`"Generando narraci?n"`,
-  `"story.md permanece v?lido"`) que llegan a la consola y a `metadata.warnings`. Además los
-  mensajes de error estructural en inglés (`graph.py:114`, `:172`, `:229`; `pipeline.py:450`,
-  `:529`) se reinyectan en el prompt de reparación (`pipeline.py:361`), así que forman parte del
-  contrato con el modelo y no pueden traducirse. **Finalizada cuando:** no queda texto corrupto,
-  y la regla «mensajes de usuario en español, mensajes que alimentan al modelo en inglés» está
-  escrita y comprobada.
+- [ ] **`P2` Aclarar la frontera de idiomas en los mensajes de error.** Los mensajes de error
+  estructural en inglés (`graph.py:114`, `:172`, `:229`; `pipeline.py:450`, `:529`) se reinyectan
+  en el prompt de reparación (`pipeline.py:361`), así que forman parte del contrato con el
+  modelo y no pueden traducirse; esa regla («mensajes de usuario en español, mensajes que
+  alimentan al modelo en inglés») solo está anotada como comentario junto a
+  `_record_rejected_plan` (`pipeline.py:359-361`), no en los puntos de origen ni comprobada por
+  una prueba. **Finalizada cuando:** la regla está documentada en todos los puntos relevantes
+  (origen y reinyección) y una prueba comprueba que los mensajes que alimentan al modelo
+  permanecen en inglés mientras los de cara al usuario están en español.
+  **Evidencia:** los dos bytes corruptos que originaron esta tarea (`pipeline.py:778`, `:783`,
+  `"Generando narraci?n"` y `"story.md permanece v?lido"`) ya están corregidos.
 
 - [ ] **`P2` Hacer que el proveedor no dependa de estado mutable compartido.** El pipeline muta
   `wait_callback` y `usage_callback` del proveedor y los limpia en un `finally`

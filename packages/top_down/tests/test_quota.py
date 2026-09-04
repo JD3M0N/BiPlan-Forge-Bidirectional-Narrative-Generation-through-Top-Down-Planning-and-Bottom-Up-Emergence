@@ -12,6 +12,19 @@ def test_retry_details_extracts_google_quota_fields() -> None:
     assert details["quota_id"] == "PerMinute"
 
 
+def test_retry_details_ignores_unrelated_three_digit_numbers() -> None:
+    error = Exception("El modelo devolvio 429 tokens en el intento con id 503201")
+    details = retry_details(error)
+    assert details["status"] is None
+
+
+def test_retry_details_prefers_explicit_code_over_confusing_text() -> None:
+    error = Exception("solicitud 503201 aceptada tras el intento 500")
+    error.code = 429
+    details = retry_details(error)
+    assert details["status"] == 429
+
+
 def test_sliding_window_never_accepts_more_than_capacity(monkeypatch) -> None:
     now = [0.0]
     monkeypatch.setattr("asg_top_down.quota.time.monotonic", lambda: now[0])

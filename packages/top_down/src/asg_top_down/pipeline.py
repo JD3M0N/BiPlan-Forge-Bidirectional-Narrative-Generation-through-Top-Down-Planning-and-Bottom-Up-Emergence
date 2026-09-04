@@ -356,6 +356,8 @@ class StoryPipeline:
             attempt=attempt,
         )
         payoff_rules = self._payoff_reference_rules(draft)
+        # `issue` feeds the model's repair prompt, so it stays in English like the rest of
+        # this contract; user-facing warnings and progress messages elsewhere are Spanish.
         return (
             "\n\nSTRUCTURAL REPAIR REQUIRED. RETURN A COMPLETE REPLACEMENT PLAN. "
             f"Fix this structural error: {issue}. "
@@ -775,12 +777,12 @@ class StoryPipeline:
     def _create_audio(self) -> None:
         """Create optional narration without invalidating a completed story."""
         assert self.repository is not None
-        self._notify(99, "audio", "Generando narraci?n de la historia")
+        self._notify(99, "audio", "Generando narración de la historia")
         try:
             create_story_audio_sync(self.repository.run_dir / "story.md")
         except AudioGenerationError:
             self.repository.add_warning(
-                "[AUDIO_GENERATION_FAILED] No se pudo crear story.mp3; story.md permanece v?lido."
+                "[AUDIO_GENERATION_FAILED] No se pudo crear story.mp3; story.md permanece válido."
             )
         else:
             self.repository.register_existing("story.mp3")

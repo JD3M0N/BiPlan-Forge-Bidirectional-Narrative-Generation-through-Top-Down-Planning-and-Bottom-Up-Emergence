@@ -26,8 +26,6 @@ def _canonical_prompt() -> str:
     return prompt
 
 
-CANONICAL_PROMPT = _canonical_prompt()
-
 pytestmark = pytest.mark.skipif(
     os.getenv("RUN_GEMINI_LIVE") != "1",
     reason="set RUN_GEMINI_LIVE=1 to spend Gemini quota",
@@ -35,6 +33,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_real_gemini_smoke_run() -> None:
+    canonical_prompt = _canonical_prompt()
     settings = load_settings()
     provider = GeminiProvider(
         settings.api_key,
@@ -46,14 +45,14 @@ def test_real_gemini_smoke_run() -> None:
         max_retry_delay=settings.max_retry_delay,
         request_timeout_ms=settings.request_timeout_ms,
     )
-    run = StoryGenerator(provider, settings.output_root).run(CANONICAL_PROMPT)
+    run = StoryGenerator(provider, settings.output_root).run(canonical_prompt)
     assert run.story_path.is_file()
     assert run.story_path.read_text(encoding="utf-8").strip()
 
     request = json.loads((run.run_dir / "request.json").read_text(encoding="utf-8"))
     metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
     manifest = json.loads((run.run_dir / "pipeline_manifest.json").read_text(encoding="utf-8"))
-    assert request["original_prompt"] == CANONICAL_PROMPT
+    assert request["original_prompt"] == canonical_prompt
     assert request["narrative_profile"] in {"essential", "developed", "expansive"}
     assert metadata["status"] == "completed"
     assert metadata["model"] == settings.model

@@ -82,7 +82,7 @@ def retry_details(exc: Exception) -> dict[str, object]:
     )
     metric = re.search(r"Quota exceeded for metric:\s*([^,\n]+)", text, re.I)
     quota_id = re.search(r"quotaId['\"]?\s*:\s*['\"]([^'\"]+)", text, re.I)
-    status = re.search(r"\b([45]\d\d)\b", text)
+    status = re.match(r"\s*([45]\d{2})\b", text)
     explicit_code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
     if not isinstance(explicit_code, int):
         explicit_code = None
