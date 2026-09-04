@@ -43,11 +43,10 @@ def _gemini_response_schema(schema: type[BaseModel]) -> dict:
     """
 
     def sanitize(value):
+        """Recursively drop the ``additionalProperties`` keyword."""
         if isinstance(value, dict):
             return {
-                key: sanitize(item)
-                for key, item in value.items()
-                if key != "additionalProperties"
+                key: sanitize(item) for key, item in value.items() if key != "additionalProperties"
             }
         if isinstance(value, list):
             return [sanitize(item) for item in value]

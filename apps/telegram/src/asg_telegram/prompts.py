@@ -109,9 +109,7 @@ def validate_guided_value(field: str, value: str) -> str:
         try:
             profile = PROFILE_CHOICES[normalized.casefold()]
         except KeyError as exc:
-            raise ValueError(
-                "Elige Esencial, Desarrollada, Expansiva o Automático."
-            ) from exc
+            raise ValueError("Elige Esencial, Desarrollada, Expansiva o Automático.") from exc
         return profile.value if profile else "automatic"
     return normalized
 

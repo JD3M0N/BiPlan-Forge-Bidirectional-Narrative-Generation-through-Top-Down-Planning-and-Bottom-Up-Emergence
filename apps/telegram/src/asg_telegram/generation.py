@@ -368,10 +368,7 @@ class GenerationCoordinator(TelegramDelivery):
             remaining = [
                 str(warning)
                 for warning in warnings
-                if not (
-                    details
-                    and str(warning).startswith("[WRITER_REVISION_REJECTED]")
-                )
+                if not (details and str(warning).startswith("[WRITER_REVISION_REJECTED]"))
             ]
             if details:
                 remaining = details + remaining
@@ -379,11 +376,12 @@ class GenerationCoordinator(TelegramDelivery):
                 remaining = [str(warning) for warning in warnings]
             message = (
                 "La historia se completó, pero la revisión automática dejó "
-                "estas advertencias:\n- "
-                + "\n- ".join(remaining)
+                "estas advertencias:\n- " + "\n- ".join(remaining)
             )
             if len(message) > 3500:
-                message = message[:3440].rstrip() + "\n- Consulta revision_report.json para más detalles."
+                message = (
+                    message[:3440].rstrip() + "\n- Consulta revision_report.json para más detalles."
+                )
             log_user_action(
                 LOGGER,
                 user_id=user.id,
@@ -419,8 +417,7 @@ class GenerationCoordinator(TelegramDelivery):
                 if attempt.get("status") == "rejected" and attempt.get("diagnostic")
             ]
             if diagnostics and all(
-                diagnostic.get("code") == "WORD_COUNT_OUT_OF_RANGE"
-                for diagnostic in diagnostics
+                diagnostic.get("code") == "WORD_COUNT_OUT_OF_RANGE" for diagnostic in diagnostics
             ):
                 counts = " y ".join(
                     str(diagnostic.get("actual_words", "?")) for diagnostic in diagnostics
@@ -440,8 +437,7 @@ class GenerationCoordinator(TelegramDelivery):
                 if attempt.get("status") == "failed"
             ]
             reasons = [
-                diagnostic.get("code", "RECHAZO_DESCONOCIDO")
-                for diagnostic in diagnostics
+                diagnostic.get("code", "RECHAZO_DESCONOCIDO") for diagnostic in diagnostics
             ] + failed
             details.append(
                 f"Capítulo {chapter.get('chapter_index')}: no hubo una revisión válida "

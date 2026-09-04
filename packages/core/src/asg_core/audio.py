@@ -58,6 +58,7 @@ def markdown_to_speech_text(markdown: str) -> str:
 
 
 def _fallback_voice() -> str:
+    """Return the configured fallback voice, or the built-in default."""
     configured = os.getenv("TTS_FALLBACK_VOICE", "").strip()
     if configured:
         return configured
@@ -65,6 +66,7 @@ def _fallback_voice() -> str:
 
 
 def _detect_language(text: str) -> str:
+    """Detect the language of a text, or "und" if detection fails."""
     try:
         return detect(text)
     except LangDetectException:
@@ -74,6 +76,11 @@ def _detect_language(text: str) -> str:
 async def _voice_for_language(
     language: str, fallback: str, voice_manager: VoicesManager | None = None
 ) -> str:
+    """Select a narration voice for a language, favoring Novel-tagged voices.
+
+    Spanish always resolves to a fixed Spain voice by design. Other languages
+    query ``VoicesManager`` and fall back to ``fallback`` on failure.
+    """
     global _VOICE_MANAGER
 
     # Español de España, nunca español de Argentina
@@ -100,12 +107,9 @@ async def _voice_for_language(
         return fallback
 
     def priority(voice: dict[str, Any]) -> tuple[int, str]:
+        """Rank a candidate voice, preferring Novel-tagged over General."""
         categories = voice.get("VoiceTag", {}).get("ContentCategories", [])
-        rank = (
-            0 if "Novel" in categories
-            else 1 if "General" in categories
-            else 2
-        )
+        rank = 0 if "Novel" in categories else 1 if "General" in categories else 2
         return rank, str(voice.get("ShortName", voice.get("Name", "")))
 
     selected = min(candidates, key=priority)
@@ -113,10 +117,12 @@ async def _voice_for_language(
 
 
 def _metadata_path(story_path: Path) -> Path:
+    """Return the audio metadata path sibling to a story file."""
     return story_path.with_name("audio.json")
 
 
 def _read_completed_artifact(story_path: Path, output_path: Path) -> AudioArtifact | None:
+    """Return the previously completed audio artifact, if one is valid."""
     metadata_path = _metadata_path(story_path)
     if not output_path.is_file() or output_path.stat().st_size == 0 or not metadata_path.is_file():
         return None
@@ -142,6 +148,7 @@ def _write_metadata(
     voice: str,
     error: str | None = None,
 ) -> None:
+    """Write the audio generation status and details to disk."""
     atomic_write_json(
         _metadata_path(story_path),
         {
@@ -246,6 +253,7 @@ def create_story_audio_sync(
     """Synchronously create story audio, including from an active event loop."""
 
     def run() -> AudioArtifact:
+        """Run story audio creation to completion in a fresh event loop."""
         return asyncio.run(
             create_story_audio(
                 story_path,

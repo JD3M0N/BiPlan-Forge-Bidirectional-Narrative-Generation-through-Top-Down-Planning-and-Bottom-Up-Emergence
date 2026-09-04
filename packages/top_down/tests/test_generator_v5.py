@@ -139,10 +139,18 @@ def sized_plan(event_count: int, *, branch_and_join: bool = False) -> StoryPlanD
     ]
     if branch_and_join:
         candidate.dependencies = [
-            EventDependency(source_event_id="event-1", target_event_id="event-2", relation="causal"),
-            EventDependency(source_event_id="event-1", target_event_id="event-3", relation="causal"),
-            EventDependency(source_event_id="event-2", target_event_id="event-4", relation="causal"),
-            EventDependency(source_event_id="event-3", target_event_id="event-4", relation="causal"),
+            EventDependency(
+                source_event_id="event-1", target_event_id="event-2", relation="causal"
+            ),
+            EventDependency(
+                source_event_id="event-1", target_event_id="event-3", relation="causal"
+            ),
+            EventDependency(
+                source_event_id="event-2", target_event_id="event-4", relation="causal"
+            ),
+            EventDependency(
+                source_event_id="event-3", target_event_id="event-4", relation="causal"
+            ),
             *[
                 EventDependency(
                     source_event_id=f"event-{order}",
@@ -616,9 +624,7 @@ def test_analyst_prompt_separates_explicit_constraints_and_inferences() -> None:
     ],
 )
 def test_analyst_preserves_inferred_profile(profile, raw) -> None:
-    analyzed = make_request().model_copy(
-        update={"narrative_profile": NarrativeProfile(profile)}
-    )
+    analyzed = make_request().model_copy(update={"narrative_profile": NarrativeProfile(profile)})
     result = AnalystAgent(FakeProvider(analyzed_request=analyzed)).run(raw)
     assert result.narrative_profile.value == profile
 
@@ -631,9 +637,7 @@ def test_programmatic_request_rejects_legacy_numeric_fields() -> None:
 
 
 def test_developed_plan_below_event_floor_is_replanned(tmp_path) -> None:
-    request = make_request().model_copy(
-        update={"narrative_profile": NarrativeProfile.DEVELOPED}
-    )
+    request = make_request().model_copy(update={"narrative_profile": NarrativeProfile.DEVELOPED})
     provider = FakeProvider(plans=[valid_plan(), sized_plan(6)])
     run = StoryGenerator(provider, tmp_path).generate(request)
     plan = json.loads((run.run_dir / "story_plan.json").read_text(encoding="utf-8"))
@@ -650,9 +654,7 @@ def test_developed_plan_below_event_floor_is_replanned(tmp_path) -> None:
 
 
 def test_two_profile_invalid_plans_fail_before_critique_or_drafting(tmp_path) -> None:
-    request = make_request().model_copy(
-        update={"narrative_profile": NarrativeProfile.EXPANSIVE}
-    )
+    request = make_request().model_copy(update={"narrative_profile": NarrativeProfile.EXPANSIVE})
     provider = FakeProvider(
         plans=[
             sized_plan(9, branch_and_join=False),
@@ -670,9 +672,7 @@ def test_two_profile_invalid_plans_fail_before_critique_or_drafting(tmp_path) ->
 
 
 def test_profile_invalid_refinement_falls_back_to_valid_plan(tmp_path) -> None:
-    request = make_request().model_copy(
-        update={"narrative_profile": NarrativeProfile.DEVELOPED}
-    )
+    request = make_request().model_copy(update={"narrative_profile": NarrativeProfile.DEVELOPED})
     provider = FakeProvider(
         plans=[sized_plan(6), valid_plan()],
         plan_review=rejected_plan_review(),
@@ -680,9 +680,7 @@ def test_profile_invalid_refinement_falls_back_to_valid_plan(tmp_path) -> None:
     run = StoryGenerator(provider, tmp_path).generate(request)
     plan = json.loads((run.run_dir / "story_plan.json").read_text(encoding="utf-8"))
     validation = json.loads(
-        (run.run_dir / "planning/refined-candidate-validation.json").read_text(
-            encoding="utf-8"
-        )
+        (run.run_dir / "planning/refined-candidate-validation.json").read_text(encoding="utf-8")
     )
     metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
     assert len(plan["events"]) == 6
@@ -691,28 +689,21 @@ def test_profile_invalid_refinement_falls_back_to_valid_plan(tmp_path) -> None:
 
 
 def test_profile_guidance_reaches_world_characters_and_prose_agents(tmp_path) -> None:
-    request = make_request().model_copy(
-        update={"narrative_profile": NarrativeProfile.DEVELOPED}
-    )
+    request = make_request().model_copy(update={"narrative_profile": NarrativeProfile.DEVELOPED})
     provider = FakeProvider(plans=[sized_plan(6)])
     StoryGenerator(provider, tmp_path).generate(request)
-    structured = {
-        name: (system, prompt) for name, system, prompt in provider.structured_calls
-    }
+    structured = {name: (system, prompt) for name, system, prompt in provider.structured_calls}
     assert "scaled to the qualitative narrative profile" in structured["WorldArtifact"][0]
     assert "supporting characters" in structured["CharactersArtifact"][0]
     assert "at least six causally meaningful events" in structured["WorldArtifact"][1]
     assert "at least six causally meaningful events" in structured["CharactersArtifact"][1]
     assert any(
-        "at least six causally meaningful events" in prompt
-        for _, prompt in provider.text_calls
+        "at least six causally meaningful events" in prompt for _, prompt in provider.text_calls
     )
 
 
 def test_expansive_guidance_resists_event_compression(tmp_path) -> None:
-    request = make_request().model_copy(
-        update={"narrative_profile": NarrativeProfile.EXPANSIVE}
-    )
+    request = make_request().model_copy(update={"narrative_profile": NarrativeProfile.EXPANSIVE})
     provider = FakeProvider(plans=[sized_plan(9, branch_and_join=True)])
     StoryGenerator(provider, tmp_path).generate(request)
     structured_prompts = [prompt for _, _, prompt in provider.structured_calls]

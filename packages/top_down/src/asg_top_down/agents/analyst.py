@@ -52,8 +52,7 @@ class AnalystAgent(Agent[StoryRequest]):
                 "or chapter requests are only weak signals for that inference: never copy them into any "
                 "downstream field and never promise an exact size. PROFILE CONTRACTS: "
                 + " | ".join(
-                    f"{profile.value}: {guidance}"
-                    for profile, guidance in PROFILE_GUIDANCE.items()
+                    f"{profile.value}: {guidance}" for profile, guidance in PROFILE_GUIDANCE.items()
                 )
             ),
             prompt=prompt,
@@ -87,8 +86,6 @@ class AnalystAgent(Agent[StoryRequest]):
     def _clean_items(cls, values: list[str]) -> list[str]:
         """Remove numeric story-size promises and empty remnants from a list."""
         cleaned = [
-            cls._without_numeric_scope(value)
-            for value in values
-            if not NUMERIC_SCOPE.search(value)
+            cls._without_numeric_scope(value) for value in values if not NUMERIC_SCOPE.search(value)
         ]
         return [value for value in cleaned if value]

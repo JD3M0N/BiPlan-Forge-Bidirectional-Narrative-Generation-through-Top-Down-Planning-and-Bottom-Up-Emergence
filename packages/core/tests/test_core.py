@@ -101,10 +101,12 @@ def fake_tts(monkeypatch):
 @pytest.mark.parametrize(
     ("text", "language", "voice"),
     [
+        # Spanish always uses the fixed Spain voice by design, bypassing
+        # VoicesManager selection entirely (see audio.py:_voice_for_language).
         (
             "Esta es una historia extensa escrita completamente en español.",
             "es",
-            "es-MX-NovelNeural",
+            "es-ES-AlvaroNeural",
         ),
         (
             "This is a sufficiently long story written entirely in English.",

@@ -226,9 +226,7 @@ def test_same_profile_accepts_different_valid_graph_sizes() -> None:
 
 def profile_plan(event_count: int) -> StoryPlan:
     """Build a valid linear plan with the requested number of events."""
-    candidate = plan(
-        [dependency("event-1", "event-2"), dependency("event-2", "event-3")]
-    )
+    candidate = plan([dependency("event-1", "event-2"), dependency("event-2", "event-3")])
     for order in range(4, event_count + 1):
         identifier = f"event-{order}"
         candidate.events.append(event(identifier, order))

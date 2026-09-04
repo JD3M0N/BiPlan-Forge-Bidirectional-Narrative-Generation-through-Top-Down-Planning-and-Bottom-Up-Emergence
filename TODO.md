@@ -12,24 +12,26 @@ extensión de las historias Expansivas, plan entregado sin validar, trabajos blo
 de la cola); después `P1`, empezando por integración continua y el lector de evaluaciones; y por
 último `P2`, empezando por la división de `pipeline.py`, que es la que abarata todas las demás.
 
-**Estado medido el 2026-09-03 sobre `1bea0f1`:** 168 pruebas colectadas, `ruff check .` sin
-errores, `ruff format --check .` reformatearía 8 archivos, una prueba fallando por docstrings
-ausentes. La comparación de perfiles con este código está en `docs/calibracion_perfiles.md`.
+**Estado medido el 2026-09-04 sobre `4604473`** (con las correcciones de línea base de esta
+sesión aplicadas en el árbol de trabajo): 182 pruebas colectadas (180 pasan, 2 omitidas),
+`ruff check .` sin errores, `ruff format --check .` sin errores, `pip check` limpio. La
+comparación de perfiles con este código está en `docs/calibracion_perfiles.md`.
 
 ---
 
 ## Calidad e infraestructura
 
-- [ ] **`P0` Recuperar la línea base de calidad.** Resolver la discrepancia entre la política de
+- [x] **`P0` Recuperar la línea base de calidad.** Resolver la discrepancia entre la política de
   voz española y su prueba, añadir los docstrings que exige la suite y aplicar el formato
-  pendiente. **Finalizada cuando:** las 168 pruebas pasan (con las 2 pruebas de integración
+  pendiente. **Finalizada cuando:** las 182 pruebas pasan (con las 2 pruebas de integración
   opcionales omitidas), `ruff check .` y `ruff format --check .` terminan sin errores.
-  **Evidencia:** `ruff check .` ya pasa, pero `ruff format --check .` reformatearía 8 archivos;
-  `tests/test_source_documentation.py:46` señala 9 docstrings ausentes (8 en
-  `packages/core/src/asg_core/audio.py`, 1 en
-  `packages/top_down/src/asg_top_down/provider.py:45`). Tres de ellos son closures de tres
-  líneas (`audio.py:97`, `audio.py:242`, `provider.py:45`), lo que apunta a la tarea de
-  sustituir el gate artesanal por reglas de linter.
+  **Evidencia:** la política de voz fija de España en `audio.py:_voice_for_language` (reforzada
+  en el commit `4604473`) se conservó por decisión explícita; se actualizó en su lugar
+  `packages/core/tests/test_core.py` para esperar `es-ES-AlvaroNeural`. Se añadieron los 9
+  docstrings que exigía `tests/test_source_documentation.py:46` (8 en
+  `packages/core/src/asg_core/audio.py`, 1 en `packages/top_down/src/asg_top_down/provider.py`)
+  y se aplicó `ruff format .` a los 8 archivos pendientes. `ruff check .`, `ruff format --check .`
+  y `pip check` terminan sin errores.
 
 - [ ] **`P1` Automatizar las comprobaciones en integración continua.** Crear un flujo que
   instale el monorepo y ejecute Ruff, la comprobación de formato, las pruebas Python,
@@ -53,14 +55,17 @@ ausentes. La comparación de perfiles con este código está en `docs/calibracio
   desaparece o queda reducida a la comprobación de idioma, y ningún docstring nuevo es
   tautológico.
 
-- [ ] **`P2` Limpiar el entorno declarado.** `.env` conserva `GEMINI_EMBEDDING_MODEL`,
+- [x] **`P2` Limpiar el entorno declarado.** `.env` conserva `GEMINI_EMBEDDING_MODEL`,
   `STORY_MAX_CPN_RETRIES` y `STORY_MAX_ARTIFACT_RETRIES`, que ya no lee ningún módulo, mientras
   que `.env.example` omite `ASG_PROJECT_ROOT` (`packages/core/src/asg_core/paths.py:13`) y
   `RUN_GEMINI_LIVE`. El entorno virtual arrastra instalaciones editables huérfanas
   (`asg_prompt_crafter`, `asg_testing`) sin paquete correspondiente en el repositorio.
   **Finalizada cuando:** toda variable presente en `.env.example` la lee alguien, toda variable
   leída está documentada, y `pip check` con una instalación limpia no menciona paquetes que no
-  existen en el árbol.
+  existen en el árbol. **Evidencia:** se quitaron las tres variables sin lector de `.env`, se
+  añadieron `ASG_PROJECT_ROOT` y `RUN_GEMINI_LIVE` a `.env.example`, y se desinstalaron
+  `asg-prompt-crafter`/`asg-testing` del venv (sus rutas de origen ya no existían en disco).
+  `pip check` termina limpio.
 
 ## Core y audio
 
@@ -331,14 +336,3 @@ ausentes. La comparación de perfiles con este código está en `docs/calibracio
   compatibilidad relevante con ejecuciones anteriores y los ejemplos se validan en las pruebas o
   en la integración continua.
 
-- [ ] **`P1` Actualizar la documentación desfasada.**
-  `docs/informe_ejecucion_pipeline_top_down.md` describe todavía la arquitectura 5.0, con
-  `target_words`, `length_audit.json` y los agentes `ChapterWriter → StoryCritic → StoryEditor`,
-  que ya no existen; el `README.md` raíz no menciona los perfiles narrativos y contiene
-  caracteres corruptos. Además `.gitignore` ignora `docs/*` con una lista blanca que nombra tres
-  archivos inexistentes (`como_se_crea_una_historia_top_down.md`,
-  `pipeline_top_down_caso_dinosaurios.md`, `top_down_pipeline.md`) y deja fuera del control de
-  versiones el informe de ejecución. **Finalizada cuando:** el informe vigente describe las diez
-  etapas reales y los artefactos que se producen hoy, el histórico queda marcado como tal, el
-  README raíz explica los perfiles sin texto corrupto, y la lista blanca de `docs/` corresponde
-  a los archivos que existen.

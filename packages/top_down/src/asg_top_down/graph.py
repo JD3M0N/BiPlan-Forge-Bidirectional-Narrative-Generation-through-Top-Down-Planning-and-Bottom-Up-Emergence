@@ -79,12 +79,8 @@ def validate_profile_structure(
             continue
         outgoing[dependency.source_event_id] += 1
         incoming[dependency.target_event_id] += 1
-    branch_orders = [
-        event_order[event_id] for event_id, count in outgoing.items() if count >= 2
-    ]
-    join_orders = [
-        event_order[event_id] for event_id, count in incoming.items() if count >= 2
-    ]
+    branch_orders = [event_order[event_id] for event_id, count in outgoing.items() if count >= 2]
+    join_orders = [event_order[event_id] for event_id, count in incoming.items() if count >= 2]
     if not any(branch < join for branch in branch_orders for join in join_orders):
         raise ValueError(
             "expansive profile requires a causal dependency branch followed by a causal join"
