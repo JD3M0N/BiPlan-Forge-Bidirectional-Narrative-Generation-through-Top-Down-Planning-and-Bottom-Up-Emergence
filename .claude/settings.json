@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(ruff check*)",
+      "Bash(ruff format --check*)",
+      "Bash(python -m pytest*)",
+      "Bash(python -m pip check)",
+      "Bash(python -m pip list*)"
+    ]
+  }
+}
