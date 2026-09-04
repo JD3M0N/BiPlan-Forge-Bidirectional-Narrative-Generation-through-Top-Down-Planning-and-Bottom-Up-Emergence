@@ -6,7 +6,7 @@ from asg_top_down import NarrativeProfile, StoryGenerator
 from asg_top_down import pipeline as pipeline_module
 from asg_top_down.agents import AnalystAgent
 from asg_top_down.audit import parse_chapter_bodies
-from asg_top_down.errors import PlotValidationError
+from asg_top_down.errors import GeminiDailyQuotaError, PlotValidationError
 from asg_top_down.pipeline import StoryPipeline
 from asg_top_down.schemas import (
     ChapterDraft,
@@ -226,9 +226,11 @@ class FakeProvider:
         fail_writer_call: int | None = None,
         writer_outputs: list[str] | None = None,
         analyzed_request: StoryRequest | None = None,
+        quota_error_at: str | None = None,
     ) -> None:
         self.plans = list(plans or [valid_plan()])
         self.fail_quality = fail_quality
+        self.quota_error_at = quota_error_at
         self.plan_review = plan_review or PlanReview(approved=True)
         self.story_review = story_review or StoryReview(strengths=["Clear progression"])
         self.writer_identical_once = writer_identical_once
@@ -252,6 +254,8 @@ class FakeProvider:
         if schema is StoryPlanDraft:
             return self.plans.pop(0)
         if schema is PlanReview:
+            if self.quota_error_at == "plan_critic":
+                raise GeminiDailyQuotaError("daily quota exhausted")
             return self.plan_review
         if schema is StoryPresentation:
             return StoryPresentation(
@@ -264,6 +268,8 @@ class FakeProvider:
         if schema is StoryReview:
             if self.fail_quality:
                 raise RuntimeError("review unavailable")
+            if self.quota_error_at == "drama_critic":
+                raise GeminiDailyQuotaError("daily quota exhausted")
             return self.story_review
         if schema is StoryRequest:
             return self.analyzed_request
@@ -275,6 +281,8 @@ class FakeProvider:
             self.writer_number += 1
             if self.fail_writer_call == self.writer_number:
                 raise RuntimeError("writer unavailable")
+            if self.quota_error_at == "writer":
+                raise GeminiDailyQuotaError("daily quota exhausted")
             original = prompt.split("ORIGINAL CHAPTER BODY:\n", 1)[1].split(
                 "\n\nRETRY CORRECTION:",
                 1,
@@ -293,7 +301,7 @@ def test_complete_pipeline_saves_v60_artifacts_and_agent_order(tmp_path) -> None
     progress = []
     events = []
     created = []
-    run = StoryGenerator(provider, tmp_path).run(
+    run = StoryGenerator(provider, tmp_path).generate(
         make_request(),
         on_progress=progress.append,
         on_event=events.append,
@@ -384,7 +392,9 @@ def test_audio_failure_keeps_top_down_run_completed(tmp_path, monkeypatch) -> No
     monkeypatch.setattr(pipeline_module, "create_story_audio_sync", fail_audio)
 
     progress = []
-    run = StoryGenerator(FakeProvider(), tmp_path).run(make_request(), on_progress=progress.append)
+    run = StoryGenerator(FakeProvider(), tmp_path).generate(
+        make_request(), on_progress=progress.append
+    )
 
     metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["status"] == "completed"
@@ -401,7 +411,7 @@ def test_audio_failure_keeps_top_down_run_completed(tmp_path, monkeypatch) -> No
 
 def test_invalid_initial_plan_is_replaced_once(tmp_path) -> None:
     provider = FakeProvider([invalid_plan(), valid_plan()])
-    run = StoryGenerator(provider, tmp_path).run(make_request())
+    run = StoryGenerator(provider, tmp_path).generate(make_request())
     assert (run.run_dir / "planning" / "attempt-001.json").is_file()
     plan_calls = [item for item in provider.structured_calls if item[0] == "StoryPlanDraft"]
     assert len(plan_calls) == 2
@@ -410,7 +420,7 @@ def test_invalid_initial_plan_is_replaced_once(tmp_path) -> None:
 
 def test_invalid_payoff_retry_receives_exact_reference_matrix(tmp_path) -> None:
     provider = FakeProvider([invalid_payoff_plan(), valid_plan()])
-    StoryGenerator(provider, tmp_path).run(make_request())
+    StoryGenerator(provider, tmp_path).generate(make_request())
     plan_calls = [item for item in provider.structured_calls if item[0] == "StoryPlanDraft"]
     assert len(plan_calls) == 2
     assert "PAYOFF_OF CONTRACT" in plan_calls[0][1]
@@ -427,7 +437,7 @@ def test_two_invalid_plans_fail_with_public_error(tmp_path) -> None:
     provider = FakeProvider([invalid_plan(), invalid_plan()])
     created = []
     with pytest.raises(PlotValidationError) as captured:
-        StoryGenerator(provider, tmp_path).run(make_request(), on_run_created=created.append)
+        StoryGenerator(provider, tmp_path).generate(make_request(), on_run_created=created.append)
     assert captured.value.code == "PLOT_VALIDATION_FAILED"
     metadata = json.loads((created[0] / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["status"] == "failed"
@@ -440,7 +450,7 @@ def test_plan_critic_refines_once_and_invalid_refinement_falls_back(tmp_path) ->
         [valid_plan(), refined],
         plan_review=rejected_plan_review(),
     )
-    run = StoryGenerator(provider, tmp_path / "accepted").run(make_request())
+    run = StoryGenerator(provider, tmp_path / "accepted").generate(make_request())
     saved = json.loads((run.run_dir / "story_plan.json").read_text(encoding="utf-8"))
     assert saved["ending"] == refined.ending
     assert (run.run_dir / "planning" / "refined-candidate.json").is_file()
@@ -449,7 +459,7 @@ def test_plan_critic_refines_once_and_invalid_refinement_falls_back(tmp_path) ->
         [valid_plan(), invalid_plan()],
         plan_review=rejected_plan_review(),
     )
-    fallback = StoryGenerator(fallback_provider, tmp_path / "fallback").run(make_request())
+    fallback = StoryGenerator(fallback_provider, tmp_path / "fallback").generate(make_request())
     saved = json.loads((fallback.run_dir / "story_plan.json").read_text(encoding="utf-8"))
     metadata = json.loads((fallback.run_dir / "metadata.json").read_text(encoding="utf-8"))
     assert saved["ending"] == valid_plan().ending
@@ -457,7 +467,7 @@ def test_plan_critic_refines_once_and_invalid_refinement_falls_back(tmp_path) ->
 
 
 def test_late_critic_failure_delivers_the_draft_with_warning(tmp_path) -> None:
-    run = StoryGenerator(FakeProvider(fail_quality=True), tmp_path).run(make_request())
+    run = StoryGenerator(FakeProvider(fail_quality=True), tmp_path).generate(make_request())
     assert run.story_path.read_text(encoding="utf-8") == (run.run_dir / "draft.md").read_text(
         encoding="utf-8"
     )
@@ -466,9 +476,16 @@ def test_late_critic_failure_delivers_the_draft_with_warning(tmp_path) -> None:
     assert "borrador" in metadata["warnings"][0]
 
 
+@pytest.mark.parametrize("quota_error_at", ["plan_critic", "drama_critic", "writer"])
+def test_quota_errors_abort_instead_of_becoming_a_warning(tmp_path, quota_error_at) -> None:
+    provider = FakeProvider(quota_error_at=quota_error_at)
+    with pytest.raises(GeminiDailyQuotaError):
+        StoryGenerator(provider, tmp_path).generate(make_request())
+
+
 def test_drafter_receives_dag_history_and_previous_chapter(tmp_path) -> None:
     provider = FakeProvider()
-    StoryGenerator(provider, tmp_path).run(make_request())
+    StoryGenerator(provider, tmp_path).generate(make_request())
     draft_calls = [item for item in provider.text_calls if "first-draft fiction chapter" in item[0]]
     assert len(draft_calls) == 2
     assert "RELEVANT PRIOR EVENTS:\n[]" in draft_calls[0][1]
@@ -481,7 +498,7 @@ def test_writer_retries_unchanged_major_revision_and_saves_attempt(tmp_path) -> 
         story_review=major_story_review(),
         writer_identical_once=True,
     )
-    run = StoryGenerator(provider, tmp_path).run(make_request())
+    run = StoryGenerator(provider, tmp_path).generate(make_request())
     writer_calls = [item for item in provider.text_calls if "final Writer" in item[0]]
     assert len(writer_calls) == 3
     assert (run.run_dir / "writer" / "chapter-001-attempt-001.md").is_file()
@@ -528,7 +545,7 @@ def test_writer_accepts_different_lengths_without_budget_retries(tmp_path) -> No
             prose("largo-", 500),
         ]
     )
-    run = StoryGenerator(provider, tmp_path).run(make_request())
+    run = StoryGenerator(provider, tmp_path).generate(make_request())
     report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
     assert [chapter["final_source"] for chapter in report["chapters"]] == [
         "revision",
@@ -544,7 +561,7 @@ def test_writer_accepts_different_lengths_without_budget_retries(tmp_path) -> No
 
 def test_writer_failure_is_isolated_to_its_chapter(tmp_path) -> None:
     provider = FakeProvider(fail_writer_call=2)
-    run = StoryGenerator(provider, tmp_path).run(make_request())
+    run = StoryGenerator(provider, tmp_path).generate(make_request())
     draft_bodies = parse_chapter_bodies(
         (run.run_dir / "draft.md").read_text(encoding="utf-8"),
         2,
@@ -618,7 +635,7 @@ def test_developed_plan_below_event_floor_is_replanned(tmp_path) -> None:
         update={"narrative_profile": NarrativeProfile.DEVELOPED}
     )
     provider = FakeProvider(plans=[valid_plan(), sized_plan(6)])
-    run = StoryGenerator(provider, tmp_path).run(request)
+    run = StoryGenerator(provider, tmp_path).generate(request)
     plan = json.loads((run.run_dir / "story_plan.json").read_text(encoding="utf-8"))
     validation = json.loads(
         (run.run_dir / "planning/attempt-001-validation.json").read_text(encoding="utf-8")
@@ -644,7 +661,7 @@ def test_two_profile_invalid_plans_fail_before_critique_or_drafting(tmp_path) ->
     )
     created = []
     with pytest.raises(PlotValidationError) as captured:
-        StoryGenerator(provider, tmp_path).run(request, on_run_created=created.append)
+        StoryGenerator(provider, tmp_path).generate(request, on_run_created=created.append)
     assert captured.value.code == "PLOT_VALIDATION_FAILED"
     assert not any(name == "PlanReview" for name, _, _ in provider.structured_calls)
     assert provider.text_calls == []
@@ -660,7 +677,7 @@ def test_profile_invalid_refinement_falls_back_to_valid_plan(tmp_path) -> None:
         plans=[sized_plan(6), valid_plan()],
         plan_review=rejected_plan_review(),
     )
-    run = StoryGenerator(provider, tmp_path).run(request)
+    run = StoryGenerator(provider, tmp_path).generate(request)
     plan = json.loads((run.run_dir / "story_plan.json").read_text(encoding="utf-8"))
     validation = json.loads(
         (run.run_dir / "planning/refined-candidate-validation.json").read_text(
@@ -678,7 +695,7 @@ def test_profile_guidance_reaches_world_characters_and_prose_agents(tmp_path) ->
         update={"narrative_profile": NarrativeProfile.DEVELOPED}
     )
     provider = FakeProvider(plans=[sized_plan(6)])
-    StoryGenerator(provider, tmp_path).run(request)
+    StoryGenerator(provider, tmp_path).generate(request)
     structured = {
         name: (system, prompt) for name, system, prompt in provider.structured_calls
     }
@@ -697,7 +714,7 @@ def test_expansive_guidance_resists_event_compression(tmp_path) -> None:
         update={"narrative_profile": NarrativeProfile.EXPANSIVE}
     )
     provider = FakeProvider(plans=[sized_plan(9, branch_and_join=True)])
-    StoryGenerator(provider, tmp_path).run(request)
+    StoryGenerator(provider, tmp_path).generate(request)
     structured_prompts = [prompt for _, _, prompt in provider.structured_calls]
     prose_prompts = [prompt for _, prompt in provider.text_calls]
     expected = "do not pack several planned events into a brief summary passage"
@@ -711,7 +728,7 @@ def test_expansive_guidance_resists_event_compression(tmp_path) -> None:
 
 def test_internal_agents_use_english_until_drafting(tmp_path) -> None:
     provider = FakeProvider()
-    run = StoryGenerator(provider, tmp_path).run(make_request())
+    run = StoryGenerator(provider, tmp_path).generate(make_request())
     request = json.loads((run.run_dir / "request.json").read_text(encoding="utf-8"))
     plan = json.loads((run.run_dir / "story_plan.json").read_text(encoding="utf-8"))
     presentation = json.loads((run.run_dir / "draft_presentation.json").read_text(encoding="utf-8"))
@@ -735,7 +752,7 @@ def test_internal_agents_use_english_until_drafting(tmp_path) -> None:
 
 def test_drama_critic_checks_scene_space_event_by_event(tmp_path) -> None:
     provider = FakeProvider()
-    StoryGenerator(provider, tmp_path).run(make_request())
+    StoryGenerator(provider, tmp_path).generate(make_request())
     critic_system = next(
         system for name, system, _ in provider.structured_calls if name == "StoryReview"
     )

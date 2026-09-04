@@ -32,7 +32,6 @@ class PipelineEvent:
     kind: str
     message: str
     stage: str | None = None
-    chapter_id: str | None = None
     attempt: int | None = None
     artifact: str | None = None
 

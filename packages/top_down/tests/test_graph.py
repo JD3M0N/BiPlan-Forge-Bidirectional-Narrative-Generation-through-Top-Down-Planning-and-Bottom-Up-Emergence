@@ -342,3 +342,34 @@ def test_payoff_schema_distinguishes_event_ids_from_story_state() -> None:
     properties = PlotEvent.model_json_schema()["properties"]
     assert "earlier event" in properties["payoff_of"]["description"]
     assert "not IDs" in properties["effects"]["description"]
+
+
+def test_structural_error_messages_stay_in_english() -> None:
+    """Validation messages feed the model's repair prompt, so they must stay ASCII English."""
+    messages: list[str] = []
+
+    def collect(candidate: StoryPlan) -> None:
+        with pytest.raises(ValueError) as captured:
+            validate_story_plan(candidate, world(), characters())
+        messages.append(str(captured.value))
+
+    duplicate_chapter = plan([dependency("event-1", "event-2"), dependency("event-2", "event-3")])
+    duplicate_chapter.chapters.append(duplicate_chapter.chapters[0])
+    collect(duplicate_chapter)
+
+    unknown_chapter = plan([dependency("event-1", "event-2"), dependency("event-2", "event-3")])
+    unknown_chapter.events[0].chapter_id = "missing-chapter"
+    collect(unknown_chapter)
+
+    disconnected = plan(
+        [dependency("event-1", "event-2", "temporal"), dependency("event-2", "event-3", "temporal")]
+    )
+    collect(disconnected)
+
+    unknown_payoff = plan([dependency("event-1", "event-2"), dependency("event-2", "event-3")])
+    unknown_payoff.events[1].payoff_of = ["charcoal_note"]
+    collect(unknown_payoff)
+
+    assert messages
+    for message in messages:
+        assert message.isascii(), message

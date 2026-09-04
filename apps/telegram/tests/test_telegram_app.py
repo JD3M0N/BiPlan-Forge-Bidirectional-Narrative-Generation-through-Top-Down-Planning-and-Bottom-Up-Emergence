@@ -156,6 +156,40 @@ def test_generation_edits_one_progress_message_until_complete(tmp_path):
     assert "100% — Historia terminada" in bot.edits[-1]["text"]
 
 
+def test_generation_is_not_blocked_by_a_hanging_progress_edit(tmp_path):
+    story = make_story(tmp_path)
+
+    class ProgressGenerator(FakeGenerator):
+        def generate(self, prompt, on_progress=None):
+            on_progress(ProgressUpdate(25, "world", "Construyendo el mundo"))
+            return super().generate(prompt)
+
+    class HangingBot(FakeBot):
+        async def edit_message_text(self, **kwargs):
+            await asyncio.sleep(999)
+
+    handler = TelegramStoryBot(ProgressGenerator(story))
+    handler.PROGRESS_EDIT_TIMEOUT = 0.05
+    bot = HangingBot()
+    context = SimpleNamespace(bot=bot, user_data={})
+    user = SimpleNamespace(id=12, username="ana", full_name="Ana")
+
+    asyncio.run(
+        asyncio.wait_for(
+            handler._generate_and_deliver(
+                context=context,
+                chat_id=20,
+                user=user,
+                prompt="Una historia",
+                progress_message_id=99,
+            ),
+            timeout=5,
+        )
+    )
+
+    assert bot.documents
+
+
 def test_generation_notifies_quality_warning_and_still_starts_evaluation(tmp_path):
     story = make_story(tmp_path)
     (story / "metadata.json").write_text(

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 import json
 import os
 import re
@@ -14,6 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import aiohttp
 import edge_tts
 from edge_tts import VoicesManager
 from langdetect import DetectorFactory, LangDetectException, detect
@@ -23,6 +23,7 @@ from .files import atomic_write_json
 DetectorFactory.seed = 0
 
 DEFAULT_RETRY_DELAYS = (1.0, 2.0)
+DEFAULT_FALLBACK_VOICE = "en-US-EmmaMultilingualNeural"
 _VOICE_MANAGER: VoicesManager | None = None
 
 
@@ -60,7 +61,7 @@ def _fallback_voice() -> str:
     configured = os.getenv("TTS_FALLBACK_VOICE", "").strip()
     if configured:
         return configured
-    return str(inspect.signature(edge_tts.Communicate).parameters["voice"].default)
+    return DEFAULT_FALLBACK_VOICE
 
 
 def _detect_language(text: str) -> str:
@@ -70,7 +71,9 @@ def _detect_language(text: str) -> str:
         return "und"
 
 
-async def _voice_for_language(language: str, fallback: str) -> str:
+async def _voice_for_language(
+    language: str, fallback: str, voice_manager: VoicesManager | None = None
+) -> str:
     global _VOICE_MANAGER
 
     # Español de España, nunca español de Argentina
@@ -82,13 +85,15 @@ async def _voice_for_language(language: str, fallback: str) -> str:
         return fallback
 
     try:
-        if _VOICE_MANAGER is None:
-            _VOICE_MANAGER = await VoicesManager.create()
+        if voice_manager is not None:
+            manager = voice_manager
+        else:
+            if _VOICE_MANAGER is None:
+                _VOICE_MANAGER = await VoicesManager.create()
+            manager = _VOICE_MANAGER
 
-        candidates = _VOICE_MANAGER.find(
-            Language=language.split("-", 1)[0].lower()
-        )
-    except Exception:
+        candidates = manager.find(Language=language.split("-", 1)[0].lower())
+    except (aiohttp.ClientError, TimeoutError, OSError):
         return fallback
 
     if not candidates:
@@ -183,6 +188,7 @@ async def create_story_audio(
     *,
     retry_delays: tuple[float, ...] = DEFAULT_RETRY_DELAYS,
     force: bool = False,
+    voice_manager: VoicesManager | None = None,
 ) -> AudioArtifact:
     """Create or reuse an MP3 narration for one generated Markdown story."""
     source = Path(story_path)
@@ -203,7 +209,7 @@ async def create_story_audio(
         if not text:
             raise ValueError("Story text is empty after Markdown normalization")
         language = await asyncio.to_thread(_detect_language, text)
-        voice = await _voice_for_language(language, fallback)
+        voice = await _voice_for_language(language, fallback, voice_manager)
         destination.parent.mkdir(parents=True, exist_ok=True)
         await _synthesize_with_retries(text, voice, destination, retry_delays)
         artifact = AudioArtifact(destination, language, voice)

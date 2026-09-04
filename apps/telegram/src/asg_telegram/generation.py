@@ -24,6 +24,8 @@ LOGGER = logging.getLogger(__name__)
 class GenerationCoordinator(TelegramDelivery):
     """Coordinate FIFO jobs, generation callbacks, delivery, and recovery."""
 
+    PROGRESS_EDIT_TIMEOUT: float = 5.0
+
     def __init__(self, generator: StoryGenerator, queue: QueueRepository | None = None) -> None:
         """Configure the generator, optional queue, and concurrency limits."""
         self.generator = generator
@@ -150,7 +152,10 @@ class GenerationCoordinator(TelegramDelivery):
                 ),
                 loop,
             )
-            future.result()
+            try:
+                future.result(timeout=self.PROGRESS_EDIT_TIMEOUT)
+            except Exception:
+                LOGGER.warning("no se pudo confirmar la edición del progreso a tiempo")
 
         try:
             async with self.generation_semaphore:

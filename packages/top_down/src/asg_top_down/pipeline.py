@@ -21,7 +21,14 @@ from .agents import (
     WriterAgent,
 )
 from .audit import canonical_chapter, story_metrics, word_count
-from .errors import PlotValidationError
+from .errors import (
+    ConfigurationError,
+    GeminiBillingQuotaError,
+    GeminiDailyQuotaError,
+    GeminiRPMError,
+    GeminiTPMError,
+    PlotValidationError,
+)
 from .graph import materialize_plan, relevant_prior_events, validate_profile_structure
 from .progress import PipelineEvent, PipelineEventCallback, ProgressCallback, ProgressUpdate
 from .schemas import (
@@ -58,6 +65,15 @@ CHECKPOINT_STAGES = (
     "revision",
     "story",
     "audio",
+)
+
+# Errors that must always abort the pipeline instead of being degraded to a warning.
+NON_DEGRADABLE_ERRORS = (
+    ConfigurationError,
+    GeminiRPMError,
+    GeminiTPMError,
+    GeminiDailyQuotaError,
+    GeminiBillingQuotaError,
 )
 
 
@@ -337,6 +353,8 @@ class StoryPipeline:
                 return original_plan
             self._emit("plan_refined", "plan refinado tras la crítica", stage="plan_review")
             return refined
+        except NON_DEGRADABLE_ERRORS:
+            raise
         except Exception as exc:
             warning = (
                 "La crítica del plan no pudo completarse; se conservó el primer plan "
@@ -520,6 +538,8 @@ class StoryPipeline:
             self.repository.save_json("review.json", review)
             self._validate_note_references(review.notes, plan)
             self.repository.complete_stage("critique")
+        except NON_DEGRADABLE_ERRORS:
+            raise
         except Exception as exc:
             warning = (
                 "La crítica dramática no pudo completarse; se entregó el borrador "
@@ -656,6 +676,8 @@ class StoryPipeline:
                     )
 
                 candidate = self._call_agent("writer", revise_chapter).strip()
+            except NON_DEGRADABLE_ERRORS:
+                raise
             except Exception as exc:
                 attempt_result = ChapterRevisionAttempt(
                     attempt=attempt,
@@ -841,7 +863,6 @@ class StoryPipeline:
         message: str,
         *,
         stage: str | None = None,
-        chapter_id: str | None = None,
         attempt: int | None = None,
         artifact: str | None = None,
     ) -> None:
@@ -852,7 +873,6 @@ class StoryPipeline:
                     kind=kind,
                     message=message,
                     stage=stage,
-                    chapter_id=chapter_id,
                     attempt=attempt,
                     artifact=artifact,
                 )

@@ -45,7 +45,7 @@ def test_real_gemini_smoke_run() -> None:
         max_retry_delay=settings.max_retry_delay,
         request_timeout_ms=settings.request_timeout_ms,
     )
-    run = StoryGenerator(provider, settings.output_root).run(canonical_prompt)
+    run = StoryGenerator(provider, settings.output_root).generate(canonical_prompt)
     assert run.story_path.is_file()
     assert run.story_path.read_text(encoding="utf-8").strip()
 

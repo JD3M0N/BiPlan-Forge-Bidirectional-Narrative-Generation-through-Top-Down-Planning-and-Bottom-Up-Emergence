@@ -67,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
             print(event.message, flush=True)
 
         print(f"\nGenerando con {settings.model}...")
-        output = generator.run(
+        output = generator.generate(
             prompt,
             on_progress=report_progress,
             on_event=report_event,

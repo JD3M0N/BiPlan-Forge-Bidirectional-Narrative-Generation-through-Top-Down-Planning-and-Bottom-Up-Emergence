@@ -79,18 +79,3 @@ class StoryGenerator:
             on_event=on_event,
         )
         return StoryRun(pipeline.execute(request))
-
-    def run(
-        self,
-        request: StoryRequest | str,
-        on_progress: ProgressCallback | None = None,
-        on_run_created: Callable[[Path], None] | None = None,
-        on_event: PipelineEventCallback | None = None,
-    ) -> StoryRun:
-        """Alias generate for command and application integrations."""
-        return self.generate(
-            request,
-            on_progress=on_progress,
-            on_run_created=on_run_created,
-            on_event=on_event,
-        )

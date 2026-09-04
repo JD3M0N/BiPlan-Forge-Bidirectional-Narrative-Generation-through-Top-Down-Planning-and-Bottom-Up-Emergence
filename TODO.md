@@ -76,15 +76,6 @@ ausentes. La comparación de perfiles con este código está en `docs/calibracio
   la voz alternativa está anotada como comentario (`audio.py:79`). La misma suposición `es-MX`
   sobrevive en `packages/top_down/tests/conftest.py`.
 
-- [ ] **`P2` Endurecer las dependencias implícitas del generador de audio.** `_fallback_voice`
-  (`audio.py:59-63`) deduce la voz por defecto leyendo con `inspect.signature` el valor por
-  defecto de un argumento de `edge_tts.Communicate`: una actualización de la dependencia cambia
-  la narración en silencio. `_VOICE_MANAGER` (`audio.py:26`) es un global mutable sin cerrojo
-  que las pruebas parchean directamente, y `audio.py:91` captura toda excepción para caer al
-  fallback. **Finalizada cuando:** la voz por defecto es una constante propia, la caché de
-  voces no es estado global compartido con las pruebas, y solo se degradan a fallback los
-  errores esperados.
-
 ## Top-Down: perfiles y calibración
 
 - [ ] **`P0` Garantizar que el plan entregado supera su propio validador.** El run
@@ -154,14 +145,6 @@ ausentes. La comparación de perfiles con este código está en `docs/calibracio
 
 ## Top-Down: pipeline y contrato
 
-- [ ] **`P1` Dejar de degradar los errores de cuota a advertencias.** `pipeline.py:325`, `:506`
-  y `:642` capturan `Exception` de forma amplia, de modo que un `GeminiDailyQuotaError` durante
-  la crítica del plan, la crítica dramática o la revisión de un capítulo se convierte en una
-  advertencia y el pipeline continúa hasta fallar más tarde o entregar texto sin revisar. Es
-  incompatible con `_build_world`, `_build_characters` y `_build_plan`, que sí propagan.
-  **Finalizada cuando:** los errores de cuota y de configuración abortan de inmediato con su
-  código, solo se degradan los fallos realmente recuperables, y hay pruebas para ambos casos.
-
 - [ ] **`P1` Definir una política segura para ejecuciones interrumpidas.** Medir primero si hay
   un caso de uso que justifique reanudar desde los checkpoints existentes; mientras no exista
   reanudación segura, permitir reiniciar, notificar o descartar explícitamente los trabajos
@@ -212,28 +195,22 @@ ausentes. La comparación de perfiles con este código está en `docs/calibracio
   llamada al registro es una operación de anexado, el manifiesto se consolida al cerrar cada
   etapa, y los hashes publicados siguen coincidiendo con los archivos.
 
-- [ ] **`P2` Eliminar abstracciones inertes y código muerto.** `PipelineEvent.chapter_id`
-  (`progress.py:33`) no lo rellena ningún llamador; `ArtifactValidationError`
-  (`errors.py:62-71`) no se lanza nunca; `generation_profiles` y
-  `structured_validation_retries` (`provider.py:172-173`) no los pasa nadie; `ChapterPlan`
-  (`schemas.py:135-137`) es una subclase vacía; `generator.run()` (`generator.py:77-90`) es un
-  alias literal de `generate()`; y `topological_order` es redundante porque
-  `_validate_dependency_directions` (`graph.py:257-263`) ya garantiza que el orden de Kahn
-  (`graph.py:232-254`) coincide siempre con el campo `order`. **Finalizada cuando:** cada
-  eliminación va acompañada de la prueba que demuestra que nada dependía de ella, y el contrato
-  de artefactos documenta si `topological_order` se conserva por compatibilidad.
-
-- [ ] **`P2` Aclarar la frontera de idiomas en los mensajes de error.** Los mensajes de error
-  estructural en inglés (`graph.py:114`, `:172`, `:229`; `pipeline.py:450`, `:529`) se reinyectan
-  en el prompt de reparación (`pipeline.py:361`), así que forman parte del contrato con el
-  modelo y no pueden traducirse; esa regla («mensajes de usuario en español, mensajes que
-  alimentan al modelo en inglés») solo está anotada como comentario junto a
-  `_record_rejected_plan` (`pipeline.py:359-361`), no en los puntos de origen ni comprobada por
-  una prueba. **Finalizada cuando:** la regla está documentada en todos los puntos relevantes
-  (origen y reinyección) y una prueba comprueba que los mensajes que alimentan al modelo
-  permanecen en inglés mientras los de cara al usuario están en español.
-  **Evidencia:** los dos bytes corruptos que originaron esta tarea (`pipeline.py:778`, `:783`,
-  `"Generando narraci?n"` y `"story.md permanece v?lido"`) ya están corregidos.
+- [ ] **`P2` Eliminar abstracciones inertes restantes.** `PipelineEvent.chapter_id` y
+  `generator.run()` ya se eliminaron; quedan cuatro casos que exigen antes una decisión de
+  diseño, no solo borrar código: `ChapterPlan` (`schemas.py:135-137`) es una subclase vacía pero
+  es un tipo público exportado y usado como anotación en ~10 puntos (`writer.py`, `graph.py`,
+  `pipeline.py`, tests) — eliminarlo cambia la superficie pública. `generation_profiles` y
+  `structured_validation_retries` (`provider.py:172-173`) no los pasa ningún llamador hoy, pero
+  sí los usa `GeminiProvider` internamente para temperatura y reintentos — tocarlos pertenece a
+  la tarea "Fijar la temperatura por contrato", no a una limpieza mecánica.
+  `topological_order` (`schemas.py:209`) se serializa en `story_plan.json` de cada run; el
+  propio cierre de esta tarea exige documentar antes si se conserva por compatibilidad.
+  `ArtifactValidationError` (`errors.py:62-71`) no se lanza en producción, pero sí la usan
+  `test_console.py` y `test_telegram_app.py` como error genérico con `stage` configurable — no
+  es código muerto, es un doble de prueba. **Finalizada cuando:** cada uno de los cuatro casos
+  tiene su decisión tomada (eliminar con la migración correspondiente, o mantenerse
+  explícitamente) y, si se elimina, va acompañado de la prueba que demuestra que nada dependía
+  de él.
 
 - [ ] **`P2` Hacer que el proveedor no dependa de estado mutable compartido.** El pipeline muta
   `wait_callback` y `usage_callback` del proveedor y los limpia en un `finally`
@@ -271,13 +248,6 @@ ausentes. La comparación de perfiles con este código está en `docs/calibracio
   vista cuando cambien la cola o el progreso. **Finalizada cuando:** el operador puede conocer
   la carga y la etapa actual sin consultar Telegram ni la base SQLite, y el estado mínimo
   necesario se conserva durante la ejecución.
-
-- [ ] **`P1` Eliminar el bloqueo del hilo de generación.** `report_progress`
-  (`generation.py:139-153`) llama a `future.result()` sin tiempo límite desde el hilo lanzado
-  con `asyncio.to_thread`, en cada notificación de progreso: cualquier demora al editar el
-  mensaje de Telegram (`generation.py:575-579`) detiene la generación. **Finalizada cuando:**
-  el progreso se entrega sin bloquear la generación, una edición lenta o fallida no detiene el
-  pipeline, y existe una prueba con una edición que nunca responde.
 
 - [ ] **`P1` Aceptar solicitudes de historias mediante notas de voz.** Descargar y transcribir
   el audio recibido, mostrar el texto resultante para que el usuario lo confirme o corrija y

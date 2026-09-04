@@ -1,4 +1,9 @@
-"""Deterministic validation and ordering for the Top-Down event DAG."""
+"""Deterministic validation and ordering for the Top-Down event DAG.
+
+Every ValueError message raised here stays in English on purpose: pipeline.py's
+_record_rejected_plan reinjects it verbatim into the model's structural-repair prompt, so it is
+part of the contract with the model, not user-facing text.
+"""
 
 from __future__ import annotations
 

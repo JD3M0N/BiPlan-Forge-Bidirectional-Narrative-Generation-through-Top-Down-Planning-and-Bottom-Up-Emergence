@@ -94,8 +94,8 @@ class FakeCommunicate:
 def fake_tts(monkeypatch):
     FakeCommunicate.attempts = 0
     FakeCommunicate.failures = 0
-    monkeypatch.setattr(audio_module, "_VOICE_MANAGER", FakeVoices())
     monkeypatch.setattr(audio_module.edge_tts, "Communicate", FakeCommunicate)
+    return FakeVoices()
 
 
 @pytest.mark.parametrize(
@@ -119,7 +119,7 @@ def test_story_audio_detects_language_and_selects_novel_voice(
     story = tmp_path / "story.md"
     story.write_text(f"# Relato\n\n{text}", encoding="utf-8")
 
-    artifact = asyncio.run(create_story_audio(story, retry_delays=()))
+    artifact = asyncio.run(create_story_audio(story, retry_delays=(), voice_manager=fake_tts))
 
     metadata = json.loads((tmp_path / "audio.json").read_text(encoding="utf-8"))
     assert artifact.path == tmp_path / "story.mp3"
@@ -136,7 +136,7 @@ def test_story_audio_retries_and_cleans_partial_files(tmp_path, fake_tts):
     story.write_text("Una historia suficientemente larga para detectar español.", encoding="utf-8")
     FakeCommunicate.failures = 2
 
-    artifact = asyncio.run(create_story_audio(story, retry_delays=(0, 0)))
+    artifact = asyncio.run(create_story_audio(story, retry_delays=(0, 0), voice_manager=fake_tts))
 
     assert artifact.path.is_file()
     assert FakeCommunicate.attempts == 3
