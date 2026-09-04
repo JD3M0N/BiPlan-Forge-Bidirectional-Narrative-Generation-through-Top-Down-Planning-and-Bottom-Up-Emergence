@@ -78,8 +78,8 @@ async def _voice_for_language(
 
     # Español de España, nunca español de Argentina
     if language.lower().split("-", 1)[0] == "es":
-        return "es-ES-ElviraNeural"
-        # Alternativa masculina: "es-ES-AlvaroNeural"
+        return "es-ES-AlvaroNeural"
+        # Alternativa femenina: "es-ES-ElviraNeural"
 
     if language == "und":
         return fallback
