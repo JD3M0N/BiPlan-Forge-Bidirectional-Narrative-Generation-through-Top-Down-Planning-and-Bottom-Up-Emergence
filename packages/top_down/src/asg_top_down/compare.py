@@ -25,7 +25,8 @@ def build_comparison(runs: Sequence[Path], output: Path) -> Path:
 article{{white-space:pre-wrap;line-height:1.55;border:1px solid #ccc;padding:1.5rem}}
 textarea{{width:100%;min-height:8rem}}@media(max-width:900px){{main{{grid-template-columns:1fr}}}}</style>
 <h1>Comparación narrativa</h1>
-<p>Evalúa creatividad, engagement, naturalidad, causalidad y sensación de plantilla antes de revelar qué versión es cada una.</p>
+<p>Evalúa creatividad, engagement, naturalidad, causalidad y sensación de plantilla
+antes de revelar qué versión es cada una.</p>
 <main>{sections}</main>
 <h2>Notas</h2><textarea placeholder="Preferencia y razones..."></textarea></html>"""
     output.parent.mkdir(parents=True, exist_ok=True)

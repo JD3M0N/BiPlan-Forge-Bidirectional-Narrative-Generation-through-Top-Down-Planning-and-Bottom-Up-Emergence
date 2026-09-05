@@ -7,7 +7,7 @@ from .config import load_settings
 from .errors import ASGError
 from .generator import StoryGenerator
 from .progress import format_progress
-from .provider import GeminiProvider
+from .provider import provider_from_settings
 
 EXAMPLE_PROMPT = (
     "Escribe un relato de ciencia ficción con perfil narrativo Desarrollada. Una cartógrafa "
@@ -46,16 +46,7 @@ def main(argv: list[str] | None = None) -> int:
             print("Error: el prompt no puede estar vacío.", file=sys.stderr)
             return 2
         settings = load_settings()
-        provider = GeminiProvider(
-            settings.api_key,
-            settings.model,
-            rpm_limit=settings.rpm_limit,
-            rpm_reserve=settings.rpm_reserve,
-            tpm_limit=settings.tpm_limit,
-            max_retries=settings.max_retries,
-            max_retry_delay=settings.max_retry_delay,
-            request_timeout_ms=settings.request_timeout_ms,
-        )
+        provider = provider_from_settings(settings)
         generator = StoryGenerator(provider, settings.output_root)
 
         def report_progress(update) -> None:

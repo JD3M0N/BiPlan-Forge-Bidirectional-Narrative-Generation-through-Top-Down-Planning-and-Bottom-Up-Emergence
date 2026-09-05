@@ -59,7 +59,9 @@ def test_gemini_schema_omits_unsupported_additional_properties() -> None:
 def test_structured_generation_rejects_invalid_json() -> None:
     provider = provider_with(SimpleNamespace(parsed=None, text="{invalid"))
     with pytest.raises(StructuredResponseError):
-        provider.generate_structured(system_instruction="test", prompt="test", schema=StoryRequest)
+        provider.generate_structured(
+            system_instruction="test", prompt="test", schema=StoryRequest, profile="extraction"
+        )
 
 
 def test_structured_generation_retries_validation_once_then_succeeds() -> None:
@@ -81,6 +83,7 @@ def test_structured_generation_retries_validation_once_then_succeeds() -> None:
         system_instruction="test",
         prompt="PRIVATE PROMPT",
         schema=StoryRequest,
+        profile="extraction",
     )
     assert result.title == "Título"
     assert len(provider._client.models.generate_calls) == 2
@@ -101,6 +104,7 @@ def test_structured_generation_reports_sanitized_errors_after_retry() -> None:
             system_instruction="test",
             prompt="PRIVATE PROMPT",
             schema=StoryRequest,
+            profile="extraction",
         )
     details = captured.value.details
     assert details["schema"] == "StoryRequest"
@@ -118,19 +122,21 @@ def test_structured_generation_reports_sanitized_errors_after_retry() -> None:
 def test_structured_generation_rejects_empty_response() -> None:
     provider = provider_with(SimpleNamespace(parsed=None, text=""))
     with pytest.raises(EmptyResponseError):
-        provider.generate_structured(system_instruction="test", prompt="test", schema=StoryRequest)
+        provider.generate_structured(
+            system_instruction="test", prompt="test", schema=StoryRequest, profile="extraction"
+        )
 
 
 def test_text_generation_rejects_empty_response() -> None:
     provider = provider_with(SimpleNamespace(text="  "))
     with pytest.raises(EmptyResponseError):
-        provider.generate_text(system_instruction="test", prompt="test")
+        provider.generate_text(system_instruction="test", prompt="test", profile="prose")
 
 
 def test_provider_wraps_transport_errors() -> None:
     provider = provider_with(error=OSError("sin red"))
     with pytest.raises(ProviderError, match="comunicarse con Gemini"):
-        provider.generate_text(system_instruction="test", prompt="test")
+        provider.generate_text(system_instruction="test", prompt="test", profile="prose")
 
 
 def test_usage_metadata_is_recorded_without_count_tokens_by_default() -> None:
@@ -145,7 +151,10 @@ def test_usage_metadata_is_recorded_without_count_tokens_by_default() -> None:
         ),
     )
     provider = provider_with(response)
-    assert provider.generate_text(system_instruction="test", prompt="test") == "respuesta"
+    assert (
+        provider.generate_text(system_instruction="test", prompt="test", profile="prose")
+        == "respuesta"
+    )
     assert provider._client.models.count_calls == 0
     assert provider.usage_records[0].total_tokens == 17
 
@@ -154,7 +163,7 @@ def test_usage_callback_receives_each_completed_call() -> None:
     provider = provider_with(SimpleNamespace(text="respuesta", usage_metadata=None))
     received = []
     provider.usage_callback = received.append
-    provider.generate_text(system_instruction="test", prompt="test")
+    provider.generate_text(system_instruction="test", prompt="test", profile="prose")
     assert received == provider.usage_records
 
 
@@ -165,7 +174,7 @@ def test_tpm_preflight_calls_count_tokens_only_when_configured() -> None:
         acquire=lambda tokens, callback: acquired.append(tokens)
     )
     provider.wait_callback = None
-    provider.generate_text(system_instruction="sistema", prompt="texto")
+    provider.generate_text(system_instruction="sistema", prompt="texto", profile="prose")
     assert provider._client.models.count_calls == 1
     assert acquired == [42]
 
@@ -195,7 +204,10 @@ def test_connect_error_is_retried_then_succeeds(monkeypatch) -> None:
     provider._client.models = FlakyModels()
     monkeypatch.setattr(provider_module, "retry_delay", lambda attempt, details: 0)
     monkeypatch.setattr(provider_module, "countdown_wait", lambda *args: None)
-    assert provider.generate_text(system_instruction="test", prompt="test") == "respuesta"
+    assert (
+        provider.generate_text(system_instruction="test", prompt="test", profile="prose")
+        == "respuesta"
+    )
     assert len(provider._client.models.generate_calls) == 2
     assert [record.status for record in provider.usage_records] == ["failed", "succeeded"]
 
@@ -204,7 +216,7 @@ def test_authentication_error_is_not_retried() -> None:
     provider = provider_with(error=Exception("401 invalid API key"))
     provider.max_retries = 3
     with pytest.raises(ProviderError):
-        provider.generate_text(system_instruction="test", prompt="test")
+        provider.generate_text(system_instruction="test", prompt="test", profile="prose")
     assert len(provider._client.models.generate_calls) == 1
 
 
@@ -227,3 +239,45 @@ def test_client_error_preserves_safe_status_diagnostics() -> None:
     assert error.details["status"] == 400
     assert error.details["status_name"] == "INVALID_ARGUMENT"
     assert "esquema" in error.summary
+
+
+def test_temperature_uses_explicit_profile_for_structured_generation() -> None:
+    valid = StoryRequest(
+        original_prompt="historia",
+        title="Título",
+        genre="fantasía",
+        tone="tenso",
+        narrative_profile="developed",
+        premise="Una promesa",
+    ).model_dump_json()
+    provider = provider_with(SimpleNamespace(parsed=None, text=valid))
+    provider.generate_structured(
+        system_instruction="test", prompt="test", schema=StoryRequest, profile="extraction"
+    )
+    config = provider._client.models.generate_calls[-1]["config"]
+    assert config.temperature == 0.15
+
+
+def test_temperature_uses_explicit_profile_for_text_generation() -> None:
+    provider = provider_with(SimpleNamespace(text="respuesta", usage_metadata=None))
+    provider.generate_text(system_instruction="test", prompt="test", profile="rewrite")
+    config = provider._client.models.generate_calls[-1]["config"]
+    assert config.temperature == 0.35
+
+
+def test_temperature_rejects_unknown_profile() -> None:
+    provider = provider_with(SimpleNamespace(text="respuesta", usage_metadata=None))
+    with pytest.raises(ValueError, match="not-a-real-profile"):
+        provider.generate_text(
+            system_instruction="test", prompt="test", profile="not-a-real-profile"
+        )
+
+
+def test_generation_profiles_override_merges_with_defaults() -> None:
+    provider = provider_with()
+    provider.generation_profiles = {
+        **provider_module._DEFAULT_GENERATION_PROFILES,
+        "prose": 1.0,
+    }
+    assert provider._temperature("prose") == 1.0
+    assert provider._temperature("review") == provider_module._DEFAULT_GENERATION_PROFILES["review"]

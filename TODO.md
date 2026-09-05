@@ -1,338 +1,250 @@
 # Hoja de ruta
 
-Las tareas se agrupan por subsistema. Cada una describe el resultado esperado, una condición
-concreta para considerarla terminada y la evidencia en el código que la origina.
+Tareas agrupadas por subsistema. Cada una tiene: qué falta, cuándo se considera cerrada
+(**Cierre:**) y dónde está el problema en el código (**Evidencia:**).
 
-**Prioridades.** `P0` bloquea la línea base o produce resultados incorrectos; `P1` es necesario
-para sostener la tesis y la operación; `P2` es refactorización que reduce el coste de todo lo
-anterior sin cambiar el comportamiento observable.
+**Prioridades.** `P0` bloquea la línea base o produce resultados incorrectos. `P1` hace falta
+para sostener la tesis y la operación. `P2` es refactor que no cambia el comportamiento pero
+abarata el resto.
 
-**Orden sugerido:** primero las siete tareas `P0` (línea base de calidad, política de voz,
-extensión de las historias Expansivas, plan entregado sin validar, trabajos bloqueados y fugas
-de la cola); después `P1`, empezando por integración continua y el lector de evaluaciones; y por
-último `P2`, empezando por la división de `pipeline.py`, que es la que abarata todas las demás.
+**Orden sugerido:** los cinco `P0` primero; luego `P1` empezando por CI y el lector de
+evaluaciones; por último `P2` empezando por dividir `pipeline.py`.
 
-**Estado medido el 2026-09-04 sobre `4604473`** (con las correcciones de línea base de esta
-sesión aplicadas en el árbol de trabajo): 182 pruebas colectadas (180 pasan, 2 omitidas),
-`ruff check .` sin errores, `ruff format --check .` sin errores, `pip check` limpio. La
-comparación de perfiles con este código está en `docs/calibracion_perfiles.md`.
+**Estado medido el 2026-09-05 sobre `9a94004`** (con la dedup de prompts/proveedor, la
+temperatura por contrato y la activación de `E501` de esta sesión aplicadas en el árbol de
+trabajo): 186 pruebas (184 pasan, 2 omitidas), `ruff check .`, `ruff format --check .` y
+`pip check` limpios. Comparación de perfiles en
+[docs/calibracion_perfiles.md](docs/calibracion_perfiles.md).
 
 ---
 
 ## Calidad e infraestructura
 
-- [x] **`P0` Recuperar la línea base de calidad.** Resolver la discrepancia entre la política de
-  voz española y su prueba, añadir los docstrings que exige la suite y aplicar el formato
-  pendiente. **Finalizada cuando:** las 182 pruebas pasan (con las 2 pruebas de integración
-  opcionales omitidas), `ruff check .` y `ruff format --check .` terminan sin errores.
-  **Evidencia:** la política de voz fija de España en `audio.py:_voice_for_language` (reforzada
-  en el commit `4604473`) se conservó por decisión explícita; se actualizó en su lugar
-  `packages/core/tests/test_core.py` para esperar `es-ES-AlvaroNeural`. Se añadieron los 9
-  docstrings que exigía `tests/test_source_documentation.py:46` (8 en
-  `packages/core/src/asg_core/audio.py`, 1 en `packages/top_down/src/asg_top_down/provider.py`)
-  y se aplicó `ruff format .` a los 8 archivos pendientes. `ruff check .`, `ruff format --check .`
-  y `pip check` terminan sin errores.
+- [ ] **`P1` Meter las comprobaciones en CI.** No hay `.github/`. `pyproject.toml:3` solo colecta
+  `test_*.py`, así que `tests/test_sync_railway_stories.ps1` nunca corre salvo a mano.
+  **Cierre:** un pipeline instala el repo y corre Ruff, formato, pytest, `pip check` y el test de
+  PowerShell en cada cambio; un fallo bloquea el merge.
 
-- [ ] **`P1` Automatizar las comprobaciones en integración continua.** Crear un flujo que
-  instale el monorepo y ejecute Ruff, la comprobación de formato, las pruebas Python,
-  `pip check` y la prueba PowerShell de sincronización de Railway. **Finalizada cuando:** cada
-  cambio se valida automáticamente en un entorno limpio y un fallo bloquea la comprobación
-  correspondiente. **Evidencia:** no existe ningún directorio `.github/`; `pyproject.toml:3`
-  solo colecta `test_*.py`, así que las 378 líneas de `tests/test_sync_railway_stories.ps1`
-  nunca se ejecutan salvo a mano.
+- [x] **`P1` Activar el límite de línea que ya está declarado.** `pyproject.toml:8` fija
+  `line-length = 100` pero `E501` no está en `select`, así que nunca se comprueba. **Cierre:** la
+  regla está activa, las ~82 líneas que hoy la superan están corregidas, y una línea larga nueva
+  rompe la comprobación. **Evidencia:** `E501` se añadió a `select` en `pyproject.toml:12`; las 82
+  líneas que lo violaban (concentradas en `agents/review.py`, `agents/analyst.py`,
+  `agents/planner.py` y `agents/writer.py`) se reenvolvieron sin cambiar el texto final de los
+  prompts. `ruff check .` termina sin errores con la regla activa.
 
-- [ ] **`P1` Hacer que el límite de longitud de línea sea real.** `pyproject.toml:8` declara
-  `line-length = 100`, pero `select` no incluye `E501`, de modo que el límite no se comprueba
-  nunca. **Finalizada cuando:** la regla está activa, las 82 líneas que hoy superan los 100
-  caracteres están corregidas y una línea larga nueva falla la comprobación.
-
-- [ ] **`P2` Sustituir el gate artesanal de docstrings por reglas del linter.** La prueba solo
-  comprueba presencia y ASCII (`tests/test_source_documentation.py:25-27`), lo que ha producido
-  decenas de docstrings tautológicas (`"Save json."`, `"Calculate details."`,
-  `"Represent X data and behavior."`) y obliga a documentar closures. Además su marcador
-  `"configuraci?n"` (`tests/test_source_documentation.py:9`) está corrupto y no puede coincidir
-  nunca. **Finalizada cuando:** las reglas `D` de Ruff cubren el requisito, la prueba artesanal
-  desaparece o queda reducida a la comprobación de idioma, y ningún docstring nuevo es
-  tautológico.
-
-- [x] **`P2` Limpiar el entorno declarado.** `.env` conserva `GEMINI_EMBEDDING_MODEL`,
-  `STORY_MAX_CPN_RETRIES` y `STORY_MAX_ARTIFACT_RETRIES`, que ya no lee ningún módulo, mientras
-  que `.env.example` omite `ASG_PROJECT_ROOT` (`packages/core/src/asg_core/paths.py:13`) y
-  `RUN_GEMINI_LIVE`. El entorno virtual arrastra instalaciones editables huérfanas
-  (`asg_prompt_crafter`, `asg_testing`) sin paquete correspondiente en el repositorio.
-  **Finalizada cuando:** toda variable presente en `.env.example` la lee alguien, toda variable
-  leída está documentada, y `pip check` con una instalación limpia no menciona paquetes que no
-  existen en el árbol. **Evidencia:** se quitaron las tres variables sin lector de `.env`, se
-  añadieron `ASG_PROJECT_ROOT` y `RUN_GEMINI_LIVE` a `.env.example`, y se desinstalaron
-  `asg-prompt-crafter`/`asg-testing` del venv (sus rutas de origen ya no existían en disco).
-  `pip check` termina limpio.
+- [ ] **`P2` Cambiar el gate de docstrings a reglas del linter.** El test actual
+  (`tests/test_source_documentation.py:25-27`) solo mira que exista texto ASCII, lo que ha dejado
+  pasar docstrings inútiles ("Save json.", "Calculate details.") y obliga a documentar closures.
+  Su regex de español además está rota (`"configuraci?n"`, línea 9) y nunca coincide. **Cierre:**
+  las reglas `D` de Ruff cubren esto, el test a mano desaparece o se reduce a comprobar idioma, y
+  no quedan docstrings vacíos de contenido.
 
 ## Core y audio
 
-- [ ] **`P0` Hacer configurable y reproducible la narración de historias.** Definir voces por
-  idioma y región, una selección determinista y un fallback seguro; documentar la configuración
-  y conservar en `audio.json` la voz y el idioma realmente utilizados. **Finalizada cuando:** se
-  pueden cambiar las voces sin editar el código y existen pruebas para detección de idioma,
-  selección configurada, fallback, reintentos, limpieza de archivos parciales y fallos
-  controlados. **Evidencia:** `packages/core/src/asg_core/audio.py:76-79` devuelve
-  `es-ES-ElviraNeural` con un `return` temprano mientras
-  `packages/core/tests/test_core.py:101-108` espera `es-MX-NovelNeural`; ese retorno deja
-  inalcanzable toda la clasificación por `VoicesManager` (`audio.py:84-107`) para el español, y
-  la voz alternativa está anotada como comentario (`audio.py:79`). La misma suposición `es-MX`
-  sobrevive en `packages/top_down/tests/conftest.py`.
+- [ ] **`P0` Hacer configurable y reproducible la voz de la narración.**
+  `packages/core/src/asg_core/audio.py:76-79` devuelve `es-ES-ElviraNeural` con un `return`
+  temprano, así que la selección real por `VoicesManager` (líneas 84-107) nunca se ejecuta para
+  español; el test (`packages/core/tests/test_core.py:101-108`) espera `es-MX-NovelNeural`. La
+  voz alternativa quedó como comentario. **Cierre:** la voz se elige por configuración (no por
+  código), con fallback seguro, y hay tests para detección de idioma, selección, fallback,
+  reintentos y limpieza de archivos parciales.
 
 ## Top-Down: perfiles y calibración
 
-- [ ] **`P0` Garantizar que el plan entregado supera su propio validador.** El run
-  `Stories/Top-Down/20260903-175604-el-dominio-escamado` entrega un `story_plan.json` cuyas
-  dependencias son idénticas a `planning/attempt-002.json`, rechazado con
-  `expansive profile requires a causal dependency branch followed by a causal join`, y aun así
-  registra `status: completed` y `warnings: []`. Según
-  `packages/top_down/src/asg_top_down/pipeline.py:257-262` eso debería haber lanzado
-  `PlotValidationError`. Además `plan_review.json` de ese run aprueba el plan y elogia una
-  bifurcación que el grafo no contiene: el crítico no detecta la violación estructural. La
-  ejecución de control del 2026-09-03 no reprodujo el fallo —el plan Expansivo fue rechazado y
-  corregido en el segundo intento—, lo que apunta a un estado intermedio del código, pero una
-  sola ejecución no lo descarta. **Finalizada cuando:** una prueba de regresión demuestra que
-  ningún `story_plan.json` puede persistirse sin pasar `validate_profile_structure`, y una
-  revalidación de todo el corpus distingue explícitamente entre runs anteriores al contrato y
-  runs que lo incumplen.
+- [ ] **`P0` Confirmar que ningún plan inválido se guarda como válido.** El run
+  `Stories/Top-Down/20260903-175604-el-dominio-escamado` quedó marcado `status: completed` pese a
+  tener el mismo error estructural (`expansive profile requires a causal dependency branch...`)
+  que ya había sido rechazado en un intento anterior; `plan_review.json` de ese run aprueba una
+  bifurcación que el grafo no tiene. Una ejecución de control no reprodujo el fallo, así que podría
+  ser un estado de código ya corregido. **Cierre:** un test de regresión prueba que ningún
+  `story_plan.json` puede persistirse sin pasar `validate_profile_structure`, y una revalidación
+  del corpus separa runs anteriores al contrato de incumplimientos reales.
 
-- [ ] **`P0` Mejorar la extensión real de las historias Expansivas.** El arreglo cualitativo del
-  `DramaCriticAgent` (verificación evento por evento, documentado en `docs/calibracion_perfiles.md`)
-  revirtió la compresión de eventos frente a la Esencial: la Expansiva ya no es la menos densa por
-  evento. Pero su extensión absoluta sigue por debajo de lo esperable para 9 eventos con escena
-  completa: tres ejecuciones sobre tres prompts distintos del catálogo dieron 3171, 3763 y 4102
-  palabras (`el-dominio-saurio`, `la-falsificacion-perfecta`, `las-cenizas-del-pacto`), ninguna
-  por encima de las ~5000 palabras que cabría esperar. El propio dato correlaciona extensión con
-  número de capítulos: la única ejecución con 5 capítulos (`las-cenizas-del-pacto`) alcanzó 456
-  palabras por evento y el máximo de palabras total; las de 3 capítulos se quedaron en 352 y 418.
-  Además, de las cinco ejecuciones Expansivas intentadas en esta sesión, dos (40 %) agotaron los
-  dos intentos estructurales permitidos y fallaron por completo con `PLOT_VALIDATION_FAILED`; de
-  los nueve intentos estructurales individuales realizados en total, seis (67 %) fueron
-  rechazados por `validate_profile_structure`, casi siempre por quedarse a un solo evento del
-  mínimo de 9 — el planificador tampoco converge con facilidad hacia un plan de 9 eventos bien
-  distribuido. **Finalizada cuando:** una muestra de ejecuciones Expansivas alcanza de forma
-  consistente una extensión perceptiblemente mayor —coherente con el reparto de capítulos que
-  fije la tarea de segmentación siguiente— y la tasa de fallos de planificación baja de forma
-  medible respecto al 40 % de ejecuciones y 67 % de intentos observados aquí.
+- [ ] **`P0` Alargar de verdad las historias Expansivas.** Tras arreglar el `DramaCriticAgent`
+  ya no son las menos densas por evento, pero siguen cortas: 3171-4102 palabras en tres pruebas,
+  por debajo de las ~5000 esperadas para 9 eventos con escena completa. La única corrida con 5
+  capítulos llegó a 456 palabras/evento (la más alta); las de 3 capítulos se quedaron en 352-418.
+  Además 2 de 5 corridas Expansivas fallaron del todo por `PLOT_VALIDATION_FAILED`, y 6 de 9
+  intentos de plan fueron rechazados por quedarse a un evento del mínimo de 9. **Cierre:** las
+  Expansivas alcanzan de forma consistente más extensión, y la tasa de fallos de planificación
+  baja de forma medible frente al 40%/67% observado.
 
-- [ ] **`P0` Gobernar la segmentación en capítulos.**
-  `packages/top_down/src/asg_top_down/profiles.py:51-55` solo fija un suelo de eventos; el
-  número de capítulos, personajes y subtramas queda libre, y el resultado es que el perfil no
-  afecta a la segmentación: las tres ejecuciones de control produjeron exactamente 3 capítulos.
-  El reparto interno también es desigual —el primer capítulo de la Expansiva concentra 4 de sus
-  9 eventos en 707 palabras (177 por evento) mientras el tercero dedica 1 336 palabras a 3— y
-  en el corpus anterior una Desarrollada dio 6 capítulos y una Expansiva 4. **Finalizada
-  cuando:** cada perfil impone o verifica una banda de capítulos y un reparto de eventos que
-  impide concentrar la mitad de la trama en un capítulo, sin volver a los presupuestos
-  numéricos de palabras que 6.0.0 eliminó.
+- [ ] **`P0` Hacer que el perfil controle los capítulos.**
+  `packages/top_down/src/asg_top_down/profiles.py:51-55` solo fija un mínimo de eventos; capítulos,
+  personajes y subtramas quedan libres. Las tres corridas de control dieron igual 3 capítulos, y
+  dentro de una Expansiva el primer capítulo concentró 4 de 9 eventos en 707 palabras mientras el
+  tercero usó 1336 palabras para solo 3. **Cierre:** cada perfil fija una banda de capítulos y un
+  reparto de eventos que evita que un capítulo se lleve medio libro.
 
-- [ ] **`P1` Mapear la extensión solicitada por el usuario a un perfil narrativo.** Reconocer
-  expresiones libres y cantidades de palabras o capítulos, dar precedencia a un perfil nombrado
-  explícitamente y registrar el perfil seleccionado junto con su justificación. **Finalizada
-  cuando:** casos representativos en español e inglés se asignan de forma consistente a
-  Esencial, Desarrollada o Expansiva sin prometer una longitud exacta. **Evidencia:** hoy solo
-  hay una expresión regular (`agents/analyst.py:13-17`) y tres mapas alias→perfil que pueden
-  divergir: `analyst.py:18-25`, la instrucción del sistema en `analyst.py:50-57` y
-  `apps/telegram/src/asg_telegram/prompts.py:29-40`.
+- [ ] **`P1` Traducir lo que pide el usuario a un perfil narrativo.** Hoy la detección vive
+  duplicada en tres sitios que pueden divergir: `agents/analyst.py:13-25`, la instrucción de
+  sistema en `analyst.py:50-57`, y `apps/telegram/src/asg_telegram/prompts.py:29-40`. **Cierre:**
+  casos representativos en español e inglés mapean de forma consistente a Esencial/Desarrollada/
+  Expansiva, un perfil nombrado explícitamente gana, y queda registrada la justificación — sin
+  prometer una longitud exacta.
 
-- [ ] **`P1` Evaluar e integrar taxonomías o arquetipos cuando aporten calidad.** Comparar,
-  sobre los mismos casos, historias generadas con y sin una guía taxonómica y medir su efecto en
-  originalidad, coherencia y satisfacción. **Finalizada cuando:** el experimento y la decisión
-  quedan documentados y, si existe una mejora, el pipeline incorpora un brief opcional y
-  auditable sin restaurar la complejidad completa del subsistema anterior.
+- [ ] **`P1` Probar si una taxonomía de arquetipos mejora las historias.** Comparar, sobre los
+  mismos prompts, historias con y sin guía taxonómica y medir el efecto en originalidad,
+  coherencia y satisfacción. **Cierre:** el experimento y la decisión quedan documentados; si hay
+  mejora, se añade como brief opcional y auditable sin resucitar la complejidad del subsistema
+  anterior.
 
-- [ ] **`P2` Evaluar un grafo explícito de lugares antes de añadir estado espacial dinámico.**
-  Comparar el modelo actual basado en `locations` y `location_id` con relaciones y transiciones
-  explícitas entre lugares. **Finalizada cuando:** se documenta el impacto en errores de
-  continuidad y coste de generación, y el grafo solo se adopta si ofrece una mejora medible.
+- [ ] **`P2` Evaluar un grafo explícito de lugares antes de complicar el estado espacial.**
+  Comparar el modelo actual (`locations`/`location_id`) contra relaciones y transiciones
+  explícitas. **Cierre:** se documenta el efecto en errores de continuidad y coste de generación;
+  solo se adopta si mejora algo medible.
 
 ## Top-Down: pipeline y contrato
 
-- [ ] **`P1` Definir una política segura para ejecuciones interrumpidas.** Medir primero si hay
-  un caso de uso que justifique reanudar desde los checkpoints existentes; mientras no exista
-  reanudación segura, permitir reiniciar, notificar o descartar explícitamente los trabajos
-  `recovery_pending`. **Finalizada cuando:** ningún trabajo queda indefinidamente bloqueado y la
-  política elegida está documentada y cubierta por pruebas de reinicio. **Evidencia:**
-  `complete_stage` (`storage.py:117-125`) escribe la lista de etapas pero nadie la lee para
-  reanudar; los checkpoints hoy solo sirven de auditoría.
+- [ ] **`P1` Decidir qué pasa con las ejecuciones interrumpidas.** `complete_stage`
+  (`storage.py:117-125`) escribe checkpoints que nadie lee para reanudar — hoy solo sirven de
+  auditoría. **Cierre:** primero medir si vale la pena reanudar desde checkpoint; si no, dar una
+  transición explícita (reiniciar/descartar/notificar) para que ningún trabajo quede bloqueado
+  para siempre, documentada y con test de reinicio.
 
-- [ ] **`P1` Dar al CLI las palancas que exige un experimento reproducible.** `generate-story`
-  solo acepta el prompt posicional (`cli.py:25-29`): no hay `--profile`, `--output`, `--model`
-  ni `--no-audio`, y `output_root` está fijo en `config.py:49`. El perfil viaja dentro del texto
-  y depende de una regex, y cada ejecución gasta tiempo y red en generar el MP3 aunque el
-  experimento solo mida estructura. **Finalizada cuando:** una tanda comparativa de tres
-  perfiles se lanza sin editar prompts ni mover carpetas a posteriori, y el perfil efectivo
-  queda determinado por el parámetro cuando se pasa.
+- [ ] **`P1` Dar al CLI lo mínimo para experimentos reproducibles.** `generate-story` solo acepta
+  el prompt (`cli.py:25-29`): no hay `--profile`, `--output`, `--model` ni `--no-audio`; el perfil
+  depende de una regex sobre el texto libre, y cada corrida genera el MP3 aunque solo importe la
+  estructura. **Cierre:** se puede lanzar una tanda comparativa de tres perfiles sin editar
+  prompts ni mover carpetas a mano, y `--profile` manda cuando se pasa.
 
-- [ ] **`P2` Dividir `pipeline.py`.** Son 840 líneas y 26 métodos que mezclan orquestación,
-  política de reintentos, validación, ensamblado de Markdown (`_assemble_story`,
-  `pipeline.py:452-463`), construcción de prompts de reparación (`:335-383`), formateo de
-  advertencias en español (`:739-752`) y telemetría. `_revise_one_chapter` (`:605-705`) tiene
-  100 líneas y 10 parámetros, y `_critique_plan` (`:268-333`) encierra crítica, refinado,
-  revalidación, fallback y tres escrituras bajo un único `try`. **Finalizada cuando:** las
-  etapas de plan, borrador y revisión son unidades con estado propio y prueba propia, el estado
-  compartido deja de pasarse como cadenas de parámetros posicionales, y el comportamiento
-  observable de los artefactos no cambia.
+- [ ] **`P2` Dividir `pipeline.py`.** 840 líneas y 26 métodos mezclando orquestación, reintentos,
+  validación, ensamblado de Markdown, prompts de reparación y telemetría.
+  `_revise_one_chapter` (:605-705) tiene 100 líneas y 10 parámetros; `_critique_plan` (:268-333)
+  mete crítica + refinado + revalidación + fallback + tres escrituras en un solo `try`.
+  **Cierre:** plan/borrador/revisión son unidades con estado y test propios, el estado deja de
+  pasarse como parámetros posicionales, y los artefactos generados no cambian.
 
-- [ ] **`P2` Unificar la construcción de prompts y del proveedor.** La cabecera
-  `STORY SPECIFICATION` + `NARRATIVE PROFILE CONTRACT` está copiada en siete agentes
-  (`agents/world.py:26`, `characters.py:27`, `planner.py:49`, `review.py:44` y `:81`,
-  `writer.py:69` y `:112`), y la construcción del `GeminiProvider` está copiada cinco veces
-  (`cli.py:49-58`, `apps/console/src/asg_console/top_down.py:41-50`,
-  `apps/telegram/src/asg_telegram/generators.py:49-58` y dos veces en `test_gemini_live.py`).
-  **Finalizada cuando:** existe un ayudante de cabecera y una fábrica
-  `provider_from_settings(settings)`, y ningún módulo repite esas construcciones.
+- [x] **`P2` Dejar de copiar la construcción de prompts y del proveedor.** La cabecera `STORY
+  SPECIFICATION` + `NARRATIVE PROFILE CONTRACT` está pegada en 7 sitios (world.py, characters.py,
+  planner.py, review.py x2, writer.py x2) y la construcción de `GeminiProvider` en 5 (cli.py,
+  console/top_down.py, telegram/generators.py, test_gemini_live.py x2). **Cierre:** existe un
+  helper de cabecera y una fábrica `provider_from_settings(settings)`, y nadie repite la
+  construcción a mano. **Evidencia:** `story_specification_header` vive en `agents/base.py` y lo
+  usan los 7 sitios; `provider_from_settings(settings)` vive en `provider.py` y lo usan los 5
+  sitios de construcción, incluido el fake de `apps/console/tests/test_app.py` (que ahora
+  monkeypatchea `GeminiProvider` en `asg_top_down.provider` en vez de en el módulo de la app).
 
-- [ ] **`P2` Fijar la temperatura por contrato y no por heurística de texto.**
-  `provider.py:207-225` clasifica la operación buscando subcadenas en el nombre del esquema y en
-  la instrucción del sistema, con el diccionario de temperaturas duplicado (`:198-204` y
-  `:218-224`) y una rama `elif` que nunca alcanza el caso `analyst`. Cambiar una palabra de un
-  prompt altera la temperatura en silencio. **Finalizada cuando:** cada agente declara su perfil
-  de generación explícitamente y una prueba fija la temperatura esperada por agente.
+- [x] **`P2` Fijar la temperatura por contrato, no por texto.** `provider.py:198-225` adivina la
+  operación buscando subcadenas en el nombre del esquema, con el diccionario de temperaturas
+  duplicado y una rama que nunca se alcanza para `analyst`. Cambiar una palabra del prompt cambia
+  la temperatura sin avisar. **Cierre:** cada agente declara su perfil de generación de forma
+  explícita, y un test fija la temperatura esperada por agente. **Evidencia:** `generate_structured`
+  y `generate_text` exigen ahora un kwarg `profile` (Protocol incluido); los 9 call sites de
+  agentes lo declaran explícitamente y `_temperature` solo hace un lookup contra
+  `_DEFAULT_GENERATION_PROFILES` (dict único, sin duplicar). `DrafterAgent.presentation` pasó de
+  caer por accidente en `"prose"` a declarar `"planning"`. Cuatro tests nuevos en
+  `test_provider.py` fijan la temperatura por perfil, el rechazo de perfiles desconocidos y el
+  merge de overrides con los defaults.
 
-- [ ] **`P2` Abaratar la escritura de artefactos.** `append_llm_call` (`storage.py:106-115`) lee
-  y reescribe `llm_calls.jsonl` completo en cada llamada y vuelve a calcular su SHA-256 para el
-  manifiesto; `llm_usage.json` se reescribe entero por llamada (`pipeline.py:162-177`); y el
-  manifiesto se regenera con cada artefacto y con cada actualización de `metadata.json`. Un run
-  de nueve capítulos hace decenas de reescrituras completas. **Finalizada cuando:** añadir una
-  llamada al registro es una operación de anexado, el manifiesto se consolida al cerrar cada
-  etapa, y los hashes publicados siguen coincidiendo con los archivos.
+- [ ] **`P2` Dejar de reescribir artefactos enteros por cada llamada.** `append_llm_call`
+  (`storage.py:106-115`) relee y reescribe todo `llm_calls.jsonl` y recalcula su SHA-256 en cada
+  llamada; `llm_usage.json` se reescribe entero también; el manifiesto se regenera con cada
+  artefacto. Un run de 9 capítulos hace decenas de reescrituras completas. **Cierre:** registrar
+  una llamada es un anexado, el manifiesto se consolida al cerrar cada etapa, y los hashes siguen
+  siendo correctos.
 
-- [ ] **`P2` Eliminar abstracciones inertes restantes.** `PipelineEvent.chapter_id` y
-  `generator.run()` ya se eliminaron; quedan cuatro casos que exigen antes una decisión de
-  diseño, no solo borrar código: `ChapterPlan` (`schemas.py:135-137`) es una subclase vacía pero
-  es un tipo público exportado y usado como anotación en ~10 puntos (`writer.py`, `graph.py`,
-  `pipeline.py`, tests) — eliminarlo cambia la superficie pública. `generation_profiles` y
-  `structured_validation_retries` (`provider.py:172-173`) no los pasa ningún llamador hoy, pero
-  sí los usa `GeminiProvider` internamente para temperatura y reintentos — tocarlos pertenece a
-  la tarea "Fijar la temperatura por contrato", no a una limpieza mecánica.
-  `topological_order` (`schemas.py:209`) se serializa en `story_plan.json` de cada run; el
-  propio cierre de esta tarea exige documentar antes si se conserva por compatibilidad.
-  `ArtifactValidationError` (`errors.py:62-71`) no se lanza en producción, pero sí la usan
-  `test_console.py` y `test_telegram_app.py` como error genérico con `stage` configurable — no
-  es código muerto, es un doble de prueba. **Finalizada cuando:** cada uno de los cuatro casos
-  tiene su decisión tomada (eliminar con la migración correspondiente, o mantenerse
-  explícitamente) y, si se elimina, va acompañado de la prueba que demuestra que nada dependía
-  de él.
+- [ ] **`P2` Resolver 4 abstracciones que ya no hacen nada.** `ChapterPlan` (`schemas.py:135-137`)
+  es una subclase vacía pero pública y usada como tipo en ~10 sitios. `generation_profiles` y
+  `structured_validation_retries` (`provider.py:172-173`) no los pasa ningún llamador, pero
+  `GeminiProvider` sí los usa internamente — tocarlos es parte de la tarea de temperatura, no de
+  esta. `topological_order` (`schemas.py:209`) se serializa en cada `story_plan.json`.
+  `ArtifactValidationError` (`errors.py:62-71`) no se lanza en producción pero la usan los tests
+  como doble genérico. **Cierre:** cada caso tiene decisión tomada (eliminar con migración, o
+  quedarse explícitamente) y, si se elimina, hay test que prueba que nada dependía de él.
 
-- [ ] **`P2` Hacer que el proveedor no dependa de estado mutable compartido.** El pipeline muta
-  `wait_callback` y `usage_callback` del proveedor y los limpia en un `finally`
-  (`pipeline.py:102-103`), lee `usage_records` por `getattr` en siete puntos, y el limitador de
-  peticiones es un singleton de proceso cacheado en `provider.py:32-33`. Dos ejecuciones
-  concurrentes sobre el mismo proveedor se pisarían. Además el `Protocol
-  LanguageModelProvider` (`provider.py:144-155`) no anota los parámetros de `StoryGenerator` ni
-  de `StoryPipeline`. **Finalizada cuando:** los callbacks se pasan por llamada, la telemetría
-  se obtiene por una interfaz declarada, y el tipo del proveedor está anotado en las fachadas.
+- [ ] **`P2` Quitar el estado mutable compartido del proveedor.** El pipeline muta
+  `wait_callback`/`usage_callback` del proveedor y los limpia en un `finally`
+  (`pipeline.py:102-103`); el limitador de peticiones es un singleton de proceso
+  (`provider.py:32-33`). Dos corridas concurrentes con el mismo proveedor se pisarían. El
+  `Protocol LanguageModelProvider` tampoco está anotado donde se usa. **Cierre:** los callbacks se
+  pasan por llamada, la telemetría sale de una interfaz declarada, y el tipo del proveedor está
+  anotado en las fachadas.
 
 ## Telegram
 
-- [ ] **`P0` Desbloquear los trabajos irrecuperables.** `queue.py:178-199` marca los trabajos
-  interrumpidos como `recovery_pending` con `error_code = RECOVERY_NOT_IMPLEMENTED`, pero
-  ningún camino los saca de ese estado: `finish` (`queue.py:153`) solo acepta `completed`,
-  `failed` o `cancelled`, y `cancel_user` (`queue.py:164-176`) solo actúa sobre `queued`, de
-  modo que tampoco puede cancelarse un trabajo en ejecución. Cada reinicio del bot durante una
-  generación deja un trabajo varado para siempre e incrementa `recovery_count`. **Finalizada
-  cuando:** existe una transición explícita —reencolar, descartar o notificar— para cada
-  trabajo `recovery_pending`, el operador puede cancelar un trabajo en ejecución, y hay pruebas
-  de reinicio que lo demuestran.
+- [ ] **`P0` Sacar los trabajos varados de `recovery_pending`.** `queue.py:178-199` marca los
+  trabajos interrumpidos como `recovery_pending`, pero nada los saca de ahí: `finish`
+  (`queue.py:153`) solo acepta `completed`/`failed`/`cancelled`, y `cancel_user` (:164-176) solo
+  cancela trabajos en cola, no en ejecución. Cada reinicio del bot durante una generación deja un
+  trabajo bloqueado para siempre. **Cierre:** hay una transición explícita (reencolar, descartar o
+  notificar) para `recovery_pending`, se puede cancelar un trabajo en ejecución, y hay test de
+  reinicio que lo prueba.
 
-- [ ] **`P1` Versionar y mantener la cola persistente.** Incorporar migraciones compatibles para
-  `telegram_queue.sqlite3` y definir cuánto tiempo se conservan trabajos terminados, errores y
-  prompts. **Finalizada cuando:** una base creada por una versión anterior se actualiza sin
-  perder trabajos activos y los registros vencidos pueden depurarse de forma verificable.
-  **Evidencia:** `queue.py:41-51` solo hace `CREATE TABLE IF NOT EXISTS`, sin versión de
-  esquema, y `_job` (`queue.py:62`) construye el registro por posición de campo, así que
-  cualquier columna nueva rompe toda lectura de una base antigua; la base está en `.gitignore`,
-  de modo que el fallo solo aparece en producción. `average_duration` (`queue.py:208`) exige
-  exactamente diez filas completadas, por lo que la estimación no aparece nunca antes.
+- [ ] **`P1` Versionar la base de la cola.** `queue.py:41-51` solo hace `CREATE TABLE IF NOT
+  EXISTS`, sin versión de esquema; `_job` (:62) lee por posición de columna, así que una columna
+  nueva rompe la lectura de una base vieja. Como la base está en `.gitignore`, el fallo solo
+  aparece en producción. `average_duration` (:208) además exige exactamente 10 filas completadas
+  para dar una estimación. **Cierre:** una base creada por una versión anterior migra sin perder
+  trabajos activos, y hay forma verificable de purgar registros viejos.
 
-- [ ] **`P1` Mostrar en la consola el estado operativo de la cola.** Presentar el trabajo en
-  ejecución, usuario, posición, etapa, porcentaje y solicitudes pendientes, actualizando la
-  vista cuando cambien la cola o el progreso. **Finalizada cuando:** el operador puede conocer
-  la carga y la etapa actual sin consultar Telegram ni la base SQLite, y el estado mínimo
-  necesario se conserva durante la ejecución.
+- [ ] **`P1` Mostrar el estado de la cola en la consola.** Trabajo en curso, usuario, posición,
+  etapa, porcentaje y pendientes, actualizándose con la cola. **Cierre:** el operador ve la carga
+  y la etapa sin mirar Telegram ni la SQLite.
 
-- [ ] **`P1` Aceptar solicitudes de historias mediante notas de voz.** Descargar y transcribir
-  el audio recibido, mostrar el texto resultante para que el usuario lo confirme o corrija y
-  solo entonces incorporarlo al flujo libre o guiado. **Finalizada cuando:** una nota de voz
-  válida puede iniciar una solicitud y los formatos, tamaños o transcripciones no válidos
-  generan mensajes claros sin añadir trabajos a la cola.
+- [ ] **`P1` Aceptar notas de voz como solicitud de historia.** Transcribir el audio recibido,
+  mostrar el texto para que el usuario lo confirme o corrija, y solo entonces meterlo al flujo.
+  **Cierre:** una nota de voz válida arranca una solicitud; formatos/tamaños/transcripciones
+  inválidas dan un mensaje claro sin encolar nada.
 
-- [ ] **`P2` Hacer real la abstracción del generador.** `generators.py:15-31` declara un
-  `StoryGeneratorAdapter`, pero la app importa directamente de `asg_top_down` los errores y el
-  formateo de progreso (`generation.py:12-13`, `console.py:9`, `prompts.py:9`), detecta las
-  capacidades del generador con `inspect.signature` (`generation.py:239-254`) —de modo que
-  renombrar un parámetro desactiva el progreso en silencio— y `_revision_warning_details`
-  (`generation.py:399-456`) interpreta a mano tres esquemas de artefactos de Top-Down.
-  Además `TopDownGenerator.generate` reconstruye los ajustes y el proveedor en cada historia
-  (`generators.py:44-72`), así que el control de cuota no se comparte entre trabajos de la cola.
-  **Finalizada cuando:** el adaptador expone progreso, errores y advertencias como contrato
-  propio, la app no importa nada de `asg_top_down` fuera de la fábrica, y el proveedor se
-  reutiliza entre trabajos.
+- [ ] **`P2` Hacer real el adaptador del generador.** `generators.py:15-31` declara un
+  `StoryGeneratorAdapter`, pero la app importa errores y formateo directo de `asg_top_down`
+  (`generation.py:12-13`, `console.py:9`, `prompts.py:9`), detecta capacidades con
+  `inspect.signature` (`generation.py:239-254` — renombrar un parámetro apaga el progreso en
+  silencio), y `_revision_warning_details` (:399-456) interpreta a mano tres esquemas de
+  artefactos. `TopDownGenerator.generate` también reconstruye ajustes y proveedor en cada
+  historia, así que el control de cuota no se comparte entre trabajos. **Cierre:** el adaptador
+  expone progreso/errores/advertencias como contrato propio, la app no importa nada de
+  `asg_top_down` fuera de la fábrica, y el proveedor se reutiliza entre trabajos.
 
-- [ ] **`P2` Unificar los reintentos de entrega y el estado conversacional.**
+- [ ] **`P2` Unificar reintentos de entrega y estados de conversación.**
   `_send_document_with_retry` y `_send_audio_with_retry` (`delivery.py:129-237`) son la misma
-  máquina de reintentos escrita dos veces, y los estados de conversación son cadenas repartidas
-  entre `handlers.py:116-209` y `generation.py:87` sin una definición única. Además
-  `handlers.py:271-281` reintenta indefinidamente si falla el guardado de una evaluación, y
-  `enqueue` (`queue.py:75-81`) devuelve el trabajo existente sin que el llamador pueda
-  distinguir «encolado» de «rechazado». **Finalizada cuando:** existe una única política de
-  reintentos parametrizada, los estados son una enumeración compartida, el reintento de
-  evaluación está acotado y `enqueue` comunica el rechazo.
+  máquina de reintentos escrita dos veces; los estados de conversación son strings repartidos
+  entre `handlers.py:116-209` y `generation.py:87`. `handlers.py:271-281` reintenta sin límite si
+  falla guardar una evaluación, y `enqueue` (`queue.py:75-81`) no distingue «encolado» de
+  «rechazado». **Cierre:** una sola política de reintentos parametrizada, estados como enum
+  compartido, reintento de evaluación acotado, y `enqueue` comunica el rechazo.
 
 ## Evaluación y benchmark
 
-- [ ] **`P1` Poder leer y agregar las evaluaciones humanas.** `asg_evaluation` solo escribe:
-  exporta `METRICS`, `add_evaluation`, `create_evaluation_template` y `discover_stories`
-  (`__init__.py:3-15`), sin ningún lector, media, varianza ni acuerdo entre evaluadores. Una
-  tesis necesita analizar esas puntuaciones y hoy nada del repositorio puede cargarlas de
-  vuelta. **Finalizada cuando:** existe una función de carga y agregación por historia y por
-  perfil, con pruebas, y el resultado puede compararse entre versiones del generador.
+- [ ] **`P1` Poder leer y agregar las evaluaciones humanas, no solo escribirlas.**
+  `asg_evaluation` exporta `add_evaluation`, `create_evaluation_template`, `discover_stories` — sin
+  lector, media, varianza ni acuerdo entre evaluadores. **Cierre:** hay carga y agregación por
+  historia y por perfil, con tests, comparable entre versiones del generador.
 
-- [ ] **`P1` Hacer robusto el formato de `evaluation.json`.** La plantilla pendiente se detecta
-  comparando por igualdad la lista completa (`evaluation.py:78-79`), así que cualquier edición
-  manual convierte el archivo en irrecuperable; `SCHEMA_VERSION = 1` (`evaluation.py:19, 73`) se
-  rechaza sin migración; no hay deduplicación por evaluador; y la secuencia leer-modificar-
-  escribir (`evaluation.py:88-99`) no está protegida, de modo que dos evaluaciones simultáneas
-  desde Telegram pierden una. **Finalizada cuando:** el centinela no depende de una comparación
-  exacta, existe una ruta de migración, y una prueba de concurrencia demuestra que no se pierden
-  evaluaciones.
+- [ ] **`P1` Blindar el formato de `evaluation.json`.** La plantilla pendiente se detecta
+  comparando la lista completa por igualdad (`evaluation.py:78-79`), así que cualquier edición
+  manual la vuelve irrecuperable; `SCHEMA_VERSION = 1` se rechaza sin migración; no hay
+  deduplicación por evaluador; y el ciclo leer-modificar-escribir (:88-99) no está protegido, así
+  que dos evaluaciones simultáneas por Telegram se pisan. **Cierre:** el centinela no depende de
+  comparación exacta, hay ruta de migración, y un test de concurrencia prueba que no se pierde
+  ninguna evaluación.
 
-- [ ] **`P1` Crear un benchmark narrativo reproducible.** Mantener un conjunto versionado de
-  prompts y un procedimiento común para recoger métricas automáticas y evaluaciones humanas de
-  perfiles, taxonomías y cambios futuros. **Finalizada cuando:** dos versiones del generador
-  pueden compararse bajo las mismas condiciones y los resultados conservan la configuración
-  necesaria para repetir el experimento. **Evidencia:** los prompts canónicos ya existen en
-  `docs/prompts_top_down.md`, y `story_metrics.json` más `llm_usage.json` aportan la parte
-  automática; falta el procedimiento y el recolector. Ninguno de los runs con perfil registrado
-  tiene todavía una evaluación humana rellenada.
+- [ ] **`P1` Armar un benchmark narrativo repetible.** Los prompts canónicos ya existen
+  (`docs/prompts_top_down.md`) y `story_metrics.json`/`llm_usage.json` dan la parte automática;
+  falta el procedimiento y el recolector, y ningún run con perfil tiene aún evaluación humana.
+  **Cierre:** dos versiones del generador se comparan bajo las mismas condiciones, guardando la
+  configuración necesaria para repetir el experimento.
 
 ## Documentación y despliegue
 
-- [ ] **`P1` Dar persistencia real a los artefactos desplegados.** El `Dockerfile` crea
-  `/app/Stories/Top-Down` sin volumen, de modo que la cola SQLite y todas las historias viven en
-  el sistema de archivos efímero del contenedor; `sync-railway-stories.ps1` (713 líneas) existe
-  precisamente para rescatarlas antes de que el contenedor se reemplace. Es deuda de
-  arquitectura, no de scripting. **Finalizada cuando:** los artefactos y la cola sobreviven a un
-  redespliegue sin intervención manual, y el script de sincronización queda reducido a una
-  herramienta de archivado opcional.
+- [ ] **`P1` Dar persistencia real a lo desplegado.** El `Dockerfile` crea `/app/Stories/Top-Down`
+  sin volumen: la cola SQLite y las historias viven en el filesystem efímero del contenedor, y
+  `sync-railway-stories.ps1` (713 líneas) existe solo para rescatarlas antes de cada redeploy —
+  es deuda de arquitectura, no de scripting. **Cierre:** artefactos y cola sobreviven a un
+  redeploy sin intervención manual; el script queda como herramienta de archivado opcional.
 
-- [ ] **`P2` Hacer mantenible el script de sincronización.** Todo lo que sigue a
-  `sync-railway-stories.ps1:464` son sentencias de nivel superior dentro de un único `try` de
-  unas 210 líneas, por lo que la orquestación no puede probarse en aislamiento y
-  `tests/test_sync_railway_stories.ps1` debe cargar el archivo completo. `Test-ArchivedRun`
-  (`:160-262`) convierte cualquier excepción en `State='invalid'`, así que un error de permisos
-  y una corrupción real son indistinguibles, y la política de borrado depende de comparar el
-  texto en inglés de un mensaje de la CLI de Railway (`:439-452`). **Finalizada cuando:** las
-  funciones son un módulo importable con pruebas propias, los fallos transitorios se distinguen
-  de la corrupción, y la clasificación del borrado no depende de una cadena de terceros.
+- [ ] **`P2` Hacer mantenible `sync-railway-stories.ps1`.** Todo lo que sigue a la línea 464 son
+  ~210 líneas sueltas dentro de un único `try`, así que no se puede probar en aislamiento y el
+  test tiene que cargar el archivo completo. `Test-ArchivedRun` (:160-262) convierte cualquier
+  excepción en `State='invalid'` — un error de permisos y una corrupción real se ven igual — y el
+  borrado depende de comparar el texto en inglés de un mensaje de la CLI de Railway (:439-452).
+  **Cierre:** las funciones son un módulo importable con tests propios, fallos transitorios se
+  distinguen de corrupción real, y el borrado no depende de un string de terceros.
 
-- [ ] **`P1` Documentar los contratos públicos con ejemplos ejecutables.** Cubrir las fachadas
-  de `asg_core`, `asg_top_down`, `asg_evaluation` y `asg_escape_room`, además de callbacks,
-  errores y artefactos principales, con ejemplos mínimos de entrada, salida y fallo.
-  **Finalizada cuando:** la documentación describe el contrato Top-Down 6.0, aclara la
-  compatibilidad relevante con ejecuciones anteriores y los ejemplos se validan en las pruebas o
-  en la integración continua.
-
+- [ ] **`P1` Documentar los contratos públicos con ejemplos que se ejecuten.** Cubrir las
+  fachadas de `asg_core`, `asg_top_down`, `asg_evaluation`, `asg_escape_room` más callbacks,
+  errores y artefactos principales, con ejemplos mínimos de entrada/salida/fallo. **Cierre:** la
+  documentación describe el contrato Top-Down 6.0, aclara compatibilidad con runs anteriores, y
+  los ejemplos se validan en tests o CI.

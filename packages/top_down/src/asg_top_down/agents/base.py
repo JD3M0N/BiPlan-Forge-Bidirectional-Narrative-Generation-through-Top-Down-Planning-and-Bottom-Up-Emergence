@@ -6,7 +6,9 @@ from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel
 
+from ..profiles import profile_guidance
 from ..provider import LanguageModelProvider
+from ..schemas import StoryRequest
 
 T = TypeVar("T")
 
@@ -25,6 +27,14 @@ def json_text(value: Any) -> str:
         return item
 
     return json.dumps(convert(value), ensure_ascii=False, indent=2)
+
+
+def story_specification_header(request: StoryRequest) -> str:
+    """Return the shared STORY SPECIFICATION + NARRATIVE PROFILE CONTRACT header."""
+    return (
+        f"STORY SPECIFICATION:\n{json_text(request.agent_spec())}"
+        f"\n\nNARRATIVE PROFILE CONTRACT:\n{profile_guidance(request.narrative_profile)}"
+    )
 
 
 class Agent(ABC, Generic[T]):

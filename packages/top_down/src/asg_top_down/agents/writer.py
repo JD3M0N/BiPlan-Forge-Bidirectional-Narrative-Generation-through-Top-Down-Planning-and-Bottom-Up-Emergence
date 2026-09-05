@@ -1,6 +1,5 @@
 """First-draft generation and note-driven chapter rewriting."""
 
-from ..profiles import profile_guidance
 from ..schemas import (
     ChapterPlan,
     CharacterProfile,
@@ -11,7 +10,7 @@ from ..schemas import (
     StoryRequest,
     WorldArtifact,
 )
-from .base import Agent, json_text
+from .base import Agent, json_text, story_specification_header
 
 
 class DrafterAgent(Agent[str]):
@@ -23,16 +22,17 @@ class DrafterAgent(Agent[str]):
         """Localize public titles when fiction writing begins."""
         return self.provider.generate_structured(
             system_instruction=(
-                f"You are the Drafter. Writing now begins in {request.language}. Create one polished public "
-                "story title and exactly one chapter title for every canonical chapter ID. Preserve the "
-                "planned meaning, return no commentary, and use the requested fiction language for every "
-                "title."
+                f"You are the Drafter. Writing now begins in {request.language}. Create one "
+                "polished public story title and exactly one chapter title for every canonical "
+                "chapter ID. Preserve the planned meaning, return no commentary, and use the "
+                "requested fiction language for every title."
             ),
             prompt=(
                 f"INTERNAL STORY SPECIFICATION:\n{json_text(request.agent_spec())}"
                 f"\n\nENGLISH PLAN:\n{json_text(plan)}"
             ),
             schema=StoryPresentation,
+            profile="planning",
         )
 
     def run(
@@ -56,18 +56,17 @@ class DrafterAgent(Agent[str]):
         }
         return self.provider.generate_text(
             system_instruction=(
-                f"You are the Drafter. Write only this first-draft fiction chapter body in "
-                f"{request.language}, without a heading or process "
-                "notes. Dramatize the supplied events in order, make causes and consequences visible, and "
-                "render every supplied event as a distinct narrative development instead of compressing "
-                "multiple events into summary. Expand Developed and Expansive stories through meaningful "
-                "action, reaction, and consequence rather than repetition or decorative filler. "
-                "respect world rules, character intentions, continuity, and the qualitative narrative profile. "
-                "Do not expose internal IDs or planning terminology."
+                "You are the Drafter. Write only this first-draft fiction chapter body in "
+                f"{request.language}, without a heading or process notes. Dramatize the supplied "
+                "events in order, make causes and consequences visible, and render every supplied "
+                "event as a distinct narrative development instead of compressing multiple events "
+                "into summary. Expand Developed and Expansive stories through meaningful action, "
+                "reaction, and consequence rather than repetition or decorative filler. respect "
+                "world rules, character intentions, continuity, and the qualitative narrative "
+                "profile. Do not expose internal IDs or planning terminology."
             ),
             prompt=(
-                f"STORY SPECIFICATION:\n{json_text(request.agent_spec())}"
-                f"\n\nNARRATIVE PROFILE CONTRACT:\n{profile_guidance(request.narrative_profile)}"
+                f"{story_specification_header(request)}"
                 f"\n\nWORLD:\n{json_text(world)}"
                 f"\n\nRELEVANT CHARACTERS:\n{json_text(characters)}"
                 f"\n\nGLOBAL PLAN:\n{json_text(plan_context)}"
@@ -77,6 +76,7 @@ class DrafterAgent(Agent[str]):
                 f"\n\nRELEVANT PRIOR EVENTS:\n{json_text(relevant_history)}"
                 f"\n\nPREVIOUS CHAPTER:\n{previous_chapter or 'none'}"
             ),
+            profile="prose",
         )
 
 
@@ -100,17 +100,16 @@ class WriterAgent(Agent[str]):
         """Rewrite one chapter body in the requested fiction language."""
         return self.provider.generate_text(
             system_instruction=(
-                f"You are the final Writer. Rewrite only this chapter body in {request.language}; return no "
-                "heading, commentary, note IDs, or process language. Apply every supplied global and local "
-                "revision note, preserve correct material, planned causality, and continuity, and honor the "
-                "depth and pacing of the qualitative narrative profile. Preserve every distinct planned "
-                "event and expand through meaningful action, reaction, and consequence rather than summary, "
-                "repetition, or decorative filler. Coordinate the opening with the "
-                "previously revised chapter."
+                f"You are the final Writer. Rewrite only this chapter body in {request.language}; "
+                "return no heading, commentary, note IDs, or process language. Apply every "
+                "supplied global and local revision note, preserve correct material, planned "
+                "causality, and continuity, and honor the depth and pacing of the qualitative "
+                "narrative profile. Preserve every distinct planned event and expand through "
+                "meaningful action, reaction, and consequence rather than summary, repetition, or "
+                "decorative filler. Coordinate the opening with the previously revised chapter."
             ),
             prompt=(
-                f"STORY SPECIFICATION:\n{json_text(request.agent_spec())}"
-                f"\n\nNARRATIVE PROFILE CONTRACT:\n{profile_guidance(request.narrative_profile)}"
+                f"{story_specification_header(request)}"
                 f"\n\nPLAN:\n{json_text(plan)}"
                 f"\n\nLOCALIZED PRESENTATION:\n{json_text(presentation)}"
                 f"\n\nCURRENT CHAPTER:\n{json_text(chapter)}"
@@ -120,4 +119,5 @@ class WriterAgent(Agent[str]):
                 f"\n\nORIGINAL CHAPTER BODY:\n{draft_body}"
                 f"{retry_feedback}"
             ),
+            profile="rewrite",
         )

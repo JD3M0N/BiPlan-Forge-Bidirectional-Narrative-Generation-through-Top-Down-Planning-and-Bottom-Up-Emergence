@@ -45,8 +45,9 @@ class GenerationCoordinator(TelegramDelivery):
                     chat_id=job.chat_id,
                     text=(
                         "El bot se reinició durante tu historia. El trabajo quedó marcado como "
-                        "recovery_pending: sus checkpoints se conservan, pero la reanudación automática "
-                        "todavía no está implementada. Las demás solicitudes continuarán."
+                        "recovery_pending: sus checkpoints se conservan, pero la reanudación "
+                        "automática todavía no está implementada. Las demás solicitudes "
+                        "continuarán."
                     ),
                 )
             except TelegramError:

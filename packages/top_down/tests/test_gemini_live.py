@@ -7,7 +7,7 @@ import pytest
 from asg_top_down import StoryGenerator
 from asg_top_down.agents import AnalystAgent
 from asg_top_down.config import load_settings
-from asg_top_down.provider import GeminiProvider
+from asg_top_down.provider import provider_from_settings
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PROMPT_CATALOG = REPOSITORY_ROOT / "docs" / "prompts_top_down.md"
@@ -35,16 +35,7 @@ pytestmark = pytest.mark.skipif(
 def test_real_gemini_smoke_run() -> None:
     canonical_prompt = _canonical_prompt()
     settings = load_settings()
-    provider = GeminiProvider(
-        settings.api_key,
-        settings.model,
-        rpm_limit=settings.rpm_limit,
-        rpm_reserve=settings.rpm_reserve,
-        tpm_limit=settings.tpm_limit,
-        max_retries=settings.max_retries,
-        max_retry_delay=settings.max_retry_delay,
-        request_timeout_ms=settings.request_timeout_ms,
-    )
+    provider = provider_from_settings(settings)
     run = StoryGenerator(provider, settings.output_root).generate(canonical_prompt)
     assert run.story_path.is_file()
     assert run.story_path.read_text(encoding="utf-8").strip()
@@ -84,16 +75,7 @@ def test_real_gemini_smoke_run() -> None:
 
 def test_real_analyst_enriches_a_sparse_request() -> None:
     settings = load_settings()
-    provider = GeminiProvider(
-        settings.api_key,
-        settings.model,
-        rpm_limit=settings.rpm_limit,
-        rpm_reserve=settings.rpm_reserve,
-        tpm_limit=settings.tpm_limit,
-        max_retries=settings.max_retries,
-        max_retry_delay=settings.max_retry_delay,
-        request_timeout_ms=settings.request_timeout_ms,
-    )
+    provider = provider_from_settings(settings)
     prompt = "Crea una historia de un caballero que salva a una princesa de un dragón"
     request = AnalystAgent(provider).run(prompt)
     assert request.original_prompt == prompt

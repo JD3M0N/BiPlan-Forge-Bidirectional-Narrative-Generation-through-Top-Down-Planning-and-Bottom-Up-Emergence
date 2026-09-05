@@ -3,7 +3,8 @@ from asg_top_down.quota import SlidingWindowLimiter, retry_details
 
 def test_retry_details_extracts_google_quota_fields() -> None:
     error = Exception(
-        "429 RESOURCE_EXHAUSTED Quota exceeded for metric: generate_content_requests, limit: 15, 'quotaId': 'PerMinute', 'retryDelay': '28s'"
+        "429 RESOURCE_EXHAUSTED Quota exceeded for metric: generate_content_requests, "
+        "limit: 15, 'quotaId': 'PerMinute', 'retryDelay': '28s'"
     )
     details = retry_details(error)
     assert details["status"] == 429

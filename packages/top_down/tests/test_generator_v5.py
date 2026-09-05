@@ -253,7 +253,7 @@ class FakeProvider:
         self.draft_number = 0
         self.writer_number = 0
 
-    def generate_structured(self, *, system_instruction, prompt, schema):
+    def generate_structured(self, *, system_instruction, prompt, schema, profile):
         self.structured_calls.append((schema.__name__, system_instruction, prompt))
         if schema is WorldArtifact:
             return make_world()
@@ -283,7 +283,7 @@ class FakeProvider:
             return self.analyzed_request
         raise AssertionError(schema)
 
-    def generate_text(self, *, system_instruction, prompt):
+    def generate_text(self, *, system_instruction, prompt, profile):
         self.text_calls.append((system_instruction, prompt))
         if "final Writer" in system_instruction:
             self.writer_number += 1

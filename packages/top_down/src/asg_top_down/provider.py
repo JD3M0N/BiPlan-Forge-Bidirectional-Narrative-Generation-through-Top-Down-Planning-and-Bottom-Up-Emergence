@@ -10,6 +10,7 @@ from typing import Protocol, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+from .config import Settings
 from .errors import (
     EmptyResponseError,
     GeminiBillingQuotaError,
@@ -31,6 +32,13 @@ from .schemas import LLMUsageRecord
 T = TypeVar("T", bound=BaseModel)
 _LIMITERS: dict[tuple[int, int], SlidingWindowLimiter] = {}
 _LIMITERS_LOCK = threading.Lock()
+_DEFAULT_GENERATION_PROFILES: dict[str, float] = {
+    "extraction": 0.15,
+    "review": 0.2,
+    "planning": 0.5,
+    "prose": 0.9,
+    "rewrite": 0.35,
+}
 
 
 def _gemini_response_schema(schema: type[BaseModel]) -> dict:
@@ -145,11 +153,13 @@ class LanguageModelProvider(Protocol):
 
     model_name: str
 
-    def generate_structured(self, *, system_instruction: str, prompt: str, schema: type[T]) -> T:
+    def generate_structured(
+        self, *, system_instruction: str, prompt: str, schema: type[T], profile: str
+    ) -> T:
         """Generate and validate a structured response."""
         ...
 
-    def generate_text(self, *, system_instruction: str, prompt: str) -> str:
+    def generate_text(self, *, system_instruction: str, prompt: str, profile: str) -> str:
         """Generate an unstructured text response."""
         ...
 
@@ -194,34 +204,15 @@ class GeminiProvider:
         self.wait_callback: Callable[[int, str], None] | None = None
         self.usage_callback: Callable[[LLMUsageRecord], None] | None = None
         self.usage_records: list[LLMUsageRecord] = []
-        defaults = {
-            "extraction": 0.15,
-            "review": 0.2,
-            "planning": 0.5,
-            "prose": 0.9,
-            "rewrite": 0.35,
-        }
-        self.generation_profiles = {**defaults, **(generation_profiles or {})}
+        self.generation_profiles = {**_DEFAULT_GENERATION_PROFILES, **(generation_profiles or {})}
 
-    def _temperature(self, operation: str, system_instruction: str = "") -> float:
-        """Handle the temperature operation for GeminiProvider."""
-        text = f"{operation} {system_instruction}".casefold()
-        if "rewrite" in text or "edit" in text:
-            profile = "rewrite"
-        elif any(word in text for word in ("review", "critic", "analyst")):
-            profile = "review" if "analyst" not in text else "extraction"
-        elif operation == "text" or "drafter" in text:
-            profile = "prose"
-        else:
-            profile = "planning"
-        defaults = {
-            "extraction": 0.15,
-            "review": 0.2,
-            "planning": 0.5,
-            "prose": 0.9,
-            "rewrite": 0.35,
-        }
-        return float(getattr(self, "generation_profiles", defaults).get(profile, defaults[profile]))
+    def _temperature(self, profile: str) -> float:
+        """Look up the configured temperature for an explicit generation profile."""
+        profiles = getattr(self, "generation_profiles", None) or _DEFAULT_GENERATION_PROFILES
+        try:
+            return float(profiles[profile])
+        except KeyError as exc:
+            raise ValueError(f"Unknown generation profile: {profile!r}") from exc
 
     def _preflight_tokens(self, prompt: str, system_instruction: str) -> None:
         """Handle the preflight tokens operation for GeminiProvider."""
@@ -369,7 +360,8 @@ class GeminiProvider:
                                 "retries": attempt,
                             },
                             recommendations=[
-                                "Espera a que se restablezca la cuota o revisa tu plan en AI Studio."
+                                "Espera a que se restablezca la cuota o revisa tu plan en "
+                                "AI Studio."
                             ],
                         ) from exc
                     raise
@@ -383,10 +375,13 @@ class GeminiProvider:
                 countdown_wait(delay, "reintento solicitado por Gemini", callback)
                 waited += delay
 
-    def generate_structured(self, *, system_instruction: str, prompt: str, schema: type[T]) -> T:
+    def generate_structured(
+        self, *, system_instruction: str, prompt: str, schema: type[T], profile: str
+    ) -> T:
         """Generate structured."""
         from google.genai import types
 
+        temperature = self._temperature(profile)
         validation_retries = max(0, getattr(self, "structured_validation_retries", 1))
         current_prompt = prompt
         last_errors: list[dict[str, str]] = []
@@ -403,7 +398,7 @@ class GeminiProvider:
                             system_instruction=system_instruction,
                             response_mime_type="application/json",
                             response_schema=_gemini_response_schema(schema),
-                            temperature=self._temperature(schema.__name__, system_instruction),
+                            temperature=temperature,
                         ),
                     )
 
@@ -451,10 +446,11 @@ class GeminiProvider:
                 raise _safe_provider_error(exc) from exc
         raise AssertionError("structured validation loop ended unexpectedly")
 
-    def generate_text(self, *, system_instruction: str, prompt: str) -> str:
+    def generate_text(self, *, system_instruction: str, prompt: str, profile: str) -> str:
         """Generate text."""
         from google.genai import types
 
+        temperature = self._temperature(profile)
         try:
             self._preflight_tokens(prompt, system_instruction)
 
@@ -465,7 +461,7 @@ class GeminiProvider:
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         system_instruction=system_instruction,
-                        temperature=self._temperature("text", system_instruction),
+                        temperature=temperature,
                     ),
                 )
 
@@ -478,3 +474,17 @@ class GeminiProvider:
             raise
         except Exception as exc:
             raise _safe_provider_error(exc) from exc
+
+
+def provider_from_settings(settings: Settings) -> GeminiProvider:
+    """Build a GeminiProvider from loaded Top-Down settings."""
+    return GeminiProvider(
+        settings.api_key,
+        settings.model,
+        rpm_limit=settings.rpm_limit,
+        rpm_reserve=settings.rpm_reserve,
+        tpm_limit=settings.tpm_limit,
+        max_retries=settings.max_retries,
+        max_retry_delay=settings.max_retry_delay,
+        request_timeout_ms=settings.request_timeout_ms,
+    )

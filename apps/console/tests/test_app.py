@@ -8,6 +8,7 @@ from asg_console.app import BottomUpMenu, ConsoleApp, TopDownMenu
 from asg_console.visualizer import VisualOutcome
 from asg_escape_room import run_simulation
 from asg_escape_room.config import Settings as BottomSettings
+from asg_top_down import provider as top_down_provider_module
 
 
 class MenuSpy:
@@ -82,7 +83,7 @@ def test_top_down_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
         },
     )()
     monkeypatch.setattr(top_down_module, "load_top_down_settings", lambda: settings)
-    monkeypatch.setattr(top_down_module, "GeminiProvider", Provider)
+    monkeypatch.setattr(top_down_provider_module, "GeminiProvider", Provider)
     monkeypatch.setattr(top_down_module, "StoryGenerator", Orchestrator)
     menu = TopDownMenu(
         input_fn=input_sequence(["1", "Una historia", "0"]),

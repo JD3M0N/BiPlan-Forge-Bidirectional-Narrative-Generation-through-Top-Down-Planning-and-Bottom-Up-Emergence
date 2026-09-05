@@ -7,7 +7,7 @@ import inspect
 from asg_top_down import StoryGenerator
 from asg_top_down.config import load_settings as load_top_down_settings
 from asg_top_down.progress import format_progress
-from asg_top_down.provider import GeminiProvider
+from asg_top_down.provider import provider_from_settings
 
 from .types import InputFn, OutputFn
 
@@ -39,16 +39,7 @@ class TopDownMenu:
     def _generate(self, prompt: str) -> None:
         """Build runtime dependencies and generate one requested story."""
         settings = load_top_down_settings()
-        provider = GeminiProvider(
-            settings.api_key,
-            settings.model,
-            rpm_limit=settings.rpm_limit,
-            rpm_reserve=settings.rpm_reserve,
-            tpm_limit=settings.tpm_limit,
-            max_retries=settings.max_retries,
-            max_retry_delay=settings.max_retry_delay,
-            request_timeout_ms=settings.request_timeout_ms,
-        )
+        provider = provider_from_settings(settings)
         self.output(f"Generando con {settings.model}...")
         generator = StoryGenerator(
             provider,
