@@ -80,9 +80,20 @@ trabajo): 186 pruebas (184 pasan, 2 omitidas), `ruff check .`, `ruff format --ch
   Expansiva en 33 de 96 pares (34%) y el 47% de los capítulos Desarrollada carga un solo evento.
   Añadida `PROFILE_CHAPTER_BAND` en `profiles.py` (Esencial 2-3, Desarrollada 4-5, Expansiva 5-7),
   que el planificador recibe como guía junto a la regla de reparto de eventos. **Es orientativa:
-  `validate_profile_structure` no la exige todavía.** Falta la tanda de medición que decida si hay
-  que endurecerla, dado que `docs/calibracion_perfiles.md` ya documenta un 40% de runs Expansiva
-  muertos por `PLOT_VALIDATION_FAILED` y una banda validada podría empeorarlo.
+  `validate_profile_structure` no la exige todavía.**
+  **Medición (2026-09-07, 6 celdas: catálogos 6 y 7 × los tres perfiles, `--no-audio`):** el
+  planificador respetó la banda en **6 de 6** sin necesitar validación, así que como guía basta y
+  endurecerla no aporta. El orden por longitud queda correcto en ambos catálogos (cat. 6:
+  978 < 3369 < 4981, antes invertido en 3680 > 3171; cat. 7: 1553 < 3931 < 4252). Expansiva sube
+  +57% y +13% sobre su línea base, que era el objetivo.
+  **Pero la banda empeora el reparto de eventos**, que es la otra mitad del cierre: capítulos con un
+  solo evento pasan de 47% a 67% en Desarrollada y de 19% a 40% en Expansiva (Esencial mejora de
+  16% a 0%). La causa es aritmética, no del modelo: con la banda 4-5 y el mínimo de 6 eventos,
+  Desarrollada necesitaría 8-10 eventos para tener ≥2 por capítulo; Expansiva necesitaría 10-14
+  frente a su mínimo de 9. **Pendiente:** conciliar `PROFILE_CHAPTER_BAND` con `PROFILE_MIN_EVENTS`
+  antes de dar el ítem por cerrado — subir los mínimos encarece la planificación (1 de 3 intentos
+  Expansiva murió por `PLOT_VALIDATION_FAILED` quedándose en 8 eventos), estrechar las bandas
+  conserva el orden ya logrado.
 
 - [ ] **`P1` Traducir lo que pide el usuario a un perfil narrativo.** Hoy la detección vive
   duplicada en tres sitios que pueden divergir: `agents/analyst.py:13-25`, la instrucción de
