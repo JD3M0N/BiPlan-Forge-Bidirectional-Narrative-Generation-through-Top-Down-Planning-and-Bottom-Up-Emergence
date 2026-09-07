@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .errors import RunArtifactError
 from .pipeline import StoryPipeline
+from .profiles import NarrativeProfile
 from .progress import PipelineEventCallback, ProgressCallback
 from .schemas import StoryRequest
 from .version import SUPPORTED_PIPELINE_VERSIONS
@@ -60,11 +61,15 @@ class StoryGenerator:
         output_root: Path,
         *,
         narrative_guidance: bool = True,
+        narrative_profile: NarrativeProfile | None = None,
+        audio: bool = True,
     ) -> None:
         """Configure a generator with its provider and output directory."""
         self.provider = provider
         self.output_root = Path(output_root)
         self.narrative_guidance = narrative_guidance
+        self.narrative_profile = narrative_profile
+        self.audio = audio
 
     def generate(
         self,
@@ -81,5 +86,7 @@ class StoryGenerator:
             on_run_created=on_run_created,
             on_event=on_event,
             narrative_guidance=self.narrative_guidance,
+            narrative_profile=self.narrative_profile,
+            audio=self.audio,
         )
         return StoryRun(pipeline.execute(request))

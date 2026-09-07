@@ -76,6 +76,13 @@ trabajo): 186 pruebas (184 pasan, 2 omitidas), `ruff check .`, `ruff format --ch
   dentro de una Expansiva el primer capítulo concentró 4 de 9 eventos en 707 palabras mientras el
   tercero usó 1336 palabras para solo 3. **Cierre:** cada perfil fija una banda de capítulos y un
   reparto de eventos que evita que un capítulo se lleve medio libro.
+  **Estado (2026-09-06):** medido sobre los 33 runs con métricas del corpus, Desarrollada supera a
+  Expansiva en 33 de 96 pares (34%) y el 47% de los capítulos Desarrollada carga un solo evento.
+  Añadida `PROFILE_CHAPTER_BAND` en `profiles.py` (Esencial 2-3, Desarrollada 4-5, Expansiva 5-7),
+  que el planificador recibe como guía junto a la regla de reparto de eventos. **Es orientativa:
+  `validate_profile_structure` no la exige todavía.** Falta la tanda de medición que decida si hay
+  que endurecerla, dado que `docs/calibracion_perfiles.md` ya documenta un 40% de runs Expansiva
+  muertos por `PLOT_VALIDATION_FAILED` y una banda validada podría empeorarlo.
 
 - [ ] **`P1` Traducir lo que pide el usuario a un perfil narrativo.** Hoy la detección vive
   duplicada en tres sitios que pueden divergir: `agents/analyst.py:13-25`, la instrucción de
@@ -98,6 +105,14 @@ trabajo): 186 pruebas (184 pasan, 2 omitidas), `ruff check .`, `ruff format --ch
   Cuando la guía está apagada no se escribe artefacto, `architecture` no aparece en
   `completed_stages` y los prompts quedan idénticos a la línea base, que es la señal de
   auditoría del experimento.
+  **Estado (2026-09-06):** primera tanda ejecutada (prompt 7, los tres perfiles + una Expansiva de
+  control con la guía apagada). El brazo de control **no era válido**: `agents/characters.py`
+  inyectaba el vocabulario de roles funcionales sin condicionarlo al blueprint, así que la
+  ejecución sin guía conservaba `functional_role` y `persona`. Corregido en 6.3.0 y cubierto por
+  `test_disabled_guidance_also_drops_the_functional_role_vocabulary`. El par con y sin guía sobre
+  el mismo prompt resultó casi indistinguible en estructura (3520 vs 3558 palabras, 3 capítulos y
+  9 eventos ambos), pero es n=1 y anterior a la corrección: **el experimento hay que repetirlo**
+  con la ablación ya limpia antes de documentar cualquier decisión.
 
 - [ ] **`P2` Evaluar un grafo explícito de lugares antes de complicar el estado espacial.**
   Comparar el modelo actual (`locations`/`location_id`) contra relaciones y transiciones
@@ -112,11 +127,17 @@ trabajo): 186 pruebas (184 pasan, 2 omitidas), `ruff check .`, `ruff format --ch
   transición explícita (reiniciar/descartar/notificar) para que ningún trabajo quede bloqueado
   para siempre, documentada y con test de reinicio.
 
-- [ ] **`P1` Dar al CLI lo mínimo para experimentos reproducibles.** `generate-story` solo acepta
-  el prompt (`cli.py:25-29`): no hay `--profile`, `--output`, `--model` ni `--no-audio`; el perfil
-  depende de una regex sobre el texto libre, y cada corrida genera el MP3 aunque solo importe la
-  estructura. **Cierre:** se puede lanzar una tanda comparativa de tres perfiles sin editar
-  prompts ni mover carpetas a mano, y `--profile` manda cuando se pasa.
+- [x] **`P1` Dar al CLI lo mínimo para experimentos reproducibles.** **Evidencia:**
+  `generate-story` acepta `--profile`, `--output`, `--model` y `--no-audio`
+  (`packages/top_down/src/asg_top_down/cli.py`). `--profile` se aplica en
+  `pipeline.py:_with_forced_profile`, después del analista, así que manda sobre la regex del texto
+  libre; `--no-audio` corta en `_create_audio` sin emitir la etapa. `--model` y `--output` se
+  resuelven con `dataclasses.replace` sobre `Settings`, sin añadir campos nuevos.
+  `packages/top_down/tests/test_top_down_cli.py` cubre el parser y
+  `test_generator_v5.py::test_forced_profile_outranks_the_prompt_derived_one` y
+  `::test_audio_can_be_skipped_without_touching_the_story` cubren el efecto. La tanda del
+  2026-09-06 midió que el audio consumía entre el 23% y el 45% del tiempo de reloj de cada
+  ejecución.
 
 - [ ] **`P2` Dividir `pipeline.py`.** 840 líneas y 26 métodos mezclando orquestación, reintentos,
   validación, ensamblado de Markdown, prompts de reparación y telemetría.

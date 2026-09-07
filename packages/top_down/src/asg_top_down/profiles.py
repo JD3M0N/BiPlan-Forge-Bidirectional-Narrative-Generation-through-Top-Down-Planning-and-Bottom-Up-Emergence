@@ -56,6 +56,16 @@ PROFILE_MIN_EVENTS: dict[NarrativeProfile, int | None] = {
 }
 
 
+# Structural chapter bands, currently advisory: the planner receives them as guidance and no
+# validator enforces them. Measured runs showed chapter count, not the profile contract, driving
+# story length, which let Developed stories outgrow Expansive ones.
+PROFILE_CHAPTER_BAND: dict[NarrativeProfile, tuple[int, int]] = {
+    NarrativeProfile.ESSENTIAL: (2, 3),
+    NarrativeProfile.DEVELOPED: (4, 5),
+    NarrativeProfile.EXPANSIVE: (5, 7),
+}
+
+
 def profile_guidance(profile: NarrativeProfile) -> str:
     """Return the canonical downstream contract for one profile."""
     return PROFILE_GUIDANCE[profile]
@@ -64,3 +74,8 @@ def profile_guidance(profile: NarrativeProfile) -> str:
 def profile_min_events(profile: NarrativeProfile) -> int | None:
     """Return the structural event floor for a narrative profile, when present."""
     return PROFILE_MIN_EVENTS[profile]
+
+
+def profile_chapter_band(profile: NarrativeProfile) -> tuple[int, int]:
+    """Return the advisory minimum and maximum chapter count for a narrative profile."""
+    return PROFILE_CHAPTER_BAND[profile]

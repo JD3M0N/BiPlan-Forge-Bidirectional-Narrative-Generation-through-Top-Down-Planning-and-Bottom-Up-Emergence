@@ -31,6 +31,7 @@ from .errors import (
     PlotValidationError,
 )
 from .graph import materialize_plan, relevant_prior_events, validate_profile_structure
+from .profiles import NarrativeProfile
 from .progress import PipelineEvent, PipelineEventCallback, ProgressCallback, ProgressUpdate
 from .schemas import (
     ChapterPlan,
@@ -92,11 +93,15 @@ class StoryPipeline:
         on_run_created: Callable[[Path], None] | None = None,
         on_event: PipelineEventCallback | None = None,
         narrative_guidance: bool = True,
+        narrative_profile: NarrativeProfile | None = None,
+        audio: bool = True,
     ) -> None:
         """Store pipeline dependencies and optional lifecycle callbacks."""
         self.provider = provider
         self.output_root = Path(output_root)
         self.narrative_guidance = narrative_guidance
+        self.narrative_profile = narrative_profile
+        self.audio = audio
         self.on_progress = on_progress
         self.on_run_created = on_run_created
         self.on_event = on_event
@@ -143,13 +148,19 @@ class StoryPipeline:
         """Convert a free-form prompt into a validated story request."""
         self._notify(0, "analysis", "Analizando la solicitud")
         if isinstance(request, StoryRequest):
-            return request
+            return self._with_forced_profile(request)
 
         def analyze_request():
             """Analyze the bound free-form request into a story contract."""
             return AnalystAgent(self.provider).run(request)
 
-        return self._call_agent("analyst", analyze_request)
+        return self._with_forced_profile(self._call_agent("analyst", analyze_request))
+
+    def _with_forced_profile(self, request: StoryRequest) -> StoryRequest:
+        """Apply the caller's explicit profile, which outranks any prompt-derived choice."""
+        if self.narrative_profile is None:
+            return request
+        return request.model_copy(update={"narrative_profile": self.narrative_profile})
 
     def _create_repository(self, request: StoryRequest) -> ArtifactRepository:
         """Create the run repository and attach artifact event reporting."""
@@ -634,18 +645,28 @@ class StoryPipeline:
                 if event_by_id[event_id].chapter_id == chapter.id
             ]
             notes = self._notes_for_chapter(review.notes, chapter, events)
-            accepted, result = self._revise_one_chapter(
-                writer,
-                request,
-                plan,
-                presentation,
-                chapter,
-                events,
-                notes,
-                draft_body,
-                revised_bodies[-1] if revised_bodies else "",
-                index,
-            )
+            if notes:
+                accepted, result = self._revise_one_chapter(
+                    writer,
+                    request,
+                    plan,
+                    presentation,
+                    chapter,
+                    events,
+                    notes,
+                    draft_body,
+                    revised_bodies[-1] if revised_bodies else "",
+                    index,
+                )
+            else:
+                accepted, result = (
+                    draft_body,
+                    self._unrevised_chapter_result(
+                        chapter,
+                        index,
+                        draft_body,
+                    ),
+                )
             revised_bodies.append(accepted)
             revision_results.append(result)
             self.repository.save_text(f"revisions/chapter-{index:03d}.md", accepted)
@@ -673,6 +694,24 @@ class StoryPipeline:
                 or bool(event_ids.intersection(note.event_ids))
             )
         ]
+
+    @staticmethod
+    def _unrevised_chapter_result(
+        chapter: ChapterPlan,
+        chapter_index: int,
+        draft_body: str,
+    ) -> ChapterRevisionResult:
+        """Record a chapter the critic left untouched, so no Writer call is spent."""
+        draft_words = word_count(draft_body)
+        return ChapterRevisionResult(
+            chapter_id=chapter.id,
+            chapter_index=chapter_index,
+            note_ids=[],
+            draft_words=draft_words,
+            attempts=[],
+            final_source="draft",
+            final_words=draft_words,
+        )
 
     def _revise_one_chapter(
         self,
@@ -721,24 +760,11 @@ class StoryPipeline:
                 )
                 attempts.append(attempt_result)
                 self.repository.save_json(f"{prefix}-validation.json", attempt_result)
-                warning = (
-                    "[WRITER_REVISION_REJECTED] Writer no pudo corregir el capítulo "
-                    f"{chapter_index}; el intento {attempt} falló con "
-                    f"{type(exc).__name__} y se conservó el borrador de {draft_words} "
-                    "palabras."
+                retry_feedback = (
+                    "\n\nRETRY CORRECTION:\nThe previous rewrite could not be completed "
+                    f"({type(exc).__name__}). Return a complete corrected chapter body."
                 )
-                self.repository.add_warning(warning)
-                self._emit("writer_fallback", warning, stage="revision")
-                return draft_body, ChapterRevisionResult(
-                    chapter_id=chapter.id,
-                    chapter_index=chapter_index,
-                    note_ids=[note.id for note in notes],
-                    draft_words=draft_words,
-                    attempts=attempts,
-                    final_source="draft",
-                    final_words=draft_words,
-                    warning_code="WRITER_REVISION_REJECTED",
-                )
+                continue
             self.repository.save_text(f"{prefix}.md", candidate)
             diagnostic = self._writer_candidate_issue(candidate, draft_body, notes)
             attempt_result = ChapterRevisionAttempt(
@@ -817,8 +843,12 @@ class StoryPipeline:
         attempts: list[ChapterRevisionAttempt],
     ) -> str:
         """Build a concise Spanish warning from the structured rejection trail."""
-        diagnostics = [item.diagnostic for item in attempts if item.diagnostic is not None]
-        codes = ", ".join(item.code for item in diagnostics) or "WRITER_EXCEPTION"
+        reasons = [
+            item.diagnostic.code if item.diagnostic is not None else item.exception_type
+            for item in attempts
+            if item.diagnostic is not None or item.exception_type is not None
+        ]
+        codes = ", ".join(reason for reason in reasons if reason) or "WRITER_EXCEPTION"
         return (
             "[WRITER_REVISION_REJECTED] Capítulo "
             f"{chapter_index}: no hubo una revisión válida tras {len(attempts)} intentos "
@@ -849,6 +879,8 @@ class StoryPipeline:
     def _create_audio(self) -> None:
         """Create optional narration without invalidating a completed story."""
         assert self.repository is not None
+        if not self.audio:
+            return
         self._notify(99, "audio", "Generando narración de la historia")
         try:
             create_story_audio_sync(self.repository.run_dir / "story.md")

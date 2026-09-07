@@ -1,5 +1,6 @@
 """DAG planning and bounded plan refinement."""
 
+from ..profiles import profile_chapter_band
 from ..schemas import (
     CharactersArtifact,
     NarrativeBlueprint,
@@ -26,12 +27,17 @@ class PlotPlannerAgent(Agent[StoryPlanDraft]):
         blueprint: NarrativeBlueprint | None = None,
     ) -> StoryPlanDraft:
         """Run the PlotPlannerAgent workflow."""
+        low, high = profile_chapter_band(request.narrative_profile)
         return self.provider.generate_structured(
             system_instruction=(
                 "Plan a complete story as generic events connected by causal or temporal "
                 "dependencies. Choose the chapters required to fulfill the qualitative narrative "
-                "profile and meet its explicit minimum event count. Do not target or infer word or "
-                "chapter budgets. Chapter and event orders must be consecutive from 1. "
+                "profile and meet its explicit minimum event count. Do not target or infer word "
+                "or prose-length budgets. Plan the story in "
+                f"{low} to {high} chapters, which is the range this profile normally needs; "
+                "leave it only when the material genuinely demands it. Distribute events so that "
+                "no chapter carries a single event alone and no chapter absorbs most of the story. "
+                "Chapter and event orders must be consecutive from 1. "
                 "Dependencies may only point from an earlier event to a later event. Use only "
                 "canonical character, location, and object IDs. Build a weakly connected graph "
                 "with a causal backbone, while allowing branches and joins. Every event must "

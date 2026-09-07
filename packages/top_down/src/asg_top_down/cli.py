@@ -2,10 +2,13 @@
 
 import argparse
 import sys
+from dataclasses import replace
+from pathlib import Path
 
 from .config import load_settings
 from .errors import ASGError
 from .generator import StoryGenerator
+from .profiles import NarrativeProfile
 from .progress import format_progress
 from .provider import provider_from_settings
 
@@ -27,6 +30,26 @@ def parser() -> argparse.ArgumentParser:
         nargs="?",
         help="Solicitud narrativa; si se omite se pide de forma interactiva",
     )
+    result.add_argument(
+        "--profile",
+        type=NarrativeProfile,
+        choices=list(NarrativeProfile),
+        help="Fuerza el perfil narrativo y manda sobre el que se deduzca del prompt",
+    )
+    result.add_argument(
+        "--output",
+        type=Path,
+        help="Directorio raíz donde se guarda la ejecución",
+    )
+    result.add_argument(
+        "--model",
+        help="Modelo de Gemini a utilizar en lugar del configurado en .env",
+    )
+    result.add_argument(
+        "--no-audio",
+        action="store_true",
+        help="Omite la narración en audio, que domina el tiempo de una tanda de experimentos",
+    )
     return result
 
 
@@ -46,11 +69,17 @@ def main(argv: list[str] | None = None) -> int:
             print("Error: el prompt no puede estar vacío.", file=sys.stderr)
             return 2
         settings = load_settings()
+        if args.model:
+            settings = replace(settings, model=args.model)
+        if args.output:
+            settings = replace(settings, output_root=args.output)
         provider = provider_from_settings(settings)
         generator = StoryGenerator(
             provider,
             settings.output_root,
             narrative_guidance=settings.narrative_guidance,
+            narrative_profile=args.profile,
+            audio=not args.no_audio,
         )
 
         def report_progress(update) -> None:
@@ -70,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\nHistoria terminada: {output.story_path}")
         if output.audio_path.is_file():
             print(f"Audio disponible en: {output.audio_path}")
-        else:
+        elif not args.no_audio:
             print("Advertencia: la historia se guardó, pero no fue posible crear el audio.")
         return 0
     except (ASGError, KeyboardInterrupt) as exc:

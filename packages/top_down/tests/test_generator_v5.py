@@ -234,7 +234,7 @@ class FakeProvider:
         plan_review: PlanReview | None = None,
         story_review: StoryReview | None = None,
         writer_identical_once=False,
-        fail_writer_call: int | None = None,
+        fail_writer_call: int | set[int] | None = None,
         writer_outputs: list[str] | None = None,
         analyzed_request: StoryRequest | None = None,
         quota_error_at: str | None = None,
@@ -247,7 +247,12 @@ class FakeProvider:
         self.plan_review = plan_review or PlanReview(approved=True)
         self.story_review = story_review or StoryReview(strengths=["Clear progression"])
         self.writer_identical_once = writer_identical_once
-        self.fail_writer_call = fail_writer_call
+        if fail_writer_call is None:
+            self.fail_writer_calls: set[int] = set()
+        elif isinstance(fail_writer_call, int):
+            self.fail_writer_calls = {fail_writer_call}
+        else:
+            self.fail_writer_calls = set(fail_writer_call)
         self.writer_outputs = list(writer_outputs) if writer_outputs is not None else None
         self.analyzed_request = analyzed_request or make_request()
         self.fail_semantic_ranking = fail_semantic_ranking
@@ -316,7 +321,7 @@ class FakeProvider:
         self.text_calls.append((system_instruction, prompt))
         if "final Writer" in system_instruction:
             self.writer_number += 1
-            if self.fail_writer_call == self.writer_number:
+            if self.writer_number in self.fail_writer_calls:
                 raise RuntimeError("writer unavailable")
             if self.quota_error_at == "writer":
                 raise GeminiDailyQuotaError("daily quota exhausted")
@@ -334,7 +339,7 @@ class FakeProvider:
 
 
 def test_complete_pipeline_saves_v60_artifacts_and_agent_order(tmp_path) -> None:
-    provider = FakeProvider()
+    provider = FakeProvider(story_review=major_story_review())
     progress = []
     events = []
     created = []
@@ -515,7 +520,10 @@ def test_late_critic_failure_delivers_the_draft_with_warning(tmp_path) -> None:
 
 @pytest.mark.parametrize("quota_error_at", ["plan_critic", "drama_critic", "writer"])
 def test_quota_errors_abort_instead_of_becoming_a_warning(tmp_path, quota_error_at) -> None:
-    provider = FakeProvider(quota_error_at=quota_error_at)
+    provider = FakeProvider(
+        story_review=major_story_review(),
+        quota_error_at=quota_error_at,
+    )
     with pytest.raises(GeminiDailyQuotaError):
         StoryGenerator(provider, tmp_path).generate(make_request())
 
@@ -577,10 +585,11 @@ def test_writer_reports_unchanged_significant_revision() -> None:
 
 def test_writer_accepts_different_lengths_without_budget_retries(tmp_path) -> None:
     provider = FakeProvider(
+        story_review=major_story_review(),
         writer_outputs=[
             prose("corto-a-", 100),
             prose("largo-", 500),
-        ]
+        ],
     )
     run = StoryGenerator(provider, tmp_path).generate(make_request())
     report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
@@ -597,7 +606,7 @@ def test_writer_accepts_different_lengths_without_budget_retries(tmp_path) -> No
 
 
 def test_writer_failure_is_isolated_to_its_chapter(tmp_path) -> None:
-    provider = FakeProvider(fail_writer_call=2)
+    provider = FakeProvider(story_review=major_story_review(), fail_writer_call={2, 3})
     run = StoryGenerator(provider, tmp_path).generate(make_request())
     draft_bodies = parse_chapter_bodies(
         (run.run_dir / "draft.md").read_text(encoding="utf-8"),
@@ -607,12 +616,41 @@ def test_writer_failure_is_isolated_to_its_chapter(tmp_path) -> None:
     metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
     assert final_bodies[0] != draft_bodies[0]
     assert final_bodies[1] == draft_bodies[1]
-    assert "capítulo 2" in metadata["warnings"][0]
+    assert "Capítulo 2" in metadata["warnings"][0]
     report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
     failed = report["chapters"][1]
     assert failed["final_source"] == "draft"
-    assert failed["attempts"][0]["status"] == "failed"
+    assert failed["warning_code"] == "WRITER_REVISION_REJECTED"
+    assert [item["status"] for item in failed["attempts"]] == ["failed", "failed"]
     assert failed["attempts"][0]["exception_type"] == "RuntimeError"
+
+
+def test_writer_retries_after_a_transient_failure(tmp_path) -> None:
+    provider = FakeProvider(story_review=major_story_review(), fail_writer_call=1)
+    run = StoryGenerator(provider, tmp_path).generate(make_request())
+    report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
+    recovered = report["chapters"][0]
+    assert recovered["final_source"] == "revision"
+    assert recovered["warning_code"] is None
+    assert [item["status"] for item in recovered["attempts"]] == ["failed", "accepted"]
+    metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["warnings"] == []
+
+
+def test_chapters_without_notes_skip_the_writer(tmp_path) -> None:
+    provider = FakeProvider()
+    run = StoryGenerator(provider, tmp_path).generate(make_request())
+    assert [item for item in provider.text_calls if "final Writer" in item[0]] == []
+    report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
+    for chapter in report["chapters"]:
+        assert chapter["final_source"] == "draft"
+        assert chapter["attempts"] == []
+        assert chapter["warning_code"] is None
+    metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["warnings"] == []
+    assert run.story_path.read_text(encoding="utf-8") == (run.run_dir / "draft.md").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_analyst_prompt_separates_explicit_constraints_and_inferences() -> None:
@@ -791,6 +829,10 @@ def structured_prompt(provider, schema_name: str) -> str:
     return next(prompt for name, _, prompt in provider.structured_calls if name == schema_name)
 
 
+def structured_prompt_system(provider, schema_name: str) -> str:
+    return next(system for name, system, _ in provider.structured_calls if name == schema_name)
+
+
 def test_architecture_stage_writes_a_blueprint_and_guides_later_agents(tmp_path) -> None:
     provider = FakeProvider()
     run = StoryGenerator(provider, tmp_path).generate(make_request())
@@ -840,6 +882,31 @@ def test_disabled_guidance_skips_the_stage_and_every_prompt(tmp_path) -> None:
         assert "NARRATIVE INSPIRATION" not in prompt
 
 
+def test_disabled_guidance_also_drops_the_functional_role_vocabulary(tmp_path) -> None:
+    provider = FakeProvider()
+    run = StoryGenerator(provider, tmp_path, narrative_guidance=False).generate(make_request())
+
+    characters_system = next(
+        system for name, system, _ in provider.structured_calls if name == "CharactersArtifact"
+    )
+    assert "functional_role" not in characters_system
+    assert "persona" not in characters_system
+    characters = json.loads((run.run_dir / "characters.json").read_text(encoding="utf-8"))
+    for character in characters["characters"]:
+        assert character["functional_role"] == ""
+        assert character["persona"] == ""
+
+
+def test_guidance_keeps_the_functional_role_vocabulary(tmp_path) -> None:
+    provider = FakeProvider()
+    StoryGenerator(provider, tmp_path).generate(make_request())
+
+    characters_system = next(
+        system for name, system, _ in provider.structured_calls if name == "CharactersArtifact"
+    )
+    assert "functional_role" in characters_system
+
+
 def test_architect_failure_only_costs_the_guidance(tmp_path) -> None:
     provider = FakeProvider(fail_architect=True)
     run = StoryGenerator(provider, tmp_path).generate(make_request())
@@ -865,3 +932,39 @@ def test_architect_quota_error_aborts_the_run(tmp_path) -> None:
     provider = FakeProvider(quota_error_at="architect")
     with pytest.raises(GeminiDailyQuotaError):
         StoryGenerator(provider, tmp_path).generate(make_request())
+
+
+def test_forced_profile_outranks_the_prompt_derived_one(tmp_path) -> None:
+    provider = FakeProvider(plans=[sized_plan(9, branch_and_join=True)])
+    run = StoryGenerator(
+        provider,
+        tmp_path,
+        narrative_profile=NarrativeProfile.EXPANSIVE,
+    ).generate(make_request())
+
+    request = json.loads((run.run_dir / "request.json").read_text(encoding="utf-8"))
+    assert request["narrative_profile"] == "expansive"
+    assert "5 to 7 chapters" in structured_prompt_system(provider, "StoryPlanDraft")
+
+
+def test_audio_can_be_skipped_without_touching_the_story(tmp_path, monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        pipeline_module,
+        "create_story_audio_sync",
+        lambda path: calls.append(path),
+    )
+    progress = []
+    run = StoryGenerator(FakeProvider(), tmp_path, audio=False).generate(
+        make_request(),
+        on_progress=progress.append,
+    )
+
+    assert calls == []
+    assert not run.audio_path.exists()
+    assert run.story_path.is_file()
+    metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["status"] == "completed"
+    assert metadata["warnings"] == []
+    assert "audio" not in metadata["completed_stages"]
+    assert all(update.stage != "audio" for update in progress)

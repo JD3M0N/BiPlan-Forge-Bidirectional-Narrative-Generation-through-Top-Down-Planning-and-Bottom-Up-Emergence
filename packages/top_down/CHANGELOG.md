@@ -1,5 +1,27 @@
 # Historial de cambios
 
+## 6.3.0
+
+- Corregido el reintento de revision: una excepcion degradable ya no descarta el
+  segundo intento permitido, sino que reintenta y solo cae al borrador cuando se
+  agotan los intentos. Antes, un `ProviderError` transitorio en el intento 1
+  dejaba el capitulo sin revisar.
+- El writer ya no se invoca en capitulos sin notas del critico. La llamada no
+  podia cambiar nada y solo anadia coste y superficie de fallo; el informe marca
+  esos capitulos con `final_source: "draft"` y `warning_code: null`.
+- Completada la ablacion de `ASG_NARRATIVE_GUIDANCE`: el vocabulario de roles
+  funcionales tambien queda fuera del prompt del disenador de personajes cuando
+  la guia esta apagada. Hasta ahora se inyectaba siempre, asi que el brazo de
+  control conservaba `functional_role` y `persona` y no era una linea base
+  limpia, pese a lo indicado en 6.2.0.
+- Anadida `PROFILE_CHAPTER_BAND`, una banda de capitulos por perfil que el
+  planificador recibe como guia junto a un reparto de eventos que evita
+  capitulos de un solo evento. Es orientativa: ninguna validacion la exige
+  todavia, a la espera de medir su efecto.
+- `generate-story` acepta `--profile`, `--output`, `--model` y `--no-audio`.
+  `--profile` manda sobre el perfil deducido del prompt, y `--no-audio` omite la
+  narracion, que consumia entre el 23% y el 45% del tiempo de cada ejecucion.
+
 ## 6.2.0
 
 - Anadida una biblioteca de 34 esqueletos de trama etiquetados por capa
