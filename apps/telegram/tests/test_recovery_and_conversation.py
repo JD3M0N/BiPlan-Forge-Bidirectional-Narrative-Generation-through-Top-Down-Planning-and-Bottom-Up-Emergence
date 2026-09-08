@@ -1,0 +1,442 @@
+import asyncio
+import json
+import sqlite3
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from asg_telegram import app as app_module
+from asg_telegram.app import TelegramStoryBot
+from asg_telegram.config import TelegramConfigurationError
+from asg_telegram.contract import GenerationProgress, ProfileOption, RunSummary
+from asg_telegram.queue import SCHEMA_VERSION, QueueRepository
+from asg_telegram.states import ConversationState
+from asg_top_down.errors import ConfigurationError
+
+PROFILES = (
+    ProfileOption("essential", "Esencial", ("essential", "esencial")),
+    ProfileOption("developed", "Desarrollada", ("developed", "desarrollada")),
+    ProfileOption("expansive", "Expansiva", ("expansive", "expansiva")),
+)
+
+
+class FakeBot:
+    def __init__(self):
+        self.messages = []
+        self.edits = []
+
+    async def send_message(self, **kwargs):
+        self.messages.append(kwargs)
+        return SimpleNamespace(message_id=len(self.messages))
+
+    async def send_document(self, **kwargs):
+        return None
+
+    async def edit_message_text(self, **kwargs):
+        self.edits.append(kwargs)
+
+
+class RecordingGenerator:
+    display_name = "Fake"
+    profiles = PROFILES
+
+    def __init__(self, story_directory: Path):
+        self.story_directory = story_directory
+        self.calls = []
+
+    def generate(
+        self,
+        prompt,
+        *,
+        narrative_profile=None,
+        on_progress=None,
+        on_run_created=None,
+        on_event=None,
+    ):
+        self.calls.append({"prompt": prompt, "narrative_profile": narrative_profile})
+        return self.story_directory
+
+    def summarize(self, run_dir):
+        return RunSummary()
+
+
+class BrokenGenerator(RecordingGenerator):
+    def generate(self, prompt, **kwargs):
+        raise RuntimeError("el proveedor devolvió basura")
+
+
+def make_story(tmp_path: Path) -> Path:
+    directory = tmp_path / "story"
+    directory.mkdir()
+    (directory / "story.md").write_text("# Historia\n\nContenido", encoding="utf-8")
+    return directory
+
+
+def make_update(user_id=7, chat_id=70, text="Un relato", replies=None):
+    sent = replies if replies is not None else []
+
+    async def reply_text(text, **kwargs):
+        sent.append(text)
+        return SimpleNamespace(message_id=100 + len(sent))
+
+    return SimpleNamespace(
+        effective_user=SimpleNamespace(id=user_id, username="ana", full_name="Ana"),
+        effective_chat=SimpleNamespace(id=chat_id),
+        effective_message=SimpleNamespace(text=text, reply_text=reply_text),
+        callback_query=None,
+    )
+
+
+def make_context(bot, user_data=None):
+    tasks = []
+    application = SimpleNamespace(
+        bot=bot,
+        create_task=lambda coro, update=None: tasks.append(coro),
+        user_data={},
+    )
+    context = SimpleNamespace(bot=bot, application=application, user_data=user_data or {})
+    return context, tasks
+
+
+# --- unexpected failures -----------------------------------------------------
+
+
+def test_unexpected_error_names_the_job_and_does_not_say_unknown(tmp_path):
+    queue = QueueRepository(tmp_path / "q.sqlite3")
+    job = queue.enqueue(user_id=11, username="ana", chat_id=20, prompt="Una historia").job
+    handler = TelegramStoryBot(BrokenGenerator(make_story(tmp_path)), queue)
+    bot = FakeBot()
+    context, _ = make_context(bot)
+    user = SimpleNamespace(id=11, username="ana", full_name="Ana")
+
+    asyncio.run(
+        handler._generate_and_deliver(
+            context=context,
+            chat_id=20,
+            user=user,
+            prompt="Una historia",
+            progress_message_id=99,
+            job_id=job.id,
+        )
+    )
+
+    notice = next(
+        message["text"] for message in bot.messages if "UNEXPECTED_ERROR" in message["text"]
+    )
+    assert job.id in notice
+    progress = next(edit["text"] for edit in bot.edits if "Generación fallida" in edit["text"])
+    assert "unknown" not in progress
+    assert "antes de comenzar" in progress
+    assert queue.get(job.id).error_code == "UNEXPECTED_ERROR"
+
+
+# --- cooperative cancellation ------------------------------------------------
+
+
+def test_running_generation_stops_when_the_user_cancels(tmp_path):
+    queue = QueueRepository(tmp_path / "q.sqlite3")
+    job = queue.enqueue(user_id=11, username="ana", chat_id=20, prompt="Una historia").job
+    story = make_story(tmp_path)
+
+    class CancellingGenerator(RecordingGenerator):
+        def generate(self, prompt, *, on_progress=None, **kwargs):
+            on_progress(GenerationProgress(10, "analysis", "Analizando"))
+            queue.request_cancellation(job.id)
+            on_progress(GenerationProgress(20, "world", "Construyendo el mundo"))
+            raise AssertionError("la generación debió detenerse")
+
+    handler = TelegramStoryBot(CancellingGenerator(story), queue)
+    bot = FakeBot()
+    context, _ = make_context(bot)
+    user = SimpleNamespace(id=11, username="ana", full_name="Ana")
+
+    asyncio.run(
+        handler._generate_and_deliver(
+            context=context,
+            chat_id=20,
+            user=user,
+            prompt="Una historia",
+            progress_message_id=99,
+            job_id=job.id,
+        )
+    )
+
+    assert queue.get(job.id).status == "cancelled"
+    assert queue.get(job.id).error_code == "CANCELLED_BY_USER"
+    assert any("Cancelaste la generación" in message["text"] for message in bot.messages)
+
+
+# --- restart recovery --------------------------------------------------------
+
+
+def test_interrupted_job_is_requeued_once_then_reported_as_exhausted(tmp_path):
+    path = tmp_path / "q.sqlite3"
+    queue = QueueRepository(path)
+    job = queue.enqueue(user_id=11, username="ana", chat_id=20, prompt="Una historia").job
+    queue.mark_running(job.id)
+
+    handler = TelegramStoryBot(RecordingGenerator(make_story(tmp_path)), queue)
+    bot = FakeBot()
+    application = SimpleNamespace(
+        bot=bot, create_task=lambda coro: coro.close(), user_data={11: {}}
+    )
+
+    asyncio.run(handler.restore_queue(application))
+
+    assert queue.get(job.id).status == "queued"
+    assert any("volveré a generar" in message["text"] for message in bot.messages)
+
+    queue.mark_running(job.id)
+    second_bot = FakeBot()
+    second_application = SimpleNamespace(
+        bot=second_bot, create_task=lambda coro: coro.close(), user_data={11: {}}
+    )
+    asyncio.run(handler.restore_queue(second_application))
+
+    assert queue.get(job.id).status == "failed"
+    assert queue.get(job.id).error_code == "RECOVERY_EXHAUSTED"
+    assert any("RECOVERY_EXHAUSTED" in message["text"] for message in second_bot.messages)
+
+
+def test_no_job_is_left_parked_in_recovery_pending(tmp_path):
+    queue = QueueRepository(tmp_path / "q.sqlite3")
+    job = queue.enqueue(user_id=11, username="ana", chat_id=20, prompt="Una historia").job
+    queue.mark_running(job.id)
+    handler = TelegramStoryBot(RecordingGenerator(make_story(tmp_path)), queue)
+    application = SimpleNamespace(
+        bot=FakeBot(), create_task=lambda coro: coro.close(), user_data={11: {}}
+    )
+
+    asyncio.run(handler.restore_queue(application))
+
+    assert queue.recovery_pending() == []
+
+
+# --- schema migration --------------------------------------------------------
+
+
+def test_a_database_from_the_previous_schema_migrates_without_losing_jobs(tmp_path):
+    path = tmp_path / "legacy.sqlite3"
+    legacy = sqlite3.connect(path)
+    legacy.execute(
+        """CREATE TABLE jobs (
+            id TEXT PRIMARY KEY, user_id INTEGER NOT NULL,
+            username TEXT NOT NULL, chat_id INTEGER NOT NULL,
+            prompt TEXT NOT NULL, status TEXT NOT NULL,
+            enqueued_at TEXT NOT NULL, started_at TEXT, finished_at TEXT,
+            progress_message_id INTEGER, run_dir TEXT,
+            recovery_count INTEGER NOT NULL DEFAULT 0,
+            duration_seconds REAL, error_code TEXT
+        )"""
+    )
+    legacy.execute(
+        "INSERT INTO jobs(id,user_id,username,chat_id,prompt,status,enqueued_at) "
+        "VALUES('legacy-1',11,'ana',20,'Una historia','queued','2026-01-01')"
+    )
+    legacy.commit()
+    legacy.close()
+
+    queue = QueueRepository(path)
+
+    restored = queue.get("legacy-1")
+    assert restored is not None
+    assert restored.prompt == "Una historia"
+    assert restored.narrative_profile is None
+    assert restored.cancel_requested == 0
+    with queue._connect() as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+
+
+def test_migration_is_idempotent(tmp_path):
+    path = tmp_path / "q.sqlite3"
+    QueueRepository(path).enqueue(user_id=1, username="ana", chat_id=2, prompt="a")
+    reopened = QueueRepository(path)
+    assert len(reopened.active()) == 1
+
+
+# --- conversation handlers ---------------------------------------------------
+
+
+def test_new_story_offers_the_mode_keyboard(tmp_path):
+    handler = TelegramStoryBot(RecordingGenerator(make_story(tmp_path)))
+    replies: list = []
+    update = make_update(replies=replies)
+    context, _ = make_context(FakeBot())
+
+    asyncio.run(handler.new_story(update, context))
+
+    assert context.user_data["state"] == ConversationState.CHOOSE_MODE
+    assert "¿Cómo quieres describir la historia?" in replies
+
+
+def test_start_and_help_name_the_generator_and_commands(tmp_path):
+    handler = TelegramStoryBot(RecordingGenerator(make_story(tmp_path)))
+    replies: list = []
+    update = make_update(replies=replies)
+    context, _ = make_context(FakeBot())
+
+    asyncio.run(handler.start(update, context))
+    asyncio.run(handler.help(update, context))
+
+    assert "Fake" in replies[0]
+    assert "/newstory" in replies[1]
+
+
+def test_text_outside_any_flow_points_at_newstory(tmp_path):
+    handler = TelegramStoryBot(RecordingGenerator(make_story(tmp_path)))
+    replies: list = []
+    update = make_update(replies=replies)
+    context, _ = make_context(FakeBot())
+
+    asyncio.run(handler.text_input(update, context))
+
+    assert replies == ["Usa /newstory para crear una historia."]
+
+
+def test_guided_flow_sends_the_chosen_profile_to_the_generator(tmp_path):
+    generator = RecordingGenerator(make_story(tmp_path))
+    handler = TelegramStoryBot(generator)
+    bot = FakeBot()
+    replies: list = []
+    context, tasks = make_context(bot, {"state": ConversationState.GUIDED})
+    context.user_data.update(guided_index=0, guided_values={})
+
+    answers = [
+        "español",
+        "fantasía",
+        "una cartógrafa",
+        "las estrellas desaparecen",
+        "una estación orbital",
+        "melancólico",
+        "Esencial",
+        "ninguna",
+    ]
+    for answer in answers:
+        update = make_update(text=answer, replies=replies)
+        asyncio.run(handler.text_input(update, context))
+
+    assert len(tasks) == 1
+    asyncio.run(tasks[0])
+    assert generator.calls[0]["narrative_profile"] == "essential"
+    assert "Perfil narrativo: Esencial" in generator.calls[0]["prompt"]
+
+
+def test_guided_flow_rejects_an_unknown_profile(tmp_path):
+    handler = TelegramStoryBot(RecordingGenerator(make_story(tmp_path)))
+    replies: list = []
+    context, _ = make_context(FakeBot(), {"state": ConversationState.GUIDED})
+    context.user_data.update(guided_index=6, guided_values={})
+
+    asyncio.run(handler.text_input(make_update(text="gigantesca", replies=replies), context))
+
+    assert "Esencial, Desarrollada, Expansiva" in replies[-1]
+    assert context.user_data["guided_index"] == 6
+
+
+def test_cancel_reports_each_possible_outcome(tmp_path):
+    queue = QueueRepository(tmp_path / "q.sqlite3")
+    handler = TelegramStoryBot(RecordingGenerator(make_story(tmp_path)), queue)
+    replies: list = []
+    context, _ = make_context(FakeBot())
+
+    asyncio.run(handler.cancel(make_update(replies=replies), context))
+    assert "No hay ningún proceso activo." in replies[-1]
+
+    job = queue.enqueue(user_id=7, username="ana", chat_id=70, prompt="a").job
+    asyncio.run(handler.cancel(make_update(replies=replies), context))
+    assert "retirada de la cola" in replies[-1]
+
+    second = queue.enqueue(user_id=7, username="ana", chat_id=70, prompt="b").job
+    queue.mark_running(second.id)
+    asyncio.run(handler.cancel(make_update(replies=replies), context))
+    assert "Pedí detener la generación" in replies[-1]
+    assert queue.cancellation_requested(second.id)
+    assert queue.get(job.id).status == "cancelled"
+
+
+def test_a_second_request_is_refused_instead_of_silently_dropped(tmp_path):
+    queue = QueueRepository(tmp_path / "q.sqlite3")
+    queue.enqueue(user_id=7, username="ana", chat_id=70, prompt="la primera")
+    handler = TelegramStoryBot(RecordingGenerator(make_story(tmp_path)), queue)
+    replies: list = []
+    context, tasks = make_context(FakeBot())
+
+    asyncio.run(handler._launch_generation(make_update(replies=replies), context, "la segunda"))
+
+    assert tasks == []
+    assert "no encolé esta" in replies[-1]
+    assert 7 not in handler.active_users
+
+
+# --- start-up validation -----------------------------------------------------
+
+
+def test_main_reports_broken_top_down_configuration_as_exit_code_two(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        app_module,
+        "load_settings",
+        lambda: SimpleNamespace(
+            telegram_token="t", generator_name="top-down", project_root=tmp_path
+        ),
+    )
+
+    def explode(_name):
+        raise ConfigurationError("Falta GEMINI_API_KEY.")
+
+    monkeypatch.setattr(app_module, "create_generator", explode)
+
+    assert app_module.main([]) == 2
+
+
+def test_main_reports_a_missing_telegram_token_as_exit_code_two(monkeypatch):
+    def explode():
+        raise TelegramConfigurationError("Falta TELEGRAM_BOT_TOKEN.")
+
+    monkeypatch.setattr(app_module, "load_settings", explode)
+
+    assert app_module.main([]) == 2
+
+
+@pytest.mark.parametrize("profile", ["essential", "developed", "expansive"])
+def test_the_profile_survives_a_restart(tmp_path, profile):
+    path = tmp_path / "q.sqlite3"
+    queue = QueueRepository(path)
+    job = queue.enqueue(
+        user_id=11,
+        username="ana",
+        chat_id=20,
+        prompt="Una historia",
+        narrative_profile=profile,
+    ).job
+
+    assert QueueRepository(path).get(job.id).narrative_profile == profile
+
+
+def test_story_json_artifacts_are_never_required(tmp_path):
+    from asg_telegram.generators import summarize_run
+
+    empty = tmp_path / "run"
+    empty.mkdir()
+    summary = summarize_run(empty)
+    assert summary.usage is None
+    assert summary.warnings == ()
+
+
+def test_broken_artifacts_do_not_break_the_summary(tmp_path):
+    from asg_telegram.generators import summarize_run
+
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "metadata.json").write_text("{no es json", encoding="utf-8")
+    (run / "llm_usage_summary.json").write_text(json.dumps([1, 2]), encoding="utf-8")
+
+    summary = summarize_run(run)
+    assert summary.usage is None
+    assert summary.warnings == ()
+
+
+def test_bad_request_subclasses_network_error_so_handler_order_matters():
+    """A permanent rejection must be matched before the retryable base class."""
+    from telegram.error import BadRequest, NetworkError
+
+    assert issubclass(BadRequest, NetworkError)

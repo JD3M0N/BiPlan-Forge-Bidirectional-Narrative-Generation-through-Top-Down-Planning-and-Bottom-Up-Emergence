@@ -6,8 +6,9 @@ import logging
 import re
 import sys
 
-from asg_top_down.errors import ASGError
 from colorama import Fore, Style, just_fix_windows_console
+
+from .contract import GenerationFailure
 
 COLORS = {
     logging.DEBUG: Fore.WHITE,
@@ -57,14 +58,14 @@ class ConsoleFormatter(logging.Formatter):
         lines.append(f"Acción  : {record.getMessage()}")
         if record.exc_info:
             exception = record.exc_info[1]
-            if isinstance(exception, ASGError):
+            if isinstance(exception, GenerationFailure):
                 detail = exception.public_message()
                 lines.append(f"Etapa   : {exception.stage}")
             else:
                 message = _redact_diagnostic(str(exception).strip()) or "sin mensaje"
                 detail = f"Error interno inesperado ({type(exception).__name__}): {message}"
             lines.append(f"Detalle : {detail}")
-            if not isinstance(exception, ASGError):
+            if not isinstance(exception, GenerationFailure):
                 trace = _redact_diagnostic(self.formatException(record.exc_info))
                 lines.append(f"Traza   : {trace}")
         lines.append(f"{'─' * 62}{Style.RESET_ALL}")

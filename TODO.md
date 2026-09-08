@@ -11,8 +11,9 @@ abarata el resto.
 una funcionalidad de usuario inservible); luego `P1` empezando por CI y el lector de evaluaciones;
 por último `P2` empezando por dividir `pipeline.py`.
 
-**Estado medido el 2026-09-07 sobre `7b435b6`** (árbol limpio): 216 pruebas (214 pasan, 2
-omitidas), `ruff check .`, `ruff format --check .` (113 archivos) y `pip check` limpios.
+**Estado medido el 2026-09-07 sobre `2d7a1f2`** (más los cambios de Telegram/consola todavía sin
+commitear): 245 pruebas (243 pasan, 2 omitidas), `ruff check .`, `ruff format --check .`
+(117 archivos) y `pip check` limpios.
 Comparación de perfiles en [docs/calibracion_perfiles.md](docs/calibracion_perfiles.md).
 
 ---
@@ -36,17 +37,16 @@ Comparación de perfiles en [docs/calibracion_perfiles.md](docs/calibracion_perf
 
 ## Apps
 
-- [ ] **`P0` Reparar la llamada a un método que ya no existe.** `95aa558` eliminó
-  `StoryGenerator.run()` afirmando en su mensaje que quedaba «now used directly by its two callers»,
-  pero no actualizó a ninguno de los dos: `apps/console/src/asg_console/top_down.py:49` hace
-  `inspect.signature(generator.run)` y lanza `AttributeError` antes de generar nada (también llama
-  `.run(...)` en :59 y :65), y `apps/telegram/src/asg_telegram/generators.py:58` repite la llamada.
-  Hoy `StoryGenerator` solo define `generate` (`generator.py:74`). **La consola y el bot no pueden
-  generar ninguna historia Top-Down.** La suite no lo detecta porque
-  `apps/console/tests/test_app.py:88` monkeypatchea `StoryGenerator` con un doble que sí define
-  `run(self, prompt)` (:66), de modo que el fallo queda enmascarado y CI sigue en verde.
-  **Cierre:** ambas apps llaman al método que existe, y el doble de test deja de enmascarar la
-  diferencia.
+- [x] **`P0` Reparar la llamada a un método que ya no existe.** `95aa558` eliminó
+  `StoryGenerator.run()` sin actualizar a ninguno de sus dos llamadores, así que la consola y el
+  bot lanzaban `AttributeError` antes de generar nada. En Telegram el usuario lo veía como
+  `[░░░░░░░░░░] 0% — unknown: Generación fallida` y `Código: UNEXPECTED_ERROR`, porque
+  `AttributeError` no es `ASGError` y el fallo ocurría antes del primer `_notify` del pipeline.
+  **Hecho (2026-09-07):** ambas apps llaman `generate(...)`; la consola pierde además la sonda
+  `inspect.signature` y su rama muerta. Los dobles que lo enmascaraban se sustituyeron por
+  `unittest.mock.create_autospec(StoryGenerator, ...)`, que rechaza `.run()` y toda firma
+  inexistente. **Evidencia:** `apps/telegram/tests/test_generators_contract.py` (comprobado: al
+  reintroducir `.run(` fallan sus dos tests de contrato), `apps/console/tests/test_app.py:66`.
 
 ## Top-Down: perfiles y calibración
 
@@ -166,23 +166,27 @@ Comparación de perfiles en [docs/calibracion_perfiles.md](docs/calibracion_perf
 
 ## Telegram
 
-- [ ] **`P0` Sacar los trabajos varados de `recovery_pending`.** `queue.py:200-206` marca los
-  trabajos interrumpidos como `recovery_pending`, pero nada los saca de ahí: `finish` (:158-169)
-  solo acepta `completed`/`failed`/`cancelled`, y `cancel_user` (:171-183) solo cancela trabajos en
-  cola (`status='queued'`, :175), no en ejecución. Cada reinicio del bot durante una generación deja
-  un trabajo bloqueado para siempre. **Cierre:** hay una transición explícita (reencolar, descartar
-  o notificar) para `recovery_pending`, se puede cancelar un trabajo en ejecución, y hay test de
-  reinicio que lo prueba.
+- [x] **`P0` Sacar los trabajos varados de `recovery_pending`.** **Hecho (2026-09-07):**
+  `GenerationCoordinator._apply_recovery_policy` reencola cada trabajo interrumpido mientras
+  `recovery_count <= MAX_RECOVERY_ATTEMPTS` (1) y, superado el límite, lo cierra como
+  `RECOVERY_EXHAUSTED` avisando al usuario. `queue.requeue` implementa la transición y
+  `cancel_user` cancela ahora también `recovery_pending`. Un trabajo en ejecución se detiene por
+  cancelación cooperativa: `request_cancellation` marca la intención y el callback de progreso
+  lanza `GenerationCancelled` en la siguiente frontera de etapa. **Evidencia:**
+  `apps/telegram/tests/test_recovery_and_conversation.py`
+  (`test_interrupted_job_is_requeued_once_then_reported_as_exhausted`,
+  `test_no_job_is_left_parked_in_recovery_pending`,
+  `test_running_generation_stops_when_the_user_cancels`).
 
-- [ ] **`P1` Versionar la base de la cola.** `queue.py:43-53` solo hace `CREATE TABLE IF NOT
-  EXISTS` sobre 14 columnas, sin `schema_version` ni `PRAGMA user_version`, así que una base vieja
-  con otra forma sobrevive en silencio. Como la base está en `.gitignore`, el fallo solo aparece en
-  producción. `average_duration` (:208-215) además exige exactamente 10 filas completadas para dar
-  una estimación —devuelve `None` con 1 a 9— y es la última lectura posicional que queda en el
-  archivo (:215). `enqueue` (:72-113) tampoco distingue «encolado» de «rechazado»: ante un duplicado
-  devuelve el trabajo existente sin avisar (:82-88). **Cierre:** una base creada por una versión
-  anterior migra sin perder trabajos activos, hay forma verificable de purgar registros viejos, y
-  `enqueue` comunica el rechazo.
+- [ ] **`P1` Versionar la base de la cola.** **Hecho en su mayor parte (2026-09-07):** `queue.py`
+  fija `SCHEMA_VERSION = 2` y migra con `PRAGMA user_version`, añadiendo por `ALTER TABLE` las
+  columnas nuevas (`narrative_profile`, `cancel_requested`) sobre bases anteriores sin perder
+  trabajos activos. `average_duration` exige ahora un mínimo de 3 muestras
+  (`MINIMUM_SAMPLES_FOR_ESTIMATE`) en vez de exactamente 10, y `enqueue` devuelve
+  `EnqueueResult(job, created)`, de modo que el coordinador avisa al usuario cuando su solicitud
+  no se encoló. **Evidencia:** `test_a_database_from_the_previous_schema_migrates_without_losing_jobs`,
+  `test_a_second_request_is_refused_instead_of_silently_dropped`, `apps/telegram/tests/test_queue.py`.
+  **Falta para cerrar:** una forma verificable de purgar registros viejos.
 
 - [ ] **`P1` Mostrar el estado de la cola en la consola.** Trabajo en curso, usuario, posición,
   etapa, porcentaje y pendientes, actualizándose con la cola. **Cierre:** el operador ve la carga
@@ -193,25 +197,27 @@ Comparación de perfiles en [docs/calibracion_perfiles.md](docs/calibracion_perf
   **Cierre:** una nota de voz válida arranca una solicitud; formatos/tamaños/transcripciones
   inválidas dan un mensaje claro sin encolar nada.
 
-- [ ] **`P2` Hacer real el adaptador del generador.** `generators.py:15-31` declara un
-  `StoryGeneratorAdapter`, pero la app importa errores y formateo directo de `asg_top_down`
-  (`generation.py:12-13`, `console.py:9`, `prompts.py:9`), detecta capacidades con
-  `inspect.signature` (`generation.py:245` y las tres sondas de :255-261 — renombrar un parámetro
-  apaga el progreso en silencio), y `_revision_warning_details` (:403-458) interpreta a mano tres
-  esquemas de artefactos. `TopDownGenerator.generate` también reconstruye ajustes y proveedor en
-  cada historia, así que el control de cuota no se comparte entre trabajos. **Cierre:** el
-  adaptador expone progreso/errores/advertencias como contrato propio, la app no importa nada de
-  `asg_top_down` fuera de la fábrica, y el proveedor se reutiliza entre trabajos.
+- [x] **`P2` Hacer real el adaptador del generador.** **Hecho (2026-09-07):** el nuevo
+  `apps/telegram/src/asg_telegram/contract.py` declara los tipos propios de la app
+  (`GenerationProgress`, `GenerationEvent`, `GenerationFailure`, `GenerationCancelled`,
+  `RunSummary`, `ProfileOption`, un `format_progress` propio y el `Protocol`
+  `StoryGeneratorAdapter`, marcado `runtime_checkable`). `generators.py` es ya el **único** módulo
+  que importa `asg_top_down`: traduce progreso, eventos y errores, expone el catálogo de perfiles y
+  absorbe `_revision_warning_details` detrás de `summarize_run`. Desaparecen las tres sondas
+  `inspect.signature`. `TopDownGenerator.__init__` resuelve ajustes y proveedor una sola vez, así
+  que la cuota de Gemini se comparte entre trabajos y una configuración rota falla al arrancar
+  (`app.main` devuelve 2 ante `ASGError`) en vez de en el chat de un usuario. **Evidencia:**
+  `apps/telegram/tests/test_generators_contract.py`,
+  `test_main_reports_broken_top_down_configuration_as_exit_code_two`.
 
-- [ ] **`P2` Unificar reintentos de entrega y estados de conversación.**
-  `_send_audio_with_retry` (`delivery.py:129-178`) y `_send_document_with_retry` (:189-237) son la
-  misma máquina de reintentos escrita dos veces, sobre dos constantes con valores idénticos
-  (`DOCUMENT_RETRY_DELAYS` y `AUDIO_RETRY_DELAYS`, :17-18, ambas `(1, 2, 4)`). Los estados de
-  conversación son strings sueltos repartidos entre `handlers.py` (:116, :158, :163, :210, leídos
-  en :140, :152, :168, :170, :176, :178, :239) y `generation.py:89-90`, que fija el quinto valor
-  desde otro módulo. `handlers.py:271-281` reintenta sin límite si falla guardar una evaluación.
-  **Cierre:** una sola política de reintentos parametrizada, estados como enum compartido, y
-  reintento de evaluación acotado.
+- [x] **`P2` Unificar reintentos de entrega y estados de conversación.**
+  **Hecho (2026-09-07):** `TelegramDelivery._send_with_retry` es la única máquina de reintentos,
+  sobre una sola constante `RETRY_DELAYS`. **Trampa aprendida:** en python-telegram-bot
+  `BadRequest` hereda de `NetworkError`, así que su `except` tiene que ir primero o un rechazo
+  permanente se reintenta; el orden es funcional, está comentado en el código y lo fija
+  `test_bad_request_subclasses_network_error_so_handler_order_matters`. Los estados viven en
+  `states.py` como `ConversationState`, y guardar una evaluación se reintenta como mucho
+  `MAX_EVALUATION_RETRIES` (3) veces, devolviendo las puntuaciones al usuario si se agota.
 
 ## Evaluación y benchmark
 

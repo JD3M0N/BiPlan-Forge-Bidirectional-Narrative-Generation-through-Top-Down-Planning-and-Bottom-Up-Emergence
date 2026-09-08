@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
-
 from asg_top_down import StoryGenerator
 from asg_top_down.config import load_settings as load_top_down_settings
 from asg_top_down.progress import format_progress
@@ -46,23 +44,20 @@ class TopDownMenu:
             settings.output_root,
             narrative_guidance=settings.narrative_guidance,
         )
-        if "on_progress" in inspect.signature(generator.run).parameters:
 
-            def report_progress(update) -> None:
-                """Write one formatted pipeline progress update to the console."""
-                self.output(format_progress(update))
+        def report_progress(update) -> None:
+            """Write one formatted pipeline progress update to the console."""
+            self.output(format_progress(update))
 
-            def report_event(event) -> None:
-                """Write one structured pipeline event to the console."""
-                self.output(event.message)
+        def report_event(event) -> None:
+            """Write one structured pipeline event to the console."""
+            self.output(event.message)
 
-            output = generator.run(
-                prompt,
-                on_progress=report_progress,
-                on_event=report_event,
-            )
-        else:
-            output = generator.run(prompt)
+        output = generator.generate(
+            prompt,
+            on_progress=report_progress,
+            on_event=report_event,
+        )
         output_dir = output.run_dir if hasattr(output, "run_dir") else output
         self.output(f"Historia terminada: {output_dir / 'story.md'}")
         audio_path = output_dir / "story.mp3"

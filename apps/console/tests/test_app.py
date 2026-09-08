@@ -1,5 +1,7 @@
 import argparse
 import json
+from types import SimpleNamespace
+from unittest.mock import create_autospec
 
 from asg_console import bottom_up as bottom_up_module
 from asg_console import evaluation as evaluation_module
@@ -8,6 +10,7 @@ from asg_console.app import BottomUpMenu, ConsoleApp, TopDownMenu
 from asg_console.visualizer import VisualOutcome
 from asg_escape_room import run_simulation
 from asg_escape_room.config import Settings as BottomSettings
+from asg_top_down import StoryGenerator
 from asg_top_down import provider as top_down_provider_module
 
 
@@ -59,13 +62,19 @@ def test_top_down_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
             self.model_name = model
             captured["provider_options"] = kwargs
 
-    class Orchestrator:
-        def __init__(self, provider, output_root, **kwargs):
-            captured["generator_options"] = kwargs
+    def build_generator(provider, output_root, **kwargs):
+        captured["generator_options"] = kwargs
+        instance = create_autospec(StoryGenerator, spec_set=True, instance=True)
 
-        def run(self, prompt):
-            captured["prompt"] = prompt
-            return tmp_path
+        def generate(request, on_progress=None, on_run_created=None, on_event=None):
+            captured["prompt"] = request
+            return SimpleNamespace(run_dir=tmp_path)
+
+        instance.generate.side_effect = generate
+        return instance
+
+    Orchestrator = create_autospec(StoryGenerator, spec_set=True)
+    Orchestrator.side_effect = build_generator
 
     settings = type(
         "Settings",

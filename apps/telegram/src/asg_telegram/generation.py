@@ -3,30 +3,43 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
-import json
 import logging
 from pathlib import Path
 from types import SimpleNamespace
 
-from asg_top_down.errors import ASGError
-from asg_top_down.progress import PipelineEvent, ProgressUpdate, format_progress
 from telegram.error import BadRequest, TelegramError
 
 from .console import log_user_action
+from .contract import (
+    GenerationCancelled,
+    GenerationEvent,
+    GenerationFailure,
+    GenerationProgress,
+    StoryGeneratorAdapter,
+    format_progress,
+)
 from .delivery import TelegramDelivery
-from .generators import StoryGenerator
 from .queue import QueueRepository
+from .states import ConversationState
 
 LOGGER = logging.getLogger(__name__)
+WARNING_MESSAGE_LIMIT = 3500
+UNEXPECTED_ERROR_MESSAGE = (
+    "No pude generar la historia por un error interno inesperado. "
+    "Consulta el registro de la consola y vuelve a intentarlo. "
+    "Código: UNEXPECTED_ERROR."
+)
 
 
 class GenerationCoordinator(TelegramDelivery):
     """Coordinate FIFO jobs, generation callbacks, delivery, and recovery."""
 
     PROGRESS_EDIT_TIMEOUT: float = 5.0
+    MAX_RECOVERY_ATTEMPTS: int = 1
 
-    def __init__(self, generator: StoryGenerator, queue: QueueRepository | None = None) -> None:
+    def __init__(
+        self, generator: StoryGeneratorAdapter, queue: QueueRepository | None = None
+    ) -> None:
         """Configure the generator, optional queue, and concurrency limits."""
         self.generator = generator
         self.queue = queue
@@ -35,24 +48,12 @@ class GenerationCoordinator(TelegramDelivery):
         self.generation_semaphore = asyncio.Semaphore(1)
 
     async def restore_queue(self, application) -> None:
-        """Restore waiting jobs and mark interrupted runs for manual recovery."""
+        """Resume waiting jobs and apply the recovery policy after a restart."""
         if not self.queue:
             return
-        jobs = self.queue.recover_interrupted()
-        for job in self.queue.recovery_pending():
-            try:
-                await application.bot.send_message(
-                    chat_id=job.chat_id,
-                    text=(
-                        "El bot se reinició durante tu historia. El trabajo quedó marcado como "
-                        "recovery_pending: sus checkpoints se conservan, pero la reanudación "
-                        "automática todavía no está implementada. Las demás solicitudes "
-                        "continuarán."
-                    ),
-                )
-            except TelegramError:
-                LOGGER.warning("No se pudo avisar el trabajo pendiente %s", job.id)
-        for job in jobs:
+        self.queue.recover_interrupted()
+        await self._apply_recovery_policy(application)
+        for job in self.queue.active():
             self.active_users.add(job.user_id)
             user = SimpleNamespace(id=job.user_id, username=job.username, full_name=job.username)
             context = SimpleNamespace(
@@ -68,11 +69,39 @@ class GenerationCoordinator(TelegramDelivery):
                     prompt=job.prompt,
                     progress_message_id=job.progress_message_id,
                     job_id=job.id,
+                    narrative_profile=job.narrative_profile,
                 )
             )
         await self._refresh_queue(application)
 
-    async def _launch_generation(self, update, context, prompt: str) -> None:
+    async def _apply_recovery_policy(self, application) -> None:
+        """Requeue each interrupted job once, then give up and say so.
+
+        Without this every restart during a generation left the job parked in
+        ``recovery_pending`` forever, because nothing moved it out again.
+        """
+        for job in self.queue.recovery_pending():
+            if job.recovery_count <= self.MAX_RECOVERY_ATTEMPTS:
+                self.queue.requeue(job.id)
+                notice = (
+                    "El bot se reinició durante tu historia. La volveré a generar "
+                    "desde el principio y te avisaré cuando avance."
+                )
+            else:
+                self.queue.finish(job.id, "failed", error_code="RECOVERY_EXHAUSTED")
+                notice = (
+                    "El bot se reinició varias veces durante tu historia y no pude "
+                    "completarla. Usa /newstory para intentarlo otra vez. "
+                    "Código: RECOVERY_EXHAUSTED."
+                )
+            try:
+                await application.bot.send_message(chat_id=job.chat_id, text=notice)
+            except TelegramError:
+                LOGGER.warning("No se pudo avisar el trabajo interrumpido %s", job.id)
+
+    async def _launch_generation(
+        self, update, context, prompt: str, narrative_profile: str | None = None
+    ) -> None:
         """Enqueue and schedule one user generation request."""
         user_id = update.effective_user.id
         if user_id in self.active_users:
@@ -87,19 +116,21 @@ class GenerationCoordinator(TelegramDelivery):
             category="generación",
         )
         context.user_data.clear()
-        context.user_data["state"] = "generating"
+        context.user_data["state"] = ConversationState.GENERATING
         progress_message = await update.effective_message.reply_text(
             format_progress(
-                ProgressUpdate(
+                GenerationProgress(
                     percent=0,
                     stage="starting",
                     description=f"Iniciando generación {self.generator.display_name}",
                 )
             )
         )
-        job_id = self._enqueue(update, prompt, progress_message.message_id)
-        if self.queue:
-            await self._refresh_queue(context.application)
+        job_id = await self._enqueue(
+            update, context, prompt, progress_message.message_id, narrative_profile
+        )
+        if self.queue and job_id is None:
+            return
         context.application.create_task(
             self._generate_and_deliver(
                 context=context,
@@ -108,22 +139,40 @@ class GenerationCoordinator(TelegramDelivery):
                 prompt=prompt,
                 progress_message_id=progress_message.message_id,
                 job_id=job_id,
+                narrative_profile=narrative_profile,
             ),
             update=update,
         )
 
-    def _enqueue(self, update, prompt: str, progress_message_id: int) -> str | None:
-        """Persist a queue job when the coordinator has a repository."""
+    async def _enqueue(
+        self,
+        update,
+        context,
+        prompt: str,
+        progress_message_id: int,
+        narrative_profile: str | None,
+    ) -> str | None:
+        """Persist a queue job, telling the user when one was already active."""
         if not self.queue:
             return None
-        job = self.queue.enqueue(
+        result = self.queue.enqueue(
             user_id=update.effective_user.id,
             username=update.effective_user.username or update.effective_user.full_name,
             chat_id=update.effective_chat.id,
             prompt=prompt,
             progress_message_id=progress_message_id,
+            narrative_profile=narrative_profile,
         )
-        return job.id
+        if not result.created:
+            context.user_data.clear()
+            self.active_users.discard(update.effective_user.id)
+            await update.effective_message.reply_text(
+                "Ya tenías una solicitud en curso, así que no encolé esta. "
+                "Usa /cancel si quieres reemplazarla."
+            )
+            return None
+        await self._refresh_queue(context.application)
+        return result.job.id
 
     async def _generate_and_deliver(
         self,
@@ -134,26 +183,29 @@ class GenerationCoordinator(TelegramDelivery):
         prompt: str,
         progress_message_id: int | None = None,
         job_id: str | None = None,
+        narrative_profile: str | None = None,
     ) -> None:
         """Serialize generation while keeping progress reporting thread-safe."""
         loop = asyncio.get_running_loop()
-        last_progress: list[ProgressUpdate] = []
+        last_progress: list[GenerationProgress] = []
 
-        def report_progress(update: ProgressUpdate) -> None:
-            """Forward synchronous provider progress to the Telegram event loop."""
+        def report_progress(update: GenerationProgress) -> None:
+            """Forward synchronous pipeline progress to the Telegram event loop."""
+            if job_id and self.queue and self.queue.cancellation_requested(job_id):
+                raise GenerationCancelled(update.stage)
             last_progress[:] = [update]
             if progress_message_id is None:
                 return
-            future = asyncio.run_coroutine_threadsafe(
-                self._safe_edit_progress(
-                    context,
-                    chat_id,
-                    progress_message_id,
-                    format_progress(update),
-                ),
-                loop,
-            )
             try:
+                future = asyncio.run_coroutine_threadsafe(
+                    self._safe_edit_progress(
+                        context,
+                        chat_id,
+                        progress_message_id,
+                        format_progress(update),
+                    ),
+                    loop,
+                )
                 future.result(timeout=self.PROGRESS_EDIT_TIMEOUT)
             except Exception:
                 LOGGER.warning("no se pudo confirmar la edición del progreso a tiempo")
@@ -162,6 +214,7 @@ class GenerationCoordinator(TelegramDelivery):
             async with self.generation_semaphore:
                 if job_id and self.queue:
                     if self.queue.position(job_id) is None:
+                        await self._report_vanished_job(context, chat_id, progress_message_id)
                         return
                     self.queue.mark_running(job_id)
                     await self._refresh_queue(context.application)
@@ -172,6 +225,7 @@ class GenerationCoordinator(TelegramDelivery):
                     prompt=prompt,
                     progress_message_id=progress_message_id,
                     job_id=job_id,
+                    narrative_profile=narrative_profile,
                     report_progress=report_progress,
                     last_progress=last_progress,
                 )
@@ -179,6 +233,17 @@ class GenerationCoordinator(TelegramDelivery):
             self.active_users.discard(user.id)
             if self.queue:
                 await self._refresh_queue(context.application)
+
+    async def _report_vanished_job(self, context, chat_id, progress_message_id) -> None:
+        """Close the progress message of a job cancelled before it started."""
+        if progress_message_id is None:
+            return
+        await self._safe_edit_progress(
+            context,
+            chat_id,
+            progress_message_id,
+            "Solicitud cancelada antes de empezar. Usa /newstory cuando quieras.",
+        )
 
     async def _run_generation_and_delivery(
         self,
@@ -189,6 +254,7 @@ class GenerationCoordinator(TelegramDelivery):
         prompt,
         progress_message_id,
         job_id,
+        narrative_profile,
         report_progress,
         last_progress,
     ) -> None:
@@ -198,6 +264,7 @@ class GenerationCoordinator(TelegramDelivery):
                 prompt,
                 user,
                 job_id,
+                narrative_profile,
                 report_progress,
             )
         except Exception as exc:
@@ -229,10 +296,10 @@ class GenerationCoordinator(TelegramDelivery):
             job_id,
         )
 
-    async def _generate_story(self, prompt, user, job_id, report_progress):
-        """Invoke the configured generator with every callback it supports."""
+    async def _generate_story(self, prompt, user, job_id, narrative_profile, report_progress):
+        """Invoke the configured generator through the application contract."""
 
-        def report_event(event: PipelineEvent) -> None:
+        def report_event(event: GenerationEvent) -> None:
             """Record structured pipeline events in the bot console."""
             log_user_action(
                 LOGGER,
@@ -242,23 +309,20 @@ class GenerationCoordinator(TelegramDelivery):
                 category="generación",
             )
 
-        parameters = inspect.signature(self.generator.generate).parameters
-
         def record_run(path: Path) -> None:
             """Persist the generated run directory for the bound queue job."""
-            assert self.queue is not None
-            assert job_id is not None
-            self.queue.set_run_dir(job_id, str(path))
+            if job_id and self.queue:
+                self.queue.set_run_dir(job_id, str(path))
 
-        run_created = record_run if job_id and self.queue else None
-        kwargs = {}
-        if "on_progress" in parameters:
-            kwargs["on_progress"] = report_progress
-        if "on_run_created" in parameters:
-            kwargs["on_run_created"] = run_created
-        if "on_event" in parameters:
-            kwargs["on_event"] = report_event
-        return await asyncio.to_thread(self.generator.generate, prompt, **kwargs)
+        return await asyncio.to_thread(
+            lambda: self.generator.generate(
+                prompt,
+                narrative_profile=narrative_profile,
+                on_progress=report_progress,
+                on_run_created=record_run if job_id and self.queue else None,
+                on_event=report_event,
+            )
+        )
 
     async def _handle_generation_failure(
         self,
@@ -271,49 +335,55 @@ class GenerationCoordinator(TelegramDelivery):
         last_progress,
     ) -> None:
         """Persist, display, and safely report a generation failure."""
+        cancelled = isinstance(error, GenerationCancelled)
+        recognized = isinstance(error, GenerationFailure)
         if job_id and self.queue:
             self.queue.finish(
                 job_id,
-                "failed",
-                error_code=getattr(error, "code", "UNEXPECTED_ERROR"),
+                "cancelled" if cancelled else "failed",
+                error_code=error.code if recognized else "UNEXPECTED_ERROR",
             )
         log_user_action(
             LOGGER,
             user_id=user.id,
             username=user.username or user.full_name,
-            action="Falló la generación de la historia",
-            category="error",
-            level=logging.ERROR,
-            exc_info=True,
+            action="Cancelaste la generación"
+            if cancelled
+            else "Falló la generación de la historia",
+            category="advertencia" if cancelled else "error",
+            level=logging.WARNING if cancelled else logging.ERROR,
+            exc_info=not cancelled,
         )
         if progress_message_id is not None:
-            percent = last_progress[-1].percent if last_progress else 0
-            stage = getattr(error, "stage", last_progress[-1].stage if last_progress else "unknown")
             await self._safe_edit_progress(
                 context,
                 chat_id,
                 progress_message_id,
-                format_progress(
-                    ProgressUpdate(
-                        percent=percent,
-                        stage="failed",
-                        description=f"{stage}: {getattr(error, 'summary', 'Generación fallida')}"[
-                            :180
-                        ],
-                    )
-                ),
+                format_progress(self._failure_progress(error, recognized, last_progress)),
             )
         context.user_data.clear()
-        message = (
-            error.public_message()
-            if isinstance(error, ASGError)
-            else (
-                "No pude generar la historia por un error interno inesperado. "
-                "Consulta el registro de la consola y vuelve a intentarlo. "
-                "Código: UNEXPECTED_ERROR."
-            )
-        )
+        message = error.public_message() if recognized else self._unexpected_message(job_id)
         await self._safe_notice(context, chat_id, message, user)
+
+    @staticmethod
+    def _failure_progress(error, recognized: bool, last_progress) -> GenerationProgress:
+        """Describe where a generation stopped, even without any progress yet."""
+        percent = last_progress[-1].percent if last_progress else 0
+        if recognized:
+            stage, summary = error.stage, error.summary
+        else:
+            stage = last_progress[-1].stage if last_progress else "antes de comenzar"
+            summary = "Generación fallida"
+        return GenerationProgress(
+            percent=percent, stage="failed", description=f"{stage}: {summary}"[:180]
+        )
+
+    @staticmethod
+    def _unexpected_message(job_id: str | None) -> str:
+        """Report an internal defect, naming the job so logs can be matched."""
+        if not job_id:
+            return UNEXPECTED_ERROR_MESSAGE
+        return f"{UNEXPECTED_ERROR_MESSAGE}\nSolicitud: {job_id}."
 
     @staticmethod
     def _log_generation_complete(user, story_directory) -> None:
@@ -334,128 +404,38 @@ class GenerationCoordinator(TelegramDelivery):
         story_directory: Path,
         progress_message_id: int | None,
     ) -> None:
-        """Report final usage and quality warnings when artifacts are available."""
-        usage_path = story_directory / "llm_usage_summary.json"
-        if progress_message_id is not None and usage_path.is_file():
-            try:
-                usage = json.loads(usage_path.read_text(encoding="utf-8"))
-                await self._safe_edit_progress(
-                    context,
-                    chat_id,
-                    progress_message_id,
-                    "[██████████] 100% — Historia terminada\n"
-                    f"Gemini: {usage.get('calls', 0)} llamadas, "
-                    f"{usage.get('total_tokens', 0)} tokens, "
-                    f"{round(usage.get('total_wait_seconds', 0))}s esperando cuota.",
-                )
-            except (OSError, ValueError):
-                pass
-        await self._report_warnings(context, chat_id, user, story_directory)
-
-    async def _report_warnings(self, context, chat_id: int, user, story_directory: Path) -> None:
-        """Send one consolidated, actionable warning summary for a completed run."""
-        metadata_path = story_directory / "metadata.json"
-        if not metadata_path.is_file():
-            return
-        try:
-            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-            warnings = metadata.get("warnings", [])
-            if not warnings:
-                return
-            details = self._revision_warning_details(story_directory)
-            writer_warning = any(
-                str(warning).startswith("[WRITER_REVISION_REJECTED]") for warning in warnings
-            )
-            remaining = [
-                str(warning)
-                for warning in warnings
-                if not (details and str(warning).startswith("[WRITER_REVISION_REJECTED]"))
-            ]
-            if details:
-                remaining = details + remaining
-            elif not writer_warning:
-                remaining = [str(warning) for warning in warnings]
-            message = (
-                "La historia se completó, pero la revisión automática dejó "
-                "estas advertencias:\n- " + "\n- ".join(remaining)
-            )
-            if len(message) > 3500:
-                message = (
-                    message[:3440].rstrip() + "\n- Consulta revision_report.json para más detalles."
-                )
-            log_user_action(
-                LOGGER,
-                user_id=user.id,
-                username=user.username or user.full_name,
-                action="Historia completada con advertencias de calidad",
-                category="advertencia",
-                level=logging.WARNING,
-            )
-            await self._safe_notice(
+        """Report final usage and quality warnings for a completed run."""
+        summary = self.generator.summarize(story_directory)
+        if progress_message_id is not None and summary.usage:
+            await self._safe_edit_progress(
                 context,
                 chat_id,
-                message,
-                user,
+                progress_message_id,
+                f"[██████████] 100% — Historia terminada\n{summary.usage}",
             )
-        except (OSError, ValueError, TypeError):
-            LOGGER.warning("No se pudieron leer las advertencias de la ejecución")
+        if summary.warnings:
+            await self._report_warnings(context, chat_id, user, summary.warnings)
 
-    @staticmethod
-    def _revision_warning_details(story_directory: Path) -> list[str]:
-        """Format structured Writer fallbacks and the final length impact."""
-        report_path = story_directory / "revision_report.json"
-        if not report_path.is_file():
-            return []
-        report = json.loads(report_path.read_text(encoding="utf-8"))
-        details: list[str] = []
-        for chapter in report.get("chapters", []):
-            if chapter.get("warning_code") != "WRITER_REVISION_REJECTED":
-                continue
-            attempts = chapter.get("attempts", [])
-            diagnostics = [
-                attempt.get("diagnostic")
-                for attempt in attempts
-                if attempt.get("status") == "rejected" and attempt.get("diagnostic")
-            ]
-            if diagnostics and all(
-                diagnostic.get("code") == "WORD_COUNT_OUT_OF_RANGE" for diagnostic in diagnostics
-            ):
-                counts = " y ".join(
-                    str(diagnostic.get("actual_words", "?")) for diagnostic in diagnostics
-                )
-                latest = diagnostics[-1]
-                details.append(
-                    f"Capítulo {chapter.get('chapter_index')}: {len(diagnostics)} "
-                    f"revisiones descartadas por longitud ({counts} palabras; rango válido "
-                    f"{latest.get('minimum_words')}-{latest.get('maximum_words')}). "
-                    f"Se entregó el borrador de {chapter.get('draft_words')} palabras. "
-                    "Código: WRITER_REVISION_REJECTED."
-                )
-                continue
-            failed = [
-                attempt.get("exception_type", "error interno")
-                for attempt in attempts
-                if attempt.get("status") == "failed"
-            ]
-            reasons = [
-                diagnostic.get("code", "RECHAZO_DESCONOCIDO") for diagnostic in diagnostics
-            ] + failed
-            details.append(
-                f"Capítulo {chapter.get('chapter_index')}: no hubo una revisión válida "
-                f"({', '.join(reasons) or 'sin diagnóstico'}). Se entregó el borrador de "
-                f"{chapter.get('draft_words')} palabras. Código: WRITER_REVISION_REJECTED."
+    async def _report_warnings(self, context, chat_id: int, user, warnings) -> None:
+        """Send one consolidated, actionable warning summary for a run."""
+        message = (
+            "La historia se completó, pero la revisión automática dejó "
+            "estas advertencias:\n- " + "\n- ".join(warnings)
+        )
+        if len(message) > WARNING_MESSAGE_LIMIT:
+            message = (
+                message[: WARNING_MESSAGE_LIMIT - 60].rstrip()
+                + "\n- Consulta revision_report.json para más detalles."
             )
-
-        audit_path = story_directory / "length_audit.json"
-        if details and audit_path.is_file():
-            audit = json.loads(audit_path.read_text(encoding="utf-8"))
-            total = audit.get("total", {})
-            if total and not total.get("within_tolerance", True):
-                details.append(
-                    f"Longitud final: {total.get('actual_words')} palabras; mínimo esperado "
-                    f"{total.get('minimum_words')} y objetivo {total.get('target_words')}."
-                )
-        return details
+        log_user_action(
+            LOGGER,
+            user_id=user.id,
+            username=user.username or user.full_name,
+            action="Historia completada con advertencias de calidad",
+            category="advertencia",
+            level=logging.WARNING,
+        )
+        await self._safe_notice(context, chat_id, message, user)
 
     async def _deliver_completed_run(
         self,
@@ -466,7 +446,7 @@ class GenerationCoordinator(TelegramDelivery):
         job_id: str | None,
     ) -> None:
         """Serialize story delivery and hand a success to evaluation handlers."""
-        context.user_data["state"] = "delivering"
+        context.user_data["state"] = ConversationState.DELIVERING
         log_user_action(
             LOGGER,
             user_id=user.id,

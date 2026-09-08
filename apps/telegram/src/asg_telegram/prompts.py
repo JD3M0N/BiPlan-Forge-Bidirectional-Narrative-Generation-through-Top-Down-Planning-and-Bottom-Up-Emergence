@@ -6,7 +6,7 @@ import html
 import re
 from dataclasses import dataclass
 
-from asg_top_down.profiles import PROFILE_LABELS, NarrativeProfile
+from .contract import ProfileOption
 
 GUIDED_FIELDS = (
     ("language", "¿En qué idioma quieres la historia?"),
@@ -17,7 +17,7 @@ GUIDED_FIELDS = (
     ("tone", "¿Qué tono debe tener?"),
     (
         "narrative_profile",
-        "¿Qué perfil narrativo prefieres? Esencial, Desarrollada, Expansiva o Automático.",
+        "¿Qué perfil narrativo prefieres? {profiles} o Automático.",
     ),
     (
         "constraints",
@@ -25,18 +25,9 @@ GUIDED_FIELDS = (
     ),
 )
 
-PROFILE_CHOICES = {
-    "esencial": NarrativeProfile.ESSENTIAL,
-    "essential": NarrativeProfile.ESSENTIAL,
-    "desarrollada": NarrativeProfile.DEVELOPED,
-    "developed": NarrativeProfile.DEVELOPED,
-    "expansiva": NarrativeProfile.EXPANSIVE,
-    "expansive": NarrativeProfile.EXPANSIVE,
-    "automático": None,
-    "automatico": None,
-    "automatic": None,
-    "auto": None,
-}
+AUTOMATIC_PROFILE = "automatic"
+AUTOMATIC_ALIASES = frozenset({"automático", "automatico", "automatic", "auto"})
+PROFILE_FIELD = "narrative_profile"
 
 
 @dataclass(frozen=True)
@@ -100,31 +91,44 @@ METRIC_EXPLANATIONS = {
 HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$")
 
 
-def validate_guided_value(field: str, value: str) -> str:
-    """Validate guided value."""
+def guided_question(index: int, profiles: tuple[ProfileOption, ...]) -> str:
+    """Return one guided question, naming the profiles the generator offers."""
+    field, question = GUIDED_FIELDS[index]
+    if field != PROFILE_FIELD:
+        return question
+    return question.format(profiles=", ".join(option.label for option in profiles))
+
+
+def validate_guided_value(field: str, value: str, profiles: tuple[ProfileOption, ...] = ()) -> str:
+    """Normalize one guided answer, rejecting values the field cannot accept."""
     normalized = value.strip()
     if not normalized:
         raise ValueError("La respuesta no puede estar vacía.")
-    if field == "narrative_profile":
-        try:
-            profile = PROFILE_CHOICES[normalized.casefold()]
-        except KeyError as exc:
-            raise ValueError("Elige Esencial, Desarrollada, Expansiva o Automático.") from exc
-        return profile.value if profile else "automatic"
+    if field == PROFILE_FIELD:
+        return _resolve_profile(normalized, profiles)
     return normalized
 
 
-def build_guided_prompt(values: dict[str, str]) -> str:
-    """Build guided prompt."""
+def _resolve_profile(value: str, profiles: tuple[ProfileOption, ...]) -> str:
+    """Map a user answer onto a profile value, or onto automatic selection."""
+    normalized = value.casefold()
+    if normalized in AUTOMATIC_ALIASES:
+        return AUTOMATIC_PROFILE
+    for option in profiles:
+        if normalized == option.value.casefold() or normalized in option.aliases:
+            return option.value
+    choices = ", ".join(option.label for option in profiles)
+    raise ValueError(f"Elige {choices} o Automático.")
+
+
+def build_guided_prompt(values: dict[str, str], profiles: tuple[ProfileOption, ...] = ()) -> str:
+    """Compose one free-form prompt out of the collected guided answers."""
     constraints = values["constraints"]
     if constraints.casefold() == "ninguna":
         constraints = "Sin restricciones adicionales."
-    profile = values["narrative_profile"]
-    profile_text = (
-        ""
-        if profile == "automatic"
-        else f" Perfil narrativo: {PROFILE_LABELS[NarrativeProfile(profile)]}."
-    )
+    profile = values[PROFILE_FIELD]
+    label = next((option.label for option in profiles if option.value == profile), None)
+    profile_text = "" if label is None else f" Perfil narrativo: {label}."
     return (
         f"Escribe una historia en {values['language']}.{profile_text} Género: {values['genre']}. "
         f"Protagonista: {values['protagonist']}. Conflicto principal: "

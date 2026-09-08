@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 
+from asg_top_down.errors import ASGError
 from telegram import Update
 from telegram.error import TelegramError
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
@@ -76,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
                 QueueRepository(settings.project_root / "Stories" / "telegram_queue.sqlite3"),
             ),
         )
-    except (TelegramConfigurationError, ValueError) as exc:
+    except (TelegramConfigurationError, ValueError, ASGError) as exc:
         LOGGER.error("%s", exc)
         return 2
     LOGGER.info("Iniciando bot con el generador %s", generator.display_name)

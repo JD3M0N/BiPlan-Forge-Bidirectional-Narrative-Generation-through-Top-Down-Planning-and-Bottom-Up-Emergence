@@ -7,28 +7,31 @@ from asg_telegram.queue import QueueRepository
 
 def test_queue_is_fifo_and_blocks_duplicate_active_user(tmp_path: Path) -> None:
     queue = QueueRepository(tmp_path / "queue.sqlite3")
-    first = queue.enqueue(user_id=1, username="uno", chat_id=10, prompt="a")
-    second = queue.enqueue(user_id=2, username="dos", chat_id=20, prompt="b")
+    first = queue.enqueue(user_id=1, username="uno", chat_id=10, prompt="a").job
+    second = queue.enqueue(user_id=2, username="dos", chat_id=20, prompt="b").job
     duplicate = queue.enqueue(user_id=1, username="uno", chat_id=10, prompt="otra")
-    assert duplicate.id == first.id
+    assert duplicate.job.id == first.id
+    assert not duplicate.created
     assert queue.position(first.id) == 1
     assert queue.position(second.id) == 2
 
 
 def test_cancel_removes_queued_user_and_updates_position(tmp_path: Path) -> None:
     queue = QueueRepository(tmp_path / "queue.sqlite3")
-    first = queue.enqueue(user_id=1, username="uno", chat_id=10, prompt="a")
-    second = queue.enqueue(user_id=2, username="dos", chat_id=20, prompt="b")
+    first = queue.enqueue(user_id=1, username="uno", chat_id=10, prompt="a").job
+    second = queue.enqueue(user_id=2, username="dos", chat_id=20, prompt="b").job
     queue.mark_running(first.id)
-    assert queue.cancel_user(2)
+    assert queue.cancel_user(2) == "cancelled"
     assert queue.position(second.id) is None
-    assert not queue.cancel_user(1)
+    assert queue.cancel_user(1) == "requested"
+    assert queue.cancellation_requested(first.id)
+    assert queue.cancel_user(99) is None
 
 
 def test_running_job_becomes_recovery_pending_and_queue_continues(tmp_path: Path) -> None:
     path = tmp_path / "queue.sqlite3"
     queue = QueueRepository(path)
-    first = queue.enqueue(user_id=1, username="uno", chat_id=10, prompt="a")
+    first = queue.enqueue(user_id=1, username="uno", chat_id=10, prompt="a").job
     queue.enqueue(user_id=2, username="dos", chat_id=20, prompt="b")
     queue.mark_running(first.id)
     restarted = QueueRepository(path)
@@ -45,15 +48,15 @@ def test_running_job_becomes_recovery_pending_and_queue_continues(tmp_path: Path
 
 def test_queue_persists_run_directory(tmp_path: Path) -> None:
     queue = QueueRepository(tmp_path / "queue.sqlite3")
-    job = queue.enqueue(user_id=1, username="uno", chat_id=10, prompt="a")
+    job = queue.enqueue(user_id=1, username="uno", chat_id=10, prompt="a").job
     queue.set_run_dir(job.id, "Stories/run-1")
     assert QueueRepository(queue.path).get(job.id).run_dir == "Stories/run-1"
 
 
-def test_estimate_requires_ten_completed_stories(tmp_path: Path) -> None:
+def test_estimate_needs_a_minimum_number_of_completed_stories(tmp_path: Path) -> None:
     queue = QueueRepository(tmp_path / "queue.sqlite3")
     with queue._connect() as db:
-        for index in range(9):
+        for index in range(2):
             db.execute(
                 "INSERT INTO jobs(id,user_id,username,chat_id,prompt,status,enqueued_at,"
                 "finished_at,duration_seconds) VALUES(?,?,?,?,?,'completed',?,?,?)",
@@ -83,7 +86,7 @@ def test_every_operation_closes_its_connection(tmp_path: Path, monkeypatch) -> N
     monkeypatch.setattr(sqlite3, "connect", tracking_connect)
 
     queue = QueueRepository(tmp_path / "queue.sqlite3")
-    job = queue.enqueue(user_id=1, username="uno", chat_id=10, prompt="a")
+    job = queue.enqueue(user_id=1, username="uno", chat_id=10, prompt="a").job
     queue.active()
     queue.get(job.id)
     queue.mark_running(job.id)

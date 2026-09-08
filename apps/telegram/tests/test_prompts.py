@@ -2,11 +2,19 @@ import html
 import re
 
 import pytest
+from asg_telegram.contract import ProfileOption
 from asg_telegram.prompts import (
     METRIC_EXPLANATIONS,
     build_guided_prompt,
+    guided_question,
     telegram_story_chunks,
     validate_guided_value,
+)
+
+PROFILES = (
+    ProfileOption("essential", "Esencial", ("essential", "esencial")),
+    ProfileOption("developed", "Desarrollada", ("developed", "desarrollada")),
+    ProfileOption("expansive", "Expansiva", ("expansive", "expansiva")),
 )
 
 
@@ -24,7 +32,7 @@ def guided_values():
 
 
 def test_guided_prompt_contains_every_answer():
-    prompt = build_guided_prompt(guided_values())
+    prompt = build_guided_prompt(guided_values(), PROFILES)
     assert prompt == (
         "Escribe una historia en español. Perfil narrativo: Desarrollada. "
         "Género: fantasía. Protagonista: una cartógrafa. Conflicto principal: "
@@ -36,7 +44,7 @@ def test_guided_prompt_contains_every_answer():
 @pytest.mark.parametrize("value", ["corta", "mil", ""])
 def test_narrative_profile_is_validated(value):
     with pytest.raises(ValueError):
-        validate_guided_value("narrative_profile", value)
+        validate_guided_value("narrative_profile", value, PROFILES)
 
 
 @pytest.mark.parametrize(
@@ -49,10 +57,10 @@ def test_narrative_profile_is_validated(value):
     ],
 )
 def test_all_guided_profile_paths_are_supported(answer, canonical):
-    assert validate_guided_value("narrative_profile", answer) == canonical
+    assert validate_guided_value("narrative_profile", answer, PROFILES) == canonical
     values = guided_values()
     values["narrative_profile"] = canonical
-    prompt = build_guided_prompt(values)
+    prompt = build_guided_prompt(values, PROFILES)
     if canonical == "automatic":
         assert "Perfil narrativo:" not in prompt
     else:
@@ -99,3 +107,18 @@ def test_telegram_story_chunks_are_safe_and_within_limit():
     assert plain.replace(" ", "") == ("Título & prueba" + ("A < B y texto largo. " * 80)).replace(
         " ", ""
     )
+
+
+def test_profile_question_names_the_profiles_the_generator_offers():
+    question = guided_question(6, PROFILES)
+    assert "Esencial, Desarrollada, Expansiva" in question
+    assert "Automático" in question
+
+
+def test_other_guided_questions_are_returned_untouched():
+    assert guided_question(0, PROFILES) == "¿En qué idioma quieres la historia?"
+
+
+def test_unknown_profile_error_lists_the_available_labels():
+    with pytest.raises(ValueError, match="Esencial, Desarrollada, Expansiva"):
+        validate_guided_value("narrative_profile", "gigantesca", PROFILES)

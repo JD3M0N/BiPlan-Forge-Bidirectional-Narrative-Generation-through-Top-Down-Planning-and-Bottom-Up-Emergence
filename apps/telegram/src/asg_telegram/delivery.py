@@ -14,8 +14,7 @@ from .console import log_user_action
 from .prompts import telegram_story_chunks
 
 LOGGER = logging.getLogger(__name__)
-DOCUMENT_RETRY_DELAYS = (1, 2, 4)
-AUDIO_RETRY_DELAYS = (1, 2, 4)
+RETRY_DELAYS = (1, 2, 4)
 
 
 class TelegramDelivery:
@@ -138,44 +137,27 @@ class TelegramDelivery:
         voice: str,
     ) -> bool:
         """Send an MP3 with bounded retries for temporary network errors."""
-        attempts = len(AUDIO_RETRY_DELAYS) + 1
-        for attempt in range(1, attempts + 1):
-            try:
-                with audio_path.open("rb") as audio:
-                    await context.bot.send_audio(
-                        chat_id=chat_id,
-                        audio=audio,
-                        filename=audio_path.name,
-                        title=title[:64],
-                        performer="ASG",
-                        caption=f"Narración {language} · {voice}",
-                    )
-                log_user_action(
-                    LOGGER,
-                    user_id=user.id,
-                    username=user.username or user.full_name,
-                    action="Audio entregado por Telegram",
-                    category="éxito",
+
+        async def send() -> None:
+            """Upload the narration file once."""
+            with audio_path.open("rb") as audio:
+                await context.bot.send_audio(
+                    chat_id=chat_id,
+                    audio=audio,
+                    filename=audio_path.name,
+                    title=title[:64],
+                    performer="ASG",
+                    caption=f"Narración {language} · {voice}",
                 )
-                return True
-            except BadRequest:
-                break
-            except NetworkError:
-                if attempt == attempts:
-                    break
-                await asyncio.sleep(AUDIO_RETRY_DELAYS[attempt - 1])
-            except TelegramError:
-                break
-        log_user_action(
-            LOGGER,
-            user_id=user.id,
-            username=user.username or user.full_name,
-            action="Telegram no pudo recibir el audio",
-            category="advertencia",
-            level=logging.WARNING,
-            exc_info=True,
+
+        return await self._send_with_retry(
+            send,
+            user=user,
+            success="Audio entregado por Telegram",
+            rejected="Telegram no pudo recibir el audio",
+            exhausted="Telegram no pudo recibir el audio",
+            failure_level=logging.WARNING,
         )
-        return False
 
     @staticmethod
     def _story_title(story: str) -> str:
@@ -195,32 +177,63 @@ class TelegramDelivery:
         story_path: Path,
     ) -> bool:
         """Send a story document with bounded retries for network failures."""
-        attempts = len(DOCUMENT_RETRY_DELAYS) + 1
+
+        async def send() -> None:
+            """Upload the story file once."""
+            with story_path.open("rb") as document:
+                await context.bot.send_document(
+                    chat_id=chat_id,
+                    document=document,
+                    filename=story_path.name,
+                    caption="Historia completa en formato Markdown.",
+                )
+
+        return await self._send_with_retry(
+            send,
+            user=user,
+            attempt_label="Enviando archivo",
+            rejected="Telegram rechazó permanentemente el archivo",
+            exhausted="Se agotaron los reintentos del archivo",
+        )
+
+    async def _send_with_retry(
+        self,
+        send,
+        *,
+        user,
+        rejected: str,
+        exhausted: str,
+        success: str | None = None,
+        attempt_label: str | None = None,
+        failure_level: int = logging.ERROR,
+    ) -> bool:
+        """Run one Telegram upload, retrying only temporary network errors.
+
+        Permanent rejections are never retried: repeating a request Telegram
+        already refused only delays telling the user that it failed. BadRequest
+        must be caught before NetworkError because it subclasses it, so the
+        order of these handlers is load-bearing.
+        """
+        attempts = len(RETRY_DELAYS) + 1
         for attempt in range(1, attempts + 1):
-            log_user_action(
-                LOGGER,
-                user_id=user.id,
-                username=user.username or user.full_name,
-                action=f"Enviando archivo, intento {attempt}/{attempts}",
-                category="entrega",
-            )
+            if attempt_label:
+                log_user_action(
+                    LOGGER,
+                    user_id=user.id,
+                    username=user.username or user.full_name,
+                    action=f"{attempt_label}, intento {attempt}/{attempts}",
+                    category="entrega",
+                )
             try:
-                with story_path.open("rb") as document:
-                    await context.bot.send_document(
-                        chat_id=chat_id,
-                        document=document,
-                        filename=story_path.name,
-                        caption="Historia completa en formato Markdown.",
-                    )
-                return True
+                await send()
             except BadRequest:
-                self._log_permanent_document_error(user)
+                self._log_delivery_failure(user, rejected, failure_level)
                 return False
             except NetworkError:
                 if attempt == attempts:
-                    self._log_exhausted_document_retries(user)
+                    self._log_delivery_failure(user, exhausted, failure_level)
                     return False
-                delay = DOCUMENT_RETRY_DELAYS[attempt - 1]
+                delay = RETRY_DELAYS[attempt - 1]
                 log_user_action(
                     LOGGER,
                     user_id=user.id,
@@ -232,33 +245,30 @@ class TelegramDelivery:
                 )
                 await asyncio.sleep(delay)
             except TelegramError:
-                self._log_permanent_document_error(user)
+                self._log_delivery_failure(user, rejected, failure_level)
                 return False
+            else:
+                if success:
+                    log_user_action(
+                        LOGGER,
+                        user_id=user.id,
+                        username=user.username or user.full_name,
+                        action=success,
+                        category="éxito",
+                    )
+                return True
         return False
 
     @staticmethod
-    def _log_permanent_document_error(user) -> None:
-        """Record a permanent Telegram rejection for a story document."""
+    def _log_delivery_failure(user, action: str, level: int) -> None:
+        """Record why one Telegram upload will not be attempted again."""
         log_user_action(
             LOGGER,
             user_id=user.id,
             username=user.username or user.full_name,
-            action="Telegram rechazó permanentemente el archivo",
-            category="error",
-            level=logging.ERROR,
-            exc_info=True,
-        )
-
-    @staticmethod
-    def _log_exhausted_document_retries(user) -> None:
-        """Record that all temporary document retries were exhausted."""
-        log_user_action(
-            LOGGER,
-            user_id=user.id,
-            username=user.username or user.full_name,
-            action="Se agotaron los reintentos del archivo",
-            category="error",
-            level=logging.ERROR,
+            action=action,
+            category="error" if level >= logging.ERROR else "advertencia",
+            level=level,
             exc_info=True,
         )
 

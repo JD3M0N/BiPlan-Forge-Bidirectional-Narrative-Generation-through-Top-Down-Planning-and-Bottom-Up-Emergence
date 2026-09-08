@@ -2,7 +2,7 @@ import logging
 import sys
 
 from asg_telegram.console import ConsoleFormatter
-from asg_top_down.errors import ArtifactValidationError
+from asg_telegram.contract import GenerationFailure
 from colorama import Fore, Style
 
 
@@ -45,14 +45,14 @@ def test_console_formatter_uses_green_for_success():
     assert "ÉXITO" in result
 
 
-def test_console_formatter_shows_actionable_asg_error():
+def test_console_formatter_shows_actionable_generation_failure():
     try:
-        raise ArtifactValidationError(
+        raise GenerationFailure(
             "El outline incumple el contrato.",
+            code="ARTIFACT_VALIDATION_FAILED",
             stage="outline",
-            details={"artifact": "outline"},
         )
-    except ArtifactValidationError:
+    except GenerationFailure:
         record = make_record(level=logging.ERROR, message="falló la generación")
         record.exc_info = sys.exc_info()
     result = ConsoleFormatter().format(record)
