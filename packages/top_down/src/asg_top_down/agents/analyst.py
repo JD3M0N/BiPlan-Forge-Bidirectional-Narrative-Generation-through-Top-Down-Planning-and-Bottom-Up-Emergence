@@ -2,7 +2,7 @@
 
 import re
 
-from ..profiles import PROFILE_GUIDANCE, NarrativeProfile
+from ..profiles import PROFILE_GUIDANCE, NarrativeProfile, profile_event_target
 from ..schemas import StoryRequest
 from .base import Agent
 
@@ -55,7 +55,9 @@ class AnalystAgent(Agent[StoryRequest]):
                 "inference: never copy them into any downstream field and never promise an exact "
                 "size. PROFILE CONTRACTS: "
                 + " | ".join(
-                    f"{profile.value}: {guidance}" for profile, guidance in PROFILE_GUIDANCE.items()
+                    f"{profile.value}: {guidance} Events: "
+                    f"{profile_event_target(profile)[0]} to {profile_event_target(profile)[1]}."
+                    for profile, guidance in PROFILE_GUIDANCE.items()
                 )
             ),
             prompt=prompt,

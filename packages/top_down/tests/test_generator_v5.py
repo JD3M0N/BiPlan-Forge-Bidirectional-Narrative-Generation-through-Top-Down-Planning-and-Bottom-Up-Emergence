@@ -7,8 +7,9 @@ from asg_top_down import pipeline as pipeline_module
 from asg_top_down.agents import AnalystAgent
 from asg_top_down.audit import parse_chapter_bodies
 from asg_top_down.errors import GeminiDailyQuotaError, PlotValidationError
-from asg_top_down.graph import materialize_plan
+from asg_top_down.graph import materialize_plan, validate_profile_structure
 from asg_top_down.pipeline import StoryPipeline
+from asg_top_down.profiles import profile_event_floor
 from asg_top_down.schemas import (
     ChapterDraft,
     ChapterPresentation,
@@ -28,6 +29,10 @@ from asg_top_down.schemas import (
     StoryReview,
     WorldArtifact,
 )
+
+# A qualitative fragment of the Developed contract. PROFILE_GUIDANCE carries no event count
+# any more, so the tests that follow the profile contract downstream track this instead.
+PROFILE_MARKER = "a functional secondary arc"
 
 
 def make_request() -> StoryRequest:
@@ -116,14 +121,17 @@ def valid_plan(*, ending: str = "The town chooses to rebuild together") -> Story
         ],
         events=[
             plot_event("event-1", 1, "chapter-1"),
-            plot_event("event-2", 2, "chapter-2"),
+            plot_event("event-2", 2, "chapter-1"),
+            plot_event("event-3", 3, "chapter-2"),
+            plot_event("event-4", 4, "chapter-2"),
         ],
         dependencies=[
             EventDependency(
-                source_event_id="event-1",
-                target_event_id="event-2",
+                source_event_id=f"event-{order}",
+                target_event_id=f"event-{order + 1}",
                 relation="causal",
             )
+            for order in range(1, 4)
         ],
     )
 
@@ -184,6 +192,23 @@ def invalid_plan() -> StoryPlanDraft:
 def invalid_payoff_plan() -> StoryPlanDraft:
     candidate = valid_plan()
     candidate.events[1].payoff_of = ["charcoal_note"]
+    return candidate
+
+
+def empty_chapter_plan() -> StoryPlanDraft:
+    """Carry a chapter with no events at all, which validate_story_plan rejects upstream."""
+    candidate = valid_plan()
+    candidate.chapters.append(chapter("chapter-3", 3, "The Cost"))
+    return candidate
+
+
+def thin_chapter_plan() -> StoryPlanDraft:
+    """Meet the Essential event floor while leaving two chapters carrying a single event."""
+    candidate = sized_plan(4)
+    candidate.chapters.append(chapter("chapter-3", 3, "The Cost"))
+    candidate.events[1].chapter_id = "chapter-2"
+    candidate.events[2].chapter_id = "chapter-2"
+    candidate.events[3].chapter_id = "chapter-3"
     return candidate
 
 
@@ -400,9 +425,9 @@ def test_complete_pipeline_saves_v60_artifacts_and_agent_order(tmp_path) -> None
     metrics = json.loads((run.run_dir / "story_metrics.json").read_text(encoding="utf-8"))
     assert metrics["narrative_profile"] == "essential"
     assert metrics["chapters"] == 2
-    assert metrics["events"] == 2
+    assert metrics["events"] == 4
     assert metrics["words"] > 0
-    assert {item["events"] for item in metrics["chapter_metrics"]} == {1}
+    assert {item["events"] for item in metrics["chapter_metrics"]} == {2}
     assert "target_words" not in json.dumps(metrics)
     assert "within_tolerance" not in json.dumps(metrics)
     for index in (1, 2):
@@ -471,19 +496,19 @@ def test_invalid_initial_plan_is_replaced_once(tmp_path) -> None:
 @pytest.mark.parametrize(
     ("profile", "plans", "expected_attempts", "check_no_prose_before_failing"),
     [
-        (None, lambda: [invalid_plan(), invalid_plan()], 2, False),
-        (NarrativeProfile.DEVELOPED, lambda: [valid_plan(), valid_plan()], 2, False),
+        (None, lambda: [invalid_plan() for _ in range(3)], 3, False),
+        (NarrativeProfile.DEVELOPED, lambda: [valid_plan() for _ in range(3)], 3, False),
         (
             NarrativeProfile.EXPANSIVE,
-            lambda: [sized_plan(9, branch_and_join=False) for _ in range(3)],
-            3,
+            lambda: [sized_plan(10, branch_and_join=False) for _ in range(4)],
+            4,
             True,
         ),
     ],
     ids=[
-        "default-profile-two-attempts",
-        "developed-profile-two-attempts",
-        "expansive-profile-three-attempts",
+        "default-profile-three-attempts",
+        "developed-profile-three-attempts",
+        "expansive-profile-four-attempts",
     ],
 )
 def test_exhausted_planning_attempts_fail_before_any_prose(
@@ -701,33 +726,32 @@ def test_analyst_prompt_separates_explicit_constraints_and_inferences() -> None:
 
 def test_developed_plan_below_event_floor_is_replanned(tmp_path) -> None:
     request = make_request().model_copy(update={"narrative_profile": NarrativeProfile.DEVELOPED})
-    provider = FakeProvider(plans=[valid_plan(), sized_plan(6)])
+    provider = FakeProvider(plans=[valid_plan(), sized_plan(8)])
     run = StoryGenerator(provider, tmp_path).generate(request)
     plan = json.loads((run.run_dir / "story_plan.json").read_text(encoding="utf-8"))
     validation = json.loads(
         (run.run_dir / "planning/attempt-001-validation.json").read_text(encoding="utf-8")
     )
-    assert len(plan["events"]) == 6
-    assert validation["issue"] == "developed profile requires at least 6 events; got 2"
+    assert len(plan["events"]) == 8
+    assert validation["issue"] == "developed profile requires at least 8 events; got 4"
     planner_prompts = [
         prompt for name, _, prompt in provider.structured_calls if name == "StoryPlanDraft"
     ]
     assert "Fix this structural error" in planner_prompts[1]
-    assert "at least six causally meaningful events" in planner_prompts[1]
+    assert "ADD at least 4 more causally meaningful events to reach 8" in planner_prompts[1]
+    assert PROFILE_MARKER in planner_prompts[1]
 
 
 def test_profile_guidance_reaches_world_characters_and_prose_agents(tmp_path) -> None:
     request = make_request().model_copy(update={"narrative_profile": NarrativeProfile.DEVELOPED})
-    provider = FakeProvider(plans=[sized_plan(6)])
+    provider = FakeProvider(plans=[sized_plan(8)])
     StoryGenerator(provider, tmp_path).generate(request)
     structured = {name: (system, prompt) for name, system, prompt in provider.structured_calls}
     assert "scaled to the qualitative narrative profile" in structured["WorldArtifact"][0]
     assert "supporting characters" in structured["CharactersArtifact"][0]
-    assert "at least six causally meaningful events" in structured["WorldArtifact"][1]
-    assert "at least six causally meaningful events" in structured["CharactersArtifact"][1]
-    assert any(
-        "at least six causally meaningful events" in prompt for _, prompt in provider.text_calls
-    )
+    assert PROFILE_MARKER in structured["WorldArtifact"][1]
+    assert PROFILE_MARKER in structured["CharactersArtifact"][1]
+    assert any(PROFILE_MARKER in prompt for _, prompt in provider.text_calls)
 
 
 def test_internal_agents_use_english_until_drafting(tmp_path) -> None:
@@ -840,7 +864,7 @@ def test_semantic_ranking_failure_still_produces_a_blueprint(tmp_path) -> None:
 
 
 def test_forced_profile_outranks_the_prompt_derived_one(tmp_path) -> None:
-    provider = FakeProvider(plans=[sized_plan(9, branch_and_join=True)])
+    provider = FakeProvider(plans=[sized_plan(10, branch_and_join=True)])
     run = StoryGenerator(
         provider,
         tmp_path,
@@ -880,10 +904,15 @@ def test_audio_can_be_skipped_without_touching_the_story(tmp_path, monkeypatch) 
     [
         (
             NarrativeProfile.EXPANSIVE,
-            lambda: sized_plan(9),
+            lambda: sized_plan(10),
             "causal dependency branch followed by a causal join",
         ),
-        (NarrativeProfile.DEVELOPED, valid_plan, "requires at least 6 events"),
+        (NarrativeProfile.DEVELOPED, valid_plan, "requires at least 8 events"),
+        (
+            NarrativeProfile.ESSENTIAL,
+            lambda: thin_chapter_plan(),
+            "requires at least 2 events per chapter",
+        ),
     ],
 )
 def test_a_plan_breaking_its_profile_contract_is_never_persisted(
@@ -894,7 +923,7 @@ def test_a_plan_breaking_its_profile_contract_is_never_persisted(
     expected_issue,
 ) -> None:
     request = make_request().model_copy(update={"narrative_profile": profile})
-    provider = FakeProvider(plans=[sized_plan(9, branch_and_join=True)])
+    provider = FakeProvider(plans=[sized_plan(10, branch_and_join=True)])
     leaked = materialize_plan(leaked_plan(), make_world(), make_characters())
     monkeypatch.setattr(StoryPipeline, "_critique_plan", lambda self, *args, **kwargs: leaked)
     created = []
@@ -953,7 +982,7 @@ def _branch_pointing_backwards() -> StoryPlanDraft:
     ("draft", "issue", "profile", "must_contain", "must_not_contain"),
     [
         (
-            lambda: sized_plan(9, branch_and_join=False),
+            lambda: sized_plan(10, branch_and_join=False),
             "expansive profile requires a causal dependency branch followed by a causal join",
             NarrativeProfile.EXPANSIVE,
             [
@@ -986,7 +1015,7 @@ def _branch_pointing_backwards() -> StoryPlanDraft:
         ),
         (
             lambda: sized_plan(6, branch_and_join=True),
-            "expansive profile requires at least 9 events; got 6",
+            "expansive profile requires at least 10 events; got 6",
             NarrativeProfile.EXPANSIVE,
             [
                 "This profile needs 10 to 14 events",
@@ -1009,6 +1038,28 @@ def _branch_pointing_backwards() -> StoryPlanDraft:
             ],
             ["DIRECTION PROBLEM"],
         ),
+        (
+            thin_chapter_plan,
+            "essential profile requires at least 2 events per chapter; "
+            "these chapters carry fewer: chapter-1, chapter-3",
+            NarrativeProfile.ESSENTIAL,
+            [
+                "CURRENT EVENTS PER CHAPTER",
+                "need new material: chapter-1, chapter-3",
+                "do not drop chapters to meet the count",
+            ],
+            ["PAYOFF_OF REFERENCE MATRIX", "ADD at least"],
+        ),
+        (
+            empty_chapter_plan,
+            "chapters without events: chapter-3",
+            NarrativeProfile.ESSENTIAL,
+            [
+                "CURRENT EVENTS PER CHAPTER",
+                "need new material: chapter-3",
+            ],
+            ["PAYOFF_OF REFERENCE MATRIX"],
+        ),
     ],
     ids=[
         "missing-branch-and-join",
@@ -1016,6 +1067,8 @@ def _branch_pointing_backwards() -> StoryPlanDraft:
         "backwards-dependency-names-the-offending-edge",
         "event-shortfall-says-how-many-and-where",
         "payoff-failure-gets-the-reference-matrix",
+        "thin-chapter-failure-lists-the-thin-chapters",
+        "empty-chapter-failure-gets-the-budget-block",
     ],
 )
 def test_repair_prompt_matches_the_failure_class(
@@ -1044,10 +1097,78 @@ def test_the_planner_is_given_the_event_target_its_chapter_band_implies(
     events,
 ) -> None:
     request = make_request().model_copy(update={"narrative_profile": profile})
-    provider = FakeProvider(plans=[sized_plan(9, branch_and_join=True)])
+    provider = FakeProvider(plans=[sized_plan(10, branch_and_join=True)])
     StoryGenerator(provider, tmp_path).generate(request)
     instruction = structured_prompt_system(provider, "StoryPlanDraft")
     assert chapters in instruction
     assert events in instruction
     assert "at least 2 events" in instruction
-    assert "never leave a chapter carrying a single event" in instruction
+    assert "chapter carrying a single event is sent back" in instruction
+
+
+@pytest.mark.parametrize(
+    ("profile", "draft"),
+    [
+        (NarrativeProfile.ESSENTIAL, lambda: sized_plan(2)),
+        (NarrativeProfile.ESSENTIAL, thin_chapter_plan),
+        (NarrativeProfile.DEVELOPED, valid_plan),
+        (NarrativeProfile.DEVELOPED, thin_chapter_plan),
+        (NarrativeProfile.EXPANSIVE, lambda: sized_plan(10, branch_and_join=False)),
+    ],
+    ids=[
+        "essential-below-floor",
+        "essential-thin-chapter",
+        "developed-below-floor",
+        "developed-thin-chapter",
+        "expansive-without-a-branch",
+    ],
+)
+def test_every_profile_rejection_reaches_a_repair_block(profile, draft) -> None:
+    """No message graph.py can raise for a profile may fall through to empty repair guidance."""
+    candidate = draft()
+    plan = materialize_plan(candidate, make_world(), make_characters())
+    with pytest.raises(ValueError) as captured:
+        validate_profile_structure(plan, profile)
+    issue = str(captured.value)
+    assert issue.isascii()
+    assert StoryPipeline._repair_guidance(candidate, issue, profile) != ""
+
+
+def test_a_thin_chapter_is_rejected_and_repaired_on_the_next_attempt(tmp_path) -> None:
+    """The per-chapter floor drives a real replan, not just a note inside another failure."""
+    provider = FakeProvider(plans=[thin_chapter_plan(), valid_plan()])
+    run = StoryGenerator(provider, tmp_path).generate(make_request())
+
+    validation = json.loads(
+        (run.run_dir / "planning/attempt-001-validation.json").read_text(encoding="utf-8")
+    )
+    assert validation["issue"] == (
+        "essential profile requires at least 2 events per chapter; "
+        "these chapters carry fewer: chapter-1, chapter-3"
+    )
+    planner_prompts = [
+        prompt for name, _, prompt in provider.structured_calls if name == "StoryPlanDraft"
+    ]
+    assert "need new material: chapter-1, chapter-3" in planner_prompts[1]
+    plan = json.loads((run.run_dir / "story_plan.json").read_text(encoding="utf-8"))
+    assert len(plan["events"]) == 4
+    metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["status"] == "completed"
+
+
+def test_the_planner_is_taught_exactly_the_floor_that_is_enforced(tmp_path) -> None:
+    """The prompt carries one event floor per profile, and it is the validated one."""
+    for profile in NarrativeProfile:
+        provider = FakeProvider(plans=[sized_plan(10, branch_and_join=True)])
+        request = make_request().model_copy(update={"narrative_profile": profile})
+        StoryGenerator(provider, tmp_path / profile.value).generate(request)
+        floor = profile_event_floor(profile)
+        system, prompt = next(
+            (system, prompt)
+            for name, system, prompt in provider.structured_calls
+            if name == "StoryPlanDraft"
+        )
+        assert f"{floor} is the rejection boundary" in system
+        # The contract block travels in the prompt, and it may not smuggle a competing number.
+        assert "NARRATIVE PROFILE CONTRACT" in prompt
+        assert "causally meaningful events" not in prompt

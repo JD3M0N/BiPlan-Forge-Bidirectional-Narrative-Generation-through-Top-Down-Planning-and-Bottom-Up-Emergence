@@ -1,6 +1,28 @@
 # Historial de cambios
 
-## No publicado
+## 6.4.0
+
+- El numero de eventos que se le ensena al planificador y el que se le impone son ahora
+  el mismo. `validate_profile_structure` valida el extremo bajo de `profile_event_target`
+  (Esencial 4, Desarrollada 8, Expansiva 10) en vez de `PROFILE_MIN_EVENTS`, que antes
+  dejaba a Esencial sin ninguna red. Expuesto como `profile_event_floor`.
+
+- `MIN_EVENTS_PER_CHAPTER` deja de ser advisory: un capitulo con un solo evento rechaza el
+  plan y dispara una replanificacion. La lista de capitulos flacos que ya calculaba
+  `_event_budget_repair_rules` pasa a ser la causa del rechazo y no solo informacion
+  adjunta a otro fallo. Medido sobre las 25 ejecuciones de 6.3.0: 16 de los 60 capitulos
+  Expansivos y 9 de los 25 Desarrollados llevaban un solo evento.
+
+- `PROFILE_GUIDANCE` ya no lleva numeros de eventos. Viajaba dentro del prompt de todos los
+  agentes, asi que el planificador recibia dos cifras contradictorias en la misma llamada:
+  su `system_instruction` pedia diez eventos para Expansiva y el bloque
+  `NARRATIVE PROFILE CONTRACT` pedia nueve. El modelo obedecia el nueve, y planifico
+  exactamente nueve eventos en 9 de sus 12 corridas. El ejemplo trabajado de rama y union
+  queda marcado como fragmento, porque sus identificadores sugerian un total de seis.
+
+- El planificador recibe el centro de la banda como objetivo (`profile_event_aim`) y el
+  suelo declarado como frontera de rechazo, no como meta. El analista conserva un
+  discriminador numerico para detectar el perfil, leido de la misma fuente.
 
 - El plan se revalida en el unico punto donde se escribe `story_plan.json`
   (`StoryPipeline._persist_plan`), no solo en las dos ramas que lo producen. Un
@@ -23,7 +45,8 @@
   explicitos, porque la formulacion abstracta fallo dos veces seguidas.
 
 - Los intentos de planificacion pasan a depender del perfil
-  (`PLAN_ATTEMPTS_BY_PROFILE`): Expansiva dispone de 3 y el resto conserva 2.
+  (`PLAN_ATTEMPTS_BY_PROFILE`): Expansiva dispone de 4 y el resto de 3, frente a los 2
+  fijos anteriores. Es un techo, no un coste: solo se gasta cuando hay rechazo.
   `PlotValidationError` informa del numero real de intentos, que antes estaba
   fijado a 2 en el mensaje y en `details`.
 

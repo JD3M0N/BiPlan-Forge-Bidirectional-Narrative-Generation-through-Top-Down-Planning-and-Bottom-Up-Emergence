@@ -1,10 +1,12 @@
 # Hoja de ruta
 
-**Estado medido el 2026-09-12 sobre `fee199c`.** Puerta de calidad limpia: `ruff check .`,
-`ruff format --check .` (117 archivos), 256 pruebas pasan y 2 se omiten, `pip check` sin
-requisitos rotos, y `tests/test_sync_railway_stories.ps1` pasa lanzado a mano. Las mediciones que
-cita este documento salen del corpus de 121 ejecuciones de `Stories/`, incluida una matriz de 6
-historias generadas con Gemini real el 2026-09-12 (prompts canónicos 6 y 7 por los tres perfiles).
+**Estado medido el 2026-09-12 sobre `cf45c1b` más el cambio de perfiles de la versión 6.4.0.**
+Puerta de calidad limpia: `ruff check .`, `ruff format --check .` (113 archivos), 205 pruebas
+pasan y 2 se omiten, `pip check` sin requisitos rotos, y `tests/test_sync_railway_stories.ps1`
+pasa lanzado a mano. Las mediciones que cita este documento salen del corpus de `Stories/`, hoy
+127 ejecuciones Top-Down. Las cifras por perfil proceden de las 25 ejecuciones de la versión
+6.3.0; la última matriz de 6 historias con Gemini real (prompts canónicos 6 y 7 por los tres
+perfiles) es la verificación de 6.4.0 y ya no comparte contrato con ellas.
 
 ## Cómo leer esto
 
@@ -38,31 +40,6 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
   por `"unknown"`.
 - **Hecho cuando.** Un fallo arbitrario del narrador deja el run en `completed` con su aviso, y un
   error no clasificado escribe en `error_report.json` la etapa donde ocurrió. Ambos con test.
-
-### Validar el objetivo de eventos que se le enseña al planificador
-
-- **Síntoma.** `profile_event_target`, en `packages/top_down/src/asg_top_down/profiles.py`, ya
-  concilia la banda de capítulos con el suelo de eventos, y ese objetivo llega al planificador y al
-  prompt de reparación. Pero `validate_profile_structure`, en `graph.py`, solo impone
-  `PROFILE_MIN_EVENTS`, y el único invariante de capítulo acepta capítulos de un solo evento. El
-  planificador optimiza contra el número que se valida, no contra el que se le enseña. Medido
-  sobre las 25 ejecuciones de la versión 6.3.0 del generador:
-
-  | Perfil | Suelo validado | Objetivo enseñado | Eventos observados | Dentro del objetivo | Capítulos de un solo evento |
-  | --- | --- | --- | --- | --- | --- |
-  | Esencial | ninguno | 4 a 6 | 3 a 6 | 6 de 7 | 3 de 19 |
-  | Desarrollada | 6 | 8 a 10 | 6 a 8 | 2 de 6 | 9 de 25 |
-  | Expansiva | 9 | 10 a 14 | 9 a 11 | 3 de 12 | 16 de 60 |
-
-  Expansiva planificó **exactamente 9 eventos en 9 de sus 12 ejecuciones**: se clava en el suelo y
-  no llega nunca al objetivo. Y Esencial, que no tiene suelo ninguno, produjo en la matriz del
-  2026-09-12 una historia de 3 capítulos con un solo evento cada uno.
-- **Qué hacer.** Decidir si el suelo validado pasa a ser el extremo bajo de `profile_event_target`,
-  o si se valida directamente `MIN_EVENTS_PER_CHAPTER`. Hoy la lista de capítulos flacos que
-  calcula `_event_budget_repair_rules` nunca se usa sola, porque no existe un fallo de validación
-  «capítulo con un solo evento», y Esencial no tiene ninguna red.
-- **Hecho cuando.** Ningún perfil produce capítulos de un solo evento de forma sistemática, y el
-  contrato que se enseña al modelo y el que se impone son el mismo número.
 
 ### Desbloquear `evaluation.json` y poder leer las evaluaciones
 

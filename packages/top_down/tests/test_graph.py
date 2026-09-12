@@ -8,6 +8,8 @@ from asg_top_down.profiles import (
     MIN_EVENTS_PER_CHAPTER,
     NarrativeProfile,
     profile_chapter_band,
+    profile_event_aim,
+    profile_event_floor,
     profile_event_target,
     profile_min_events,
 )
@@ -291,14 +293,16 @@ def profile_plan(event_count: int) -> StoryPlan:
 @pytest.mark.parametrize(
     ("profile", "event_count", "expectation"),
     [
-        (NarrativeProfile.ESSENTIAL, 3, "accepts"),
-        (NarrativeProfile.DEVELOPED, 5, "rejects"),
-        (NarrativeProfile.DEVELOPED, 6, "accepts"),
-        (NarrativeProfile.EXPANSIVE, 8, "rejects"),
-        (NarrativeProfile.EXPANSIVE, 9, "rejects-without-branch"),
+        (NarrativeProfile.ESSENTIAL, 3, "rejects"),
+        (NarrativeProfile.ESSENTIAL, 4, "accepts"),
+        (NarrativeProfile.DEVELOPED, 7, "rejects"),
+        (NarrativeProfile.DEVELOPED, 8, "accepts"),
+        (NarrativeProfile.EXPANSIVE, 9, "rejects"),
+        (NarrativeProfile.EXPANSIVE, 10, "rejects-without-branch"),
     ],
     ids=[
-        "essential-compact-plan",
+        "essential-below-floor",
+        "essential-at-floor",
         "developed-below-floor",
         "developed-at-floor",
         "expansive-below-floor",
@@ -310,7 +314,7 @@ def test_profile_structure(profile, event_count, expectation) -> None:
     if expectation == "accepts":
         validate_profile_structure(profile_plan(event_count), profile)
     elif expectation == "rejects":
-        minimum = profile_min_events(profile)
+        minimum = profile_event_floor(profile)
         with pytest.raises(
             ValueError,
             match=rf"{profile.value} profile requires at least {minimum} events; got {event_count}",
@@ -321,18 +325,31 @@ def test_profile_structure(profile, event_count, expectation) -> None:
             validate_profile_structure(profile_plan(event_count), profile)
 
 
+def test_a_chapter_carrying_a_single_event_is_rejected_for_every_profile() -> None:
+    """The per-chapter floor is validated, so a stub chapter can no longer reach the writer."""
+    for profile in NarrativeProfile:
+        candidate = profile_plan(profile_event_floor(profile))
+        third = second_chapter(order=3)
+        third.id = "chapter-3"
+        candidate.chapters.extend([second_chapter(), third])
+        # chapter-2 keeps one event and chapter-3 none, so the message must name both in order.
+        candidate.events[-1].chapter_id = "chapter-2"
+        with pytest.raises(ValueError) as captured:
+            validate_profile_structure(candidate, profile)
+        message = str(captured.value)
+        assert message.isascii()
+        assert f"requires at least {MIN_EVENTS_PER_CHAPTER} events per chapter" in message
+        assert "chapter-2, chapter-3" in message
+
+
 def test_expansive_profile_accepts_a_causal_branch_and_later_join() -> None:
-    candidate = profile_plan(9)
+    candidate = profile_plan(10)
     candidate.dependencies = [
         dependency("event-1", "event-2"),
         dependency("event-1", "event-3"),
         dependency("event-2", "event-4"),
         dependency("event-3", "event-4"),
-        dependency("event-4", "event-5"),
-        dependency("event-5", "event-6"),
-        dependency("event-6", "event-7"),
-        dependency("event-7", "event-8"),
-        dependency("event-8", "event-9"),
+        *[dependency(f"event-{order}", f"event-{order + 1}") for order in range(4, 10)],
     ]
     validate_story_plan(candidate, world(), characters())
     validate_profile_structure(candidate, NarrativeProfile.EXPANSIVE)
@@ -352,3 +369,6 @@ def test_the_event_target_follows_from_the_chapter_band_and_never_undercuts_the_
         assert low >= low_chapters * MIN_EVENTS_PER_CHAPTER
         assert high >= high_chapters * MIN_EVENTS_PER_CHAPTER
         assert low <= high
+        # The low end is the single number: taught to the planner and enforced on its plan.
+        assert profile_event_floor(profile) == low
+        assert low <= profile_event_aim(profile) <= high

@@ -89,12 +89,15 @@ Lo que hace este pipeline distinto de "pedirle una historia al modelo":
   los reinyecta literalmente en el prompt de reparación estructural del modelo: son parte del
   contrato con el LLM, no texto para el usuario. No traducirlos.
 - **`profiles.py` define contratos cualitativos, no presupuestos de palabras.** Esencial /
-  Desarrollada / Expansiva se expresan como texto de contrato (`PROFILE_GUIDANCE`) más un piso
-  estructural (`PROFILE_MIN_EVENTS`: 6 y 9). `PROFILE_CHAPTER_BAND` y `MIN_EVENTS_PER_CHAPTER` son
-  **advisory**: llegan al planificador como guía y ningún validador los impone.
-  `profile_event_target` ya concilia ambos y llega al prompt, pero el validador sigue imponiendo
-  solo el piso, así que el planificador se clava en él: Expansiva planificó exactamente 9 eventos
-  en 9 de sus 12 corridas de la versión 6.3.0. Es la primera tarea abierta del `TODO.md`.
+  Desarrollada / Expansiva se expresan como texto de contrato (`PROFILE_GUIDANCE`), que es
+  **puramente cualitativo a propósito**: viaja dentro del prompt de todos los agentes, así que
+  un número ahí competía con el del planificador y el modelo obedecía al de la guía.
+  `PROFILE_CHAPTER_BAND` sigue siendo advisory, pero determina el objetivo de eventos vía
+  `MIN_EVENTS_PER_CHAPTER`, y el extremo bajo de ese objetivo (`profile_event_floor`: 4, 8 y
+  10) es **el único número** que se enseña al planificador y que `validate_profile_structure`
+  impone. `MIN_EVENTS_PER_CHAPTER` también se valida: un capítulo con un solo evento rechaza
+  el plan. Al planificador se le enseña además `profile_event_aim`, el centro de la banda,
+  para que no apunte a la frontera de rechazo.
 - **Los reintentos son por perfil.** `PLAN_ATTEMPTS_BY_PROFILE` da a Expansiva un intento extra
   porque es la única con contrato de rama y reunión causal (`validate_profile_structure`).
 - **Los fallos se clasifican.** `errors.py` define `ASGError` con código, etapa, resumen seguro y

@@ -79,9 +79,9 @@ CHECKPOINT_STAGES = (
 
 # Planning attempts allowed per narrative profile. Expansive carries the strictest structural
 # contract (a causal branch followed by a causal join), so it gets one extra repair attempt.
-DEFAULT_PLAN_ATTEMPTS = 2
+DEFAULT_PLAN_ATTEMPTS = 3
 PLAN_ATTEMPTS_BY_PROFILE: dict[NarrativeProfile, int] = {
-    NarrativeProfile.EXPANSIVE: 3,
+    NarrativeProfile.EXPANSIVE: 4,
 }
 
 # Errors that must always abort the pipeline instead of being degraded to a warning.
@@ -492,7 +492,9 @@ class StoryPipeline:
         """Return the repair block that matches one validation failure class."""
         if "causal dependency branch" in issue:
             return cls._causal_branch_repair_rules(draft)
-        if "requires at least" in issue and "events" in issue:
+        if ("requires at least" in issue and "events" in issue) or (
+            "chapters without events" in issue
+        ):
             return cls._event_budget_repair_rules(draft, profile)
         if "points backwards" in issue:
             return cls._dependency_direction_repair_rules(draft, issue)

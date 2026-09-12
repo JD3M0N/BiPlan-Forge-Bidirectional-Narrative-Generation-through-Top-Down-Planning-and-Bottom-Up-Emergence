@@ -7,9 +7,10 @@ part of the contract with the model, not user-facing text.
 
 from __future__ import annotations
 
+from collections import Counter
 from operator import attrgetter
 
-from .profiles import NarrativeProfile, profile_min_events
+from .profiles import MIN_EVENTS_PER_CHAPTER, NarrativeProfile, profile_event_floor
 from .schemas import (
     ChapterPlan,
     CharactersArtifact,
@@ -61,12 +62,23 @@ def validate_profile_structure(
     plan: StoryPlan,
     profile: NarrativeProfile,
 ) -> None:
-    """Reject plans that do not meet the selected profile's structural floor."""
-    minimum = profile_min_events(profile)
+    """Reject plans below the profile's event floor, its per-chapter floor, or its causal shape."""
+    minimum = profile_event_floor(profile)
     actual = len(plan.events)
-    if minimum is not None and actual < minimum:
+    if actual < minimum:
         raise ValueError(
             f"{profile.value} profile requires at least {minimum} events; got {actual}"
+        )
+    counts = Counter(event.chapter_id for event in plan.events)
+    thin = [
+        chapter.id
+        for chapter in sorted(plan.chapters, key=attrgetter("order"))
+        if counts[chapter.id] < MIN_EVENTS_PER_CHAPTER
+    ]
+    if thin:
+        raise ValueError(
+            f"{profile.value} profile requires at least {MIN_EVENTS_PER_CHAPTER} events per "
+            f"chapter; these chapters carry fewer: {', '.join(thin)}"
         )
     if profile is not NarrativeProfile.EXPANSIVE:
         return
