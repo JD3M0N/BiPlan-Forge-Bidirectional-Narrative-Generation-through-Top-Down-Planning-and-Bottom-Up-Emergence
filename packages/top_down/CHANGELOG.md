@@ -1,5 +1,32 @@
 # Historial de cambios
 
+## No publicado
+
+- El plan se revalida en el unico punto donde se escribe `story_plan.json`
+  (`StoryPipeline._persist_plan`), no solo en las dos ramas que lo producen. Un
+  plan que incumpla su contrato estructural o el minimo de eventos de su perfil
+  aborta la ejecucion con `PLOT_VALIDATION_FAILED` en vez de guardarse y dejar
+  el run marcado como `completed`. Los artefactos de una ejecucion valida no
+  cambian.
+
+- El feedback de reparacion del planificador es ahora especifico por clase de
+  error en vez de volcar siempre la matriz de `PAYOFF_OF`. Cuando falta la rama
+  causal del perfil Expansiva, el prompt lleva los grados causales actuales de
+  cada evento y **una arista concreta y legal** que repara el plan; cuando una
+  dependencia apunta hacia atras, nombra la arista ofensora con sus dos `order`
+  y las dos reparaciones validas. Medido sobre los dos candidatos que Gemini
+  rechazo en la prueba canonica: el modelo trataba el contrato como un puzle de
+  conteo y perdia la restriccion de orden, primero omitiendo la rama y despues
+  anadiendola en direccion prohibida.
+
+- El planificador recibe un ejemplo trabajado de rama y reunion con ordenes
+  explicitos, porque la formulacion abstracta fallo dos veces seguidas.
+
+- Los intentos de planificacion pasan a depender del perfil
+  (`PLAN_ATTEMPTS_BY_PROFILE`): Expansiva dispone de 3 y el resto conserva 2.
+  `PlotValidationError` informa del numero real de intentos, que antes estaba
+  fijado a 2 en el mensaje y en `details`.
+
 ## 6.3.0
 
 - Corregido el reintento de revision: una excepcion degradable ya no descarta el

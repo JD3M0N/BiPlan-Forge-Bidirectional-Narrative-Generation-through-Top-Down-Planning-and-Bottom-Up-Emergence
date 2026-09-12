@@ -66,6 +66,12 @@ PROFILE_CHAPTER_BAND: dict[NarrativeProfile, tuple[int, int]] = {
 }
 
 
+# A chapter carrying a single event reads as a stub rather than a scene. Measured Expansive runs
+# left 42% of chapters that way because the planner aimed at the bare event floor, which the
+# chapter band cannot satisfy: 5 chapters with two events each already need 10, not 9.
+MIN_EVENTS_PER_CHAPTER = 2
+
+
 def profile_guidance(profile: NarrativeProfile) -> str:
     """Return the canonical downstream contract for one profile."""
     return PROFILE_GUIDANCE[profile]
@@ -79,3 +85,11 @@ def profile_min_events(profile: NarrativeProfile) -> int | None:
 def profile_chapter_band(profile: NarrativeProfile) -> tuple[int, int]:
     """Return the advisory minimum and maximum chapter count for a narrative profile."""
     return PROFILE_CHAPTER_BAND[profile]
+
+
+def profile_event_target(profile: NarrativeProfile) -> tuple[int, int]:
+    """Return the event range the chapter band implies at the per-chapter event floor."""
+    low_chapters, high_chapters = profile_chapter_band(profile)
+    minimum = profile_min_events(profile) or 0
+    low = max(low_chapters * MIN_EVENTS_PER_CHAPTER, minimum)
+    return low, max(high_chapters * MIN_EVENTS_PER_CHAPTER, low)

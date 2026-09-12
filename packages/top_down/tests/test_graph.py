@@ -4,7 +4,13 @@ from asg_top_down.graph import (
     validate_profile_structure,
     validate_story_plan,
 )
-from asg_top_down.profiles import NarrativeProfile
+from asg_top_down.profiles import (
+    MIN_EVENTS_PER_CHAPTER,
+    NarrativeProfile,
+    profile_chapter_band,
+    profile_event_target,
+    profile_min_events,
+)
 from asg_top_down.schemas import (
     ChapterDraft,
     ChapterPlan,
@@ -371,3 +377,19 @@ def test_structural_error_messages_stay_in_english() -> None:
     assert messages
     for message in messages:
         assert message.isascii(), message
+
+
+def test_the_event_target_follows_from_the_chapter_band_and_never_undercuts_the_floor() -> None:
+    assert profile_event_target(NarrativeProfile.ESSENTIAL) == (4, 6)
+    assert profile_event_target(NarrativeProfile.DEVELOPED) == (8, 10)
+    assert profile_event_target(NarrativeProfile.EXPANSIVE) == (10, 14)
+    for profile in NarrativeProfile:
+        low, high = profile_event_target(profile)
+        low_chapters, high_chapters = profile_chapter_band(profile)
+        floor = profile_min_events(profile) or 0
+        # The target is what makes the chapter band and the validated floor compatible: aiming at
+        # it satisfies validate_profile_structure, which aiming at the bare floor did not.
+        assert low >= floor
+        assert low >= low_chapters * MIN_EVENTS_PER_CHAPTER
+        assert high >= high_chapters * MIN_EVENTS_PER_CHAPTER
+        assert low <= high

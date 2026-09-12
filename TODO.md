@@ -7,13 +7,13 @@ Tareas agrupadas por subsistema. Cada una tiene: qué falta, cuándo se consider
 para sostener la tesis y la operación. `P2` es refactor que no cambia el comportamiento pero
 abarata el resto.
 
-**Orden sugerido:** los cuatro `P0` primero, empezando por las apps rotas (es el único que deja
-una funcionalidad de usuario inservible); luego `P1` empezando por CI y el lector de evaluaciones;
-por último `P2` empezando por dividir `pipeline.py`.
+**Orden sugerido:** queda un solo `P0` abierto (la banda de capítulos frente a los mínimos de
+eventos), que necesita decidir la salida y re-medir con API real; luego `P1` empezando por CI y el
+lector de evaluaciones; por último `P2` empezando por dividir `pipeline.py`.
 
-**Estado medido el 2026-09-07 sobre `2d7a1f2`** (más los cambios de Telegram/consola todavía sin
-commitear): 245 pruebas (243 pasan, 2 omitidas), `ruff check .`, `ruff format --check .`
-(117 archivos) y `pip check` limpios.
+**Estado medido el 2026-09-11 sobre `37a70a5`** (más el guard de persistencia del plan y el
+feedback de reparación causal, todavía sin commitear): 253 pruebas (251 pasan, 2 omitidas),
+`ruff check .`, `ruff format --check .` (117 archivos) y `pip check` limpios.
 Comparación de perfiles en [docs/calibracion_perfiles.md](docs/calibracion_perfiles.md).
 
 ---
@@ -50,20 +50,61 @@ Comparación de perfiles en [docs/calibracion_perfiles.md](docs/calibracion_perf
 
 ## Top-Down: perfiles y calibración
 
-- [ ] **`P0` Confirmar que ningún plan inválido se guarda como válido.** El run
+- [x] **`P0` Confirmar que ningún plan inválido se guarda como válido.** El run
   `Stories/Top-Down/20260903-175604-el-dominio-escamado` quedó marcado `status: completed` pese a
   incumplir el contrato Expansiva; su `plan_review.json` aprueba una bifurcación que el grafo no
-  tiene. **Cierre:** un test de regresión prueba que ningún `story_plan.json` puede persistirse sin
-  pasar `validate_profile_structure`, y una revalidación del corpus separa runs anteriores al
-  contrato de incumplimientos reales.
-  **Evidencia (2026-09-07):** la revalidación del corpus ya está hecha — de 39 runs `completed` con
+  tiene.
+  **Hecho (2026-09-11):** la validación deja de vivir solo en las dos ramas que producen el plan
+  (`pipeline.py:331` y :414) y pasa a la única frontera que lo escribe: `_persist_plan` (:348)
+  revalida `validate_story_plan` + `validate_profile_structure` y, si falla, aborta con
+  `PLOT_VALIDATION_FAILED` sin escribir `story_plan.json` ni dejar el run como `completed`. Los
+  artefactos de una ejecución válida no cambian. **Evidencia:**
+  `test_a_plan_breaking_its_profile_contract_is_never_persisted` (parametrizado sobre Expansiva y
+  Desarrollada; simula un bug futuro en la ruta de crítica sustituyendo `_critique_plan`) y
+  `test_the_story_plan_is_written_from_a_single_guarded_site`, que impide que una rama nueva vuelva
+  a saltarse el guard. Comprobado: los tres fallan si se revierte `_persist_plan` a un `save_json`
+  directo.
+  **Revalidación del corpus (2026-09-07):** ya estaba hecha — de 39 runs `completed` con
   perfil (más 22 anteriores al contrato, sin `narrative_profile`), 4 incumplen su contrato
   estructural, todos entre el 2026-09-01 y el 09-03. Tres son `generator_version` 6.0.0, es decir
   anteriores a `1bea0f1` (2026-09-03 14:43), que fue quien introdujo la regla rama→reunión: no son
   fallos, son runs previos a la norma. El único caso genuinamente anómalo es el que nombra este
   ítem: es 6.1.0 y se generó a las 17:56, después de la regla, y aun así carece de rama causal.
-  Ningún run posterior al 2026-09-04 incumple (15+ runs, incluidos los 6 del 09-07). Queda
-  pendiente **solo el test de regresión**.
+  Ningún run posterior al 2026-09-04 incumple (15+ runs, incluidos los 6 del 09-07).
+
+- [x] **`P1` Hacer que el planificador cumpla el contrato de rama causal (Expansiva).** La prueba
+  live canónica murió con `PLOT_VALIDATION_FAILED` tras agotar sus dos intentos: el modelo trataba
+  el contrato rama→reunión como un puzle de conteo y perdía la restricción de orden. En el intento 1
+  produjo dos raíces paralelas convergentes (reunión válida en `event_5`, ninguna rama: le faltaba
+  **una sola arista**); en el intento 2 la añadió como `event_4→event_3`, que satisface el conteo
+  pero apunta hacia atrás. El prompt de reparación no ayudaba: decía solo "Fix this structural
+  error" y volcaba la matriz de `PAYOFF_OF`, irrelevante para esa clase de fallo.
+  **Hecho (2026-09-11):** `_record_rejected_plan` despacha el feedback según el error
+  (`_repair_guidance`). Ante una rama faltante emite los grados causales de cada evento y **una
+  arista concreta y legal** que repara el plan (`_suggested_branch_edge`); ante una dependencia
+  hacia atrás nombra la arista con sus dos `order` y las dos reparaciones válidas; los fallos de
+  `payoff_of` conservan su matriz. El planificador recibe además un ejemplo trabajado de rama→reunión
+  con órdenes explícitos, y Expansiva dispone de un tercer intento
+  (`PLAN_ATTEMPTS_BY_PROFILE`), con `PlotValidationError` informando del número real de intentos en
+  vez del 2 fijo anterior. El contrato **no se relajó**.
+  **Evidencia medida con Gemini real (2026-09-11, `--no-audio`):** sobre el prompt canónico
+  Expansiva, la línea base completaba 0/1; tras el cambio **la planificación superó el contrato en
+  5 de 5 corridas** y ninguna volvió a ser rechazada por rama→reunión (los rechazos restantes son
+  del suelo de eventos: 6, 7, 7, 8 y 8 frente al mínimo de 9). Cuatro terminaron la historia
+  completa (`20260911-160244`, `-161105`, `-162223`, `-170230`); la quinta (`-165056`) murió después
+  de planificar por un `PROVIDER_ERROR` 503 UNAVAILABLE de Gemini, ajeno al cambio. Comprobado sobre
+  los `story_plan.json` resultantes que tienen rama y reunión reales con `rama.order < reunión.order`
+  (`event_1→event_7`, `event_4→event_8`, `event_3→event_6`, `event_3→event_7`). **Controles sin
+  degradación:** un run Esencial (`-163523`, 3 capítulos / 6 eventos) y uno Desarrollada (`-164429`,
+  4 / 7) aceptaron el plan **al primer intento**, sin rechazos ni avisos. Tests con proveedor falso en
+  `packages/top_down/tests/test_generator_v5.py`
+  (`test_a_join_without_a_branch_is_repaired_by_naming_the_missing_edge` replica la topología exacta
+  del fallo real, `test_backwards_dependency_retry_is_told_which_edge_points_back`,
+  `test_payoff_failures_still_receive_their_reference_matrix`,
+  `test_only_the_expansive_profile_earns_a_third_planning_attempt`).
+  **Trampa aprendida:** una arista hacia atrás sobre una cadena lineal dispara primero el detector de
+  ciclos, no el de dirección; para probar el caso real hay que reproducir su topología
+  (`1→4, 4→5, 4→3, 2→3, 3→5, …`), donde no hay ciclo.
 
 - [ ] **`P0` Conciliar la banda de capítulos con los mínimos de eventos.**
   `PROFILE_CHAPTER_BAND` (`packages/top_down/src/asg_top_down/profiles.py:62-66`: Esencial 2-3,
@@ -77,6 +118,11 @@ Comparación de perfiles en [docs/calibracion_perfiles.md](docs/calibracion_perf
   978 < 3369 < 4981, antes invertido en 3680 > 3171; cat. 7: 1553 < 3931 < 4252) y la inversión
   Desarrollada > Expansiva bajó del 34% al 0%. Expansiva subió +57% y +13% sobre su línea base, que
   era el objetivo de alargarla.
+  **Dato nuevo (2026-09-11, 3 corridas del prompt canónico Expansiva):** el planificador se queda
+  corto de eventos en el **primer** intento las tres veces (7, 7 y 8 frente al mínimo de 9) y solo
+  alcanza los 9 tras el rechazo. Con la banda 5-7 y 9 eventos, el reparto sigue dando capítulos de
+  un solo evento. Es el mismo desajuste aritmético que describe este ítem, ahora medido sobre el
+  caso canónico.
   **Pero la banda empeora el reparto de eventos:** capítulos con un solo evento pasan del 47% al
   67% en Desarrollada y del 19% al 30% en Expansiva (Esencial mejora del 16% al 0%). La causa es
   aritmética, no del modelo: con la banda 4-5 y el mínimo de 6 eventos, Desarrollada necesitaría
@@ -234,6 +280,17 @@ Comparación de perfiles en [docs/calibracion_perfiles.md](docs/calibracion_perf
   que dos evaluaciones simultáneas por Telegram se pisan. **Cierre:** el centinela no depende de
   comparación exacta, hay ruta de migración, y un test de concurrencia prueba que no se pierde
   ninguna evaluación.
+
+- [ ] **`P1` `test_real_gemini_smoke_run` exige un artefacto que el pipeline puede omitir por
+  diseño.** El test afirma `required_artifacts <= manifest["artifacts"]` con `plan_review.json`
+  dentro (`packages/top_down/tests/test_gemini_live.py:59`), pero `_critique_plan` degrada a aviso
+  cuando el crítico falla y en ese caso **no** escribe ese artefacto. Observado el 2026-09-11: el run
+  `20260911-170230` terminó `completed` con historia de 23 KB, las 11 etapas y un plan válido, y aun
+  así el test falló porque el crítico murió con `ProviderError` y el pipeline conservó
+  correctamente el primer plan válido. El test confunde "el crítico corrió" con "la ejecución es
+  válida". **Cierre:** el test tolera la degradación documentada (comprobando el aviso
+  correspondiente) o distingue artefactos obligatorios de condicionales, y deja de fallar por una
+  caída transitoria del proveedor.
 
 - [ ] **`P1` Armar un benchmark narrativo repetible.** Los prompts canónicos ya existen
   (`docs/prompts_top_down.md`) y `story_metrics.json`/`llm_usage.json` dan la parte automática;
