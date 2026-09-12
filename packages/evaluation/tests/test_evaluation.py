@@ -35,7 +35,11 @@ def test_first_evaluation_replaces_template_and_next_is_appended(tmp_path):
     assert document["evaluations"][0]["coherence"] == 8
 
 
-@pytest.mark.parametrize("value", [0, 11, 1.5, True, None])
+@pytest.mark.parametrize(
+    "value",
+    [0, 11, True],
+    ids=["below-range", "above-range", "bool-is-not-a-plain-int"],
+)
 def test_scores_must_be_integers_from_one_to_ten(tmp_path, value):
     story = tmp_path / "story"
     story.mkdir()

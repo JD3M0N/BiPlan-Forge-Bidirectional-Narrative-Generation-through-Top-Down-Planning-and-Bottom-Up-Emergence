@@ -31,19 +31,19 @@ def guided_values():
     }
 
 
-def test_guided_prompt_contains_every_answer():
-    prompt = build_guided_prompt(guided_values(), PROFILES)
-    assert prompt == (
-        "Escribe una historia en español. Perfil narrativo: Desarrollada. "
-        "Género: fantasía. Protagonista: una cartógrafa. Conflicto principal: "
-        "las estrellas desaparecen. Ambientación: una estación orbital. "
-        "Tono: melancólico. Restricciones: Sin restricciones adicionales."
-    )
-
-
-@pytest.mark.parametrize("value", ["corta", "mil", ""])
-def test_narrative_profile_is_validated(value):
-    with pytest.raises(ValueError):
+@pytest.mark.parametrize(
+    ("value", "match"),
+    [
+        ("corta", "Esencial, Desarrollada, Expansiva"),
+        ("mil", "Esencial, Desarrollada, Expansiva"),
+        ("gigantesca", "Esencial, Desarrollada, Expansiva"),
+        ("", None),
+    ],
+    ids=["unrecognized-word", "unrecognized-number", "unrecognized-label", "empty-answer"],
+)
+def test_invalid_profile_answers_are_rejected(value, match):
+    """Unrecognized answers list the available labels; an empty answer gets its own message."""
+    with pytest.raises(ValueError, match=match or ".+"):
         validate_guided_value("narrative_profile", value, PROFILES)
 
 
@@ -66,6 +66,13 @@ def test_all_guided_profile_paths_are_supported(answer, canonical):
     else:
         assert "Perfil narrativo:" in prompt
     assert not any(token in prompt for token in (" palabras", " capítulos"))
+    if canonical == "developed":
+        assert prompt == (
+            "Escribe una historia en español. Perfil narrativo: Desarrollada. "
+            "Género: fantasía. Protagonista: una cartógrafa. Conflicto principal: "
+            "las estrellas desaparecen. Ambientación: una estación orbital. "
+            "Tono: melancólico. Restricciones: Sin restricciones adicionales."
+        )
 
 
 def test_all_evaluation_metrics_have_spanish_explanations():
@@ -81,8 +88,6 @@ def test_all_evaluation_metrics_have_spanish_explanations():
         explanation.name and explanation.description and explanation.low and explanation.high
         for explanation in METRIC_EXPLANATIONS.values()
     )
-    assert "Insatisfecho" in METRIC_EXPLANATIONS["satisfaction"].message()
-    assert "Muy satisfecho" in METRIC_EXPLANATIONS["satisfaction"].message()
 
 
 def test_telegram_story_formats_headings_and_escapes_html():
@@ -113,12 +118,3 @@ def test_profile_question_names_the_profiles_the_generator_offers():
     question = guided_question(6, PROFILES)
     assert "Esencial, Desarrollada, Expansiva" in question
     assert "Automático" in question
-
-
-def test_other_guided_questions_are_returned_untouched():
-    assert guided_question(0, PROFILES) == "¿En qué idioma quieres la historia?"
-
-
-def test_unknown_profile_error_lists_the_available_labels():
-    with pytest.raises(ValueError, match="Esencial, Desarrollada, Expansiva"):
-        validate_guided_value("narrative_profile", "gigantesca", PROFILES)

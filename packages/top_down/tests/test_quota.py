@@ -1,3 +1,4 @@
+import pytest
 from asg_top_down.quota import SlidingWindowLimiter, retry_details
 
 
@@ -13,17 +14,19 @@ def test_retry_details_extracts_google_quota_fields() -> None:
     assert details["quota_id"] == "PerMinute"
 
 
-def test_retry_details_ignores_unrelated_three_digit_numbers() -> None:
-    error = Exception("El modelo devolvio 429 tokens en el intento con id 503201")
-    details = retry_details(error)
-    assert details["status"] is None
-
-
-def test_retry_details_prefers_explicit_code_over_confusing_text() -> None:
-    error = Exception("solicitud 503201 aceptada tras el intento 500")
-    error.code = 429
-    details = retry_details(error)
-    assert details["status"] == 429
+@pytest.mark.parametrize(
+    ("message", "code", "expected_status"),
+    [
+        ("El modelo devolvio 429 tokens en el intento con id 503201", None, None),
+        ("solicitud 503201 aceptada tras el intento 500", 429, 429),
+    ],
+    ids=["unrelated-three-digit-numbers-are-ignored", "explicit-code-wins-over-confusing-text"],
+)
+def test_retry_details_status_parsing(message, code, expected_status) -> None:
+    error = Exception(message)
+    if code is not None:
+        error.code = code
+    assert retry_details(error)["status"] == expected_status
 
 
 def test_sliding_window_never_accepts_more_than_capacity(monkeypatch) -> None:

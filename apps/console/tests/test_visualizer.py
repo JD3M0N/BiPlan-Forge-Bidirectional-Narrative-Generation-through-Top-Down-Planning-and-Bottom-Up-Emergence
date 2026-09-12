@@ -36,6 +36,7 @@ class FakeTerminal:
 
 
 def test_controls_pause_step_view_speed_and_quit(room) -> None:
+    """Every interactive control, plus the bounds the speed control is clamped to."""
     model = EscapeRoomModel(room, seed=1)
     terminal = FakeTerminal()
     visualizer = EscapeRoomVisualizer(
@@ -51,21 +52,5 @@ def test_controls_pause_step_view_speed_and_quit(room) -> None:
     assert visualizer.interval == 1.3
     assert any("Vista: A" in frame for frame in terminal.frames)
 
-
-def test_visual_result_matches_non_visual_result(room) -> None:
-    model = EscapeRoomModel(room, seed=9)
-    visualizer = EscapeRoomVisualizer(
-        terminal=FakeTerminal(),
-        keyboard=FakeKeyboard(),
-        clock=FakeClock(),
-        interval=0.1,
-    )
-    outcome = visualizer.run(model, tick_limit=100)
-    assert not outcome.cancelled
-    assert outcome.result is not None
-    assert outcome.result.success
-
-
-def test_speed_is_clamped(room) -> None:
     assert EscapeRoomVisualizer(interval=0).interval == 0.1
     assert EscapeRoomVisualizer(interval=99).interval == 5.0

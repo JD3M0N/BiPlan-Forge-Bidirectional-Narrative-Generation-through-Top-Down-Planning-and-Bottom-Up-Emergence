@@ -40,6 +40,17 @@ def provider_with(response=None, error: Exception | None = None) -> GeminiProvid
     return provider
 
 
+def valid_story_request_json() -> str:
+    return StoryRequest(
+        original_prompt="historia",
+        title="Título",
+        genre="fantasía",
+        tone="tenso",
+        narrative_profile="developed",
+        premise="Una promesa",
+    ).model_dump_json()
+
+
 def test_gemini_schema_omits_unsupported_additional_properties() -> None:
     schema = _gemini_response_schema(StoryRequest)
 
@@ -56,6 +67,24 @@ def test_gemini_schema_omits_unsupported_additional_properties() -> None:
     assert schema["properties"]["narrative_profile"]["$ref"] == "#/$defs/NarrativeProfile"
 
 
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda provider: provider.generate_structured(
+            system_instruction="test", prompt="test", schema=StoryRequest, profile="extraction"
+        ),
+        lambda provider: provider.generate_text(
+            system_instruction="test", prompt="test", profile="prose"
+        ),
+    ],
+    ids=["structured", "text"],
+)
+def test_empty_responses_are_rejected(call) -> None:
+    provider = provider_with(SimpleNamespace(parsed=None, text=""))
+    with pytest.raises(EmptyResponseError):
+        call(provider)
+
+
 def test_structured_generation_rejects_invalid_json() -> None:
     provider = provider_with(SimpleNamespace(parsed=None, text="{invalid"))
     with pytest.raises(StructuredResponseError):
@@ -65,18 +94,10 @@ def test_structured_generation_rejects_invalid_json() -> None:
 
 
 def test_structured_generation_retries_validation_once_then_succeeds() -> None:
-    valid = StoryRequest(
-        original_prompt="historia",
-        title="Título",
-        genre="fantasía",
-        tone="tenso",
-        narrative_profile="developed",
-        premise="Una promesa",
-    ).model_dump_json()
     provider = provider_with(
         [
             SimpleNamespace(parsed=None, text="{invalid"),
-            SimpleNamespace(parsed=None, text=valid),
+            SimpleNamespace(parsed=None, text=valid_story_request_json()),
         ]
     )
     result = provider.generate_structured(
@@ -119,73 +140,72 @@ def test_structured_generation_reports_sanitized_errors_after_retry() -> None:
     assert "PRIVATE PROMPT" not in json.dumps(details)
 
 
-def test_structured_generation_rejects_empty_response() -> None:
-    provider = provider_with(SimpleNamespace(parsed=None, text=""))
-    with pytest.raises(EmptyResponseError):
-        provider.generate_structured(
-            system_instruction="test", prompt="test", schema=StoryRequest, profile="extraction"
-        )
-
-
-def test_text_generation_rejects_empty_response() -> None:
-    provider = provider_with(SimpleNamespace(text="  "))
-    with pytest.raises(EmptyResponseError):
-        provider.generate_text(system_instruction="test", prompt="test", profile="prose")
-
-
 def test_provider_wraps_transport_errors() -> None:
     provider = provider_with(error=OSError("sin red"))
     with pytest.raises(ProviderError, match="comunicarse con Gemini"):
         provider.generate_text(system_instruction="test", prompt="test", profile="prose")
 
 
-def test_usage_metadata_is_recorded_without_count_tokens_by_default() -> None:
-    response = SimpleNamespace(
-        text="respuesta",
-        usage_metadata=SimpleNamespace(
-            prompt_token_count=10,
-            candidates_token_count=5,
-            thoughts_token_count=2,
-            cached_content_token_count=1,
-            total_token_count=17,
-        ),
+@pytest.mark.parametrize(
+    ("configure_limiter", "expected_count_calls"),
+    [(False, 0), (True, 1)],
+    ids=["no-tpm-limiter", "tpm-limiter-configured"],
+)
+def test_usage_metadata_respects_tpm_preflight_configuration(
+    configure_limiter, expected_count_calls
+) -> None:
+    """count_tokens only runs when a token-window limiter is actually configured."""
+    provider = provider_with(
+        SimpleNamespace(
+            text="respuesta",
+            usage_metadata=SimpleNamespace(
+                prompt_token_count=10,
+                candidates_token_count=5,
+                thoughts_token_count=2,
+                cached_content_token_count=1,
+                total_token_count=17,
+            ),
+        )
     )
-    provider = provider_with(response)
+    if configure_limiter:
+        acquired = []
+        provider._token_limiter = SimpleNamespace(
+            acquire=lambda tokens, callback: acquired.append(tokens)
+        )
+        provider.wait_callback = None
     assert (
         provider.generate_text(system_instruction="test", prompt="test", profile="prose")
         == "respuesta"
     )
-    assert provider._client.models.count_calls == 0
-    assert provider.usage_records[0].total_tokens == 17
+    assert provider._client.models.count_calls == expected_count_calls
+    if not configure_limiter:
+        assert provider.usage_records[0].total_tokens == 17
 
 
-def test_usage_callback_receives_each_completed_call() -> None:
-    provider = provider_with(SimpleNamespace(text="respuesta", usage_metadata=None))
-    received = []
-    provider.usage_callback = received.append
-    provider.generate_text(system_instruction="test", prompt="test", profile="prose")
-    assert received == provider.usage_records
-
-
-def test_tpm_preflight_calls_count_tokens_only_when_configured() -> None:
-    provider = provider_with(SimpleNamespace(text="respuesta", usage_metadata=None))
-    acquired = []
-    provider._token_limiter = SimpleNamespace(
-        acquire=lambda tokens, callback: acquired.append(tokens)
-    )
-    provider.wait_callback = None
-    provider.generate_text(system_instruction="sistema", prompt="texto", profile="prose")
-    assert provider._client.models.count_calls == 1
-    assert acquired == [42]
-
-
-def test_daily_quota_is_not_retried() -> None:
-    provider = provider_with(
-        error=Exception("429 Quota exceeded for metric: requests_per_day, 'quotaId': 'PerDay'")
-    )
+@pytest.mark.parametrize(
+    ("error_text", "expected_exception", "call"),
+    [
+        (
+            "429 Quota exceeded for metric: requests_per_day, 'quotaId': 'PerDay'",
+            GeminiDailyQuotaError,
+            lambda provider: provider._generate("text", provider._client.models.generate_content),
+        ),
+        (
+            "401 invalid API key",
+            ProviderError,
+            lambda provider: provider.generate_text(
+                system_instruction="test", prompt="test", profile="prose"
+            ),
+        ),
+    ],
+    ids=["daily-quota-not-retried", "authentication-error-not-retried"],
+)
+def test_non_retryable_errors_fail_immediately(error_text, expected_exception, call) -> None:
+    provider = provider_with(error=Exception(error_text))
     provider.max_retries = 3
-    with pytest.raises(GeminiDailyQuotaError):
-        provider._generate("text", provider._client.models.generate_content)
+    with pytest.raises(expected_exception):
+        call(provider)
+    assert len(provider._client.models.generate_calls) == 1
 
 
 def test_connect_error_is_retried_then_succeeds(monkeypatch) -> None:
@@ -212,69 +232,70 @@ def test_connect_error_is_retried_then_succeeds(monkeypatch) -> None:
     assert [record.status for record in provider.usage_records] == ["failed", "succeeded"]
 
 
-def test_authentication_error_is_not_retried() -> None:
-    provider = provider_with(error=Exception("401 invalid API key"))
-    provider.max_retries = 3
-    with pytest.raises(ProviderError):
-        provider.generate_text(system_instruction="test", prompt="test", profile="prose")
-    assert len(provider._client.models.generate_calls) == 1
+@pytest.mark.parametrize(
+    ("build_error", "assertions"),
+    [
+        (
+            lambda: type("ConnectError", (Exception,), {})(
+                "socket access forbidden by its access permissions"
+            ),
+            lambda error: "comunicarse con Gemini" in error.summary,
+        ),
+        (
+            lambda: type("ClientError", (Exception,), {"code": 400, "status": "INVALID_ARGUMENT"})(
+                "400 invalid argument"
+            ),
+            lambda error: (
+                error.details["status"] == 400
+                and error.details["status_name"] == "INVALID_ARGUMENT"
+                and "esquema" in error.summary
+            ),
+        ),
+    ],
+    ids=["socket-permission-is-transport", "client-error-preserves-status-diagnostics"],
+)
+def test_error_classification_preserves_safe_diagnostics(build_error, assertions) -> None:
+    error = provider_module._safe_provider_error(build_error())
+    assert assertions(error)
 
 
-def test_socket_permission_error_is_classified_as_transport() -> None:
-    class ConnectError(Exception):
-        pass
-
-    error = provider_module._safe_provider_error(
-        ConnectError("socket access forbidden by its access permissions")
-    )
-    assert "comunicarse con Gemini" in error.summary
-
-
-def test_client_error_preserves_safe_status_diagnostics() -> None:
-    class ClientError(Exception):
-        code = 400
-        status = "INVALID_ARGUMENT"
-
-    error = provider_module._safe_provider_error(ClientError("400 invalid argument"))
-    assert error.details["status"] == 400
-    assert error.details["status_name"] == "INVALID_ARGUMENT"
-    assert "esquema" in error.summary
-
-
-def test_temperature_uses_explicit_profile_for_structured_generation() -> None:
-    valid = StoryRequest(
-        original_prompt="historia",
-        title="Título",
-        genre="fantasía",
-        tone="tenso",
-        narrative_profile="developed",
-        premise="Una promesa",
-    ).model_dump_json()
-    provider = provider_with(SimpleNamespace(parsed=None, text=valid))
-    provider.generate_structured(
-        system_instruction="test", prompt="test", schema=StoryRequest, profile="extraction"
-    )
+@pytest.mark.parametrize(
+    ("call", "profile", "expected_temperature"),
+    [
+        (
+            lambda provider: provider.generate_structured(
+                system_instruction="test",
+                prompt="test",
+                schema=StoryRequest,
+                profile="extraction",
+            ),
+            None,
+            0.15,
+        ),
+        (
+            lambda provider: provider.generate_text(
+                system_instruction="test", prompt="test", profile="rewrite"
+            ),
+            None,
+            0.35,
+        ),
+    ],
+    ids=["structured-extraction-profile", "text-rewrite-profile"],
+)
+def test_temperature_uses_the_explicit_profile(call, profile, expected_temperature) -> None:
+    provider = provider_with(SimpleNamespace(parsed=None, text=valid_story_request_json()))
+    call(provider)
     config = provider._client.models.generate_calls[-1]["config"]
-    assert config.temperature == 0.15
+    assert config.temperature == expected_temperature
 
 
-def test_temperature_uses_explicit_profile_for_text_generation() -> None:
-    provider = provider_with(SimpleNamespace(text="respuesta", usage_metadata=None))
-    provider.generate_text(system_instruction="test", prompt="test", profile="rewrite")
-    config = provider._client.models.generate_calls[-1]["config"]
-    assert config.temperature == 0.35
-
-
-def test_temperature_rejects_unknown_profile() -> None:
+def test_unknown_temperature_profile_is_rejected_and_overrides_merge_with_defaults() -> None:
+    """An unknown profile name fails fast, and an explicit override only replaces its entry."""
     provider = provider_with(SimpleNamespace(text="respuesta", usage_metadata=None))
     with pytest.raises(ValueError, match="not-a-real-profile"):
         provider.generate_text(
             system_instruction="test", prompt="test", profile="not-a-real-profile"
         )
-
-
-def test_generation_profiles_override_merges_with_defaults() -> None:
-    provider = provider_with()
     provider.generation_profiles = {
         **provider_module._DEFAULT_GENERATION_PROFILES,
         "prose": 1.0,

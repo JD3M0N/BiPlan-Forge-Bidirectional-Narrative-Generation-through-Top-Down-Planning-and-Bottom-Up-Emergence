@@ -133,28 +133,29 @@ def test_story_audio_detects_language_and_selects_novel_voice(
     assert not list(tmp_path.glob("*.tmp"))
 
 
-def test_story_audio_retries_and_cleans_partial_files(tmp_path, fake_tts):
+@pytest.mark.parametrize(
+    "failures",
+    [2, 3],
+    ids=["recovers-before-exhausting-retries", "fails-after-exhausting-retries"],
+)
+def test_story_audio_retries_then_recovers_or_fails_cleanly(tmp_path, fake_tts, failures):
+    """Two failures still recover; three exhaust the retries without partial files."""
     story = tmp_path / "story.md"
     story.write_text("Una historia suficientemente larga para detectar español.", encoding="utf-8")
-    FakeCommunicate.failures = 2
+    FakeCommunicate.failures = failures
 
-    artifact = asyncio.run(create_story_audio(story, retry_delays=(0, 0), voice_manager=fake_tts))
-
-    assert artifact.path.is_file()
-    assert FakeCommunicate.attempts == 3
-    assert not list(tmp_path.glob("*.tmp"))
-
-
-def test_story_audio_failure_is_controlled_and_recorded(tmp_path, fake_tts):
-    story = tmp_path / "story.md"
-    story.write_text("Una historia suficientemente larga para detectar español.", encoding="utf-8")
-    FakeCommunicate.failures = 3
-
-    with pytest.raises(AudioGenerationError):
-        asyncio.run(create_story_audio(story, retry_delays=(0, 0)))
-
-    metadata = json.loads((tmp_path / "audio.json").read_text(encoding="utf-8"))
-    assert metadata["status"] == "failed"
-    assert metadata["error"] == "OSError"
-    assert not (tmp_path / "story.mp3").exists()
-    assert not list(tmp_path.glob("*.tmp"))
+    if failures < 3:
+        artifact = asyncio.run(
+            create_story_audio(story, retry_delays=(0, 0), voice_manager=fake_tts)
+        )
+        assert artifact.path.is_file()
+        assert FakeCommunicate.attempts == failures + 1
+        assert not list(tmp_path.glob("*.tmp"))
+    else:
+        with pytest.raises(AudioGenerationError):
+            asyncio.run(create_story_audio(story, retry_delays=(0, 0)))
+        metadata = json.loads((tmp_path / "audio.json").read_text(encoding="utf-8"))
+        assert metadata["status"] == "failed"
+        assert metadata["error"] == "OSError"
+        assert not (tmp_path / "story.mp3").exists()
+        assert not list(tmp_path.glob("*.tmp"))

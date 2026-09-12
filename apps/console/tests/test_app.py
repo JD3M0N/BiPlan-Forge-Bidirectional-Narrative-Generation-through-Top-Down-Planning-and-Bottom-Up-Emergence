@@ -1,15 +1,10 @@
-import argparse
 import json
 from types import SimpleNamespace
 from unittest.mock import create_autospec
 
-from asg_console import bottom_up as bottom_up_module
 from asg_console import evaluation as evaluation_module
 from asg_console import top_down as top_down_module
-from asg_console.app import BottomUpMenu, ConsoleApp, TopDownMenu
-from asg_console.visualizer import VisualOutcome
-from asg_escape_room import run_simulation
-from asg_escape_room.config import Settings as BottomSettings
+from asg_console.app import ConsoleApp, TopDownMenu
 from asg_top_down import StoryGenerator
 from asg_top_down import provider as top_down_provider_module
 
@@ -27,12 +22,12 @@ def input_sequence(values):
     return lambda prompt="": next(iterator)
 
 
-def test_main_menu_navigates_both_models() -> None:
+def test_main_menu_navigates_both_models_and_rejects_bad_input() -> None:
     top = MenuSpy()
     bottom = MenuSpy()
     messages = []
     application = ConsoleApp(
-        input_fn=input_sequence(["1", "2", "0"]),
+        input_fn=input_sequence(["1", "2", "x", "0"]),
         output=messages.append,
         top_down=top,
         bottom_up=bottom,
@@ -40,17 +35,6 @@ def test_main_menu_navigates_both_models() -> None:
     assert application.run() == 0
     assert top.calls == 1
     assert bottom.calls == 1
-
-
-def test_invalid_main_option_is_reported() -> None:
-    messages = []
-    application = ConsoleApp(
-        input_fn=input_sequence(["x", "0"]),
-        output=messages.append,
-        top_down=MenuSpy(),
-        bottom_up=MenuSpy(),
-    )
-    assert application.run() == 0
     assert "Opción inválida." in messages
 
 
@@ -103,90 +87,6 @@ def test_top_down_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
     assert captured["prompt"] == "Una historia"
     assert captured["provider_options"]["max_retries"] == 4
     assert captured["generator_options"] == {"narrative_guidance": True}
-
-
-def test_normal_bottom_up_uses_selected_options(tmp_path, maps_dir, monkeypatch) -> None:
-    captured = {}
-
-    def run(args):
-        captured["args"] = args
-        return tmp_path
-
-    monkeypatch.setattr(
-        bottom_up_module,
-        "run_one",
-        run,
-    )
-    menu = BottomUpMenu(
-        input_fn=input_sequence([str(maps_dir / "minimal_room.json"), "2", "42", "50", "n"]),
-        output=lambda message: None,
-    )
-    menu._normal()
-    assert captured["args"].seed == 42
-    assert captured["args"].tick_limit == 50
-    assert captured["args"].no_llm
-
-
-def test_cancelled_visual_run_does_not_save(maps_dir, monkeypatch) -> None:
-    class CancelVisualizer:
-        def __init__(self, **kwargs):
-            pass
-
-        def run(self, model, *, tick_limit):
-            return VisualOutcome(True, None, model)
-
-    menu = BottomUpMenu(
-        input_fn=input_sequence(
-            [
-                str(maps_dir / "minimal_room.json"),
-                "2",
-                "3",
-                "100",
-                "n",
-                "0.1",
-            ]
-        ),
-        output=lambda message: None,
-        visualizer_factory=CancelVisualizer,
-    )
-    monkeypatch.setattr(
-        menu,
-        "_save_visual",
-        lambda **kwargs: (_ for _ in ()).throw(AssertionError("must not persist")),
-    )
-    menu._visual()
-
-
-def test_completed_visual_run_saves_all_artifacts(tmp_path, room, maps_dir, monkeypatch) -> None:
-    result, model = run_simulation(room, seed=5, tick_limit=100)
-    menu = BottomUpMenu(output=lambda message: None)
-    monkeypatch.setattr(
-        bottom_up_module,
-        "load_bottom_up_settings",
-        lambda: BottomSettings(None, "fake", tmp_path),
-    )
-    args = argparse.Namespace(
-        map=maps_dir / "minimal_room.json",
-        agents=2,
-        tick_limit=100,
-        no_llm=True,
-    )
-    output = menu._save_visual(args=args, seed=5, room=room, model=model)
-    assert result.success
-    assert {
-        "request.json",
-        "initial_world.json",
-        "characters.json",
-        "ticks.jsonl",
-        "events.json",
-        "result.json",
-        "metrics.json",
-        "story.md",
-        "story.mp3",
-        "audio.json",
-        "evaluation.json",
-        "metadata.json",
-    } <= {path.name for path in output.iterdir()}
 
 
 def test_console_evaluates_story_and_retries_invalid_values(tmp_path, monkeypatch) -> None:

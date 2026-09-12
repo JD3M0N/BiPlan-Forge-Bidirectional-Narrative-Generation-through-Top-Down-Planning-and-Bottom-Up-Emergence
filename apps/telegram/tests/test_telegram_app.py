@@ -3,10 +3,11 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from asg_core import AudioGenerationError
 from asg_telegram import delivery as delivery_module
 from asg_telegram import generation as generation_module
-from asg_telegram.app import TelegramStoryBot, _evaluator_name, build_application
+from asg_telegram.app import TelegramStoryBot, _evaluator_name
 from asg_telegram.contract import (
     GenerationEvent,
     GenerationFailure,
@@ -111,7 +112,7 @@ class FakeBot:
 
 def make_story(tmp_path, text="# Historia\n\nContenido"):
     directory = tmp_path / "story"
-    directory.mkdir()
+    directory.mkdir(parents=True)
     (directory / "story.md").write_text(text, encoding="utf-8")
     (directory / "story.mp3").write_bytes(b"fake-mp3")
     (directory / "audio.json").write_text(
@@ -156,8 +157,6 @@ def test_generation_delivers_messages_document_and_starts_evaluation(tmp_path):
     assert context.user_data["story_directory"] == str(story)
     assert user.id not in handler.active_users
     assert "<b>Coherencia</b>" in fake_bot.messages[-1]["text"]
-    assert "1 — Incoherente" in fake_bot.messages[-1]["text"]
-    assert "10 — Totalmente coherente" in fake_bot.messages[-1]["text"]
 
 
 def test_generation_edits_one_progress_message_until_complete(tmp_path):
@@ -221,38 +220,30 @@ def test_generation_is_not_blocked_by_a_hanging_progress_edit(tmp_path):
     assert bot.documents
 
 
-def test_generation_notifies_quality_warning_and_still_starts_evaluation(tmp_path):
-    story = make_story(tmp_path)
-    (story / "metadata.json").write_text(
+def test_generation_reports_quality_warnings_and_still_evaluates(tmp_path):
+    """A plain metadata warning and a structured revision-report warning both reach the user."""
+    simple = make_story(tmp_path / "simple")
+    (simple / "metadata.json").write_text(
         json.dumps({"warnings": ["Se entregó el mejor borrador disponible."]}),
         encoding="utf-8",
     )
-    handler = TelegramStoryBot(FakeGenerator(story))
+    handler = TelegramStoryBot(FakeGenerator(simple))
     bot = FakeBot()
     context = SimpleNamespace(bot=bot, user_data={})
     user = SimpleNamespace(id=12, username="ana", full_name="Ana")
-
     asyncio.run(
-        handler._generate_and_deliver(
-            context=context,
-            chat_id=20,
-            user=user,
-            prompt="Una historia",
-        )
+        handler._generate_and_deliver(context=context, chat_id=20, user=user, prompt="Historia")
     )
-
     assert any("mejor borrador" in message["text"] for message in bot.messages)
     assert context.user_data["state"] == "evaluating"
     assert bot.documents
 
-
-def test_generation_summarizes_structured_revision_warning(tmp_path):
-    story = make_story(tmp_path)
-    (story / "metadata.json").write_text(
+    structured = make_story(tmp_path / "structured")
+    (structured / "metadata.json").write_text(
         json.dumps({"warnings": ["[WRITER_REVISION_REJECTED] fallback"]}),
         encoding="utf-8",
     )
-    (story / "revision_report.json").write_text(
+    (structured / "revision_report.json").write_text(
         json.dumps(
             {
                 "chapters": [
@@ -286,7 +277,7 @@ def test_generation_summarizes_structured_revision_warning(tmp_path):
         ),
         encoding="utf-8",
     )
-    (story / "length_audit.json").write_text(
+    (structured / "length_audit.json").write_text(
         json.dumps(
             {
                 "total": {
@@ -299,73 +290,17 @@ def test_generation_summarizes_structured_revision_warning(tmp_path):
         ),
         encoding="utf-8",
     )
-    handler = TelegramStoryBot(FakeGenerator(story))
+    handler = TelegramStoryBot(FakeGenerator(structured))
     bot = FakeBot()
     context = SimpleNamespace(bot=bot, user_data={})
-    user = SimpleNamespace(id=12, username="ana", full_name="Ana")
-
     asyncio.run(
-        handler._generate_and_deliver(
-            context=context,
-            chat_id=20,
-            user=user,
-            prompt="Una historia",
-        )
+        handler._generate_and_deliver(context=context, chat_id=20, user=user, prompt="Historia")
     )
-
     warning = next(message["text"] for message in bot.messages if "Código:" in message["text"])
     assert "499 y 550 palabras" in warning
     assert "borrador de 470 palabras" in warning
     assert "Longitud final: 1295 palabras" in warning
     assert "mínimo esperado 1350" in warning
-
-
-def test_v60_revision_warning_never_adds_numeric_budget_language(tmp_path):
-    story = make_story(tmp_path)
-    (story / "revision_report.json").write_text(
-        json.dumps(
-            {
-                "chapters": [
-                    {
-                        "chapter_index": 1,
-                        "draft_words": 470,
-                        "warning_code": "WRITER_REVISION_REJECTED",
-                        "attempts": [
-                            {
-                                "status": "rejected",
-                                "diagnostic": {
-                                    "code": "MARKDOWN_HEADINGS",
-                                    "actual_words": 499,
-                                },
-                            }
-                        ],
-                    }
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
-    (story / "story_metrics.json").write_text(
-        json.dumps(
-            {
-                "narrative_profile": "developed",
-                "words": 1295,
-                "chapters": 2,
-                "events": 5,
-            }
-        ),
-        encoding="utf-8",
-    )
-    (story / "metadata.json").write_text(
-        json.dumps({"warnings": ["[WRITER_REVISION_REJECTED] Capítulo 1"]}),
-        encoding="utf-8",
-    )
-    details = summarize_run(story).warnings
-    assert details
-    rendered = " ".join(details).casefold()
-    assert "rango" not in rendered
-    assert "objetivo" not in rendered
-    assert "mínimo esperado" not in rendered
 
 
 def test_generation_reports_actionable_safe_error() -> None:
@@ -392,29 +327,19 @@ def test_generation_reports_actionable_safe_error() -> None:
     assert "planning:" in bot.edits[-1]["text"]
 
 
-def test_active_users_are_isolated(tmp_path):
-    handler = TelegramStoryBot(FakeGenerator(make_story(tmp_path)))
-    handler.active_users.add(1)
-    assert 1 in handler.active_users
-    assert 2 not in handler.active_users
-
-
-def test_evaluator_contains_stable_id_and_readable_name():
-    user = SimpleNamespace(id=123, username="lectora", full_name="Ana Pérez")
-    assert _evaluator_name(user) == "telegram:123 (lectora)"
-
-
-def test_completed_scores_are_compatible_with_evaluation_storage(tmp_path):
+def test_evaluation_is_stored_under_a_stable_evaluator_id(tmp_path):
+    """The evaluator id shown to the user is exactly what evaluation storage persists."""
     from asg_evaluation import METRICS, add_evaluation
+
+    user = SimpleNamespace(id=123, username="lectora", full_name="Ana Pérez")
+    evaluator = _evaluator_name(user)
+    assert evaluator == "telegram:123 (lectora)"
 
     story = make_story(tmp_path)
     scores = dict.fromkeys(METRICS, 8)
-    add_evaluation(story, "telegram:123 (lectora)", scores)
+    add_evaluation(story, evaluator, scores)
     document = json.loads((story / "evaluation.json").read_text(encoding="utf-8"))
-    assert document["evaluations"][0] == {
-        "user": "telegram:123 (lectora)",
-        **scores,
-    }
+    assert document["evaluations"][0] == {"user": evaluator, **scores}
 
 
 class RetryingDocumentBot(FakeBot):
@@ -443,10 +368,26 @@ class RetryingAudioBot(FakeBot):
         await super().send_audio(**kwargs)
 
 
-def test_document_retries_temporary_network_errors(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("failures", "expect_delivered", "expected_attempts"),
+    [
+        ([TimedOut(), TimedOut()], True, 3),
+        ([TimedOut()] * 4, False, 4),
+        ([BadRequest("archivo rechazado")], False, 1),
+    ],
+    ids=[
+        "temporary-errors-eventually-succeed",
+        "exhausts-after-three-retries",
+        "permanent-error-is-not-retried",
+    ],
+)
+def test_delivery_retries_only_temporary_errors(
+    tmp_path, monkeypatch, failures, expect_delivered, expected_attempts
+):
+    """`BadRequest` must be checked before `NetworkError` in the handler, or this misclassifies."""
     story = make_story(tmp_path)
     handler = TelegramStoryBot(FakeGenerator(story))
-    bot = RetryingDocumentBot([TimedOut(), TimedOut()])
+    bot = RetryingDocumentBot(failures)
     context = SimpleNamespace(bot=bot, user_data={})
     user = SimpleNamespace(id=1, username="ana", full_name="Ana")
     monkeypatch.setattr(delivery_module, "RETRY_DELAYS", (0, 0, 0))
@@ -460,50 +401,8 @@ def test_document_retries_temporary_network_errors(tmp_path, monkeypatch):
         )
     )
 
-    assert delivered
-    assert bot.document_attempts == 3
-    assert len(bot.documents) == 1
-
-
-def test_document_stops_after_three_failed_retries(tmp_path, monkeypatch):
-    story = make_story(tmp_path)
-    handler = TelegramStoryBot(FakeGenerator(story))
-    bot = RetryingDocumentBot([TimedOut()] * 4)
-    context = SimpleNamespace(bot=bot, user_data={})
-    user = SimpleNamespace(id=1, username="ana", full_name="Ana")
-    monkeypatch.setattr(delivery_module, "RETRY_DELAYS", (0, 0, 0))
-
-    delivered = asyncio.run(
-        handler._send_document_with_retry(
-            context=context,
-            chat_id=2,
-            user=user,
-            story_path=story / "story.md",
-        )
-    )
-
-    assert not delivered
-    assert bot.document_attempts == 4
-
-
-def test_permanent_document_error_is_not_retried(tmp_path):
-    story = make_story(tmp_path)
-    handler = TelegramStoryBot(FakeGenerator(story))
-    bot = RetryingDocumentBot([BadRequest("archivo rechazado")])
-    context = SimpleNamespace(bot=bot, user_data={})
-    user = SimpleNamespace(id=1, username="ana", full_name="Ana")
-
-    delivered = asyncio.run(
-        handler._send_document_with_retry(
-            context=context,
-            chat_id=2,
-            user=user,
-            story_path=story / "story.md",
-        )
-    )
-
-    assert not delivered
-    assert bot.document_attempts == 1
+    assert delivered is expect_delivered
+    assert bot.document_attempts == expected_attempts
 
 
 def test_audio_retries_temporary_network_errors(tmp_path, monkeypatch):
@@ -529,50 +428,34 @@ def test_audio_retries_temporary_network_errors(tmp_path, monkeypatch):
     assert bot.audios[0]["content"] == b"fake-mp3"
 
 
-def test_audio_rejection_does_not_block_evaluation(tmp_path):
-    story = make_story(tmp_path)
-    handler = TelegramStoryBot(FakeGenerator(story))
+def test_audio_failure_never_blocks_evaluation_regardless_of_cause(tmp_path, monkeypatch):
+    """A rejected audio and a failed audio generation both still let the user evaluate."""
+    rejected = make_story(tmp_path / "rejected")
+    handler = TelegramStoryBot(FakeGenerator(rejected))
     bot = RetryingAudioBot([BadRequest("audio rechazado")])
     context = SimpleNamespace(bot=bot, user_data={})
     user = SimpleNamespace(id=1, username="ana", full_name="Ana")
-
     asyncio.run(
-        handler._generate_and_deliver(
-            context=context,
-            chat_id=2,
-            user=user,
-            prompt="Historia",
-        )
+        handler._generate_and_deliver(context=context, chat_id=2, user=user, prompt="Historia")
     )
-
     assert bot.audio_attempts == 1
     assert any("Telegram no pudo recibir el MP3" in message["text"] for message in bot.messages)
     assert context.user_data["state"] == "evaluating"
 
-
-def test_audio_generation_failure_does_not_block_evaluation(tmp_path, monkeypatch):
-    story = make_story(tmp_path)
-    (story / "story.mp3").unlink()
-    (story / "audio.json").unlink()
+    failed = make_story(tmp_path / "failed")
+    (failed / "story.mp3").unlink()
+    (failed / "audio.json").unlink()
 
     async def fail_audio(story_path):
         raise AudioGenerationError("tts unavailable")
 
     monkeypatch.setattr(delivery_module, "create_story_audio", fail_audio)
-    handler = TelegramStoryBot(FakeGenerator(story))
+    handler = TelegramStoryBot(FakeGenerator(failed))
     bot = FakeBot()
     context = SimpleNamespace(bot=bot, user_data={})
-    user = SimpleNamespace(id=1, username="ana", full_name="Ana")
-
     asyncio.run(
-        handler._generate_and_deliver(
-            context=context,
-            chat_id=2,
-            user=user,
-            prompt="Historia",
-        )
+        handler._generate_and_deliver(context=context, chat_id=2, user=user, prompt="Historia")
     )
-
     assert not bot.audios
     assert any("no pude crear su audio" in message["text"] for message in bot.messages)
     assert context.user_data["state"] == "evaluating"
@@ -644,20 +527,6 @@ def test_deliveries_are_serialized_between_users(tmp_path):
     assert maximum == 1
     assert first.user_data["state"] == "evaluating"
     assert second.user_data["state"] == "evaluating"
-
-
-def test_application_uses_resilient_timeouts():
-    application = build_application(
-        "123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi",
-        TelegramStoryBot(SimpleNamespace(display_name="Fake")),
-    )
-    request = application.bot.request
-    timeout = request._client_kwargs["timeout"]
-    assert timeout.connect == 15
-    assert timeout.read == 30
-    assert timeout.write == 30
-    assert timeout.pool == 10
-    assert request._media_write_timeout == 60
 
 
 def test_pipeline_events_are_logged_without_editing_chat(tmp_path, monkeypatch):

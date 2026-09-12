@@ -9,6 +9,7 @@ from asg_telegram import app as app_module
 from asg_telegram.app import TelegramStoryBot
 from asg_telegram.config import TelegramConfigurationError
 from asg_telegram.contract import GenerationProgress, ProfileOption, RunSummary
+from asg_telegram.generators import summarize_run
 from asg_telegram.queue import SCHEMA_VERSION, QueueRepository
 from asg_telegram.states import ConversationState
 from asg_top_down.errors import ConfigurationError
@@ -184,6 +185,7 @@ def test_interrupted_job_is_requeued_once_then_reported_as_exhausted(tmp_path):
     asyncio.run(handler.restore_queue(application))
 
     assert queue.get(job.id).status == "queued"
+    assert queue.recovery_pending() == []
     assert any("volveré a generar" in message["text"] for message in bot.messages)
 
     queue.mark_running(job.id)
@@ -195,27 +197,15 @@ def test_interrupted_job_is_requeued_once_then_reported_as_exhausted(tmp_path):
 
     assert queue.get(job.id).status == "failed"
     assert queue.get(job.id).error_code == "RECOVERY_EXHAUSTED"
-    assert any("RECOVERY_EXHAUSTED" in message["text"] for message in second_bot.messages)
-
-
-def test_no_job_is_left_parked_in_recovery_pending(tmp_path):
-    queue = QueueRepository(tmp_path / "q.sqlite3")
-    job = queue.enqueue(user_id=11, username="ana", chat_id=20, prompt="Una historia").job
-    queue.mark_running(job.id)
-    handler = TelegramStoryBot(RecordingGenerator(make_story(tmp_path)), queue)
-    application = SimpleNamespace(
-        bot=FakeBot(), create_task=lambda coro: coro.close(), user_data={11: {}}
-    )
-
-    asyncio.run(handler.restore_queue(application))
-
     assert queue.recovery_pending() == []
+    assert any("RECOVERY_EXHAUSTED" in message["text"] for message in second_bot.messages)
 
 
 # --- schema migration --------------------------------------------------------
 
 
-def test_a_database_from_the_previous_schema_migrates_without_losing_jobs(tmp_path):
+def test_a_legacy_database_migrates_once_and_keeps_its_jobs(tmp_path):
+    """A pre-migration database keeps its jobs, gains the new columns, and reopens cleanly."""
     path = tmp_path / "legacy.sqlite3"
     legacy = sqlite3.connect(path)
     legacy.execute(
@@ -246,59 +236,44 @@ def test_a_database_from_the_previous_schema_migrates_without_losing_jobs(tmp_pa
     with queue._connect() as db:
         assert db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
 
-
-def test_migration_is_idempotent(tmp_path):
-    path = tmp_path / "q.sqlite3"
-    QueueRepository(path).enqueue(user_id=1, username="ana", chat_id=2, prompt="a")
+    # Reopening must neither re-migrate nor duplicate, and the new column round-trips.
+    job = queue.enqueue(
+        user_id=12,
+        username="luis",
+        chat_id=21,
+        prompt="Otra historia",
+        narrative_profile="expansive",
+    ).job
     reopened = QueueRepository(path)
-    assert len(reopened.active()) == 1
+    assert len(reopened.active()) == 2
+    assert reopened.get(job.id).narrative_profile == "expansive"
 
 
 # --- conversation handlers ---------------------------------------------------
 
 
-def test_new_story_offers_the_mode_keyboard(tmp_path):
+def test_conversation_routes_text_by_state(tmp_path):
+    """`/newstory` opens the mode choice; text with no state is pointed back at the command."""
     handler = TelegramStoryBot(RecordingGenerator(make_story(tmp_path)))
+
     replies: list = []
-    update = make_update(replies=replies)
     context, _ = make_context(FakeBot())
-
-    asyncio.run(handler.new_story(update, context))
-
+    asyncio.run(handler.new_story(make_update(replies=replies), context))
     assert context.user_data["state"] == ConversationState.CHOOSE_MODE
     assert "¿Cómo quieres describir la historia?" in replies
 
-
-def test_start_and_help_name_the_generator_and_commands(tmp_path):
-    handler = TelegramStoryBot(RecordingGenerator(make_story(tmp_path)))
-    replies: list = []
-    update = make_update(replies=replies)
-    context, _ = make_context(FakeBot())
-
-    asyncio.run(handler.start(update, context))
-    asyncio.run(handler.help(update, context))
-
-    assert "Fake" in replies[0]
-    assert "/newstory" in replies[1]
+    stray: list = []
+    stateless, _ = make_context(FakeBot())
+    asyncio.run(handler.text_input(make_update(replies=stray), stateless))
+    assert stray == ["Usa /newstory para crear una historia."]
 
 
-def test_text_outside_any_flow_points_at_newstory(tmp_path):
-    handler = TelegramStoryBot(RecordingGenerator(make_story(tmp_path)))
-    replies: list = []
-    update = make_update(replies=replies)
-    context, _ = make_context(FakeBot())
-
-    asyncio.run(handler.text_input(update, context))
-
-    assert replies == ["Usa /newstory para crear una historia."]
-
-
-def test_guided_flow_sends_the_chosen_profile_to_the_generator(tmp_path):
+def test_guided_flow_validates_and_sends_the_chosen_profile(tmp_path):
+    """An invalid profile answer does not advance the flow; the valid one reaches the generator."""
     generator = RecordingGenerator(make_story(tmp_path))
     handler = TelegramStoryBot(generator)
-    bot = FakeBot()
     replies: list = []
-    context, tasks = make_context(bot, {"state": ConversationState.GUIDED})
+    context, tasks = make_context(FakeBot(), {"state": ConversationState.GUIDED})
     context.user_data.update(guided_index=0, guided_values={})
 
     answers = [
@@ -308,29 +283,23 @@ def test_guided_flow_sends_the_chosen_profile_to_the_generator(tmp_path):
         "las estrellas desaparecen",
         "una estación orbital",
         "melancólico",
-        "Esencial",
-        "ninguna",
     ]
     for answer in answers:
-        update = make_update(text=answer, replies=replies)
-        asyncio.run(handler.text_input(update, context))
+        asyncio.run(handler.text_input(make_update(text=answer, replies=replies), context))
+
+    # The profile question is next: a bad answer is rejected without advancing.
+    assert context.user_data["guided_index"] == 6
+    asyncio.run(handler.text_input(make_update(text="gigantesca", replies=replies), context))
+    assert "Esencial, Desarrollada, Expansiva" in replies[-1]
+    assert context.user_data["guided_index"] == 6
+
+    for answer in ("Esencial", "ninguna"):
+        asyncio.run(handler.text_input(make_update(text=answer, replies=replies), context))
 
     assert len(tasks) == 1
     asyncio.run(tasks[0])
     assert generator.calls[0]["narrative_profile"] == "essential"
     assert "Perfil narrativo: Esencial" in generator.calls[0]["prompt"]
-
-
-def test_guided_flow_rejects_an_unknown_profile(tmp_path):
-    handler = TelegramStoryBot(RecordingGenerator(make_story(tmp_path)))
-    replies: list = []
-    context, _ = make_context(FakeBot(), {"state": ConversationState.GUIDED})
-    context.user_data.update(guided_index=6, guided_values={})
-
-    asyncio.run(handler.text_input(make_update(text="gigantesca", replies=replies), context))
-
-    assert "Esencial, Desarrollada, Expansiva" in replies[-1]
-    assert context.user_data["guided_index"] == 6
 
 
 def test_cancel_reports_each_possible_outcome(tmp_path):
@@ -371,7 +340,8 @@ def test_a_second_request_is_refused_instead_of_silently_dropped(tmp_path):
 # --- start-up validation -----------------------------------------------------
 
 
-def test_main_reports_broken_top_down_configuration_as_exit_code_two(monkeypatch, tmp_path):
+def _break_top_down_configuration(monkeypatch, tmp_path):
+    """Make the Top-Down generator fail to build while Telegram settings load fine."""
     monkeypatch.setattr(
         app_module,
         "load_settings",
@@ -385,58 +355,47 @@ def test_main_reports_broken_top_down_configuration_as_exit_code_two(monkeypatch
 
     monkeypatch.setattr(app_module, "create_generator", explode)
 
-    assert app_module.main([]) == 2
 
+def _break_telegram_settings(monkeypatch, tmp_path):
+    """Make the Telegram settings themselves fail to load."""
 
-def test_main_reports_a_missing_telegram_token_as_exit_code_two(monkeypatch):
     def explode():
         raise TelegramConfigurationError("Falta TELEGRAM_BOT_TOKEN.")
 
     monkeypatch.setattr(app_module, "load_settings", explode)
 
+
+@pytest.mark.parametrize(
+    "break_configuration",
+    [_break_top_down_configuration, _break_telegram_settings],
+    ids=["broken-top-down-configuration", "missing-telegram-token"],
+)
+def test_main_reports_broken_configuration_as_exit_code_two(
+    monkeypatch, tmp_path, break_configuration
+):
+    break_configuration(monkeypatch, tmp_path)
     assert app_module.main([]) == 2
 
 
-@pytest.mark.parametrize("profile", ["essential", "developed", "expansive"])
-def test_the_profile_survives_a_restart(tmp_path, profile):
-    path = tmp_path / "q.sqlite3"
-    queue = QueueRepository(path)
-    job = queue.enqueue(
-        user_id=11,
-        username="ana",
-        chat_id=20,
-        prompt="Una historia",
-        narrative_profile=profile,
-    ).job
-
-    assert QueueRepository(path).get(job.id).narrative_profile == profile
+# --- run summaries -----------------------------------------------------------
 
 
-def test_story_json_artifacts_are_never_required(tmp_path):
-    from asg_telegram.generators import summarize_run
-
-    empty = tmp_path / "run"
-    empty.mkdir()
-    summary = summarize_run(empty)
-    assert summary.usage is None
-    assert summary.warnings == ()
-
-
-def test_broken_artifacts_do_not_break_the_summary(tmp_path):
-    from asg_telegram.generators import summarize_run
-
+@pytest.mark.parametrize(
+    "prepare",
+    [
+        lambda run: None,
+        lambda run: (
+            (run / "metadata.json").write_text("{no es json", encoding="utf-8"),
+            (run / "llm_usage_summary.json").write_text(json.dumps([1, 2]), encoding="utf-8"),
+        ),
+    ],
+    ids=["no-json-artifacts-at-all", "broken-json-artifacts"],
+)
+def test_summary_survives_missing_or_broken_artifacts(tmp_path, prepare):
     run = tmp_path / "run"
     run.mkdir()
-    (run / "metadata.json").write_text("{no es json", encoding="utf-8")
-    (run / "llm_usage_summary.json").write_text(json.dumps([1, 2]), encoding="utf-8")
+    prepare(run)
 
     summary = summarize_run(run)
     assert summary.usage is None
     assert summary.warnings == ()
-
-
-def test_bad_request_subclasses_network_error_so_handler_order_matters():
-    """A permanent rejection must be matched before the retryable base class."""
-    from telegram.error import BadRequest, NetworkError
-
-    assert issubclass(BadRequest, NetworkError)

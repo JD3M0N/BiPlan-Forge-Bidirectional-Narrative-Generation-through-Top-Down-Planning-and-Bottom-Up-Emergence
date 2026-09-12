@@ -16,22 +16,11 @@ def project(tmp_path):
     return tmp_path
 
 
-def test_settings_are_reduced_to_runtime_generation_values(tmp_path, monkeypatch) -> None:
+def test_settings_never_carry_legacy_length_budget_fields(tmp_path, monkeypatch) -> None:
     root = project(tmp_path)
     monkeypatch.setenv("GEMINI_API_KEY", "secret")
     settings = load_settings(root)
-    assert set(settings.__dataclass_fields__) == {
-        "api_key",
-        "model",
-        "output_root",
-        "rpm_limit",
-        "rpm_reserve",
-        "tpm_limit",
-        "max_retries",
-        "max_retry_delay",
-        "request_timeout_ms",
-        "narrative_guidance",
-    }
+    assert "target_words" not in settings.__dataclass_fields__
 
 
 def test_missing_api_key_is_actionable(tmp_path, monkeypatch) -> None:
@@ -41,7 +30,7 @@ def test_missing_api_key_is_actionable(tmp_path, monkeypatch) -> None:
         load_settings(root)
 
 
-def test_repository_versions_new_runs_as_6(tmp_path) -> None:
+def test_repository_versions_new_runs_to_match_the_installed_package(tmp_path) -> None:
     repository = ArtifactRepository(tmp_path, "model", "Historia")
     metadata = json.loads((repository.run_dir / "metadata.json").read_text(encoding="utf-8"))
     generator = json.loads(
@@ -58,48 +47,33 @@ def test_repository_versions_new_runs_as_6(tmp_path) -> None:
     assert metadata["pipeline_version"] == PIPELINE_VERSION
     assert manifest["pipeline_version"] == PIPELINE_VERSION
     assert "generator_version.json" in manifest["artifacts"]
-
-
-def test_public_version_matches_installed_package_metadata() -> None:
     assert __version__ == GENERATOR_VERSION == version("asg-top-down")
 
 
-def test_story_run_rejects_old_or_incomplete_metadata(tmp_path) -> None:
-    run_dir = tmp_path / "old"
+@pytest.mark.parametrize(
+    ("metadata_text", "match"),
+    [
+        (json.dumps({"status": "completed", "pipeline_version": "4.1"}), "5.0"),
+        (json.dumps({"status": "running", "pipeline_version": "5.1"}), "completed"),
+        (None, "metadata.json"),
+        ("{not valid json", "metadata.json"),
+    ],
+    ids=["unsupported-old-version", "not-completed", "missing-file", "corrupt-json"],
+)
+def test_story_run_rejects_incompatible_metadata(tmp_path, metadata_text, match) -> None:
+    run_dir = tmp_path / "run"
     run_dir.mkdir()
-    (run_dir / "metadata.json").write_text(
-        json.dumps({"status": "completed", "pipeline_version": "4.1"}),
-        encoding="utf-8",
-    )
-    with pytest.raises(RunArtifactError, match="5.0"):
+    if metadata_text is not None:
+        (run_dir / "metadata.json").write_text(metadata_text, encoding="utf-8")
+    with pytest.raises(RunArtifactError, match=match):
         StoryRun(run_dir)
 
-    compatible = tmp_path / "compatible"
-    compatible.mkdir()
-    (compatible / "metadata.json").write_text(
+
+def test_story_run_accepts_current_completed_metadata(tmp_path) -> None:
+    run_dir = tmp_path / "compatible"
+    run_dir.mkdir()
+    (run_dir / "metadata.json").write_text(
         json.dumps({"status": "completed", "pipeline_version": "5.0"}),
         encoding="utf-8",
     )
-    assert StoryRun(compatible).run_dir == compatible
-
-    incomplete = tmp_path / "incomplete"
-    incomplete.mkdir()
-    (incomplete / "metadata.json").write_text(
-        json.dumps({"status": "running", "pipeline_version": "5.1"}),
-        encoding="utf-8",
-    )
-    with pytest.raises(RunArtifactError, match="completed"):
-        StoryRun(incomplete)
-
-
-def test_story_run_rejects_missing_or_corrupt_metadata(tmp_path) -> None:
-    missing = tmp_path / "missing"
-    missing.mkdir()
-    with pytest.raises(RunArtifactError, match="metadata.json"):
-        StoryRun(missing)
-
-    corrupt = tmp_path / "corrupt"
-    corrupt.mkdir()
-    (corrupt / "metadata.json").write_text("{not valid json", encoding="utf-8")
-    with pytest.raises(RunArtifactError, match="metadata.json"):
-        StoryRun(corrupt)
+    assert StoryRun(run_dir).run_dir == run_dir

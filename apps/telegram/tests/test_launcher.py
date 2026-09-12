@@ -3,7 +3,8 @@ from unittest.mock import Mock
 from asg_telegram import launcher
 
 
-def test_windows_launcher_opens_a_new_console(monkeypatch):
+def test_windows_launcher_opens_a_console_or_reports_the_failure(monkeypatch):
+    """A new console is opened with the expected flags; an OSError becomes exit code 1."""
     process = Mock()
     monkeypatch.setattr(launcher.os, "name", "nt")
     monkeypatch.setattr(launcher.subprocess, "Popen", process)
@@ -17,12 +18,5 @@ def test_windows_launcher_opens_a_new_console(monkeypatch):
         close_fds=True,
     )
 
-
-def test_launcher_reports_console_creation_error(monkeypatch):
-    monkeypatch.setattr(launcher.os, "name", "nt")
-    monkeypatch.setattr(
-        launcher.subprocess,
-        "Popen",
-        Mock(side_effect=OSError("boom")),
-    )
+    monkeypatch.setattr(launcher.subprocess, "Popen", Mock(side_effect=OSError("boom")))
     assert launcher.main([]) == 1

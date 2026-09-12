@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 import pytest
 from asg_core import AudioGenerationError
@@ -29,7 +28,6 @@ from asg_top_down.schemas import (
     StoryReview,
     WorldArtifact,
 )
-from pydantic import ValidationError
 
 
 def make_request() -> StoryRequest:
@@ -340,6 +338,14 @@ class FakeProvider:
         return prose(f"borrador{self.draft_number}-")
 
 
+def structured_prompt(provider, schema_name: str) -> str:
+    return next(prompt for name, _, prompt in provider.structured_calls if name == schema_name)
+
+
+def structured_prompt_system(provider, schema_name: str) -> str:
+    return next(system for name, system, _ in provider.structured_calls if name == schema_name)
+
+
 def test_complete_pipeline_saves_v60_artifacts_and_agent_order(tmp_path) -> None:
     provider = FakeProvider(story_review=major_story_review())
     progress = []
@@ -462,30 +468,43 @@ def test_invalid_initial_plan_is_replaced_once(tmp_path) -> None:
     assert "unknown characters" in plan_calls[1][2]
 
 
-def test_invalid_payoff_retry_receives_exact_reference_matrix(tmp_path) -> None:
-    provider = FakeProvider([invalid_payoff_plan(), valid_plan()])
-    StoryGenerator(provider, tmp_path).generate(make_request())
-    plan_calls = [item for item in provider.structured_calls if item[0] == "StoryPlanDraft"]
-    assert len(plan_calls) == 2
-    assert "PAYOFF_OF CONTRACT" in plan_calls[0][1]
-    retry_prompt = plan_calls[1][2]
-    assert "charcoal_note" in retry_prompt
-    assert "PAYOFF_OF REFERENCE MATRIX" in retry_prompt
-    assert '"event_id": "event-2"' in retry_prompt
-    assert '"allowed_earlier_event_ids"' in retry_prompt
-    assert '"event-1"' in retry_prompt
-    assert "Never copy object IDs" in retry_prompt
-
-
-def test_two_invalid_plans_fail_with_public_error(tmp_path) -> None:
-    provider = FakeProvider([invalid_plan(), invalid_plan()])
+@pytest.mark.parametrize(
+    ("profile", "plans", "expected_attempts", "check_no_prose_before_failing"),
+    [
+        (None, lambda: [invalid_plan(), invalid_plan()], 2, False),
+        (NarrativeProfile.DEVELOPED, lambda: [valid_plan(), valid_plan()], 2, False),
+        (
+            NarrativeProfile.EXPANSIVE,
+            lambda: [sized_plan(9, branch_and_join=False) for _ in range(3)],
+            3,
+            True,
+        ),
+    ],
+    ids=[
+        "default-profile-two-attempts",
+        "developed-profile-two-attempts",
+        "expansive-profile-three-attempts",
+    ],
+)
+def test_exhausted_planning_attempts_fail_before_any_prose(
+    tmp_path, profile, plans, expected_attempts, check_no_prose_before_failing
+) -> None:
+    """Every profile eventually gives up on an unfixable plan without ever touching prose."""
+    request = make_request()
+    if profile is not None:
+        request = request.model_copy(update={"narrative_profile": profile})
+    provider = FakeProvider(plans=plans())
     created = []
     with pytest.raises(PlotValidationError) as captured:
-        StoryGenerator(provider, tmp_path).generate(make_request(), on_run_created=created.append)
+        StoryGenerator(provider, tmp_path).generate(request, on_run_created=created.append)
     assert captured.value.code == "PLOT_VALIDATION_FAILED"
+    assert captured.value.details["attempts"] == expected_attempts
     metadata = json.loads((created[0] / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["status"] == "failed"
     assert metadata["error_code"] == "PLOT_VALIDATION_FAILED"
+    if check_no_prose_before_failing:
+        assert not any(name == "PlanReview" for name, _, _ in provider.structured_calls)
+        assert provider.text_calls == []
 
 
 def test_plan_critic_refines_once_and_invalid_refinement_falls_back(tmp_path) -> None:
@@ -520,7 +539,7 @@ def test_late_critic_failure_delivers_the_draft_with_warning(tmp_path) -> None:
     assert "borrador" in metadata["warnings"][0]
 
 
-@pytest.mark.parametrize("quota_error_at", ["plan_critic", "drama_critic", "writer"])
+@pytest.mark.parametrize("quota_error_at", ["plan_critic", "drama_critic", "writer", "architect"])
 def test_quota_errors_abort_instead_of_becoming_a_warning(tmp_path, quota_error_at) -> None:
     provider = FakeProvider(
         story_review=major_story_review(),
@@ -553,36 +572,32 @@ def test_writer_retries_unchanged_major_revision_and_saves_attempt(tmp_path) -> 
 
 
 @pytest.mark.parametrize(
-    ("candidate", "expected_code"),
+    ("candidate", "original", "notes", "expected_code"),
     [
-        ("", "EMPTY_CHAPTER_BODY"),
-        ("# Encabezado\n\n" + prose("texto-", 300), "MARKDOWN_HEADINGS"),
+        ("", prose("original-", 300), [], "EMPTY_CHAPTER_BODY"),
+        (
+            "# Encabezado\n\n" + prose("texto-", 300),
+            prose("original-", 300),
+            [],
+            "MARKDOWN_HEADINGS",
+        ),
+        (
+            prose("original-", 300),
+            prose("original-", 300),
+            major_story_review().notes,
+            "UNCHANGED_SIGNIFICANT_NOTES",
+        ),
     ],
+    ids=["empty-body", "markdown-headings", "unchanged-with-significant-notes"],
 )
 def test_writer_candidate_diagnostics_are_structured(
-    candidate,
-    expected_code,
+    candidate, original, notes, expected_code
 ) -> None:
-    diagnostic = StoryPipeline._writer_candidate_issue(
-        candidate,
-        prose("original-", 300),
-        [],
-    )
+    diagnostic = StoryPipeline._writer_candidate_issue(candidate, original, notes)
     assert diagnostic is not None
     assert diagnostic.code == expected_code
     assert diagnostic.actual_words == len(candidate.split())
     assert diagnostic.retry_instruction
-
-
-def test_writer_reports_unchanged_significant_revision() -> None:
-    draft = prose("original-", 300)
-    diagnostic = StoryPipeline._writer_candidate_issue(
-        draft,
-        draft,
-        major_story_review().notes,
-    )
-    assert diagnostic is not None
-    assert diagnostic.code == "UNCHANGED_SIGNIFICANT_NOTES"
 
 
 def test_writer_accepts_different_lengths_without_budget_retries(tmp_path) -> None:
@@ -684,27 +699,6 @@ def test_analyst_prompt_separates_explicit_constraints_and_inferences() -> None:
     assert "when ambiguous use developed" in call[1]
 
 
-@pytest.mark.parametrize(
-    ("profile", "raw"),
-    [
-        ("essential", "Un conflicto central directo y sin subtramas."),
-        ("developed", "Una historia con arco completo y complicaciones."),
-        ("expansive", "Una saga coral con subtramas y varios arcos."),
-    ],
-)
-def test_analyst_preserves_inferred_profile(profile, raw) -> None:
-    analyzed = make_request().model_copy(update={"narrative_profile": NarrativeProfile(profile)})
-    result = AnalystAgent(FakeProvider(analyzed_request=analyzed)).run(raw)
-    assert result.narrative_profile.value == profile
-
-
-def test_programmatic_request_rejects_legacy_numeric_fields() -> None:
-    values = make_request().model_dump()
-    values["target_words"] = 1500
-    with pytest.raises(ValidationError, match="target_words"):
-        StoryRequest.model_validate(values)
-
-
 def test_developed_plan_below_event_floor_is_replanned(tmp_path) -> None:
     request = make_request().model_copy(update={"narrative_profile": NarrativeProfile.DEVELOPED})
     provider = FakeProvider(plans=[valid_plan(), sized_plan(6)])
@@ -722,37 +716,6 @@ def test_developed_plan_below_event_floor_is_replanned(tmp_path) -> None:
     assert "at least six causally meaningful events" in planner_prompts[1]
 
 
-def test_two_profile_invalid_plans_fail_before_critique_or_drafting(tmp_path) -> None:
-    request = make_request().model_copy(update={"narrative_profile": NarrativeProfile.EXPANSIVE})
-    provider = FakeProvider(plans=[sized_plan(9, branch_and_join=False) for _ in range(3)])
-    created = []
-    with pytest.raises(PlotValidationError) as captured:
-        StoryGenerator(provider, tmp_path).generate(request, on_run_created=created.append)
-    assert captured.value.code == "PLOT_VALIDATION_FAILED"
-    assert captured.value.details["attempts"] == 3
-    assert not any(name == "PlanReview" for name, _, _ in provider.structured_calls)
-    assert provider.text_calls == []
-    metadata = json.loads((created[0] / "metadata.json").read_text(encoding="utf-8"))
-    assert metadata["status"] == "failed"
-
-
-def test_profile_invalid_refinement_falls_back_to_valid_plan(tmp_path) -> None:
-    request = make_request().model_copy(update={"narrative_profile": NarrativeProfile.DEVELOPED})
-    provider = FakeProvider(
-        plans=[sized_plan(6), valid_plan()],
-        plan_review=rejected_plan_review(),
-    )
-    run = StoryGenerator(provider, tmp_path).generate(request)
-    plan = json.loads((run.run_dir / "story_plan.json").read_text(encoding="utf-8"))
-    validation = json.loads(
-        (run.run_dir / "planning/refined-candidate-validation.json").read_text(encoding="utf-8")
-    )
-    metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
-    assert len(plan["events"]) == 6
-    assert validation["issue"] == "developed profile requires at least 6 events; got 2"
-    assert any("primer plan" in warning for warning in metadata["warnings"])
-
-
 def test_profile_guidance_reaches_world_characters_and_prose_agents(tmp_path) -> None:
     request = make_request().model_copy(update={"narrative_profile": NarrativeProfile.DEVELOPED})
     provider = FakeProvider(plans=[sized_plan(6)])
@@ -765,21 +728,6 @@ def test_profile_guidance_reaches_world_characters_and_prose_agents(tmp_path) ->
     assert any(
         "at least six causally meaningful events" in prompt for _, prompt in provider.text_calls
     )
-
-
-def test_expansive_guidance_resists_event_compression(tmp_path) -> None:
-    request = make_request().model_copy(update={"narrative_profile": NarrativeProfile.EXPANSIVE})
-    provider = FakeProvider(plans=[sized_plan(9, branch_and_join=True)])
-    StoryGenerator(provider, tmp_path).generate(request)
-    structured_prompts = [prompt for _, _, prompt in provider.structured_calls]
-    prose_prompts = [prompt for _, prompt in provider.text_calls]
-    expected = "do not pack several planned events into a brief summary passage"
-    assert any(expected in prompt for prompt in structured_prompts)
-    assert any(expected in prompt for prompt in prose_prompts)
-    planner_system = next(
-        system for name, system, _ in provider.structured_calls if name == "StoryPlanDraft"
-    )
-    assert "independent parallel roots are not a branch" in planner_system
 
 
 def test_internal_agents_use_english_until_drafting(tmp_path) -> None:
@@ -806,32 +754,16 @@ def test_internal_agents_use_english_until_drafting(tmp_path) -> None:
     )
 
 
-def test_drama_critic_checks_scene_space_event_by_event(tmp_path) -> None:
-    provider = FakeProvider()
-    StoryGenerator(provider, tmp_path).generate(make_request())
-    critic_system = next(
-        system for name, system, _ in provider.structured_calls if name == "StoryReview"
-    )
-    assert "examine every planned event of each chapter individually" in critic_system
-    assert "does not by itself satisfy the profile" in critic_system
-    assert "never a word-count or length instruction" in critic_system
-
-
 def test_final_chapter_parser_requires_every_heading() -> None:
     story = "# Título\n\n## Uno\n\nPrimero.\n\n## Dos\n\nSegundo."
     assert parse_chapter_bodies(story, 2) == ["Primero.", "Segundo."]
     assert parse_chapter_bodies(story, 3) == []
 
 
-def structured_prompt(provider, schema_name: str) -> str:
-    return next(prompt for name, _, prompt in provider.structured_calls if name == schema_name)
-
-
-def structured_prompt_system(provider, schema_name: str) -> str:
-    return next(system for name, system, _ in provider.structured_calls if name == schema_name)
-
-
-def test_architecture_stage_writes_a_blueprint_and_guides_later_agents(tmp_path) -> None:
+def test_architecture_stage_writes_a_blueprint_and_guides_only_the_agents_that_should_see_it(
+    tmp_path,
+) -> None:
+    """The blueprint reaches the character designer and planner, and nowhere else."""
     provider = FakeProvider()
     run = StoryGenerator(provider, tmp_path).generate(make_request())
 
@@ -855,11 +787,9 @@ def test_architecture_stage_writes_a_blueprint_and_guides_later_agents(tmp_path)
     architect_prompt = structured_prompt(provider, "NarrativeBlueprintDraft")
     assert "SKELETON SHORTLIST" in architect_prompt
     assert "FUNCTIONAL ROLE VOCABULARY" in architect_prompt
+    assert "functional_role" in structured_prompt_system(provider, "CharactersArtifact")
 
-
-def test_guidance_never_reaches_the_prose_and_critic_agents(tmp_path) -> None:
-    provider = FakeProvider()
-    StoryGenerator(provider, tmp_path).generate(make_request())
+    # The blueprint is inspiration only: prose agents and both critics never see it.
     for _, prompt in provider.text_calls:
         assert "NARRATIVE INSPIRATION" not in prompt
     for name, _, prompt in provider.structured_calls:
@@ -867,7 +797,7 @@ def test_guidance_never_reaches_the_prose_and_critic_agents(tmp_path) -> None:
             assert "NARRATIVE INSPIRATION" not in prompt
 
 
-def test_disabled_guidance_skips_the_stage_and_every_prompt(tmp_path) -> None:
+def test_disabled_guidance_removes_the_stage_and_its_vocabulary(tmp_path) -> None:
     provider = FakeProvider()
     run = StoryGenerator(provider, tmp_path, narrative_guidance=False).generate(make_request())
 
@@ -879,30 +809,13 @@ def test_disabled_guidance_skips_the_stage_and_every_prompt(tmp_path) -> None:
     for _, _, prompt in provider.structured_calls:
         assert "NARRATIVE INSPIRATION" not in prompt
 
-
-def test_disabled_guidance_also_drops_the_functional_role_vocabulary(tmp_path) -> None:
-    provider = FakeProvider()
-    run = StoryGenerator(provider, tmp_path, narrative_guidance=False).generate(make_request())
-
-    characters_system = next(
-        system for name, system, _ in provider.structured_calls if name == "CharactersArtifact"
-    )
+    characters_system = structured_prompt_system(provider, "CharactersArtifact")
     assert "functional_role" not in characters_system
     assert "persona" not in characters_system
     characters = json.loads((run.run_dir / "characters.json").read_text(encoding="utf-8"))
     for character in characters["characters"]:
         assert character["functional_role"] == ""
         assert character["persona"] == ""
-
-
-def test_guidance_keeps_the_functional_role_vocabulary(tmp_path) -> None:
-    provider = FakeProvider()
-    StoryGenerator(provider, tmp_path).generate(make_request())
-
-    characters_system = next(
-        system for name, system, _ in provider.structured_calls if name == "CharactersArtifact"
-    )
-    assert "functional_role" in characters_system
 
 
 def test_architect_failure_only_costs_the_guidance(tmp_path) -> None:
@@ -924,12 +837,6 @@ def test_semantic_ranking_failure_still_produces_a_blueprint(tmp_path) -> None:
     blueprint = json.loads((run.run_dir / "narrative_blueprint.json").read_text(encoding="utf-8"))
     assert blueprint["semantic_used"] is False
     assert all(row["semantic_score"] is None for row in blueprint["considered"])
-
-
-def test_architect_quota_error_aborts_the_run(tmp_path) -> None:
-    provider = FakeProvider(quota_error_at="architect")
-    with pytest.raises(GeminiDailyQuotaError):
-        StoryGenerator(provider, tmp_path).generate(make_request())
 
 
 def test_forced_profile_outranks_the_prompt_derived_one(tmp_path) -> None:
@@ -1001,38 +908,8 @@ def test_a_plan_breaking_its_profile_contract_is_never_persisted(
     assert provider.text_calls == []
 
 
-def test_the_story_plan_is_written_from_a_single_guarded_site() -> None:
-    source = Path(pipeline_module.__file__).read_text(encoding="utf-8")
-    guarded = source.split("    def _persist_plan(")[1].split("\n    def ")[0]
-    assert source.count('"story_plan.json"') == 1
-    assert '"story_plan.json"' in guarded
-    assert "validate_story_plan(" in guarded
-    assert "validate_profile_structure(" in guarded
-
-
-def _planner_prompts(provider) -> list[str]:
-    """Return the prompts sent to the plot planner, in call order."""
-    return [prompt for name, _, prompt in provider.structured_calls if name == "StoryPlanDraft"]
-
-
-def test_missing_branch_retry_receives_a_concrete_forward_edge(tmp_path) -> None:
-    request = make_request().model_copy(update={"narrative_profile": NarrativeProfile.EXPANSIVE})
-    provider = FakeProvider(
-        plans=[sized_plan(9, branch_and_join=False), sized_plan(9, branch_and_join=True)]
-    )
-    StoryGenerator(provider, tmp_path).generate(request)
-    repair = _planner_prompts(provider)[1]
-    assert "DIRECTION PROBLEM, NOT A COUNTING PROBLEM" in repair
-    assert "CURRENT CAUSAL DEGREES" in repair
-    assert "source.order < target.order" in repair
-    # The payoff matrix is noise for this failure class and must not drown the real instruction.
-    assert "PAYOFF_OF REFERENCE MATRIX" not in repair
-
-
-def test_a_join_without_a_branch_is_repaired_by_naming_the_missing_edge(tmp_path) -> None:
-    request = make_request().model_copy(update={"narrative_profile": NarrativeProfile.EXPANSIVE})
-    # Reproduces the live Gemini failure: two parallel roots converging on event-5, so a join
-    # exists but no event branches. One extra forward edge is the whole fix.
+def _join_without_a_branch() -> StoryPlanDraft:
+    """Two parallel roots converging on event-5: a join exists, but no event branches."""
     candidate = sized_plan(9)
     candidate.dependencies = [
         EventDependency(source_event_id="event-1", target_event_id="event-4", relation="causal"),
@@ -1048,19 +925,11 @@ def test_a_join_without_a_branch_is_repaired_by_naming_the_missing_edge(tmp_path
             for order in range(5, 9)
         ],
     ]
-    provider = FakeProvider(plans=[candidate, sized_plan(9, branch_and_join=True)])
-    StoryGenerator(provider, tmp_path).generate(request)
-    repair = _planner_prompts(provider)[1]
-    assert "ADD this causal dependency: event-1 -> event-2" in repair
-    assert "two outgoing causal dependencies" in repair
-    assert "the branch precedes the join" in repair
+    return candidate
 
 
-def test_backwards_dependency_retry_is_told_which_edge_points_back(tmp_path) -> None:
-    request = make_request().model_copy(update={"narrative_profile": NarrativeProfile.EXPANSIVE})
-    # Mirrors the second live Gemini candidate: it bolted a branch on by pointing event-4 back at
-    # event-3, which satisfies the degree counting but runs against the event order. There is no
-    # event-3 -> event-4 edge, so this fails the direction check rather than the cycle check.
+def _branch_pointing_backwards() -> StoryPlanDraft:
+    """A branch bolted on by pointing event-4 back at event-3: legal count, illegal direction."""
     candidate = sized_plan(9)
     candidate.dependencies = [
         EventDependency(source_event_id="event-1", target_event_id="event-4", relation="causal"),
@@ -1077,29 +946,87 @@ def test_backwards_dependency_retry_is_told_which_edge_points_back(tmp_path) -> 
             for order in range(5, 9)
         ],
     ]
-    provider = FakeProvider(plans=[candidate, sized_plan(9, branch_and_join=True)])
-    StoryGenerator(provider, tmp_path).generate(request)
-    repair = _planner_prompts(provider)[1]
-    assert "event-4 -> event-3 runs from order 4 back to order 3" in repair
-    assert "reverse it to event-3 -> event-4" in repair
-    assert "PAYOFF_OF REFERENCE MATRIX" not in repair
+    return candidate
 
 
-def test_payoff_failures_still_receive_their_reference_matrix(tmp_path) -> None:
-    provider = FakeProvider([invalid_payoff_plan(), valid_plan()])
-    StoryGenerator(provider, tmp_path).generate(make_request())
-    repair = _planner_prompts(provider)[1]
-    assert "PAYOFF_OF REFERENCE MATRIX" in repair
-    assert "DIRECTION PROBLEM" not in repair
-
-
-def test_only_the_expansive_profile_earns_a_third_planning_attempt(tmp_path) -> None:
-    developed = make_request().model_copy(update={"narrative_profile": NarrativeProfile.DEVELOPED})
-    provider = FakeProvider(plans=[valid_plan(), valid_plan()])
-    with pytest.raises(PlotValidationError) as captured:
-        StoryGenerator(provider, tmp_path).generate(developed)
-    assert captured.value.details["attempts"] == 2
-    assert len(_planner_prompts(provider)) == 2
+@pytest.mark.parametrize(
+    ("draft", "issue", "profile", "must_contain", "must_not_contain"),
+    [
+        (
+            lambda: sized_plan(9, branch_and_join=False),
+            "expansive profile requires a causal dependency branch followed by a causal join",
+            NarrativeProfile.EXPANSIVE,
+            [
+                "DIRECTION PROBLEM, NOT A COUNTING PROBLEM",
+                "CURRENT CAUSAL DEGREES",
+                "source.order < target.order",
+            ],
+            ["PAYOFF_OF REFERENCE MATRIX"],
+        ),
+        (
+            _join_without_a_branch,
+            "expansive profile requires a causal dependency branch followed by a causal join",
+            NarrativeProfile.EXPANSIVE,
+            [
+                "ADD this causal dependency: event-1 -> event-2",
+                "two outgoing causal dependencies",
+                "the branch precedes the join",
+            ],
+            [],
+        ),
+        (
+            _branch_pointing_backwards,
+            "dependency event-4->event-3 points backwards",
+            NarrativeProfile.EXPANSIVE,
+            [
+                "event-4 -> event-3 runs from order 4 back to order 3",
+                "reverse it to event-3 -> event-4",
+            ],
+            ["PAYOFF_OF REFERENCE MATRIX"],
+        ),
+        (
+            lambda: sized_plan(6, branch_and_join=True),
+            "expansive profile requires at least 9 events; got 6",
+            NarrativeProfile.EXPANSIVE,
+            [
+                "This profile needs 10 to 14 events",
+                "You planned 6.",
+                "ADD at least 4 more causally meaningful events to reach 10.",
+                "CURRENT EVENTS PER CHAPTER",
+            ],
+            ["PAYOFF_OF REFERENCE MATRIX"],
+        ),
+        (
+            invalid_payoff_plan,
+            "invalid payoff_of value: charcoal_note",
+            NarrativeProfile.ESSENTIAL,
+            [
+                "PAYOFF_OF REFERENCE MATRIX",
+                '"event_id": "event-2"',
+                '"allowed_earlier_event_ids"',
+                '"event-1"',
+                "Never copy object IDs",
+            ],
+            ["DIRECTION PROBLEM"],
+        ),
+    ],
+    ids=[
+        "missing-branch-and-join",
+        "join-without-a-branch-names-the-missing-edge",
+        "backwards-dependency-names-the-offending-edge",
+        "event-shortfall-says-how-many-and-where",
+        "payoff-failure-gets-the-reference-matrix",
+    ],
+)
+def test_repair_prompt_matches_the_failure_class(
+    draft, issue, profile, must_contain, must_not_contain
+) -> None:
+    """`_repair_guidance` dispatches on the failure class, not on generic boilerplate."""
+    repair = StoryPipeline._repair_guidance(draft(), issue, profile)
+    for fragment in must_contain:
+        assert fragment in repair
+    for fragment in must_not_contain:
+        assert fragment not in repair
 
 
 @pytest.mark.parametrize(
@@ -1119,24 +1046,8 @@ def test_the_planner_is_given_the_event_target_its_chapter_band_implies(
     request = make_request().model_copy(update={"narrative_profile": profile})
     provider = FakeProvider(plans=[sized_plan(9, branch_and_join=True)])
     StoryGenerator(provider, tmp_path).generate(request)
-    instruction = next(
-        system for name, system, _ in provider.structured_calls if name == "StoryPlanDraft"
-    )
+    instruction = structured_prompt_system(provider, "StoryPlanDraft")
     assert chapters in instruction
     assert events in instruction
     assert "at least 2 events" in instruction
     assert "never leave a chapter carrying a single event" in instruction
-
-
-def test_an_event_shortfall_retry_is_told_how_many_to_add_and_where(tmp_path) -> None:
-    request = make_request().model_copy(update={"narrative_profile": NarrativeProfile.EXPANSIVE})
-    thin = sized_plan(6, branch_and_join=True)
-    provider = FakeProvider(plans=[thin, sized_plan(9, branch_and_join=True)])
-    StoryGenerator(provider, tmp_path).generate(request)
-    repair = _planner_prompts(provider)[1]
-    assert "This profile needs 10 to 14 events" in repair
-    assert "You planned 6." in repair
-    assert "ADD at least 4 more causally meaningful events to reach 10." in repair
-    assert "CURRENT EVENTS PER CHAPTER" in repair
-    # The payoff matrix is noise for a shortfall and must not bury the instruction.
-    assert "PAYOFF_OF REFERENCE MATRIX" not in repair

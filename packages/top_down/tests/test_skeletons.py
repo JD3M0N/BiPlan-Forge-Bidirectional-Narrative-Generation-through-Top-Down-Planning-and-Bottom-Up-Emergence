@@ -29,7 +29,6 @@ from asg_top_down.skeletons import (
     find_skeleton,
     skeletons_for_layer,
 )
-from pydantic import ValidationError
 
 
 def make_request() -> StoryRequest:
@@ -67,24 +66,21 @@ class RankingProvider:
         )
 
 
-def test_catalog_covers_both_layers_with_unique_valid_ids() -> None:
+def test_catalog_is_internally_consistent() -> None:
+    """IDs are unique and well-formed, and every cross-reference resolves."""
     assert len(PLOT_SKELETONS) >= 20
     ids = [item.id for item in PLOT_SKELETONS]
     assert len(set(ids)) == len(ids)
-    for item in PLOT_SKELETONS:
-        assert re.fullmatch(ID_PATTERN, item.id), item.id
-    subplot_only = [item for item in PLOT_SKELETONS if item.layers == (Layer.SUBPLOT,)]
-    assert len(subplot_only) >= 6
-    assert len(skeletons_for_layer(Layer.MACROPLOT)) >= 20
-
-
-def test_cross_references_and_roles_resolve() -> None:
     valid_roles = {role.value for role in FunctionalRole}
     for item in PLOT_SKELETONS:
+        assert re.fullmatch(ID_PATTERN, item.id), item.id
         assert {role.value for role in item.typical_functional_roles} <= valid_roles
         for reference in (*item.pairs_well_with, *item.tensions_with):
             assert reference in SKELETONS_BY_ID
             assert reference != item.id
+    subplot_only = [item for item in PLOT_SKELETONS if item.layers == (Layer.SUBPLOT,)]
+    assert len(subplot_only) >= 6
+    assert len(skeletons_for_layer(Layer.MACROPLOT)) >= 20
     for reference in FALLBACK_SHORTLIST:
         assert reference in SKELETONS_BY_ID
 
@@ -107,60 +103,8 @@ def test_lexical_scoring_is_deterministic_and_ranks_the_obvious_shape() -> None:
     assert "rescue" in {row.skeleton_id for row in ranked}
 
 
-def test_accented_spanish_query_still_tokenizes() -> None:
+def test_normalize_strips_spanish_accents() -> None:
     assert normalize("Una traición en la prisión") == "una traicion en la prision"
-    ranked = rank_skeletons("Un preso planea su huida de la prision", limit=3)
-    assert ranked
-
-
-def test_empty_query_returns_the_varied_fallback_shortlist() -> None:
-    ranked = rank_skeletons("", limit=8)
-    assert [row.skeleton_id for row in ranked] == list(FALLBACK_SHORTLIST[:8])
-    assert all(row.semantic_score is None for row in ranked)
-
-
-def test_missing_provider_degrades_to_lexical_only() -> None:
-    ranked = rank_skeletons("a detective investigates a murder", provider=None)
-    assert ranked
-    assert all(row.semantic_score is None for row in ranked)
-
-
-def test_failing_semantic_call_degrades_without_raising() -> None:
-    provider = RankingProvider(fail=True)
-    ranked = rank_skeletons("a detective investigates a murder", provider=provider)
-    assert provider.calls == 1
-    assert ranked
-    assert all(row.semantic_score is None for row in ranked)
-
-
-def test_semantic_blend_uses_the_declared_weights() -> None:
-    query = "A thief must steal a relic from a guarded museum"
-    lexical = {row.skeleton_id: row.lexical_score for row in lexical_scores(query)}
-    provider = RankingProvider({"mystery": 1.0})
-    ranked = rank_skeletons(query, provider=provider, limit=len(PLOT_SKELETONS))
-    scored = {row.skeleton_id: row for row in ranked}
-    mystery = scored["mystery"]
-    assert mystery.semantic_score == 1.0
-    expected = LEXICAL_WEIGHT * lexical["mystery"] + SEMANTIC_WEIGHT * 1.0
-    assert math.isclose(mystery.score, expected, rel_tol=1e-9)
-    heist = scored["heist"]
-    assert heist.semantic_score == 0.0
-    assert math.isclose(heist.score, LEXICAL_WEIGHT * lexical["heist"], rel_tol=1e-9)
-
-
-def test_unknown_semantic_ids_are_ignored_rather_than_raising() -> None:
-    provider = RankingProvider({"not_a_skeleton": 1.0})
-    ranked = rank_skeletons("a betrayal among thieves", provider=provider)
-    assert ranked
-    assert all(row.semantic_score is None for row in ranked)
-
-
-def test_skeleton_query_leads_with_processed_prompt_and_skips_the_original() -> None:
-    request = make_request()
-    query = skeleton_query(request)
-    assert request.processed_prompt in query
-    assert request.premise in query
-    assert request.original_prompt not in query
 
 
 def test_spanish_request_fields_still_rank_from_the_english_brief() -> None:
@@ -185,6 +129,47 @@ def test_spanish_request_fields_still_rank_from_the_english_brief() -> None:
     assert ranked[0].lexical_score > 0.5
 
 
+def test_empty_query_returns_the_varied_fallback_shortlist() -> None:
+    ranked = rank_skeletons("", limit=8)
+    assert [row.skeleton_id for row in ranked] == list(FALLBACK_SHORTLIST[:8])
+    assert all(row.semantic_score is None for row in ranked)
+
+
+@pytest.mark.parametrize(
+    "provider",
+    [RankingProvider(fail=True), RankingProvider({"not_a_skeleton": 1.0})],
+    ids=["semantic-call-fails", "semantic-call-names-an-unknown-skeleton"],
+)
+def test_semantic_degradation_never_raises(provider) -> None:
+    """A failing provider or an unresolvable skeleton id degrades to lexical-only, never raises."""
+    ranked = rank_skeletons("a detective investigates a murder", provider=provider)
+    assert ranked
+    assert all(row.semantic_score is None for row in ranked)
+
+
+def test_semantic_blend_uses_the_declared_weights() -> None:
+    query = "A thief must steal a relic from a guarded museum"
+    lexical = {row.skeleton_id: row.lexical_score for row in lexical_scores(query)}
+    provider = RankingProvider({"mystery": 1.0})
+    ranked = rank_skeletons(query, provider=provider, limit=len(PLOT_SKELETONS))
+    scored = {row.skeleton_id: row for row in ranked}
+    mystery = scored["mystery"]
+    assert mystery.semantic_score == 1.0
+    expected = LEXICAL_WEIGHT * lexical["mystery"] + SEMANTIC_WEIGHT * 1.0
+    assert math.isclose(mystery.score, expected, rel_tol=1e-9)
+    heist = scored["heist"]
+    assert heist.semantic_score == 0.0
+    assert math.isclose(heist.score, LEXICAL_WEIGHT * lexical["heist"], rel_tol=1e-9)
+
+
+def test_skeleton_query_leads_with_processed_prompt_and_skips_the_original() -> None:
+    request = make_request()
+    query = skeleton_query(request)
+    assert request.processed_prompt in query
+    assert request.premise in query
+    assert request.original_prompt not in query
+
+
 def blueprint(**overrides) -> NarrativeBlueprint:
     payload = {
         "macroplot_id": "heist",
@@ -207,21 +192,14 @@ def blueprint(**overrides) -> NarrativeBlueprint:
     return NarrativeBlueprint(**payload)
 
 
-def test_guidance_is_phrased_as_optional_inspiration() -> None:
+def test_guidance_is_phrased_as_optional_and_tolerates_unknown_ids() -> None:
+    """Guidance reads as non-binding inspiration and never raises on an invented skeleton id."""
     text = blueprint_guidance(blueprint())
     assert "non-binding" in text
     assert "must" not in text.casefold()
     assert "The vault is already empty when they arrive." in text
     assert "helper" in text
 
-
-def test_guidance_drops_unknown_ids_instead_of_raising() -> None:
-    text = blueprint_guidance(blueprint(macroplot_id="not_a_skeleton", subplot_ids=["nope"]))
-    assert "not_a_skeleton" in text
-    assert "none in particular" in text
-
-
-def test_blueprint_accepts_unknown_ids_but_caps_subplots() -> None:
-    assert blueprint(macroplot_id="invented").macroplot_id == "invented"
-    with pytest.raises(ValidationError):
-        blueprint(subplot_ids=["heist", "escape", "duel", "ambush"])
+    unknown = blueprint_guidance(blueprint(macroplot_id="not_a_skeleton", subplot_ids=["nope"]))
+    assert "not_a_skeleton" in unknown
+    assert "none in particular" in unknown

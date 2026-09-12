@@ -102,6 +102,19 @@ def dependency(source: str, target: str, relation: str = "causal") -> EventDepen
     )
 
 
+def second_chapter(order: int = 2) -> ChapterPlan:
+    return ChapterPlan(
+        id="chapter-2",
+        order=order,
+        title="The End",
+        summary="Resolution",
+        dramatic_goal="Resolve the truth",
+        opening_state="Ana faces opposition",
+        turning_point="The evidence becomes public",
+        closing_state="The town accepts the cost",
+    )
+
+
 def test_kahn_order_is_deterministic_for_a_branching_dag() -> None:
     candidate = plan(
         [
@@ -114,78 +127,6 @@ def test_kahn_order_is_deterministic_for_a_branching_dag() -> None:
         "event-2",
         "event-3",
     ]
-
-
-def test_cycle_is_rejected() -> None:
-    candidate = plan(
-        [
-            dependency("event-1", "event-2"),
-            dependency("event-2", "event-1"),
-            dependency("event-2", "event-3"),
-        ]
-    )
-    with pytest.raises(ValueError, match="cycle"):
-        validate_story_plan(candidate, world(), characters())
-
-
-def test_acyclic_backwards_dependency_is_rejected() -> None:
-    candidate = plan([dependency("event-3", "event-1"), dependency("event-1", "event-2")])
-    with pytest.raises(ValueError, match="backwards"):
-        validate_story_plan(candidate, world(), characters())
-
-
-def test_unknown_references_are_rejected() -> None:
-    candidate = plan([])
-    candidate.events[0].character_ids = ["unknown"]
-    with pytest.raises(ValueError, match="unknown characters"):
-        validate_story_plan(candidate, world(), characters())
-
-
-def test_duplicate_event_ids_are_rejected() -> None:
-    candidate = plan([])
-    candidate.events[1].id = candidate.events[0].id
-    with pytest.raises(ValueError, match="event ids"):
-        validate_story_plan(candidate, world(), characters())
-
-
-def test_every_chapter_requires_an_event() -> None:
-    candidate = plan([])
-    candidate.chapters.append(
-        ChapterPlan(
-            id="chapter-2",
-            order=2,
-            title="The End",
-            summary="Resolution",
-            dramatic_goal="Resolve the truth",
-            opening_state="Ana faces opposition",
-            turning_point="The evidence becomes public",
-            closing_state="The town accepts the cost",
-        )
-    )
-    with pytest.raises(ValueError, match="chapters without events"):
-        validate_story_plan(candidate, world(), characters())
-
-
-def test_global_event_order_must_follow_chapter_order() -> None:
-    candidate = plan([dependency("event-1", "event-2"), dependency("event-2", "event-3")])
-    candidate.chapters.append(
-        ChapterPlan(
-            id="chapter-2",
-            order=2,
-            title="The End",
-            summary="Resolution",
-            dramatic_goal="Resolve the truth",
-            opening_state="Ana faces opposition",
-            turning_point="The evidence becomes public",
-            closing_state="The town accepts the cost",
-        )
-    )
-    candidate.events.append(event("event-4", 4, "chapter-2"))
-    candidate.dependencies.append(dependency("event-3", "event-4"))
-    candidate.events[0].chapter_id = "chapter-2"
-    candidate.events[3].chapter_id = "chapter-1"
-    with pytest.raises(ValueError, match="follow chapter order"):
-        validate_story_plan(candidate, world(), characters())
 
 
 def test_materialize_plan_accepts_qualitative_size_and_adds_trusted_order() -> None:
@@ -216,97 +157,101 @@ def test_materialize_plan_accepts_qualitative_size_and_adds_trusted_order() -> N
     assert result.topological_order == ["event-1", "event-2"]
 
 
-def test_same_profile_accepts_different_valid_graph_sizes() -> None:
-    compact = plan([dependency("event-1", "event-2"), dependency("event-2", "event-3")])
-    validate_story_plan(compact, world(), characters())
-    expanded = compact.model_copy(deep=True)
-    expanded.events.append(event("event-4", 4))
-    expanded.dependencies.append(dependency("event-3", "event-4"))
-    assert validate_story_plan(expanded, world(), characters()) == [
-        "event-1",
-        "event-2",
-        "event-3",
-        "event-4",
+def _cycle(candidate: StoryPlan) -> None:
+    candidate.dependencies = [
+        dependency("event-1", "event-2"),
+        dependency("event-2", "event-1"),
+        dependency("event-2", "event-3"),
     ]
 
 
-def profile_plan(event_count: int) -> StoryPlan:
-    """Build a valid linear plan with the requested number of events."""
-    candidate = plan([dependency("event-1", "event-2"), dependency("event-2", "event-3")])
-    for order in range(4, event_count + 1):
-        identifier = f"event-{order}"
-        candidate.events.append(event(identifier, order))
-        candidate.dependencies.append(dependency(f"event-{order - 1}", identifier))
-    validate_story_plan(candidate, world(), characters())
-    return candidate
+def _backwards_dependency(candidate: StoryPlan) -> None:
+    candidate.dependencies = [dependency("event-3", "event-1"), dependency("event-1", "event-2")]
 
 
-def test_essential_profile_keeps_compact_plan_valid() -> None:
-    validate_profile_structure(profile_plan(3), NarrativeProfile.ESSENTIAL)
+def _unknown_character(candidate: StoryPlan) -> None:
+    candidate.events[0].character_ids = ["unknown"]
+
+
+def _unknown_object(candidate: StoryPlan) -> None:
+    candidate.events[0].object_ids = ["unknown-object"]
+
+
+def _duplicate_event_ids(candidate: StoryPlan) -> None:
+    candidate.events[1].id = candidate.events[0].id
+
+
+def _chapter_orders_not_consecutive(candidate: StoryPlan) -> None:
+    candidate.chapters.append(second_chapter(order=3))
+    candidate.events.append(event("event-4", 4, "chapter-2"))
+    candidate.dependencies.append(dependency("event-3", "event-4"))
+
+
+def _empty_chapter(candidate: StoryPlan) -> None:
+    candidate.chapters.append(second_chapter())
+
+
+def _event_order_breaks_chapter_order(candidate: StoryPlan) -> None:
+    candidate.chapters.append(second_chapter())
+    candidate.events.append(event("event-4", 4, "chapter-2"))
+    candidate.dependencies.append(dependency("event-3", "event-4"))
+    candidate.events[0].chapter_id = "chapter-2"
+    candidate.events[3].chapter_id = "chapter-1"
+
+
+def _self_referential_dependency(candidate: StoryPlan) -> None:
+    candidate.dependencies.append(dependency("event-1", "event-1"))
+
+
+def _duplicate_dependency(candidate: StoryPlan) -> None:
+    candidate.dependencies.append(dependency("event-1", "event-2"))
+
+
+def _only_temporal_dependencies(candidate: StoryPlan) -> None:
+    candidate.dependencies = [
+        dependency("event-1", "event-2", "temporal"),
+        dependency("event-2", "event-3", "temporal"),
+    ]
+
+
+def _weakly_disconnected(candidate: StoryPlan) -> None:
+    candidate.dependencies = [dependency("event-1", "event-2")]
+
+
+def _unknown_payoff(candidate: StoryPlan) -> None:
+    candidate.dependencies = [dependency("event-1", "event-2"), dependency("event-2", "event-3")]
+    candidate.events[1].payoff_of = ["charcoal_note"]
 
 
 @pytest.mark.parametrize(
-    ("profile", "minimum", "actual"),
+    ("mutate", "match"),
     [
-        (NarrativeProfile.DEVELOPED, 6, 5),
-        (NarrativeProfile.EXPANSIVE, 9, 8),
+        (_cycle, "cycle"),
+        (_backwards_dependency, "backwards"),
+        (_unknown_character, "unknown characters"),
+        (_unknown_object, "unknown objects"),
+        (_duplicate_event_ids, "event ids"),
+        (_chapter_orders_not_consecutive, "chapter orders must be consecutive"),
+        (_empty_chapter, "chapters without events"),
+        (_event_order_breaks_chapter_order, "follow chapter order"),
+        (_self_referential_dependency, "self-referential"),
+        (_duplicate_dependency, "unique"),
+        (_only_temporal_dependencies, "causal"),
+        (_weakly_disconnected, "weakly connected"),
+        (_unknown_payoff, "unknown event IDs: charcoal_note"),
     ],
 )
-def test_larger_profiles_reject_too_few_events(profile, minimum, actual) -> None:
-    with pytest.raises(
-        ValueError,
-        match=rf"{profile.value} profile requires at least {minimum} events; got {actual}",
-    ):
-        validate_profile_structure(profile_plan(actual), profile)
+def test_structural_rejections(mutate, match) -> None:
+    """Every objective invariant validate_story_plan enforces rejects with an ASCII message."""
+    candidate = plan([dependency("event-1", "event-2"), dependency("event-2", "event-3")])
+    mutate(candidate)
+    with pytest.raises(ValueError, match=match) as captured:
+        validate_story_plan(candidate, world(), characters())
+    assert str(captured.value).isascii()
 
 
-def test_developed_profile_accepts_six_meaningful_events() -> None:
-    validate_profile_structure(profile_plan(6), NarrativeProfile.DEVELOPED)
-
-
-def test_expansive_profile_requires_a_causal_branch_and_later_join() -> None:
-    with pytest.raises(ValueError, match="causal dependency branch"):
-        validate_profile_structure(profile_plan(9), NarrativeProfile.EXPANSIVE)
-
-
-def test_expansive_profile_accepts_a_causal_branch_and_later_join() -> None:
-    candidate = profile_plan(9)
-    candidate.dependencies = [
-        dependency("event-1", "event-2"),
-        dependency("event-1", "event-3"),
-        dependency("event-2", "event-4"),
-        dependency("event-3", "event-4"),
-        dependency("event-4", "event-5"),
-        dependency("event-5", "event-6"),
-        dependency("event-6", "event-7"),
-        dependency("event-7", "event-8"),
-        dependency("event-8", "event-9"),
-    ]
-    validate_story_plan(candidate, world(), characters())
-    validate_profile_structure(candidate, NarrativeProfile.EXPANSIVE)
-
-
-def test_disconnected_or_noncausal_graph_is_rejected() -> None:
-    with pytest.raises(ValueError, match="causal"):
-        validate_story_plan(
-            plan(
-                [
-                    dependency("event-1", "event-2", "temporal"),
-                    dependency("event-2", "event-3", "temporal"),
-                ]
-            ),
-            world(),
-            characters(),
-        )
-    with pytest.raises(ValueError, match="weakly connected"):
-        validate_story_plan(
-            plan([dependency("event-1", "event-2")]),
-            world(),
-            characters(),
-        )
-
-
-def test_unknown_payoff_reports_value_and_allowed_earlier_events() -> None:
+def test_unknown_payoff_reports_the_allowed_earlier_events() -> None:
+    """A payoff error names both the offending value and the events it could legally cite."""
     candidate = plan([dependency("event-1", "event-2"), dependency("event-2", "event-3")])
     candidate.events[1].payoff_of = ["charcoal_note"]
     with pytest.raises(ValueError) as captured:
@@ -326,57 +271,71 @@ def test_future_payoff_reports_only_earlier_events_as_allowed() -> None:
     assert "allowed earlier event IDs: event-1" in message
 
 
-def test_valid_or_empty_payoff_references_are_accepted() -> None:
-    candidate = plan([dependency("event-1", "event-2"), dependency("event-2", "event-3")])
-    candidate.events[2].payoff_of = ["event-1"]
-    assert validate_story_plan(candidate, world(), characters()) == [
-        "event-1",
-        "event-2",
-        "event-3",
-    ]
-    candidate.events[2].payoff_of = []
-    assert validate_story_plan(candidate, world(), characters()) == [
-        "event-1",
-        "event-2",
-        "event-3",
-    ]
-
-
 def test_payoff_schema_distinguishes_event_ids_from_story_state() -> None:
     properties = PlotEvent.model_json_schema()["properties"]
     assert "earlier event" in properties["payoff_of"]["description"]
     assert "not IDs" in properties["effects"]["description"]
 
 
-def test_structural_error_messages_stay_in_english() -> None:
-    """Validation messages feed the model's repair prompt, so they must stay ASCII English."""
-    messages: list[str] = []
+def profile_plan(event_count: int) -> StoryPlan:
+    """Build a valid linear plan with the requested number of events."""
+    candidate = plan([dependency("event-1", "event-2"), dependency("event-2", "event-3")])
+    for order in range(4, event_count + 1):
+        identifier = f"event-{order}"
+        candidate.events.append(event(identifier, order))
+        candidate.dependencies.append(dependency(f"event-{order - 1}", identifier))
+    validate_story_plan(candidate, world(), characters())
+    return candidate
 
-    def collect(candidate: StoryPlan) -> None:
-        with pytest.raises(ValueError) as captured:
-            validate_story_plan(candidate, world(), characters())
-        messages.append(str(captured.value))
 
-    duplicate_chapter = plan([dependency("event-1", "event-2"), dependency("event-2", "event-3")])
-    duplicate_chapter.chapters.append(duplicate_chapter.chapters[0])
-    collect(duplicate_chapter)
+@pytest.mark.parametrize(
+    ("profile", "event_count", "expectation"),
+    [
+        (NarrativeProfile.ESSENTIAL, 3, "accepts"),
+        (NarrativeProfile.DEVELOPED, 5, "rejects"),
+        (NarrativeProfile.DEVELOPED, 6, "accepts"),
+        (NarrativeProfile.EXPANSIVE, 8, "rejects"),
+        (NarrativeProfile.EXPANSIVE, 9, "rejects-without-branch"),
+    ],
+    ids=[
+        "essential-compact-plan",
+        "developed-below-floor",
+        "developed-at-floor",
+        "expansive-below-floor",
+        "expansive-linear-chain-lacks-a-branch",
+    ],
+)
+def test_profile_structure(profile, event_count, expectation) -> None:
+    """Each profile's event floor and, for Expansive, its branch-and-join contract."""
+    if expectation == "accepts":
+        validate_profile_structure(profile_plan(event_count), profile)
+    elif expectation == "rejects":
+        minimum = profile_min_events(profile)
+        with pytest.raises(
+            ValueError,
+            match=rf"{profile.value} profile requires at least {minimum} events; got {event_count}",
+        ):
+            validate_profile_structure(profile_plan(event_count), profile)
+    else:
+        with pytest.raises(ValueError, match="causal dependency branch"):
+            validate_profile_structure(profile_plan(event_count), profile)
 
-    unknown_chapter = plan([dependency("event-1", "event-2"), dependency("event-2", "event-3")])
-    unknown_chapter.events[0].chapter_id = "missing-chapter"
-    collect(unknown_chapter)
 
-    disconnected = plan(
-        [dependency("event-1", "event-2", "temporal"), dependency("event-2", "event-3", "temporal")]
-    )
-    collect(disconnected)
-
-    unknown_payoff = plan([dependency("event-1", "event-2"), dependency("event-2", "event-3")])
-    unknown_payoff.events[1].payoff_of = ["charcoal_note"]
-    collect(unknown_payoff)
-
-    assert messages
-    for message in messages:
-        assert message.isascii(), message
+def test_expansive_profile_accepts_a_causal_branch_and_later_join() -> None:
+    candidate = profile_plan(9)
+    candidate.dependencies = [
+        dependency("event-1", "event-2"),
+        dependency("event-1", "event-3"),
+        dependency("event-2", "event-4"),
+        dependency("event-3", "event-4"),
+        dependency("event-4", "event-5"),
+        dependency("event-5", "event-6"),
+        dependency("event-6", "event-7"),
+        dependency("event-7", "event-8"),
+        dependency("event-8", "event-9"),
+    ]
+    validate_story_plan(candidate, world(), characters())
+    validate_profile_structure(candidate, NarrativeProfile.EXPANSIVE)
 
 
 def test_the_event_target_follows_from_the_chapter_band_and_never_undercuts_the_floor() -> None:

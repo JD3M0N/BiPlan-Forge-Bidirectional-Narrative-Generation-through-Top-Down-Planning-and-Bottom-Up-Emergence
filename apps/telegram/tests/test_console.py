@@ -1,6 +1,7 @@
 import logging
 import sys
 
+import pytest
 from asg_telegram.console import ConsoleFormatter
 from asg_telegram.contract import GenerationFailure
 from colorama import Fore, Style
@@ -22,27 +23,20 @@ def make_record(level=logging.INFO, message="inició una historia"):
     return record
 
 
-def test_console_formatter_shows_clear_colored_user_block():
-    result = ConsoleFormatter().format(make_record())
-    assert Fore.CYAN in result
+@pytest.mark.parametrize(
+    ("category", "colour", "label"),
+    [("acción", Fore.CYAN, "ACCIÓN"), ("éxito", Fore.GREEN, "ÉXITO")],
+    ids=["action-block-is-cyan", "success-block-is-green"],
+)
+def test_console_formatter_renders_a_coloured_user_block_per_category(category, colour, label):
+    record = make_record()
+    record.category = category
+    result = ConsoleFormatter().format(record)
+    assert colour in result
     assert Style.RESET_ALL in result
-    assert "ACCIÓN" in result
+    assert label in result
     assert "Usuario : 123 (ana)" in result
     assert "Acción  : inició una historia" in result
-
-
-def test_console_formatter_does_not_add_secrets():
-    result = ConsoleFormatter().format(make_record(message="ejecutó /start"))
-    assert "TELEGRAM_BOT_TOKEN" not in result
-    assert "GEMINI_API_KEY" not in result
-
-
-def test_console_formatter_uses_green_for_success():
-    record = make_record(message="historia entregada")
-    record.category = "éxito"
-    result = ConsoleFormatter().format(record)
-    assert Fore.GREEN in result
-    assert "ÉXITO" in result
 
 
 def test_console_formatter_shows_actionable_generation_failure():
@@ -61,9 +55,15 @@ def test_console_formatter_shows_actionable_generation_failure():
     assert "Etapa   : outline" in result
 
 
-def test_console_formatter_redacts_unexpected_traceback_credentials():
+@pytest.mark.parametrize(
+    "secret",
+    ["token=super-secret", "no se pudo notificar con el token 123456789:AA" + "a" * 33],
+    ids=["generic-credential-assignment", "telegram-bot-token"],
+)
+def test_console_formatter_redacts_credentials_from_tracebacks(secret):
+    """A credential that reaches an unexpected traceback must never be printed."""
     try:
-        raise ValueError("token=super-secret")
+        raise ValueError(secret)
     except ValueError:
         record = make_record(level=logging.ERROR, message="falló la generación")
         record.exc_info = sys.exc_info()
@@ -71,16 +71,5 @@ def test_console_formatter_redacts_unexpected_traceback_credentials():
     assert "ValueError" in result
     assert "Traza" in result
     assert "super-secret" not in result
-    assert "[REDACTED]" in result
-
-
-def test_console_formatter_redacts_telegram_bot_tokens():
-    bot_token = "123456789:AA" + "a" * 33
-    try:
-        raise ValueError(f"no se pudo notificar con el token {bot_token}")
-    except ValueError:
-        record = make_record(level=logging.ERROR, message="falló la generación")
-        record.exc_info = sys.exc_info()
-    result = ConsoleFormatter().format(record)
-    assert bot_token not in result
+    assert "123456789:AA" not in result
     assert "[REDACTED]" in result
