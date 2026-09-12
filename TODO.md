@@ -1,12 +1,13 @@
 # Hoja de ruta
 
-**Estado medido el 2026-09-12 sobre `cf45c1b` más el cambio de perfiles de la versión 6.4.0.**
-Puerta de calidad limpia: `ruff check .`, `ruff format --check .` (113 archivos), 205 pruebas
-pasan y 2 se omiten, `pip check` sin requisitos rotos, y `tests/test_sync_railway_stories.ps1`
-pasa lanzado a mano. Las mediciones que cita este documento salen del corpus de `Stories/`, hoy
-127 ejecuciones Top-Down. Las cifras por perfil proceden de las 25 ejecuciones de la versión
-6.3.0; la última matriz de 6 historias con Gemini real (prompts canónicos 6 y 7 por los tres
-perfiles) es la verificación de 6.4.0 y ya no comparte contrato con ellas.
+**Estado medido el 2026-09-12 sobre `2acd732` más el fallo de audio degradado a aviso de la
+versión 6.4.1.** Puerta de calidad limpia: `ruff check .`, `ruff format --check .` (113 archivos),
+208 pruebas pasan y 2 se omiten, `pip check` sin requisitos rotos, y
+`tests/test_sync_railway_stories.ps1` pasa lanzado a mano. Las mediciones que cita este documento
+salen del corpus de `Stories/`, hoy 127 ejecuciones Top-Down. Las cifras por perfil proceden de las
+25 ejecuciones de la versión 6.3.0; la última matriz de 6 historias con Gemini real (prompts
+canónicos 6 y 7 por los tres perfiles) es la verificación de 6.4.0 y ya no comparte contrato con
+ellas.
 
 ## Cómo leer esto
 
@@ -24,22 +25,6 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 ---
 
 ## Lo siguiente
-
-### Un fallo de audio no puede invalidar una historia terminada
-
-- **Síntoma.** `_create_audio`, en `packages/top_down/src/asg_top_down/pipeline.py`, promete en su
-  propio docstring no invalidar una historia completa, pero solo captura `AudioGenerationError`.
-  El 2026-09-11 un `PermissionError` escapó y el run `20260911-173150-las-cenizas-del-juramento`
-  quedó en `failed` con 4388 palabras, las diez etapas narrativas y todos sus artefactos en disco,
-  porque `_finalize` nunca llegó a `repository.complete()`. Agrava el diagnóstico que
-  `ArtifactRepository.fail` escriba `stage: "unknown"` ante cualquier excepción que no sea
-  `ASGError`, tirando la etapa que `_record_failure` acababa de calcular: los cinco
-  `UNEXPECTED_ERROR` del corpus son indiagnosticables por eso.
-- **Qué hacer.** Capturar toda excepción en la etapa de audio y degradarla a aviso, como ya hace
-  la etapa de esqueleto narrativo. Y que `fail` conserve la etapa que recibe en vez de sustituirla
-  por `"unknown"`.
-- **Hecho cuando.** Un fallo arbitrario del narrador deja el run en `completed` con su aviso, y un
-  error no clasificado escribe en `error_report.json` la etapa donde ocurrió. Ambos con test.
 
 ### Desbloquear `evaluation.json` y poder leer las evaluaciones
 

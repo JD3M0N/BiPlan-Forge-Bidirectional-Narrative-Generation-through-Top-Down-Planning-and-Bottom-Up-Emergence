@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TypeVar
 
-from asg_core import AudioGenerationError, create_story_audio_sync
+from asg_core import create_story_audio_sync
 from asg_evaluation import create_evaluation_template
 
 from .agents import (
@@ -1087,17 +1087,25 @@ class StoryPipeline:
         if not self.audio:
             return
         self._notify(99, "audio", "Generando narración de la historia")
+        # Narration never calls the model, so no error reaching here justifies discarding a
+        # story that is already written: every failure degrades to a warning, including one
+        # raised while registering the artifact.
         try:
             create_story_audio_sync(self.repository.run_dir / "story.md")
-        except AudioGenerationError:
-            self.repository.add_warning(
-                "[AUDIO_GENERATION_FAILED] No se pudo crear story.mp3; story.md permanece válido."
-            )
-        else:
             self.repository.register_existing("story.mp3")
             self.repository.complete_stage("audio")
-        if (self.repository.run_dir / "audio.json").is_file():
-            self.repository.register_existing("audio.json")
+        except Exception as exc:
+            warning = (
+                "[AUDIO_GENERATION_FAILED] No se pudo crear story.mp3 "
+                f"({type(exc).__name__}); story.md permanece válido."
+            )
+            self.repository.add_warning(warning)
+            self._emit("audio_skipped", warning, stage="audio")
+        try:
+            if (self.repository.run_dir / "audio.json").is_file():
+                self.repository.register_existing("audio.json")
+        except OSError:
+            pass
 
     def _record_failure(self, error: Exception) -> None:
         """Persist a failed pipeline outcome before re-raising the error."""
@@ -1106,7 +1114,7 @@ class StoryPipeline:
         summary = getattr(error, "summary", type(error).__name__)
         self._emit("pipeline_failed", f"fallo la etapa {stage}: {summary}", stage=stage)
         self._save_usage()
-        self.repository.fail(error)
+        self.repository.fail(error, stage=stage)
 
     def _call_agent(self, name: str, function: Callable[[], T]) -> T:
         """Emit an agent event and execute the supplied agent operation."""

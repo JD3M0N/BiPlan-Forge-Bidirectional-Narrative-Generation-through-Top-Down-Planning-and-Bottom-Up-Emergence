@@ -137,8 +137,8 @@ class ArtifactRepository:
         self.metadata.updated_at = datetime.now(UTC)
         self._write_metadata()
 
-    def fail(self, error: Exception) -> None:
-        """Mark the requested value."""
+    def fail(self, error: Exception, *, stage: str | None = None) -> None:
+        """Record a failed run, keeping the stage the caller observed."""
         if isinstance(error, ASGError):
             error.run_id = self.metadata.run_id
             self.metadata.error = error.summary
@@ -153,12 +153,13 @@ class ArtifactRepository:
                 recommendations=error.recommendations,
             )
         else:
+            failed_stage = stage or "unknown"
             self.metadata.error = "Ocurrió un error interno inesperado."
             self.metadata.error_code = "UNEXPECTED_ERROR"
-            self.metadata.error_stage = "unknown"
+            self.metadata.error_stage = failed_stage
             report = ErrorReport(
                 code="UNEXPECTED_ERROR",
-                stage="unknown",
+                stage=failed_stage,
                 run_id=self.metadata.run_id,
                 summary="Ocurrió un error interno inesperado.",
                 details={"exception_type": type(error).__name__},

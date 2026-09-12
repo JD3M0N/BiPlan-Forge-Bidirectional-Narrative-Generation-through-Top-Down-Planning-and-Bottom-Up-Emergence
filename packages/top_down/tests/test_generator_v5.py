@@ -4,6 +4,7 @@ import pytest
 from asg_core import AudioGenerationError
 from asg_top_down import NarrativeProfile, StoryGenerator
 from asg_top_down import pipeline as pipeline_module
+from asg_top_down import storage as storage_module
 from asg_top_down.agents import AnalystAgent
 from asg_top_down.audit import parse_chapter_bodies
 from asg_top_down.errors import GeminiDailyQuotaError, PlotValidationError
@@ -474,14 +475,88 @@ def test_audio_failure_keeps_top_down_run_completed(tmp_path, monkeypatch) -> No
     metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["status"] == "completed"
     assert (
-        "[AUDIO_GENERATION_FAILED] No se pudo crear story.mp3; story.md permanece válido."
-        in metadata["warnings"]
+        "[AUDIO_GENERATION_FAILED] No se pudo crear story.mp3 (AudioGenerationError); "
+        "story.md permanece válido." in metadata["warnings"]
     )
     assert not run.audio_path.exists()
     assert (run.run_dir / "audio.json").is_file()
     audio_updates = [update for update in progress if update.stage == "audio"]
     assert audio_updates
     assert audio_updates[0].description == "Generando narración de la historia"
+
+
+def test_an_arbitrary_audio_failure_keeps_the_run_completed(tmp_path, monkeypatch) -> None:
+    def fail_audio(story_path):
+        raise PermissionError("story.mp3 is locked by another process")
+
+    monkeypatch.setattr(pipeline_module, "create_story_audio_sync", fail_audio)
+
+    run = StoryGenerator(FakeProvider(), tmp_path).generate(make_request())
+
+    metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["status"] == "completed"
+    assert (
+        "[AUDIO_GENERATION_FAILED] No se pudo crear story.mp3 (PermissionError); "
+        "story.md permanece válido." in metadata["warnings"]
+    )
+    assert "audio" not in metadata["completed_stages"]
+    assert not run.audio_path.exists()
+    assert run.run_dir.joinpath("story.md").is_file()
+
+
+def test_a_failure_registering_the_audio_artifact_keeps_the_run_completed(
+    tmp_path, monkeypatch
+) -> None:
+    def create_audio(story_path):
+        story_path.with_suffix(".mp3").write_bytes(b"fake-mp3")
+
+    def fail_register_existing(self, filename):
+        if filename == "story.mp3":
+            raise OSError("story.mp3 is locked by another process")
+        return storage_module.ArtifactRepository.register_existing(self, filename)
+
+    monkeypatch.setattr(pipeline_module, "create_story_audio_sync", create_audio)
+    monkeypatch.setattr(
+        storage_module.ArtifactRepository, "register_existing", fail_register_existing
+    )
+
+    run = StoryGenerator(FakeProvider(), tmp_path).generate(make_request())
+
+    metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["status"] == "completed"
+    assert (
+        "[AUDIO_GENERATION_FAILED] No se pudo crear story.mp3 (OSError); "
+        "story.md permanece válido." in metadata["warnings"]
+    )
+    assert "audio" not in metadata["completed_stages"]
+    assert run.run_dir.joinpath("story.md").is_file()
+
+
+def test_an_unclassified_failure_records_the_stage_where_it_happened(tmp_path) -> None:
+    class BrokenWorldProvider(FakeProvider):
+        def generate_structured(self, *, system_instruction, prompt, schema, profile):
+            if schema is WorldArtifact:
+                raise RuntimeError("world builder exploded")
+            return super().generate_structured(
+                system_instruction=system_instruction, prompt=prompt, schema=schema, profile=profile
+            )
+
+    generator = StoryGenerator(BrokenWorldProvider(), tmp_path)
+    with pytest.raises(RuntimeError):
+        generator.generate(make_request())
+
+    run_dirs = list(tmp_path.iterdir())
+    assert len(run_dirs) == 1
+    run_dir = run_dirs[0]
+
+    metadata = json.loads((run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["status"] == "failed"
+    assert metadata["error_code"] == "UNEXPECTED_ERROR"
+    assert metadata["error_stage"] == "world"
+
+    error_report = json.loads((run_dir / "error_report.json").read_text(encoding="utf-8"))
+    assert error_report["stage"] == "world"
+    assert error_report["code"] == "UNEXPECTED_ERROR"
 
 
 def test_invalid_initial_plan_is_replaced_once(tmp_path) -> None:
