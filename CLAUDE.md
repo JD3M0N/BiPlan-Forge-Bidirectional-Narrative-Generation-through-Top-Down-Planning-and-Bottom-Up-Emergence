@@ -39,7 +39,9 @@ python -m pytest -q -p no:cacheprovider
 python -m pip check
 ```
 
-No hay CI (`TODO.md`, "Calidad e infraestructura"), así que esto **no se valida solo**.
+No hay CI (`TODO.md`, "Meter la puerta de calidad en CI"), así que esto **no se valida solo**.
+Lanzar `pytest` **desde la raíz**: `tests/test_source_documentation.py` resuelve su glob contra el
+directorio de trabajo y pasa en vacío desde cualquier otro sitio.
 
 ### Iterar rápido
 
@@ -89,8 +91,10 @@ Lo que hace este pipeline distinto de "pedirle una historia al modelo":
 - **`profiles.py` define contratos cualitativos, no presupuestos de palabras.** Esencial /
   Desarrollada / Expansiva se expresan como texto de contrato (`PROFILE_GUIDANCE`) más un piso
   estructural (`PROFILE_MIN_EVENTS`: 6 y 9). `PROFILE_CHAPTER_BAND` y `MIN_EVENTS_PER_CHAPTER` son
-  **advisory**: llegan al planificador como guía y ningún validador los impone. Esa tensión entre
-  banda de capítulos y piso de eventos es el `P0` abierto del `TODO.md`.
+  **advisory**: llegan al planificador como guía y ningún validador los impone.
+  `profile_event_target` ya concilia ambos y llega al prompt, pero el validador sigue imponiendo
+  solo el piso, así que el planificador se clava en él: Expansiva planificó exactamente 9 eventos
+  en 9 de sus 12 corridas de la versión 6.3.0. Es la primera tarea abierta del `TODO.md`.
 - **Los reintentos son por perfil.** `PLAN_ATTEMPTS_BY_PROFILE` da a Expansiva un intento extra
   porque es la única con contrato de rama y reunión causal (`validate_profile_structure`).
 - **Los fallos se clasifican.** `errors.py` define `ASGError` con código, etapa, resumen seguro y
@@ -183,11 +187,13 @@ narración con edge-tts.
 
 ## TODO.md es la fuente de verdad del roadmap
 
-Antes de proponer trabajo nuevo, revisarlo: las tareas están agrupadas por subsistema, priorizadas
-`P0`/`P1`/`P2`, y cada una lleva su condición de cierre (**Cierre:**) y su evidencia en código
-(**Evidencia:**). Si la tarea de la sesión coincide con un ítem, trabajar contra esa definición de
-"hecho" y marcar el checkbox al terminar. La cabecera lleva una línea "Estado medido el <fecha>
-sobre `<commit>`" — actualizarla si el estado medido cambia sustancialmente.
+Antes de proponer trabajo nuevo, revisarlo. Las tareas van en tres secciones según lo que hace
+falta para moverlas — **Lo siguiente**, **Pendiente**, **Ideas** — y dentro de cada una el orden de
+la lista es el orden sugerido. No hay etiquetas de prioridad. Cada tarea tiene el mismo esqueleto:
+**Síntoma**, **Qué hacer** y **Hecho cuando**. Si la tarea de la sesión coincide con un ítem,
+trabajar contra su "Hecho cuando" y borrar el ítem al cerrarlo: el historial vive en git, no en el
+roadmap. La cabecera lleva una línea "Estado medido el <fecha> sobre `<commit>`" — actualizarla si
+el estado medido cambia sustancialmente.
 
 ## Trampas conocidas
 
@@ -201,8 +207,8 @@ sobre `<commit>`" — actualizarla si el estado medido cambia sustancialmente.
 - `.cache/` contiene sqlite y cachés de pytest de experimentos previos (`pytest-top-down-*`,
   `pytest-profile-*`...). Son artefactos de ejecución: no razonar sobre el estado del proyecto a
   partir de sus nombres.
-- `pipeline.py` pasa de 1100 líneas y `skeletons.py` de 1400. Dividirlos es un `P2` del `TODO.md`;
-  no lo hagas de paso dentro de otro cambio.
+- `pipeline.py` pasa de 1100 líneas y `skeletons.py` de 1400. Dividirlos está en «Pendiente» del
+  `TODO.md`; no lo hagas de paso dentro de otro cambio.
 
 ## Documentos de referencia
 
