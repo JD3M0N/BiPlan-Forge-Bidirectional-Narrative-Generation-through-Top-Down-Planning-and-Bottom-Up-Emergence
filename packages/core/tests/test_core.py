@@ -2,6 +2,10 @@
 
 import asyncio
 import json
+import os
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -10,6 +14,7 @@ from asg_core import (
     atomic_write_json,
     atomic_write_text,
     create_story_audio,
+    file_lock,
     find_project_root,
     markdown_to_speech_text,
     slugify,
@@ -159,3 +164,64 @@ def test_story_audio_retries_then_recovers_or_fails_cleanly(tmp_path, fake_tts, 
         assert metadata["error"] == "OSError"
         assert not (tmp_path / "story.mp3").exists()
         assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_file_lock_removes_its_sidecar_after_use(tmp_path):
+    protected = tmp_path / "evaluation.json"
+    sidecar = tmp_path / "evaluation.json.lock"
+    with file_lock(protected) as locked:
+        assert locked == protected.resolve()
+        assert sidecar.is_file()
+    assert not sidecar.exists()
+
+
+def test_file_lock_releases_when_the_body_raises(tmp_path):
+    protected = tmp_path / "evaluation.json"
+    with pytest.raises(RuntimeError, match="boom"), file_lock(protected):
+        raise RuntimeError("boom")
+    assert not (tmp_path / "evaluation.json.lock").exists()
+
+
+def test_a_foreign_sidecar_makes_the_lock_time_out(tmp_path):
+    protected = tmp_path / "evaluation.json"
+    (tmp_path / "evaluation.json.lock").write_text("999 0", encoding="utf-8")
+    with (
+        pytest.raises(TimeoutError, match="evaluation.json"),
+        file_lock(protected, timeout=0.1, stale_after=30.0, poll=0.01),
+    ):
+        pass
+
+
+def test_a_stale_sidecar_is_broken_and_acquired(tmp_path):
+    protected = tmp_path / "evaluation.json"
+    sidecar = tmp_path / "evaluation.json.lock"
+    sidecar.write_text("999 0", encoding="utf-8")
+    aged = time.time() - 120
+    os.utime(sidecar, (aged, aged))
+    with file_lock(protected, timeout=5.0, stale_after=1.0, poll=0.01):
+        assert sidecar.is_file()
+    assert not sidecar.exists()
+
+
+def test_threads_take_the_lock_one_at_a_time(tmp_path):
+    protected = tmp_path / "evaluation.json"
+    guard = threading.Lock()
+    inside = 0
+    overlaps = 0
+
+    def critical_section(_):
+        """Enter the lock and record any overlap with another thread."""
+        nonlocal inside, overlaps
+        with file_lock(protected, timeout=10.0, poll=0.01):
+            with guard:
+                inside += 1
+                if inside > 1:
+                    overlaps += 1
+            time.sleep(0.005)
+            with guard:
+                inside -= 1
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(critical_section, range(24)))
+    assert overlaps == 0
+    assert not (tmp_path / "evaluation.json.lock").exists()

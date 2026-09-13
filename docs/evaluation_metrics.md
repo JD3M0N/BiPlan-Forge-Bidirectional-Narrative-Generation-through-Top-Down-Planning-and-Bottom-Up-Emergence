@@ -40,12 +40,28 @@ Una historia pendiente de evaluación contiene:
 }
 ```
 
-La plantilla nula es el único registro incompleto permitido. Al registrar la
-primera evaluación se reemplaza; las siguientes se agregan a `evaluations`.
+Un registro cuyos **seis parámetros son nulos o ausentes** se considera una
+plantilla pendiente, esté donde esté en la lista y tenga o no `user` relleno:
+escribir solo el nombre del evaluador y dejar las puntuaciones para después es
+una edición válida. Las plantillas pendientes se descartan al guardar la
+siguiente evaluación; las evaluaciones completas se conservan y la nueva se
+agrega al final.
+
+Cualquier otro registro incompleto —con unas puntuaciones puestas y otras
+nulas, con un campo desconocido o con un valor fuera de 1-10— se rechaza con un
+error que nombra la **posición del registro y el campo culpable**, de modo que
+el archivo se pueda arreglar a mano en vez de quedar inservible.
+
 Cada evaluación completa requiere un `user` no vacío y los seis parámetros.
+`schema_version` sigue siendo **1**: el formato no ha cambiado, solo se ha
+relajado su interpretación, así que los `evaluation.json` ya escritos siguen
+siendo válidos.
 
 El archivo puede editarse manualmente respetando este contrato. También puede
-actualizarse desde **asg-console → Evaluar historia**.
+actualizarse desde **asg-console → Evaluar historia** o desde el bot de
+Telegram al terminar una generación. Las dos vías se serializan con un lock
+compartido (`asg_core.file_lock`), así que dos evaluaciones simultáneas no se
+pisan ni se pierden.
 
 ## API reutilizable
 
@@ -70,3 +86,42 @@ add_evaluation(
 
 La función valida el documento y realiza una sustitución atómica para no
 corromper evaluaciones existentes ante un fallo de escritura.
+
+## Leer y agregar
+
+El mismo paquete expone la lectura:
+
+```python
+from asg_evaluation import GROUPINGS, collect_evaluations, read_evaluations, summarize
+
+read_evaluations(story_directory)          # evaluaciones completas de una historia
+records = collect_evaluations(stories_root)  # todas, incluidas las no evaluadas
+summarize(records, key=GROUPINGS["profile"])  # media y varianza por perfil
+```
+
+Ejes disponibles en `GROUPINGS`: `story`, `profile`, `version`,
+`version-profile` y `approach`. La versión es la del **generador**
+(`generator_version.json`), no la del contrato de pipeline: `pipeline_version`
+agrupa releases distintas bajo una misma etiqueta y borra justo la comparación
+que interesa.
+
+La varianza es **muestral** y vale `None` cuando el grupo tiene una sola
+evaluación, que es el caso habitual por historia; la varianza poblacional daría
+un `0.0` engañoso. Las agrupaciones juntan evaluaciones individuales, no medias
+por historia, así que una historia evaluada dos veces pesa el doble: por eso
+cada resumen conserva las dos cuentas, `stories` y `evaluations`.
+
+## Comando
+
+```powershell
+report-evaluations [--stories PATH] [--csv PATH] [--group EJE]
+```
+
+Imprime la cobertura del corpus y una tabla por eje (`--group all` por defecto).
+Con `--csv` escribe **una fila por evaluación**, con las columnas
+`approach, story, run_id, narrative_profile, generator_version, pipeline_version,
+evaluation_index, user` y los seis parámetros. El archivo va en UTF-8 sin BOM:
+Excel en español necesita *Datos → Desde texto* para leerlo bien.
+
+Una historia con el `evaluation.json` corrupto se informa por `stderr` y el
+comando termina con código 1, pero el resto del corpus sí se agrega.

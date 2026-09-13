@@ -8,6 +8,7 @@ from .audio import (
     markdown_to_speech_text,
 )
 from .files import atomic_write_json, atomic_write_text
+from .locks import file_lock
 from .paths import find_project_root, slugify, stories_path
 
 __all__ = [
@@ -17,6 +18,7 @@ __all__ = [
     "atomic_write_text",
     "create_story_audio",
     "create_story_audio_sync",
+    "file_lock",
     "find_project_root",
     "markdown_to_speech_text",
     "slugify",

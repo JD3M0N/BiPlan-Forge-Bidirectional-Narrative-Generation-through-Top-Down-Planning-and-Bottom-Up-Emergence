@@ -1,13 +1,14 @@
 # Hoja de ruta
 
-**Estado medido el 2026-09-12 sobre `2acd732` más el fallo de audio degradado a aviso de la
-versión 6.4.1.** Puerta de calidad limpia: `ruff check .`, `ruff format --check .` (113 archivos),
-208 pruebas pasan y 2 se omiten, `pip check` sin requisitos rotos, y
+**Estado medido el 2026-09-13 sobre `16c16db` más el desbloqueo de `evaluation.json` de
+`asg-evaluation` 0.3.0.** Puerta de calidad limpia: `ruff check .`, `ruff format --check .`
+(117 archivos), 227 pruebas pasan y 2 se omiten, `pip check` sin requisitos rotos, y
 `tests/test_sync_railway_stories.ps1` pasa lanzado a mano. Las mediciones que cita este documento
-salen del corpus de `Stories/`, hoy 127 ejecuciones Top-Down. Las cifras por perfil proceden de las
-25 ejecuciones de la versión 6.3.0; la última matriz de 6 historias con Gemini real (prompts
-canónicos 6 y 7 por los tres perfiles) es la verificación de 6.4.0 y ya no comparte contrato con
-ellas.
+salen del corpus de `Stories/`, hoy 129 ejecuciones Top-Down; de las 92 con `evaluation.json`,
+una sola tiene puntuaciones reales, medido con `report-evaluations`. Las cifras por perfil
+proceden de las 25 ejecuciones de la versión 6.3.0; la última matriz de 6 historias con Gemini
+real (prompts canónicos 6 y 7 por los tres perfiles) es la verificación de 6.4.0 y ya no
+comparte contrato con ellas.
 
 ## Cómo leer esto
 
@@ -25,23 +26,6 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 ---
 
 ## Lo siguiente
-
-### Desbloquear `evaluation.json` y poder leer las evaluaciones
-
-- **Síntoma.** El centinela de plantilla compara la lista entera contra la plantilla exacta, así
-  que cualquier edición razonable la saca de esa igualdad y cae en la validación estricta.
-  Reproducido: escribir solo el nombre del evaluador y dejar las notas para después deja el
-  archivo inservible para siempre, y el `ValueError` culpa a `coherence` en vez de a la causa
-  real. Además el ciclo leer-modificar-escribir de `add_evaluation` no está protegido, así que dos
-  evaluaciones simultáneas por Telegram se pisan. El resultado se ve en el corpus: de 76
-  ejecuciones con `evaluation.json`, **una sola** tiene puntuaciones reales.
-- **Qué hacer.** Que el centinela reconozca una plantilla sin puntuaciones en vez de exigir
-  igualdad exacta, y proteger la secuencia completa de añadir una evaluación. De paso, exportar un
-  lector público con agregación por historia y por perfil, que hoy no existe: el paquete solo sabe
-  escribir.
-- **Hecho cuando.** Un `evaluation.json` editado a mano de forma razonable sigue aceptando
-  evaluaciones, un test de concurrencia prueba que no se pierde ninguna, y hay media y varianza por
-  historia y por perfil comparables entre versiones del generador.
 
 ### Meter la puerta de calidad en CI
 

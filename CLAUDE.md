@@ -28,7 +28,8 @@ Copiar `.env.example` a `.env`. `GEMINI_API_KEY` es opcional: sin ella los tests
 falsos y `run-escape-room --no-llm` genera la historia de respaldo determinista.
 
 Comandos expuestos (detalles en [commands.md](commands.md)): `asg-console`, `generate-story`,
-`compare-story-runs`, `run-escape-room`, `asg-telegram`, `asg-telegram-run`.
+`compare-story-runs`, `run-escape-room`, `report-evaluations`, `asg-telegram`,
+`asg-telegram-run`.
 
 ### Calidad — ejecutar siempre antes de dar por terminado un cambio
 
