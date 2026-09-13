@@ -3,7 +3,8 @@
 **Estado medido el 2026-09-13 sobre `16c16db` más el desbloqueo de `evaluation.json` de
 `asg-evaluation` 0.3.0.** Puerta de calidad limpia: `ruff check .`, `ruff format --check .`
 (117 archivos), 227 pruebas pasan y 2 se omiten, `pip check` sin requisitos rotos, y
-`tests/test_sync_railway_stories.ps1` pasa lanzado a mano. Las mediciones que cita este documento
+`tests/test_sync_railway_stories.ps1` pasa. Las cinco corren ahora en
+`.github/workflows/quality.yml` en cada push y pull request. Las mediciones que cita este documento
 salen del corpus de `Stories/`, hoy 129 ejecuciones Top-Down; de las 92 con `evaluation.json`,
 una sola tiene puntuaciones reales, medido con `report-evaluations`. Las cifras por perfil
 proceden de las 25 ejecuciones de la versión 6.3.0; la última matriz de 6 historias con Gemini
@@ -26,16 +27,6 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 ---
 
 ## Lo siguiente
-
-### Meter la puerta de calidad en CI
-
-- **Síntoma.** No existe `.github/`. Ni Ruff, ni el formato, ni pytest, ni `pip check` se ejecutan
-  automáticamente. `pyproject.toml` fija `python_files = ["test_*.py"]`, así que los ocho
-  escenarios de `tests/test_sync_railway_stories.ps1` no los lanza nadie salvo a mano.
-- **Qué hacer.** Un flujo que instale el repositorio y corra las cuatro comprobaciones más el test
-  de PowerShell en cada cambio. Lanzar pytest **desde la raíz**, porque el gate de documentación
-  depende del directorio de trabajo.
-- **Hecho cuando.** Un fallo de cualquiera de las cinco comprobaciones bloquea el merge.
 
 ### El gate de documentación pasa en vacío
 

@@ -40,7 +40,9 @@ python -m pytest -q -p no:cacheprovider
 python -m pip check
 ```
 
-No hay CI (`TODO.md`, "Meter la puerta de calidad en CI"), así que esto **no se valida solo**.
+`.github/workflows/quality.yml` corre estas cuatro más el test de PowerShell en `windows-latest`
+con Python 3.12, en cada push a `main` y en cada pull request: un status check `quality` en rojo
+bloquea el merge. Lanzarlas en local sigue siendo lo que evita el viaje de ida y vuelta con CI.
 Lanzar `pytest` **desde la raíz**: `tests/test_source_documentation.py` resuelve su glob contra el
 directorio de trabajo y pasa en vacío desde cualquier otro sitio.
 
@@ -54,7 +56,8 @@ python -m pytest packages/top_down/tests/test_generator_v5.py -q -k revision
 
 `pyproject.toml` fija `testpaths = ["packages", "apps", "tests"]`, así que `pytest` sin argumentos
 recoge todo el monorepo. `tests/test_sync_railway_stories.ps1` **no** lo recoge pytest: es un test
-de PowerShell que hay que lanzar a mano.
+de PowerShell que hay que lanzar a mano en local, aunque `.github/workflows/quality.yml` sí lo
+ejecuta en cada push y pull request.
 
 Las pruebas de Top-Down y Bottom-Up usan proveedores falsos y nunca llaman a la API real, salvo
 `packages/top_down/tests/test_gemini_live.py`, que se omite a menos que `RUN_GEMINI_LIVE=1`. **No

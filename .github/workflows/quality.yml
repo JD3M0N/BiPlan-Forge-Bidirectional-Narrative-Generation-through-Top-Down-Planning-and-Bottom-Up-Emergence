@@ -1,0 +1,63 @@
+name: Puerta de calidad
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: quality
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            packages/*/pyproject.toml
+            apps/*/pyproject.toml
+
+      - name: Instalar el monorepo
+        id: install
+        run: python -m pip install -r requirements-dev.txt
+
+      # Las cinco comprobaciones corren aunque una falle, para que una vuelta de CI
+      # enseñe todo el daño en vez de sólo el primer fallo.
+      - name: ruff check
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: ruff check .
+
+      - name: ruff format --check
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: ruff format --check .
+
+      # Desde la raíz a propósito: tests/test_source_documentation.py resuelve su glob
+      # contra el directorio de trabajo y pasa en vacío desde cualquier otro sitio.
+      - name: pytest
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: python -m pytest -q -p no:cacheprovider
+
+      - name: pip check
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: python -m pip check
+
+      # pytest no lo recoge (python_files = ["test_*.py"]) y exige Windows PowerShell 5.1.
+      - name: sync-railway-stories (PowerShell 5.1)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        shell: powershell
+        run: |
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests\test_sync_railway_stories.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
