@@ -23,6 +23,7 @@ from .agents import (
     WriterAgent,
 )
 from .audit import canonical_chapter, story_metrics, word_count
+from .craft_evidence import craft_evidence
 from .errors import (
     ConfigurationError,
     GeminiBillingQuotaError,
@@ -43,6 +44,7 @@ from .schemas import (
     ChapterPlan,
     ChapterRevisionAttempt,
     ChapterRevisionResult,
+    CharacterProfile,
     CharactersArtifact,
     LLMUsageArtifact,
     NarrativeBlueprint,
@@ -772,6 +774,8 @@ class StoryPipeline:
         """Critique the complete draft, then let Writer revise chapter by chapter."""
         assert self.repository is not None
         self._notify(78, "critique", "Analizando el drama del borrador completo")
+        evidence = craft_evidence(plan.chapters, draft_bodies)
+        self.repository.save_json("craft_evidence.json", evidence)
         try:
 
             def critique_story():
@@ -783,6 +787,7 @@ class StoryPipeline:
                     plan,
                     presentation,
                     draft,
+                    evidence.prompt_block,
                 )
 
             review = self._call_agent("drama_critic", critique_story)
@@ -801,6 +806,7 @@ class StoryPipeline:
             return draft
         return self._revise_chapters(
             request,
+            characters,
             plan,
             presentation,
             draft_bodies,
@@ -821,6 +827,7 @@ class StoryPipeline:
     def _revise_chapters(
         self,
         request: StoryRequest,
+        characters: CharactersArtifact,
         plan: StoryPlan,
         presentation: StoryPresentation,
         draft_bodies: list[str],
@@ -851,9 +858,12 @@ class StoryPipeline:
             ]
             notes = self._notes_for_chapter(review.notes, chapter, events)
             if notes:
+                character_ids = {item for event in events for item in event.character_ids}
+                relevant = [item for item in characters.characters if item.id in character_ids]
                 accepted, result = self._revise_one_chapter(
                     writer,
                     request,
+                    relevant or characters.characters,
                     plan,
                     presentation,
                     chapter,
@@ -922,6 +932,7 @@ class StoryPipeline:
         self,
         writer: WriterAgent,
         request: StoryRequest,
+        characters: list[CharacterProfile],
         plan: StoryPlan,
         presentation: StoryPresentation,
         chapter: ChapterPlan,
@@ -944,6 +955,7 @@ class StoryPipeline:
                     """Rewrite the bound chapter with this attempt's feedback."""
                     return writer.run(
                         request,
+                        characters,
                         plan,
                         presentation,
                         chapter,

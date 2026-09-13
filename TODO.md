@@ -1,17 +1,17 @@
 # Hoja de ruta
 
-**Estado medido el 2026-09-13 sobre `98a9a1b` más el registro de la artesanía narrativa de
-`asg-top-down` 6.5.0.** Puerta de calidad limpia: `ruff check .`, `ruff format --check .`
-(124 archivos), 258 pruebas pasan y 2 se omiten, `pip check` sin requisitos rotos, y
+**Estado medido el 2026-09-13 sobre `d58718b` más la intervención de artesanía narrativa de
+`asg-top-down` 6.6.0.** Puerta de calidad limpia: `ruff check .`, `ruff format --check .`
+(126 archivos), 269 pruebas pasan y 2 se omiten, `pip check` sin requisitos rotos, y
 `tests/test_sync_railway_stories.ps1` pasa. Las cinco corren ahora en
 `.github/workflows/quality.yml` en cada push y pull request. Las mediciones que cita este documento
-salen del corpus de `Stories/`, hoy 137 ejecuciones Top-Down; de las 104 historias con `story.md`,
-101 tienen `evaluation.json` y una sola tiene puntuaciones reales, medido con `report-evaluations`.
+salen del corpus de `Stories/`, hoy 146 ejecuciones Top-Down; de las 113 historias con `story.md`,
+105 tienen `evaluation.json` y una sola tiene puntuaciones reales, medido con `report-evaluations`.
 Las cifras de prosa —diálogo, palabras por frase y palabras por párrafo— salen de
-`report-story-craft` sobre las 74 historias de versión 6 en adelante, 72 de ellas terminadas, y
-están documentadas en [docs/artesania_narrativa.md](docs/artesania_narrativa.md), que incluye la
-matriz de 9 historias con Gemini real (catálogos 4, 6 y 7 por los tres perfiles) que fija la línea
-base de 6.5.0.
+`report-story-craft` sobre las 83 historias de versión 6 en adelante, 81 de ellas terminadas, y
+están documentadas en [docs/artesania_narrativa.md](docs/artesania_narrativa.md), que enfrenta dos
+matrices de 9 historias con Gemini real sobre los mismos prompts (catálogos 4, 6 y 7 por los tres
+perfiles): la línea base 6.5.0 y la intervención 6.6.0.
 
 ## Cómo leer esto
 
@@ -57,44 +57,35 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 - **Hecho cuando.** Ningún run queda bloqueado indefinidamente, los cuatro varados están
   resueltos, y hay test de la transición.
 
-### El pipeline resume en vez de dramatizar
+### El desenlace sigue resumiendo
 
-- **Síntoma.** Medido con `report-story-craft` sobre las historias 6.x del corpus: mediana de
-  31% de párrafos con alguna marca de diálogo, y **ocho historias sin una sola marca**. Las
-  cifras ya se registran en `story_metrics.json` desde 6.5.0, pero ningún agente las ve: el
-  prompt del escritor pide prosa y el del crítico dramático juzga el borrador sin ninguna
-  evidencia de si hay escena o sólo sinopsis.
-- **Qué hacer.** Pedir escena dramatizada en la guía de prosa del escritor, y dar al crítico
-  dramático la artesanía como evidencia **cualitativa**, derivada de umbrales y sin cifras en el
-  prompt: `profiles.py` documenta por qué un número dentro del prompt gana a los demás.
-- **Hecho cuando.** La matriz de nueve historias de 6.5.0 (catálogos 4, 6 y 7 por los tres
-  perfiles, en `docs/artesania_narrativa.md`) se repite sobre la versión nueva y la proporción
-  de diálogo sube sin que caigan coherencia ni satisfacción.
+- **Síntoma.** La intervención de 6.6.0 levantó el diálogo de los capítulos intermedios del 41% al
+  48%, pero el último capítulo sólo pasó del 36% al 39% y sigue 11 puntos por debajo del primero.
+  La cláusula «un desenlace es una escena» está en el prompt del Drafter y no basta: el modelo
+  cierra resumiendo cómo acabaron las cosas. Medido sobre las dos matrices de nueve historias en
+  `docs/artesania_narrativa.md`.
+- **Qué hacer.** Tratar el último capítulo como caso propio en vez de endurecer el contrato para
+  todos: el Drafter ya sabe qué capítulo escribe y en qué posición, así que puede recibir la
+  exigencia de desenlace dramatizado sólo donde hace falta.
+- **Hecho cuando.** La mediana de diálogo del último capítulo deja de estar por debajo de la de los
+  intermedios, repitiendo la matriz de nueve.
+
+### El canal de evidencia al crítico no se ha ejercitado
+
+- **Síntoma.** `craft_evidence.json` salió vacío en las nueve historias de 6.6.0: los borradores
+  pasaron los tres umbrales de `craft_evidence.py`, así que el crítico dramático nunca recibió el
+  bloque `CRAFT OBSERVATIONS`. Toda la mejora medida viene del prompt del Drafter; del canal sólo
+  se sabe que no estorba. Hay test unitario de los umbrales y de que el bloque llega al prompt,
+  pero ninguna evidencia de que el crítico lo use bien.
+- **Qué hacer.** Provocar el caso: generar con un prompt que tienda al resumen —el catálogo 6 era
+  el peor antes de 6.6.0— hasta disparar un umbral, y comprobar si el crítico levanta la nota
+  `voice_style`/`pacing` sobre el capítulo señalado y si el Writer la aplica.
+- **Hecho cuando.** Existe al menos un run con `craft_evidence.json` no vacío, y está escrito si la
+  nota que produjo mejoró el capítulo o no.
 
 ---
 
 ## Pendiente
-
-### Párrafos-bloque de hasta doscientas palabras
-
-- **Síntoma.** Mediana de 82 palabras por párrafo en las historias 6.x, con casos de 152 y 197
-  —`20260911-174447-la-sombra-del-volcan` y `20260903-172904-el-dominio-del-mesozoico`—. Un
-  párrafo de doscientas palabras no es un párrafo: es un capítulo sin cortar, y coincide con las
-  historias sin diálogo.
-- **Qué hacer.** Acotar cualitativamente la longitud de párrafo en la guía de prosa, junto a la
-  petición de escena, y comprobar si el corte de párrafo arrastra al diálogo o es independiente.
-- **Hecho cuando.** `words_per_paragraph` baja de la banda de 150+ en todo el corpus nuevo y se
-  sabe, con datos, si diálogo y longitud de párrafo son la misma señal o dos.
-
-### El perfil Esencial dramatiza la mitad que Desarrollada
-
-- **Síntoma.** 21% de párrafos con diálogo en Esencial frente al 40% de Desarrollada y el 32% de
-  Expansiva, sobre 23, 16 y 26 historias. Esencial no es sólo más corta: es la que menos escena
-  escribe, y su `PROFILE_GUIDANCE` pide economía sin distinguir entre resumir y condensar.
-- **Qué hacer.** Revisar el contrato de Esencial para que la economía no se pague en escena, y
-  medir si la diferencia sobrevive cuando el escritor recibe la petición de dramatizar.
-- **Hecho cuando.** Está escrito si la brecha es del perfil o del prompt, y Esencial deja de ser
-  el perfil con menos diálogo por construcción.
 
 ### Completar las variantes por perfil del catálogo de prompts
 

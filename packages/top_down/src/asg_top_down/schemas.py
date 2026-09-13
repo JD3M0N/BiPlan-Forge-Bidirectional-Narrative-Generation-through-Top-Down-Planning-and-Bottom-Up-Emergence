@@ -353,6 +353,20 @@ class StoryReview(BaseModel):
     constraint_checks: list[ConstraintCheck] = Field(default_factory=list)
 
 
+class ChapterCraftEvidence(BaseModel):
+    """Craft deficits observed in one drafted chapter, worded for the critic."""
+
+    chapter_id: str = Field(pattern=ID_PATTERN)
+    observations: list[str] = Field(default_factory=list)
+
+
+class CraftEvidenceArtifact(BaseModel):
+    """Deterministic craft evidence and the exact block handed to the Drama Critic."""
+
+    chapters: list[ChapterCraftEvidence] = Field(default_factory=list)
+    prompt_block: str = ""
+
+
 class ChapterMetrics(BaseModel):
     """Record observed chapter size and prose craft without defining a target."""
 

@@ -8,6 +8,7 @@ from asg_top_down import storage as storage_module
 from asg_top_down import version as version_module
 from asg_top_down.agents import AnalystAgent
 from asg_top_down.audit import parse_chapter_bodies
+from asg_top_down.craft_evidence import NO_DIALOGUE
 from asg_top_down.errors import GeminiDailyQuotaError, PlotValidationError
 from asg_top_down.graph import materialize_plan, validate_profile_structure
 from asg_top_down.pipeline import StoryPipeline
@@ -250,6 +251,11 @@ def prose(label: str, words: int = 300) -> str:
     return " ".join(f"{label}{index}" for index in range(words))
 
 
+def scene_prose(label: str = "escena") -> str:
+    spoken = "—Nadie mas lo sabe —dijo Ana."
+    return "\n\n".join([spoken, f"Ana cerro el archivo {label}."] * 4)
+
+
 class FakeProvider:
     model_name = "fake-model"
 
@@ -267,6 +273,7 @@ class FakeProvider:
         quota_error_at: str | None = None,
         fail_semantic_ranking=False,
         fail_architect=False,
+        drafter_outputs: list[str] | None = None,
     ) -> None:
         self.plans = list(plans or [valid_plan()])
         self.fail_quality = fail_quality
@@ -281,6 +288,7 @@ class FakeProvider:
         else:
             self.fail_writer_calls = set(fail_writer_call)
         self.writer_outputs = list(writer_outputs) if writer_outputs is not None else None
+        self.drafter_outputs = list(drafter_outputs) if drafter_outputs is not None else None
         self.analyzed_request = analyzed_request or make_request()
         self.fail_semantic_ranking = fail_semantic_ranking
         self.fail_architect = fail_architect
@@ -362,6 +370,8 @@ class FakeProvider:
                 return self.writer_outputs.pop(0)
             return prose(f"revisado{self.writer_number}-")
         self.draft_number += 1
+        if self.drafter_outputs is not None:
+            return self.drafter_outputs.pop(0)
         return prose(f"borrador{self.draft_number}-")
 
 
@@ -668,6 +678,38 @@ def test_drafter_receives_dag_history_and_previous_chapter(tmp_path) -> None:
     assert "RELEVANT PRIOR EVENTS:\n[]" in draft_calls[0][1]
     assert '"id": "event-1"' in draft_calls[1][1]
     assert "borrador1-0" in draft_calls[1][1]
+
+
+def test_the_critic_is_shown_which_drafted_chapters_read_as_summary(tmp_path) -> None:
+    provider = FakeProvider()
+    run = StoryGenerator(provider, tmp_path).generate(make_request())
+    critic_prompt = structured_prompt(provider, "StoryReview")
+    evidence = json.loads((run.run_dir / "craft_evidence.json").read_text(encoding="utf-8"))
+
+    assert "CRAFT OBSERVATIONS:" in critic_prompt
+    assert NO_DIALOGUE in critic_prompt
+    assert [item["chapter_id"] for item in evidence["chapters"]] == ["chapter-1", "chapter-2"]
+    assert all(item["observations"] for item in evidence["chapters"])
+
+
+def test_a_dramatized_draft_sends_the_critic_no_craft_observations(tmp_path) -> None:
+    provider = FakeProvider(drafter_outputs=[scene_prose(), scene_prose()])
+    run = StoryGenerator(provider, tmp_path).generate(make_request())
+    evidence = json.loads((run.run_dir / "craft_evidence.json").read_text(encoding="utf-8"))
+
+    assert "CRAFT OBSERVATIONS:" not in structured_prompt(provider, "StoryReview")
+    assert evidence["prompt_block"] == ""
+    assert not any(item["observations"] for item in evidence["chapters"])
+
+
+def test_the_writer_is_given_the_voices_it_must_preserve(tmp_path) -> None:
+    provider = FakeProvider(story_review=major_story_review())
+    StoryGenerator(provider, tmp_path).generate(make_request())
+    writer_calls = [item for item in provider.text_calls if "final Writer" in item[0]]
+
+    assert writer_calls
+    assert all("RELEVANT CHARACTERS:" in prompt for _, prompt in writer_calls)
+    assert all('"voice": "Precise and restrained"' in prompt for _, prompt in writer_calls)
 
 
 def test_writer_retries_unchanged_major_revision_and_saves_attempt(tmp_path) -> None:

@@ -60,10 +60,17 @@ class DrafterAgent(Agent[str]):
                 f"{request.language}, without a heading or process notes. Dramatize the supplied "
                 "events in order, make causes and consequences visible, and render every supplied "
                 "event as a distinct narrative development instead of compressing multiple events "
-                "into summary. Expand Developed and Expansive stories through meaningful action, "
-                "reaction, and consequence rather than repetition or decorative filler. respect "
-                "world rules, character intentions, continuity, and the qualitative narrative "
-                "profile. Do not expose internal IDs or planning terminology."
+                "into summary. Play the decisive turns as scene instead of reporting them: let "
+                "the characters speak in the voice recorded in their profile, and give spoken "
+                "exchange its own paragraph under the dialogue-dash convention of the requested "
+                "language rather than summarizing what was said. Break the paragraph at every "
+                "beat — a new action, a new speaker, a shift of attention — instead of "
+                "packing a whole sequence into one block. Hold this to the final chapter: a "
+                "resolution is a scene, not an account of how matters ended. Expand Developed and "
+                "Expansive stories through meaningful action, reaction, and consequence rather "
+                "than repetition or decorative filler. Respect world rules, character intentions, "
+                "continuity, and the qualitative narrative profile. Do not expose internal IDs or "
+                "planning terminology."
             ),
             prompt=(
                 f"{story_specification_header(request)}"
@@ -88,6 +95,7 @@ class WriterAgent(Agent[str]):
     def run(
         self,
         request: StoryRequest,
+        characters: list[CharacterProfile],
         plan: StoryPlan,
         presentation: StoryPresentation,
         chapter: ChapterPlan,
@@ -106,10 +114,14 @@ class WriterAgent(Agent[str]):
                 "causality, and continuity, and honor the depth and pacing of the qualitative "
                 "narrative profile. Preserve every distinct planned event and expand through "
                 "meaningful action, reaction, and consequence rather than summary, repetition, or "
-                "decorative filler. Coordinate the opening with the previously revised chapter."
+                "decorative filler. Preserve the dramatized scene you are given: keep every "
+                "character speaking in the voice recorded in their profile, never turn a spoken "
+                "exchange into reported summary, and never merge separated beats back into one "
+                "block. Coordinate the opening with the previously revised chapter."
             ),
             prompt=(
                 f"{story_specification_header(request)}"
+                f"\n\nRELEVANT CHARACTERS:\n{json_text(characters)}"
                 f"\n\nPLAN:\n{json_text(plan)}"
                 f"\n\nLOCALIZED PRESENTATION:\n{json_text(presentation)}"
                 f"\n\nCURRENT CHAPTER:\n{json_text(chapter)}"

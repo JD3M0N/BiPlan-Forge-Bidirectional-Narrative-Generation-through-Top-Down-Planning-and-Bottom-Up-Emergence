@@ -64,6 +64,7 @@ class DramaCriticAgent(Agent[StoryReview]):
         plan: StoryPlan,
         presentation: StoryPresentation,
         draft: str,
+        craft_evidence: str = "",
     ) -> StoryReview:
         """Run the global-to-local drama criticism workflow."""
         return self.provider.generate_structured(
@@ -82,9 +83,14 @@ class DramaCriticAgent(Agent[StoryReview]):
                 "dramatization instruction (for example, give event_X its own reaction beat before "
                 "continuing to event_Y) — never a word-count or length instruction. Use empty "
                 "chapter_ids for global notes and exact canonical chapter IDs for local notes. "
-                "Each note needs a unique lowercase ID, priority, category, evidence, and a "
-                "concrete instruction the Writer can apply. Do not score the story or invent user "
-                "requirements."
+                "When CRAFT OBSERVATIONS name a chapter, that chapter narrates where it should "
+                "play: raise a major note citing the chapter, voice_style when it lacks spoken "
+                "scene and pacing when its paragraphs run as blocks, and instruct the Writer which "
+                "confrontation to stage and where to break the beat — again, never a "
+                "word-count or length instruction. Chapters absent from those observations need no "
+                "craft note. Each note needs a unique lowercase ID, priority, category, evidence, "
+                "and a concrete instruction the Writer can apply. Do not score the story or invent "
+                "user requirements."
             ),
             prompt=(
                 f"{story_specification_header(request)}"
@@ -93,6 +99,7 @@ class DramaCriticAgent(Agent[StoryReview]):
                 f"\n\nPLAN:\n{json_text(plan)}"
                 f"\n\nLOCALIZED PRESENTATION:\n{json_text(presentation)}"
                 f"\n\nDRAFT:\n{draft}"
+                + (f"\n\nCRAFT OBSERVATIONS:\n{craft_evidence}" if craft_evidence else "")
             ),
             schema=StoryReview,
             profile="review",
