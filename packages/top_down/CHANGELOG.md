@@ -1,5 +1,28 @@
 # Historial de cambios
 
+## 6.5.0
+
+- `story_metrics.json` registra la artesania de la prosa junto al tamano: parrafos, frases y
+  palabras de prosa, parrafos que abren con raya, parrafos con comillas, parrafos con alguna
+  marca de dialogo, `dialogue_ratio`, `words_per_sentence` y `words_per_paragraph`. Las cuatro
+  ultimas cifras tambien van capitulo a capitulo en `chapter_metrics`. Medido sobre las 65
+  historias 6.x del corpus: mediana de 26 palabras por frase, 82 por parrafo y 31% de parrafos
+  con dialogo, y 8 historias sin una sola marca de dialogo. Ningun prompt cambia: son cifras
+  observadas, no objetivos.
+
+- Las primitivas viven en `asg_core.craft` (`craft_metrics`, `prose_paragraphs`,
+  `split_sentences`) para que el recolector de `asg_evaluation` las use sin invertir la
+  direccion de dependencias, y para que el Bottom-Up las reuse cuando se equiparen sus
+  artefactos.
+
+- `story_metrics.json` declara `chapter_bodies_recovered`. Cuando los encabezados canonicos no
+  sobreviven, `parse_chapter_bodies` devuelve cuerpos vacios y las cifras por capitulo quedan en
+  cero: antes ese cero era indistinguible de un capitulo vacio de verdad.
+
+- `pipeline_version` pasa a `6.1`. El conjunto de artefactos no cambia, pero el contenido de
+  `story_metrics.json` si, y `pipeline_version >= 6.1` es el predicado exacto de "este run
+  registro su artesania". `StoryRun` sigue abriendo 5.0, 5.1, 5.2, 5.3 y 6.0.
+
 ## 6.4.0
 
 - El numero de eventos que se le ensena al planificador y el que se le impone son ahora

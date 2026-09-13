@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "asg-evaluation"
-version = "0.3.0"
+version = "0.4.0"
 description = "Shared human-evaluation storage for ASG stories"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,6 +12,7 @@ dependencies = ["asg-core>=0.3.0"]
 
 [project.scripts]
 report-evaluations = "asg_evaluation.cli:main"
+report-story-craft = "asg_evaluation.craft_cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/asg_evaluation"]

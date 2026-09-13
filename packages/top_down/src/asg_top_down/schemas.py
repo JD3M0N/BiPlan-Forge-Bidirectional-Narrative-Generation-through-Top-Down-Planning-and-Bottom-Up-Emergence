@@ -354,20 +354,40 @@ class StoryReview(BaseModel):
 
 
 class ChapterMetrics(BaseModel):
-    """Record observed chapter size without defining a target."""
+    """Record observed chapter size and prose craft without defining a target."""
 
     chapter_id: str = Field(pattern=ID_PATTERN)
     words: int = Field(ge=0)
     events: int = Field(ge=0)
+    paragraphs: int = Field(default=0, ge=0)
+    sentences: int = Field(default=0, ge=0)
+    dialogue_paragraphs: int = Field(default=0, ge=0)
+    dialogue_ratio: float = Field(default=0.0, ge=0.0, le=1.0)
+    words_per_sentence: float = Field(default=0.0, ge=0.0)
+    words_per_paragraph: float = Field(default=0.0, ge=0.0)
 
 
 class StoryMetrics(BaseModel):
-    """Record observed story characteristics without budget compliance."""
+    """Record observed story characteristics without budget compliance.
+
+    ``words`` counts the whole Markdown document, headings included, while
+    ``prose_words`` counts only the paragraphs the craft figures describe.
+    """
 
     narrative_profile: NarrativeProfile
     words: int = Field(ge=0)
     chapters: int = Field(ge=0)
     events: int = Field(ge=0)
+    prose_paragraphs: int = Field(default=0, ge=0)
+    prose_sentences: int = Field(default=0, ge=0)
+    prose_words: int = Field(default=0, ge=0)
+    dash_paragraphs: int = Field(default=0, ge=0)
+    quoted_paragraphs: int = Field(default=0, ge=0)
+    dialogue_paragraphs: int = Field(default=0, ge=0)
+    dialogue_ratio: float = Field(default=0.0, ge=0.0, le=1.0)
+    words_per_sentence: float = Field(default=0.0, ge=0.0)
+    words_per_paragraph: float = Field(default=0.0, ge=0.0)
+    chapter_bodies_recovered: bool = True
     chapter_metrics: list[ChapterMetrics] = Field(default_factory=list)
 
 

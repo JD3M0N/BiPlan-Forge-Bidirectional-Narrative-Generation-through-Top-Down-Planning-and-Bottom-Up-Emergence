@@ -60,9 +60,27 @@ magia o tecnología extraordinaria.
 graduales de motivación, continuidad de recuerdos y resolución ganada mediante
 decisiones.
 
-<!-- PROMPT_04_START -->
+Las tres variantes comparten el texto salvo la palabra del perfil, igual que los
+catálogos 6 y 7, para que el drama entre en la matriz por perfil sin que el analista
+reciba un perfil escrito que contradiga el forzado con `--profile`.
+
+### Variante Esencial
+
+<!-- PROMPT_04_ESSENTIAL_START -->
+Escribe en español un drama contemporáneo con perfil narrativo Esencial. Tras la muerte de su madre, los hermanos Lucía y Tomás heredan un viejo cine de barrio que será demolido en siete días si no pagan una deuda. Lucía quiere venderlo y regresar a la ciudad donde construyó su carrera; Tomás quiere organizar una última función para demostrar que el lugar todavía importa. Ambos recuerdan de manera diferente el abandono de su padre y creen que la madre favoreció al otro. Desarrolla el conflicto mediante conversaciones, silencios, acciones prácticas y decisiones económicas concretas, sin convertir a ninguno de los dos en villano. Un rollo de película incompleto, una libreta de cuentas y la antigua cabina de proyección deben adquirir significado dramático y participar en la resolución. Haz que cada cambio emocional tenga una causa visible y que la verdad sobre la familia complique el conflicto en lugar de resolverlo de inmediato. Usa un tono íntimo y contenido, evita accidentes oportunistas, enfermedades repentinas y herencias secretas, y termina con una decisión conjunta creíble que implique una pérdida real y una forma limitada de reconciliación.
+<!-- PROMPT_04_ESSENTIAL_END -->
+
+### Variante Desarrollada
+
+<!-- PROMPT_04_DEVELOPED_START -->
 Escribe en español un drama contemporáneo con perfil narrativo Desarrollada. Tras la muerte de su madre, los hermanos Lucía y Tomás heredan un viejo cine de barrio que será demolido en siete días si no pagan una deuda. Lucía quiere venderlo y regresar a la ciudad donde construyó su carrera; Tomás quiere organizar una última función para demostrar que el lugar todavía importa. Ambos recuerdan de manera diferente el abandono de su padre y creen que la madre favoreció al otro. Desarrolla el conflicto mediante conversaciones, silencios, acciones prácticas y decisiones económicas concretas, sin convertir a ninguno de los dos en villano. Un rollo de película incompleto, una libreta de cuentas y la antigua cabina de proyección deben adquirir significado dramático y participar en la resolución. Haz que cada cambio emocional tenga una causa visible y que la verdad sobre la familia complique el conflicto en lugar de resolverlo de inmediato. Usa un tono íntimo y contenido, evita accidentes oportunistas, enfermedades repentinas y herencias secretas, y termina con una decisión conjunta creíble que implique una pérdida real y una forma limitada de reconciliación.
-<!-- PROMPT_04_END -->
+<!-- PROMPT_04_DEVELOPED_END -->
+
+### Variante Expansiva
+
+<!-- PROMPT_04_EXPANSIVE_START -->
+Escribe en español un drama contemporáneo con perfil narrativo Expansiva. Tras la muerte de su madre, los hermanos Lucía y Tomás heredan un viejo cine de barrio que será demolido en siete días si no pagan una deuda. Lucía quiere venderlo y regresar a la ciudad donde construyó su carrera; Tomás quiere organizar una última función para demostrar que el lugar todavía importa. Ambos recuerdan de manera diferente el abandono de su padre y creen que la madre favoreció al otro. Desarrolla el conflicto mediante conversaciones, silencios, acciones prácticas y decisiones económicas concretas, sin convertir a ninguno de los dos en villano. Un rollo de película incompleto, una libreta de cuentas y la antigua cabina de proyección deben adquirir significado dramático y participar en la resolución. Haz que cada cambio emocional tenga una causa visible y que la verdad sobre la familia complique el conflicto en lugar de resolverlo de inmediato. Usa un tono íntimo y contenido, evita accidentes oportunistas, enfermedades repentinas y herencias secretas, y termina con una decisión conjunta creíble que implique una pérdida real y una forma limitada de reconciliación.
+<!-- PROMPT_04_EXPANSIVE_END -->
 
 ## 5. Ciencia ficción — la geometría del mañana
 
@@ -143,6 +161,8 @@ Estos prompts no exigen que dos ejecuciones produzcan la misma prosa. La
 comparación debe centrarse en propiedades observables: fidelidad al contrato,
 riqueza y consistencia del mundo, referencias válidas, estructura del DAG,
 continuidad entre capítulos, tratamiento de las restricciones, cumplimiento
-cualitativo del perfil, métricas observadas, advertencias y consumo del modelo.
+cualitativo del perfil, métricas observadas —incluida la artesanía de la prosa:
+proporción de párrafos con diálogo, palabras por frase y palabras por párrafo—,
+advertencias y consumo del modelo.
 La variabilidad creativa de Gemini
 es parte del experimento y debe registrarse, no ocultarse.

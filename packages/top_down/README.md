@@ -1,6 +1,6 @@
-# ASG Top-Down 6.0
+# ASG Top-Down 6.1
 
-Top-Down 6.0 genera historias con el contrato de artefactos 6.0:
+Top-Down 6.1 genera historias con el contrato de artefactos 6.1:
 
 ```text
 Analyst → World → Characters → Plot Planner → Plan Critic
@@ -76,11 +76,13 @@ audio.json
 ```
 
 Todos los intentos del Writer quedan archivados con su validación estructurada.
-`story_metrics.json` registra palabras, capítulos y eventos observados, sin
-objetivos ni indicadores de cumplimiento. Los runs nuevos usan
-`pipeline_version: 6.0`; `StoryRun` puede abrir runs terminados 5.0, 5.1, 5.2,
-5.3 y 6.0. El MP3 se registra en el manifiesto, pero un
-fallo de TTS solo añade `AUDIO_GENERATION_FAILED`: `story.md` continúa válido.
+`story_metrics.json` registra palabras, capítulos, eventos y artesanía de la
+prosa observados —proporción de párrafos con diálogo, palabras por frase y
+palabras por párrafo, también capítulo a capítulo— sin objetivos ni indicadores
+de cumplimiento. Los runs nuevos usan `pipeline_version: 6.1`; `StoryRun` puede
+abrir runs terminados 5.0, 5.1, 5.2, 5.3, 6.0 y 6.1. El MP3 se registra en el
+manifiesto, pero un fallo de TTS solo añade `AUDIO_GENERATION_FAILED`:
+`story.md` continúa válido.
 `compare-story-runs` continúa aceptando cualquier run con `story.md`.
 
 ```powershell

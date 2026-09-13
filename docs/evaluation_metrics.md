@@ -125,3 +125,14 @@ Excel en español necesita *Datos → Desde texto* para leerlo bien.
 
 Una historia con el `evaluation.json` corrupto se informa por `stderr` y el
 comando termina con código 1, pero el resto del corpus sí se agrega.
+
+## Cifras automáticas: la artesanía de la prosa
+
+Las seis puntuaciones de arriba las pone una persona. Aparte, cada run 6.5.0 o
+posterior registra en `story_metrics.json` cifras observadas de la prosa
+—proporción de párrafos con diálogo, palabras por frase y palabras por párrafo—,
+que `report-story-craft` recalcula desde `story.md` para cualquier run, también
+los anteriores. No sustituyen a la evaluación humana: dicen si el pipeline
+escribió escena o sinopsis, no si la historia es buena. La metodología, las
+definiciones exactas y las mediciones del corpus están en
+[artesania_narrativa.md](artesania_narrativa.md).

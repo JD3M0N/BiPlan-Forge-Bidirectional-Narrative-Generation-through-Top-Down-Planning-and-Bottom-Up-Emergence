@@ -28,8 +28,8 @@ Copiar `.env.example` a `.env`. `GEMINI_API_KEY` es opcional: sin ella los tests
 falsos y `run-escape-room --no-llm` genera la historia de respaldo determinista.
 
 Comandos expuestos (detalles en [commands.md](commands.md)): `asg-console`, `generate-story`,
-`compare-story-runs`, `run-escape-room`, `report-evaluations`, `asg-telegram`,
-`asg-telegram-run`.
+`compare-story-runs`, `run-escape-room`, `report-evaluations`, `report-story-craft`,
+`asg-telegram`, `asg-telegram-run`.
 
 ### Calidad — ejecutar siempre antes de dar por terminado un cambio
 
@@ -117,7 +117,14 @@ Lo que hace este pipeline distinto de "pedirle una historia al modelo":
 todo de forma atómica. El run contiene `metadata.json` (estado, etapas completadas, warnings,
 error), `pipeline_manifest.json` (sha256 y tamaño de cada artefacto), `request.json`, `world.json`,
 `characters.json`, `story_plan.json`, `chapters/`, `revisions/`, `draft.md`, `story.md`,
-`story.mp3`, `llm_calls.jsonl` y `llm_usage.json`.
+`story.mp3`, `story_metrics.json`, `llm_calls.jsonl` y `llm_usage.json`.
+
+`story_metrics.json` registra tamaño y artesanía observados —palabras, capítulos, eventos,
+proporción de párrafos con diálogo, palabras por frase y palabras por párrafo, también por
+capítulo— y ninguna de esas cifras viaja a ningún prompt: son observaciones, no objetivos.
+`report-story-craft` las recalcula desde `story.md` para comparar versiones del generador, incluidos
+los runs anteriores a 6.5.0 que no las traen; la metodología y las mediciones están en
+[docs/artesania_narrativa.md](docs/artesania_narrativa.md).
 
 `version.py` fija `PIPELINE_VERSION` y `SUPPORTED_PIPELINE_VERSIONS`; `StoryRun` se niega a abrir
 un run incompleto o de una versión no soportada. Si cambias el conjunto de artefactos o su
@@ -178,8 +185,10 @@ tests recorren los menús sin terminal. Mantener esa inyección al añadir panta
 
 `find_project_root` sube por el árbol buscando un directorio con `Stories/` y `packages/`, y se
 puede forzar con `ASG_PROJECT_ROOT` (útil en contenedores; ver `Dockerfile`, que instala solo
-core + evaluation + top_down + telegram). `files.py` da escritura atómica UTF-8 y `audio.py` la
-narración con edge-tts.
+core + evaluation + top_down + telegram). `files.py` da escritura atómica UTF-8, `audio.py` la
+narración con edge-tts y `craft.py` las cifras de artesanía de la prosa (`craft_metrics`), puras y
+deterministas, que consumen el `audit.py` del Top-Down y el recolector de `asg_evaluation`. Vive en
+`core` porque `evaluation` no puede importar `top_down`.
 
 ## Convenciones de idioma (con verificación automática)
 
@@ -221,6 +230,8 @@ el estado medido cambia sustancialmente.
 
 - [docs/calibracion_perfiles.md](docs/calibracion_perfiles.md) — metodología y resultados de la
   calibración de los perfiles narrativos Top-Down.
+- [docs/artesania_narrativa.md](docs/artesania_narrativa.md) — metodología y mediciones de la
+  artesanía de la prosa: diálogo, longitud de frase y de párrafo por versión y por perfil.
 - [docs/evaluation_metrics.md](docs/evaluation_metrics.md) — métricas automáticas de evaluación.
 - [docs/prompts_top_down.md](docs/prompts_top_down.md) — catálogo canónico de prompts usado como
   benchmark.

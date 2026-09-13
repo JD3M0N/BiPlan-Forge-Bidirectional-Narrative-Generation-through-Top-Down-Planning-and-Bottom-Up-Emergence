@@ -19,6 +19,7 @@ from .report import (
     collect_evaluations,
     summarize,
 )
+from .text import count_noun, format_number
 
 CSV_COLUMNS = (
     "approach",
@@ -55,27 +56,17 @@ def parser() -> argparse.ArgumentParser:
     return result
 
 
-def _count(amount: int, singular: str, plural: str) -> str:
-    """Join a count with the Spanish noun form it requires."""
-    return f"{amount} {singular if amount == 1 else plural}"
-
-
-def _number(value: float | None) -> str:
-    """Format an optional statistic, marking the ones a single score cannot define."""
-    return "—" if value is None else f"{value:.2f}"
-
-
 def _render(summary: EvaluationSummary, output: list[str]) -> None:
     """Append the table of one group to the report lines."""
-    counts = f"{_count(summary.stories, 'historia', 'historias')}, "
-    counts += _count(summary.evaluations, "evaluación", "evaluaciones")
+    counts = f"{count_noun(summary.stories, 'historia', 'historias')}, "
+    counts += count_noun(summary.evaluations, "evaluación", "evaluaciones")
     output.append(f"\n  {summary.label}  ({counts})")
     output.append(f"    {'métrica':<14}{'n':>4}{'media':>9}{'desv.':>9}{'varianza':>10}")
     for metric in METRICS:
         item = summary.metrics[metric]
         output.append(
             f"    {metric:<14}{item.count:>4}"
-            f"{_number(item.mean):>9}{_number(item.stdev):>9}{_number(item.variance):>10}"
+            f"{format_number(item.mean):>9}{format_number(item.stdev):>9}{format_number(item.variance):>10}"
         )
 
 
@@ -84,7 +75,7 @@ def _coverage(records: Sequence[StoryEvaluations], stories_root: Path) -> str:
     with_file = sum(1 for record in records if (record.directory / EVALUATION_FILENAME).is_file())
     scored = sum(1 for record in records if record.evaluations)
     return (
-        f"{_count(len(records), 'historia', 'historias')} en {stories_root}, "
+        f"{count_noun(len(records), 'historia', 'historias')} en {stories_root}, "
         f"{with_file} con {EVALUATION_FILENAME}, {scored} con puntuaciones"
     )
 

@@ -1,15 +1,17 @@
 # Hoja de ruta
 
-**Estado medido el 2026-09-13 sobre `16c16db` más el desbloqueo de `evaluation.json` de
-`asg-evaluation` 0.3.0.** Puerta de calidad limpia: `ruff check .`, `ruff format --check .`
-(117 archivos), 227 pruebas pasan y 2 se omiten, `pip check` sin requisitos rotos, y
+**Estado medido el 2026-09-13 sobre `98a9a1b` más el registro de la artesanía narrativa de
+`asg-top-down` 6.5.0.** Puerta de calidad limpia: `ruff check .`, `ruff format --check .`
+(124 archivos), 258 pruebas pasan y 2 se omiten, `pip check` sin requisitos rotos, y
 `tests/test_sync_railway_stories.ps1` pasa. Las cinco corren ahora en
 `.github/workflows/quality.yml` en cada push y pull request. Las mediciones que cita este documento
-salen del corpus de `Stories/`, hoy 129 ejecuciones Top-Down; de las 92 con `evaluation.json`,
-una sola tiene puntuaciones reales, medido con `report-evaluations`. Las cifras por perfil
-proceden de las 25 ejecuciones de la versión 6.3.0; la última matriz de 6 historias con Gemini
-real (prompts canónicos 6 y 7 por los tres perfiles) es la verificación de 6.4.0 y ya no
-comparte contrato con ellas.
+salen del corpus de `Stories/`, hoy 137 ejecuciones Top-Down; de las 104 historias con `story.md`,
+101 tienen `evaluation.json` y una sola tiene puntuaciones reales, medido con `report-evaluations`.
+Las cifras de prosa —diálogo, palabras por frase y palabras por párrafo— salen de
+`report-story-craft` sobre las 74 historias de versión 6 en adelante, 72 de ellas terminadas, y
+están documentadas en [docs/artesania_narrativa.md](docs/artesania_narrativa.md), que incluye la
+matriz de 9 historias con Gemini real (catálogos 4, 6 y 7 por los tres perfiles) que fija la línea
+base de 6.5.0.
 
 ## Cómo leer esto
 
@@ -55,9 +57,55 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 - **Hecho cuando.** Ningún run queda bloqueado indefinidamente, los cuatro varados están
   resueltos, y hay test de la transición.
 
+### El pipeline resume en vez de dramatizar
+
+- **Síntoma.** Medido con `report-story-craft` sobre las historias 6.x del corpus: mediana de
+  31% de párrafos con alguna marca de diálogo, y **ocho historias sin una sola marca**. Las
+  cifras ya se registran en `story_metrics.json` desde 6.5.0, pero ningún agente las ve: el
+  prompt del escritor pide prosa y el del crítico dramático juzga el borrador sin ninguna
+  evidencia de si hay escena o sólo sinopsis.
+- **Qué hacer.** Pedir escena dramatizada en la guía de prosa del escritor, y dar al crítico
+  dramático la artesanía como evidencia **cualitativa**, derivada de umbrales y sin cifras en el
+  prompt: `profiles.py` documenta por qué un número dentro del prompt gana a los demás.
+- **Hecho cuando.** La matriz de nueve historias de 6.5.0 (catálogos 4, 6 y 7 por los tres
+  perfiles, en `docs/artesania_narrativa.md`) se repite sobre la versión nueva y la proporción
+  de diálogo sube sin que caigan coherencia ni satisfacción.
+
 ---
 
 ## Pendiente
+
+### Párrafos-bloque de hasta doscientas palabras
+
+- **Síntoma.** Mediana de 82 palabras por párrafo en las historias 6.x, con casos de 152 y 197
+  —`20260911-174447-la-sombra-del-volcan` y `20260903-172904-el-dominio-del-mesozoico`—. Un
+  párrafo de doscientas palabras no es un párrafo: es un capítulo sin cortar, y coincide con las
+  historias sin diálogo.
+- **Qué hacer.** Acotar cualitativamente la longitud de párrafo en la guía de prosa, junto a la
+  petición de escena, y comprobar si el corte de párrafo arrastra al diálogo o es independiente.
+- **Hecho cuando.** `words_per_paragraph` baja de la banda de 150+ en todo el corpus nuevo y se
+  sabe, con datos, si diálogo y longitud de párrafo son la misma señal o dos.
+
+### El perfil Esencial dramatiza la mitad que Desarrollada
+
+- **Síntoma.** 21% de párrafos con diálogo en Esencial frente al 40% de Desarrollada y el 32% de
+  Expansiva, sobre 23, 16 y 26 historias. Esencial no es sólo más corta: es la que menos escena
+  escribe, y su `PROFILE_GUIDANCE` pide economía sin distinguir entre resumir y condensar.
+- **Qué hacer.** Revisar el contrato de Esencial para que la economía no se pague en escena, y
+  medir si la diferencia sobrevive cuando el escritor recibe la petición de dramatizar.
+- **Hecho cuando.** Está escrito si la brecha es del perfil o del prompt, y Esencial deja de ser
+  el perfil con menos diálogo por construcción.
+
+### Completar las variantes por perfil del catálogo de prompts
+
+- **Síntoma.** Sólo los catálogos 4, 6 y 7 de `docs/prompts_top_down.md` tienen variantes
+  Esencial/Desarrollada/Expansiva. En los otros cuatro el perfil viene escrito en el texto, así
+  que una matriz por perfil obliga a forzar `--profile` contra un prompt que dice otra cosa, y el
+  analista ya derivó sus `creative_directions` de la palabra equivocada.
+- **Qué hacer.** Dar variantes por perfil a los prompts 1, 2, 3 y 5, con el mismo patrón de texto
+  idéntico salvo la palabra del perfil.
+- **Hecho cuando.** Cualquier prompt del catálogo se puede correr en los tres perfiles sin
+  contradicción entre el texto y `--profile`.
 
 ### `failed_calls` y `duration_seconds` miden otra cosa de la que dicen
 
@@ -85,18 +133,6 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 - **Hecho cuando.** Un fallo en la primera llamada deja un `error_report.json`, y un error de cuota
   durante el ranking aborta el run en ese punto. Con test en ambos casos.
 
-### Registrar la artesanía narrativa y usarla como señal
-
-- **Síntoma.** Medido sobre las 81 historias del corpus: mediana de 25 palabras por frase, 81
-  palabras por párrafo, y solo un 25% de los párrafos con alguna marca de diálogo. **Diez
-  historias no tienen ni una línea de diálogo.** El pipeline escribe resumen, no escena.
-  `story_metrics.json` registra palabras, capítulos y eventos, que no distinguen una escena
-  dramatizada de una sinopsis densa.
-- **Qué hacer.** Añadir a las métricas la proporción de diálogo, la longitud media de frase y la de
-  párrafo, y decidir si el crítico dramático las recibe como evidencia.
-- **Hecho cuando.** Las tres cifras están en `story_metrics.json` de cada run y se puede comparar
-  su evolución entre versiones del generador.
-
 ### Equiparar los artefactos Bottom-Up con los Top-Down
 
 - **Síntoma.** El Bottom-Up no escribe métricas de historia, ni versión del generador, ni
@@ -107,7 +143,8 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
   121 ejecuciones Top-Down repartidas en seis versiones del generador.
 - **Qué hacer.** Dar al Bottom-Up el mismo conjunto mínimo de artefactos: métricas de historia,
   versión, manifiesto y códigos de error. Reusar lo que ya existe en `asg_core` en vez de
-  duplicarlo.
+  duplicarlo; la artesanía de la prosa sale gratis llamando a `asg_core.craft_metrics`, y
+  `report-story-craft` ya mide cualquier `story.md` de los dos enfoques.
 - **Hecho cuando.** Un lector común puede abrir un run de cualquiera de los dos enfoques y obtener
   las mismas cifras, y un lote produce historias evaluables.
 
@@ -303,3 +340,6 @@ condiciones, guardando lo necesario para repetir el experimento.
 rebote. `progress.py` del Top-Down no tiene ninguno. El `storage.py` del Top-Down tiene uno solo, y
 ni los hashes del manifiesto, ni `register_existing`, ni la rama de `fail` con un error no
 clasificado se comprueban. Tampoco `collect_metrics`, `result_row`, `save_batch` ni `run_batch`.
+
+
+ - hacer un make test para correr los test automaticos

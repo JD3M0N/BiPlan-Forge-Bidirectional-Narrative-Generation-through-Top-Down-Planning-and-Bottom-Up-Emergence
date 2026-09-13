@@ -5,6 +5,7 @@ from asg_core import AudioGenerationError
 from asg_top_down import NarrativeProfile, StoryGenerator
 from asg_top_down import pipeline as pipeline_module
 from asg_top_down import storage as storage_module
+from asg_top_down import version as version_module
 from asg_top_down.agents import AnalystAgent
 from asg_top_down.audit import parse_chapter_bodies
 from asg_top_down.errors import GeminiDailyQuotaError, PlotValidationError
@@ -409,7 +410,7 @@ def test_complete_pipeline_saves_v60_artifacts_and_agent_order(tmp_path) -> None
         assert (run.run_dir / directory / "chapter-001.md").is_file()
         assert (run.run_dir / directory / "chapter-002.md").is_file()
     metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
-    assert metadata["pipeline_version"] == "6.0"
+    assert metadata["pipeline_version"] == version_module.PIPELINE_VERSION
     assert metadata["status"] == "completed"
     assert run.audio_path.is_file()
     completed_stages = metadata["completed_stages"]
@@ -429,6 +430,16 @@ def test_complete_pipeline_saves_v60_artifacts_and_agent_order(tmp_path) -> None
     assert metrics["events"] == 4
     assert metrics["words"] > 0
     assert {item["events"] for item in metrics["chapter_metrics"]} == {2}
+    assert metrics["chapter_bodies_recovered"] is True
+    assert 0 < metrics["prose_words"] < metrics["words"]
+    assert metrics["prose_paragraphs"] > 0
+    assert metrics["prose_sentences"] > 0
+    assert metrics["words_per_sentence"] > 0
+    assert metrics["words_per_paragraph"] > 0
+    assert 0.0 <= metrics["dialogue_ratio"] <= 1.0
+    assert metrics["dialogue_paragraphs"] >= metrics["dash_paragraphs"]
+    assert all(item["paragraphs"] > 0 for item in metrics["chapter_metrics"])
+    assert all(item["sentences"] > 0 for item in metrics["chapter_metrics"])
     assert "target_words" not in json.dumps(metrics)
     assert "within_tolerance" not in json.dumps(metrics)
     for index in (1, 2):

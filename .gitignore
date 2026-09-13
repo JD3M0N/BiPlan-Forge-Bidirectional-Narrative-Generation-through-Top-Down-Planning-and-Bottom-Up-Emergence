@@ -12,6 +12,7 @@ build/
 .railway/
 Stories/
 docs/*
+!docs/artesania_narrativa.md
 !docs/calibracion_perfiles.md
 !docs/evaluation_metrics.md
 !docs/prompts_top_down.md

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import re
 
-from .schemas import ChapterMetrics, StoryMetrics, StoryPlan, StoryRequest
+from asg_core import craft_metrics
+
+from .schemas import ChapterMetrics, ChapterPlan, StoryMetrics, StoryPlan, StoryRequest
 
 
 def word_count(text: str) -> int:
@@ -30,25 +32,49 @@ def parse_chapter_bodies(story: str, expected: int) -> list[str]:
     ]
 
 
+def _chapter_metrics(chapter: ChapterPlan, body: str, events: int) -> ChapterMetrics:
+    """Combine the graph event count with the prose craft of one chapter body."""
+    craft = craft_metrics(body)
+    return ChapterMetrics(
+        chapter_id=chapter.id,
+        words=word_count(body),
+        events=events,
+        paragraphs=craft.paragraphs,
+        sentences=craft.sentences,
+        dialogue_paragraphs=craft.dialogue_paragraphs,
+        dialogue_ratio=craft.dialogue_ratio,
+        words_per_sentence=craft.words_per_sentence,
+        words_per_paragraph=craft.words_per_paragraph,
+    )
+
+
 def story_metrics(request: StoryRequest, plan: StoryPlan, story: str) -> StoryMetrics:
     """Build non-prescriptive metrics from the completed story and graph."""
     bodies = parse_chapter_bodies(story, len(plan.chapters))
+    recovered = bool(bodies) or not plan.chapters
     if not bodies:
         bodies = [""] * len(plan.chapters)
     event_counts = {chapter.id: 0 for chapter in plan.chapters}
     for event in plan.events:
         event_counts[event.chapter_id] += 1
+    craft = craft_metrics(story)
     return StoryMetrics(
         narrative_profile=request.narrative_profile,
         words=word_count(story),
         chapters=len(plan.chapters),
         events=len(plan.events),
+        prose_paragraphs=craft.paragraphs,
+        prose_sentences=craft.sentences,
+        prose_words=craft.words,
+        dash_paragraphs=craft.dash_paragraphs,
+        quoted_paragraphs=craft.quoted_paragraphs,
+        dialogue_paragraphs=craft.dialogue_paragraphs,
+        dialogue_ratio=craft.dialogue_ratio,
+        words_per_sentence=craft.words_per_sentence,
+        words_per_paragraph=craft.words_per_paragraph,
+        chapter_bodies_recovered=recovered,
         chapter_metrics=[
-            ChapterMetrics(
-                chapter_id=chapter.id,
-                words=word_count(body),
-                events=event_counts[chapter.id],
-            )
+            _chapter_metrics(chapter, body, event_counts[chapter.id])
             for chapter, body in zip(plan.chapters, bodies, strict=True)
         ],
     )
