@@ -660,7 +660,10 @@ def test_late_critic_failure_delivers_the_draft_with_warning(tmp_path) -> None:
     assert "borrador" in metadata["warnings"][0]
 
 
-@pytest.mark.parametrize("quota_error_at", ["plan_critic", "drama_critic", "writer", "architect"])
+@pytest.mark.parametrize(
+    "quota_error_at",
+    ["plan_critic", "drama_critic", "writer", "architect", "semantic_ranking"],
+)
 def test_quota_errors_abort_instead_of_becoming_a_warning(tmp_path, quota_error_at) -> None:
     provider = FakeProvider(
         story_review=major_story_review(),

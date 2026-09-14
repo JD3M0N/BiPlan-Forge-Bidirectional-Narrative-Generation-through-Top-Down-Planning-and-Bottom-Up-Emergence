@@ -24,14 +24,7 @@ from .agents import (
 )
 from .audit import canonical_chapter, story_metrics, word_count
 from .craft_evidence import craft_evidence
-from .errors import (
-    ConfigurationError,
-    GeminiBillingQuotaError,
-    GeminiDailyQuotaError,
-    GeminiRPMError,
-    GeminiTPMError,
-    PlotValidationError,
-)
+from .errors import NON_DEGRADABLE_ERRORS, PlotValidationError
 from .graph import (
     materialize_plan,
     relevant_prior_events,
@@ -85,15 +78,6 @@ DEFAULT_PLAN_ATTEMPTS = 3
 PLAN_ATTEMPTS_BY_PROFILE: dict[NarrativeProfile, int] = {
     NarrativeProfile.EXPANSIVE: 4,
 }
-
-# Errors that must always abort the pipeline instead of being degraded to a warning.
-NON_DEGRADABLE_ERRORS = (
-    ConfigurationError,
-    GeminiRPMError,
-    GeminiTPMError,
-    GeminiDailyQuotaError,
-    GeminiBillingQuotaError,
-)
 
 
 class StoryPipeline:

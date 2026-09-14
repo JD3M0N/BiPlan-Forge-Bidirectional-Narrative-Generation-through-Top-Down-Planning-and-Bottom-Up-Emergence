@@ -107,3 +107,13 @@ class GeminiBillingQuotaError(ProviderError):
     """Represent GeminiBillingQuotaError data and behavior."""
 
     code = "GEMINI_BILLING_LIMIT_EXHAUSTED"
+
+
+# Errors that must always abort the pipeline instead of being degraded to a warning.
+NON_DEGRADABLE_ERRORS = (
+    ConfigurationError,
+    GeminiRPMError,
+    GeminiTPMError,
+    GeminiDailyQuotaError,
+    GeminiBillingQuotaError,
+)

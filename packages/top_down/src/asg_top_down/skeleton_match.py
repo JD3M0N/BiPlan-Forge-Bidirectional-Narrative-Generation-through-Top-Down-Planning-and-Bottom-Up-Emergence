@@ -7,6 +7,7 @@ import re
 import unicodedata
 from typing import TYPE_CHECKING
 
+from .errors import NON_DEGRADABLE_ERRORS
 from .schemas import (
     SemanticSkeletonRanking,
     SkeletonMatch,
@@ -230,6 +231,8 @@ def semantic_scores(
             schema=SemanticSkeletonRanking,
             profile="extraction",
         )
+    except NON_DEGRADABLE_ERRORS:
+        raise
     except Exception:
         return None
     resolved = {
