@@ -34,6 +34,19 @@ def test_find_project_root_and_story_path(tmp_path):
     assert stories_path("Top-Down", root=tmp_path) == tmp_path / "Stories" / "Top-Down"
 
 
+def test_an_explicit_start_outranks_the_configured_root(tmp_path, monkeypatch):
+    """ASG_PROJECT_ROOT anchors callers with no start; it never overrides one that has it."""
+    for name in ("explicit", "configured"):
+        (tmp_path / name / "packages").mkdir(parents=True)
+        (tmp_path / name / "Stories").mkdir(parents=True)
+    nested = tmp_path / "explicit" / "apps" / "telegram"
+    nested.mkdir(parents=True)
+    monkeypatch.setenv("ASG_PROJECT_ROOT", str(tmp_path / "configured"))
+
+    assert find_project_root(nested) == tmp_path / "explicit"
+    assert find_project_root() == tmp_path / "configured"
+
+
 def test_slugify_uses_ascii_and_fallback():
     """Normalize accented names and provide a stable empty-value fallback."""
     assert slugify("La habitación final") == "la-habitacion-final"

@@ -11,7 +11,9 @@ from pathlib import Path
 def find_project_root(start: str | Path | None = None) -> Path:
     """Locate the ASG repository root from an optional starting path."""
     configured = os.getenv("ASG_PROJECT_ROOT", "").strip()
-    current = Path(configured or start or Path.cwd()).resolve()
+    # An explicit start wins over the environment: ASG_PROJECT_ROOT is the fallback for
+    # callers that have no anchor, not an override of the one they passed.
+    current = Path(start or configured or Path.cwd()).resolve()
     if current.is_file():
         current = current.parent
     for candidate in (current, *current.parents):
