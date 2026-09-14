@@ -247,6 +247,23 @@ def major_story_review() -> StoryReview:
     )
 
 
+def event_scoped_story_review() -> StoryReview:
+    """A pacing note naming its events with chapter_ids empty, as the critic prompt asks."""
+    return StoryReview(
+        strengths=["The causal line is clear."],
+        notes=[
+            RevisionNote(
+                id="story-note-1",
+                priority="major",
+                category="pacing",
+                evidence="event-3 is summarized instead of staged.",
+                instruction="Stage event-3 as a scene.",
+                event_ids=["event-3"],
+            )
+        ],
+    )
+
+
 def prose(label: str, words: int = 300) -> str:
     return " ".join(f"{label}{index}" for index in range(words))
 
@@ -824,6 +841,22 @@ def test_chapters_without_notes_skip_the_writer(tmp_path) -> None:
     assert run.story_path.read_text(encoding="utf-8") == (run.run_dir / "draft.md").read_text(
         encoding="utf-8"
     )
+
+
+def test_a_note_with_only_event_ids_reaches_just_the_owning_chapter(tmp_path) -> None:
+    """An untargeted chapter list does not make an event-scoped note global."""
+    provider = FakeProvider(story_review=event_scoped_story_review())
+    run = StoryGenerator(provider, tmp_path).generate(make_request())
+    report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
+    by_chapter = {item["chapter_id"]: item for item in report["chapters"]}
+    # event-3 belongs to chapter-2, so chapter-1 must never see the note nor spend a Writer call.
+    assert by_chapter["chapter-1"]["note_ids"] == []
+    assert by_chapter["chapter-1"]["attempts"] == []
+    assert by_chapter["chapter-1"]["final_source"] == "draft"
+    assert by_chapter["chapter-2"]["note_ids"] == ["story-note-1"]
+    assert by_chapter["chapter-2"]["final_source"] == "revision"
+    writer_prompts = [item for item in provider.text_calls if "final Writer" in item[0]]
+    assert len(writer_prompts) == 1
 
 
 def test_analyst_prompt_separates_explicit_constraints_and_inferences() -> None:

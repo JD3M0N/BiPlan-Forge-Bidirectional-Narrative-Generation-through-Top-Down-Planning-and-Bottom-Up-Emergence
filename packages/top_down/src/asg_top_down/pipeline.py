@@ -887,8 +887,11 @@ class StoryPipeline:
         return [
             note
             for note in notes
+            # A note is global only when it targets nothing at all. The critic is asked to cite
+            # the affected event IDs and to leave chapter_ids empty for global notes, so a note
+            # carrying only event_ids is local and must reach just the chapters owning them.
             if (
-                not note.chapter_ids
+                not (note.chapter_ids or note.event_ids)
                 or chapter.id in note.chapter_ids
                 or bool(event_ids.intersection(note.event_ids))
             )
