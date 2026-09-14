@@ -399,3 +399,46 @@ def test_summary_survives_missing_or_broken_artifacts(tmp_path, prepare):
     summary = summarize_run(run)
     assert summary.usage is None
     assert summary.warnings == ()
+
+
+# --- queue refresh between users ---------------------------------------------
+
+
+def test_enqueueing_does_not_overwrite_the_running_users_progress_bar(tmp_path):
+    """A second user joining the queue must leave the live progress bar of the first alone."""
+    queue = QueueRepository(tmp_path / "q.sqlite3")
+    running = queue.enqueue(
+        user_id=11, username="ana", chat_id=20, prompt="Una historia", progress_message_id=99
+    ).job
+    queue.mark_running(running.id)
+    queue.enqueue(
+        user_id=12, username="beto", chat_id=21, prompt="Otra historia", progress_message_id=77
+    )
+
+    handler = TelegramStoryBot(RecordingGenerator(make_story(tmp_path)), queue)
+    bot = FakeBot()
+    context, _ = make_context(bot)
+
+    asyncio.run(handler._refresh_queue(context.application))
+
+    assert [edit["message_id"] for edit in bot.edits] == [77]
+    # The running job still counts, so the waiting user is told position 2 and not position 1.
+    assert "posición 2" in bot.edits[0]["text"]
+
+
+def test_the_queued_to_running_transition_still_edits_the_running_message(tmp_path):
+    """Skipping the running job everywhere else must not silence the moment it starts."""
+    queue = QueueRepository(tmp_path / "q.sqlite3")
+    running = queue.enqueue(
+        user_id=11, username="ana", chat_id=20, prompt="Una historia", progress_message_id=99
+    ).job
+    queue.mark_running(running.id)
+
+    handler = TelegramStoryBot(RecordingGenerator(make_story(tmp_path)), queue)
+    bot = FakeBot()
+    context, _ = make_context(bot)
+
+    asyncio.run(handler._refresh_queue(context.application, include_running=True))
+
+    assert [edit["message_id"] for edit in bot.edits] == [99]
+    assert "se está generando ahora" in bot.edits[0]["text"]

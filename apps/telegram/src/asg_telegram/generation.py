@@ -217,7 +217,7 @@ class GenerationCoordinator(TelegramDelivery):
                         await self._report_vanished_job(context, chat_id, progress_message_id)
                         return
                     self.queue.mark_running(job_id)
-                    await self._refresh_queue(context.application)
+                    await self._refresh_queue(context.application, include_running=True)
                 await self._run_generation_and_delivery(
                     context=context,
                     chat_id=chat_id,
@@ -507,13 +507,20 @@ class GenerationCoordinator(TelegramDelivery):
         """Start evaluation after delivery; concrete handlers must implement it."""
         raise NotImplementedError
 
-    async def _refresh_queue(self, application) -> None:
-        """Refresh every queued user's position and estimated wait message."""
+    async def _refresh_queue(self, application, *, include_running: bool = False) -> None:
+        """Refresh every queued user's position and estimated wait message.
+
+        The running job owns the same message id as its live progress bar, so refreshing it
+        from anywhere but the queued-to-running transition replaces that bar with a static
+        queue notice. It still counts for the positions the waiting users are told.
+        """
         if not self.queue:
             return
         jobs = self.queue.active()
         average = self.queue.average_duration()
         for position, job in enumerate(jobs, 1):
+            if job.status == "running" and not include_running:
+                continue
             text = self._queue_message(job.status, position, average)
             if job.progress_message_id:
                 try:
