@@ -1,11 +1,12 @@
 # Hoja de ruta
 
-**Estado medido el 2026-09-13 sobre `d58718b` más la intervención de artesanía narrativa de
+**Estado medido el 2026-09-13 sobre `263e756` más la intervención de artesanía narrativa de
 `asg-top-down` 6.6.0.** Puerta de calidad limpia: `ruff check .`, `ruff format --check .`
-(126 archivos), 269 pruebas pasan y 2 se omiten, `pip check` sin requisitos rotos, y
-`tests/test_sync_railway_stories.ps1` pasa. Las cinco corren ahora en
-`.github/workflows/quality.yml` en cada push y pull request. Las mediciones que cita este documento
-salen del corpus de `Stories/`, hoy 146 ejecuciones Top-Down; de las 113 historias con `story.md`,
+(126 archivos), 279 pruebas pasan y 2 se omiten, `pip check` sin requisitos rotos, y
+`tests/test_sync_railway_stories.ps1` pasa. Las cinco corren en
+`.github/workflows/quality.yml` en cada push y pull request, y en local con `.\quality.ps1`
+(o `make test`). Las mediciones que cita este documento salen del corpus de `Stories/`, hoy 146
+ejecuciones Top-Down; de las 113 historias con `story.md`,
 105 tienen `evaluation.json` y una sola tiene puntuaciones reales, medido con `report-evaluations`.
 Las cifras de prosa —diálogo, palabras por frase y palabras por párrafo— salen de
 `report-story-craft` sobre las 83 historias de versión 6 en adelante, 81 de ellas terminadas, y
@@ -110,19 +111,14 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 - **Hecho cuando.** Las dos cifras significan lo que su nombre dice, y ningún resultado de la tesis
   las cita mal.
 
-### Trazabilidad del fallo del analista y errores de cuota tragados
+### Trazabilidad del fallo del analista
 
 - **Síntoma.** `_analyze_request` corre fuera del `try` de `execute`, y `_record_failure` empieza
   por `assert self.repository is not None`. Si la primera llamada falla no se crea directorio, no
   se escribe `error_report.json` y no queda registro de uso: es la única etapa sin trazabilidad.
-  Por separado, el ranking semántico de `skeleton_match.py` tiene un `except Exception: return
-  None` que anula el guardia `NON_DEGRADABLE_ERRORS`, así que un error de cuota diario se convierte
-  en «sin evidencia semántica» y el run sigue gastando llamadas hasta abortar más tarde. Existe un
-  fixture para probarlo que ningún test usa.
 - **Qué hacer.** Crear el repositorio antes de analizar, o registrar el fallo de análisis por otra
-  vía. Y dejar pasar los errores no degradables en el ranking semántico.
-- **Hecho cuando.** Un fallo en la primera llamada deja un `error_report.json`, y un error de cuota
-  durante el ranking aborta el run en ese punto. Con test en ambos casos.
+  vía.
+- **Hecho cuando.** Un fallo en la primera llamada deja un `error_report.json`, con test.
 
 ### Equiparar los artefactos Bottom-Up con los Top-Down
 
@@ -135,22 +131,10 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 - **Qué hacer.** Dar al Bottom-Up el mismo conjunto mínimo de artefactos: métricas de historia,
   versión, manifiesto y códigos de error. Reusar lo que ya existe en `asg_core` en vez de
   duplicarlo; la artesanía de la prosa sale gratis llamando a `asg_core.craft_metrics`, y
-  `report-story-craft` ya mide cualquier `story.md` de los dos enfoques.
+  `report-story-craft` ya mide cualquier `story.md` de los dos enfoques. La escritura atómica de
+  los lotes ya pasa por `asg_core.atomic_write_text`; el resto de `storage.py` sigue sin ella.
 - **Hecho cuando.** Un lector común puede abrir un run de cualquiera de los dos enfoques y obtener
   las mismas cifras, y un lote produce historias evaluables.
-
-### Dos agentes pueden acabar en la misma celda
-
-- **Síntoma.** `_move`, en `packages/escape_room/src/asg_escape_room/actions.py`, deja entrar en
-  una casilla ocupada si el ocupante propuso moverse. Si ese movimiento se rechaza después, por
-  pared o por conflicto, los dos quedan superpuestos. La misma condición permite que dos agentes se
-  atraviesen intercambiando posiciones. Es alcanzable porque la política planifica sobre celdas
-  desconocidas y propone rutinariamente pasos contra paredes no descubiertas. No hay ningún test de
-  esa invariante.
-- **Qué hacer.** Resolver los movimientos de forma que liberar una celda dependa de que el
-  movimiento del ocupante se haya aceptado, e impedir el intercambio directo.
-- **Hecho cuando.** Ningún tick deja dos agentes en la misma posición ni permite un intercambio, y
-  hay test que reproduce la traza concreta.
 
 ### Sacar las aserciones de prompt literal de los tests
 
@@ -179,32 +163,27 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 - **Hecho cuando.** Plan, borrador y revisión son unidades con test propio, el estado deja de
   pasarse como parámetros posicionales, y los artefactos generados no cambian.
 
-### Arreglar los experimentos del escape room
+### `--seed` y `--agents` no llegan al lote del escape room
 
 - **Síntoma.** `run_batch` fija a mano dos y tres agentes y treinta semillas, ignorando `--seed` y
-  `--agents`: el usuario cree haber configurado el experimento y no lo hizo. `save_batch` nombra el
-  directorio con resolución de segundos y `exist_ok=True`, así que dos lotes seguidos se
-  sobrescriben en silencio, y revienta con `IndexError` si la lista viene vacía. Los artefactos del
-  Bottom-Up además se escriben sin atomicidad, mientras `asg_core.atomic_write_text` ya existe y el
-  Top-Down sí lo usa. El directorio del experimento solo guarda los dos CSV: ni mapa, ni límite de
-  ticks, ni versión, así que un lote no es reproducible.
-- **Qué hacer.** Respetar las banderas o rechazarlas explícitamente, usar el mismo sufijo
-  anticolisión que el repositorio de runs, escribir de forma atómica, y guardar la configuración
-  junto a los CSV.
-- **Hecho cuando.** Dos lotes seguidos conviven, un lote declara cómo reproducirlo, y ninguna
-  interrupción deja un JSON truncado.
+  `--agents`: el usuario cree haber configurado el experimento y no lo hizo. Desde que el lote
+  escribe `experiment.json` el artefacto ya no miente sobre lo que corrió, pero las banderas
+  siguen aceptándose y descartándose en silencio, y la consola construye su `Namespace` con
+  `seed=None, agents=2` como si sirvieran de algo.
+- **Qué hacer.** Respetar las banderas o rechazarlas explícitamente. Rechazarlas obliga a que
+  `--agents` tenga `default=None` en `parser()` y a ajustar `run_one` y
+  `apps/console/src/asg_console/bottom_up.py`.
+- **Hecho cuando.** Pasar `--seed` o `--agents` junto a `--batch` cambia el experimento o falla,
+  pero no se descarta en silencio.
 
-### Persistencia real de lo desplegado y techos en las dependencias
+### Persistencia real de lo desplegado
 
 - **Síntoma.** El `Dockerfile` no declara ningún `VOLUME` y la cola SQLite vive en `/app/Stories`,
   que se pierde en cada redeploy; `sync-railway-stories.ps1` existe solo para rescatar las
-  historias antes, con 713 líneas y un único `try` de 222. Por separado, `google-genai>=1.0` y
-  `pydantic>=2.7` no tienen techo, igual que `pytest` y `ruff`, y no hay lockfile: una release mayor
-  rompe el pipeline sin aviso.
-- **Qué hacer.** Montar un volumen para la cola y las historias, y poner techo de versión mayor a
-  las cuatro dependencias abiertas.
-- **Hecho cuando.** Artefactos y cola sobreviven a un redeploy sin intervención, el script queda
-  como herramienta de archivado opcional, y una release mayor no entra sin que alguien lo decida.
+  historias antes, con 713 líneas y un único `try` de 222.
+- **Qué hacer.** Montar un volumen para la cola y las historias.
+- **Hecho cuando.** Artefactos y cola sobreviven a un redeploy sin intervención y el script queda
+  como herramienta de archivado opcional.
 
 ### Resolver las abstracciones que no sostienen nada
 
@@ -225,34 +204,9 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
   a carácter entre los dos `storage.py`. El bloque `Settings` más `load_settings` con dotenv y
   `GEMINI_API_KEY` está en los dos `config.py`, incluido el literal del nombre del modelo. La
   consola reimplementa el cuerpo de `cli.run_one` del escape room, y ya divergen en cómo informan
-  del audio. Además `find_project_root` deja que `ASG_PROJECT_ROOT` sobrescriba el argumento
-  `start` en vez de usarlo como respaldo, así que los tests dependen del entorno.
+  del audio.
 - **Qué hacer.** Mover las tres utilidades a `asg_core` y que los dos paquetes las consuman.
-  Arreglar la precedencia de `find_project_root`.
-- **Hecho cuando.** No queda ninguna de las tres duplicaciones, y `find_project_root` respeta el
-  argumento explícito.
-
-### Las notas locales a un evento pueden inyectarse en todos los capítulos
-
-- **Síntoma.** `_notes_for_chapter` trata como global cualquier nota sin `chapter_ids`, aunque
-  tenga `event_ids`. El prompt del crítico pide precisamente citar los IDs de evento afectados al
-  levantar una nota de ritmo, y le dice que deje `chapter_ids` vacío para las notas globales, así
-  que la forma peligrosa es alcanzable. **Es latente, no observado:** de las 95 notas del corpus
-  ninguna llegó a darse, porque el crítico siempre pone `chapter_ids` cuando pone `event_ids`.
-- **Qué hacer.** Exigir que una nota global no tenga tampoco `event_ids`.
-- **Hecho cuando.** Una nota con solo `event_ids` llega únicamente a los capítulos que contienen
-  esos eventos, con test.
-
-### La barra de progreso se pisa entre usuarios de Telegram
-
-- **Síntoma.** `_refresh_queue` recorre todos los trabajos activos, incluido el que está generando,
-  y reescribe su mensaje con el aviso estático de cola. Cuando otro usuario encola, quien está
-  generando pierde su barra en vivo hasta la siguiente frontera de etapa, que en un run de cinco
-  minutos puede tardar más de un minuto. El test que cubre el mensaje de progreso no ejerce
-  concurrencia entre usuarios.
-- **Qué hacer.** Saltar el trabajo en ejecución al refrescar la cola.
-- **Hecho cuando.** Encolar una solicitud no altera el mensaje del trabajo que está corriendo, con
-  test que use dos usuarios.
+- **Hecho cuando.** No queda ninguna de las tres duplicaciones.
 
 ### Documentar los contratos públicos y rellenar el README
 
@@ -330,7 +284,5 @@ condiciones, guardando lo necesario para repetir el experimento.
 `policy.py` del escape room, con 283 líneas, no tiene ni un test directo: solo se ejercita de
 rebote. `progress.py` del Top-Down no tiene ninguno. El `storage.py` del Top-Down tiene uno solo, y
 ni los hashes del manifiesto, ni `register_existing`, ni la rama de `fail` con un error no
-clasificado se comprueban. Tampoco `collect_metrics`, `result_row`, `save_batch` ni `run_batch`.
-
-
- - hacer un make test para correr los test automaticos
+clasificado se comprueban. Tampoco `collect_metrics`, `result_row` ni `run_batch`; de esa lista
+sólo `save_batch` tiene test propio.

@@ -34,6 +34,14 @@ Comandos expuestos (detalles en [commands.md](commands.md)): `asg-console`, `gen
 ### Calidad — ejecutar siempre antes de dar por terminado un cambio
 
 ```powershell
+.\quality.ps1        # las cinco comprobaciones; `make test` delega en este script
+.\quality.ps1 -Fast  # sólo pytest, para iterar
+```
+
+`quality.ps1` se sitúa en la raíz por su cuenta y no corta en el primer fallo, igual que CI.
+Equivale a lanzar a mano:
+
+```powershell
 ruff check .
 ruff format --check .
 python -m pytest -q -p no:cacheprovider
