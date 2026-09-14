@@ -58,16 +58,15 @@ class ActionResolver:
         """Resolve movement conflicts before applying other action types."""
         results: dict[str, ResolvedAction] = {}
         claimed: set[tuple[int, int]] = set()
-        moving_from = {
-            self.world.characters[actor_id].position
-            for actor_id, action in proposals.items()
-            if action.kind == ActionType.MOVE
-        }
+        # A cell only frees up once its occupant has actually moved. Trusting the proposal
+        # instead let two agents stack on one cell when the occupant was rejected afterwards,
+        # and let two adjacent agents walk through each other by swapping positions.
+        vacated: set[tuple[int, int]] = set()
         for actor_id in order:
             action = proposals[actor_id]
             if action.kind != ActionType.MOVE:
                 continue
-            valid, reason = self._move(action, claimed, moving_from)
+            valid, reason = self._move(action, claimed, vacated)
             results[actor_id] = ResolvedAction(action=action, valid=valid, reason=reason)
         return results
 
@@ -75,7 +74,7 @@ class ActionResolver:
         self,
         action: Action,
         claimed: set[tuple[int, int]],
-        moving_from: set[tuple[int, int]],
+        vacated: set[tuple[int, int]],
     ) -> tuple[bool, str]:
         """Validate and apply one movement proposal."""
         agent = self.world.characters[action.actor_id]
@@ -86,11 +85,12 @@ class ActionResolver:
             return False, "blocked"
         if target in claimed:
             return False, "movement_conflict"
-        if target in self.world.occupied() and target not in moving_from:
+        if target in self.world.occupied() and target not in vacated:
             return False, "occupied"
         old = agent.position
         agent.position = target
         claimed.add(target)
+        vacated.add(old)
         agent.metrics.distance += 1
         if target == self.world.feature("exit").position:
             agent.escaped = True

@@ -135,3 +135,36 @@ def test_seed_is_random_when_omitted(tmp_path, maps_dir, monkeypatch) -> None:
     assert metadata["audio_status"] == "completed"
     assert "audio" in metadata["completed_stages"]
     assert (output / "story.mp3").read_bytes() == b"fake-mp3"
+
+
+def test_a_rejected_move_does_not_free_its_cell(room) -> None:
+    """A blocked proposal keeps its occupant in place, so nobody may take that cell."""
+    model = EscapeRoomModel(room)
+    model.world.characters["A"].position = (1, 1)
+    model.world.characters["B"].position = (2, 1)
+    proposals = {
+        # (1, 0) is a wall, so A stays on (1, 1) even though it proposed to leave.
+        "A": Action(actor_id="A", kind=ActionType.MOVE, target=(1, 0)),
+        "B": Action(actor_id="B", kind=ActionType.MOVE, target=(1, 1)),
+    }
+    resolved = {item.action.actor_id: item for item in model.resolve_actions(proposals)}
+    assert resolved["A"].valid is False
+    assert resolved["B"].valid is False
+    assert resolved["B"].reason == "occupied"
+    positions = [character.position for character in model.world.characters.values()]
+    assert len(set(positions)) == len(positions)
+
+
+def test_two_agents_cannot_walk_through_each_other(room) -> None:
+    """Adjacent agents proposing to swap positions are both rejected."""
+    model = EscapeRoomModel(room)
+    model.world.characters["A"].position = (1, 1)
+    model.world.characters["B"].position = (2, 1)
+    proposals = {
+        "A": Action(actor_id="A", kind=ActionType.MOVE, target=(2, 1)),
+        "B": Action(actor_id="B", kind=ActionType.MOVE, target=(1, 1)),
+    }
+    resolved = {item.action.actor_id: item for item in model.resolve_actions(proposals)}
+    assert [resolved["A"].valid, resolved["B"].valid] == [False, False]
+    assert model.world.characters["A"].position == (1, 1)
+    assert model.world.characters["B"].position == (2, 1)
