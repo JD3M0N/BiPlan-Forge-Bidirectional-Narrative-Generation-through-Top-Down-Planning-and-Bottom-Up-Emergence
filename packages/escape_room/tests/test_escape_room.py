@@ -5,9 +5,12 @@ matter to the thesis (determinism, mandatory cooperation, room validation,
 conflict fairness) rather than exercising every action and map combination.
 """
 
+import json
+
 import pytest
 from asg_escape_room import EscapeRoomModel, run_simulation
 from asg_escape_room.contracts import Action, ActionType, RoomConfig
+from asg_escape_room.storage import save_batch
 from pydantic import ValidationError
 
 
@@ -168,3 +171,45 @@ def test_two_agents_cannot_walk_through_each_other(room) -> None:
     assert [resolved["A"].valid, resolved["B"].valid] == [False, False]
     assert model.world.characters["A"].position == (1, 1)
     assert model.world.characters["B"].position == (2, 1)
+
+
+def batch_rows() -> list[dict]:
+    return [
+        {"seed": 0, "agents": 2, "success": True, "ticks": 10},
+        {"seed": 1, "agents": 2, "success": False, "ticks": 30},
+        {"seed": 0, "agents": 3, "success": True, "ticks": 8},
+    ]
+
+
+def test_two_batches_in_the_same_second_coexist(tmp_path) -> None:
+    """Second-resolution names used to overwrite the previous experiment in silence."""
+    first = save_batch(tmp_path, batch_rows())
+    second = save_batch(tmp_path, batch_rows())
+
+    assert first != second
+    for directory in (first, second):
+        assert (directory / "runs.csv").read_text(encoding="utf-8").startswith("seed,agents")
+        assert (directory / "summary.csv").is_file()
+    experiments = sorted((tmp_path / "experiments").iterdir())
+    assert len(experiments) == 2
+
+
+def test_an_empty_batch_is_refused_without_leaving_a_directory(tmp_path) -> None:
+    """main() catches ValueError; the old IndexError escaped as a traceback after mkdir."""
+    with pytest.raises(ValueError, match="lote sin ejecuciones"):
+        save_batch(tmp_path, [])
+    assert not (tmp_path / "experiments").exists()
+
+
+def test_a_batch_declares_how_to_reproduce_it(tmp_path) -> None:
+    """The two CSVs alone never said which map or tick limit produced them."""
+    config = {"map": "maps/minimal_room.json", "tick_limit": 50, "agent_counts": [2, 3]}
+    directory = save_batch(tmp_path, batch_rows(), config)
+
+    recorded = json.loads((directory / "experiment.json").read_text(encoding="utf-8"))
+    assert recorded["map"] == "maps/minimal_room.json"
+    assert recorded["tick_limit"] == 50
+    assert recorded["agent_counts"] == [2, 3]
+    assert recorded["runs"] == 3
+    assert recorded["experiment_id"] == directory.name
+    assert recorded["package_version"]

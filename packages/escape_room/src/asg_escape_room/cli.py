@@ -103,16 +103,28 @@ def run_one(args: argparse.Namespace) -> Path:
         raise
 
 
+# The batch matrix is fixed on purpose: --seed and --agents do not reach it. Both numbers are
+# written to experiment.json so the artifact declares what was actually run.
+BATCH_AGENT_COUNTS = (2, 3)
+BATCH_SEEDS = 30
+
+
 def run_batch(args: argparse.Namespace) -> Path:
     """Handle the run batch operation for component."""
     settings = load_settings()
     rows = []
-    for agents in (2, 3):
+    for agents in BATCH_AGENT_COUNTS:
         room = room_with_agents(args.map, agents)
-        for seed in range(30):
+        for seed in range(BATCH_SEEDS):
             result, _ = run_simulation(room, seed=seed, tick_limit=args.tick_limit)
             rows.append(result_row(result, agents))
-    return save_batch(settings.output_root, rows)
+    config = {
+        "map": str(args.map),
+        "tick_limit": args.tick_limit,
+        "agent_counts": list(BATCH_AGENT_COUNTS),
+        "seeds": list(range(BATCH_SEEDS)),
+    }
+    return save_batch(settings.output_root, rows, config)
 
 
 def main(argv: list[str] | None = None) -> int:

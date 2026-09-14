@@ -3,15 +3,36 @@
 from __future__ import annotations
 
 import csv
+import io
 import json
 from collections.abc import Iterable
 from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-from asg_core import slugify
+from asg_core import atomic_write_json, atomic_write_text, slugify
 from pydantic import BaseModel
 
 from .contracts import SimulationResult, TickRecord
+
+
+def _timestamped_directory(root: Path, name: str) -> Path:
+    """Create a fresh directory under root, suffixing the name until it does not exist."""
+    directory = root / name
+    suffix = 2
+    while directory.exists():
+        directory = root / f"{name}-{suffix}"
+        suffix += 1
+    directory.mkdir(parents=True)
+    return directory
+
+
+def _package_version() -> str:
+    """Report the installed asg-escape-room version, or "unknown" outside an install."""
+    try:
+        return version("asg-escape-room")
+    except PackageNotFoundError:
+        return "unknown"
 
 
 class RunRepository:
@@ -21,12 +42,7 @@ class RunRepository:
         """Initialize the RunRepository instance."""
         now = datetime.now(UTC)
         base = f"{now.strftime('%Y%m%d-%H%M%S')}-{slugify(room_name, fallback='escape-room')}"
-        self.run_dir = root / base
-        suffix = 2
-        while self.run_dir.exists():
-            self.run_dir = root / f"{base}-{suffix}"
-            suffix += 1
-        self.run_dir.mkdir(parents=True)
+        self.run_dir = _timestamped_directory(root, base)
         self.metadata = {
             "run_id": self.run_dir.name,
             "model": model,
@@ -107,15 +123,17 @@ def result_row(result: SimulationResult, agents: int) -> dict:
     }
 
 
-def save_batch(root: Path, rows: list[dict]) -> Path:
-    """Save batch."""
-    directory = root / "experiments" / datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    directory.mkdir(parents=True, exist_ok=True)
-    fields = list(rows[0])
-    with (directory / "runs.csv").open("w", newline="", encoding="utf-8") as stream:
-        writer = csv.DictWriter(stream, fieldnames=fields)
-        writer.writeheader()
-        writer.writerows(rows)
+def _csv_text(rows: list[dict]) -> str:
+    """Render rows as CSV text using the first row for the field order."""
+    buffer = io.StringIO(newline="")
+    writer = csv.DictWriter(buffer, fieldnames=list(rows[0]))
+    writer.writeheader()
+    writer.writerows(rows)
+    return buffer.getvalue()
+
+
+def _batch_summary(rows: list[dict]) -> list[dict]:
+    """Aggregate escape rate and average ticks per agent count."""
     summary = []
     for count in sorted({row["agents"] for row in rows}):
         subset = [row for row in rows if row["agents"] == count]
@@ -130,8 +148,27 @@ def save_batch(root: Path, rows: list[dict]) -> Path:
                 ),
             }
         )
-    with (directory / "summary.csv").open("w", newline="", encoding="utf-8") as stream:
-        writer = csv.DictWriter(stream, fieldnames=list(summary[0]))
-        writer.writeheader()
-        writer.writerows(summary)
+    return summary
+
+
+def save_batch(root: Path, rows: list[dict], config: dict | None = None) -> Path:
+    """Persist one batch experiment with the configuration needed to repeat it."""
+    if not rows:
+        raise ValueError("un lote sin ejecuciones no se puede guardar")
+    now = datetime.now(UTC)
+    # Second resolution used to collide silently under exist_ok=True, overwriting the CSVs of
+    # the previous batch; runs have always used the anti-collision suffix instead.
+    directory = _timestamped_directory(root / "experiments", now.strftime("%Y%m%d-%H%M%S"))
+    atomic_write_text(directory / "runs.csv", _csv_text(rows))
+    atomic_write_text(directory / "summary.csv", _csv_text(_batch_summary(rows)))
+    atomic_write_json(
+        directory / "experiment.json",
+        {
+            "experiment_id": directory.name,
+            "created_at": now.isoformat(),
+            "package_version": _package_version(),
+            "runs": len(rows),
+            **(config or {}),
+        },
+    )
     return directory
