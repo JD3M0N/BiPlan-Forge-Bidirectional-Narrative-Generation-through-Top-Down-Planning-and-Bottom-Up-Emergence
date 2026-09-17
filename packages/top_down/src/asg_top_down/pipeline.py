@@ -111,8 +111,16 @@ class StoryPipeline:
     def execute(self, request: StoryRequest | str) -> Path:
         """Run all story stages and return the completed run directory."""
         self.usage_start = len(getattr(self.provider, "usage_records", []))
-        request = self._analyze_request(request)
-        self.repository = self._create_repository(request)
+        # Analysis names the run directory, so its repository cannot exist yet. A failure here
+        # still gets one, or this would be the only stage that leaves no error_report.json.
+        submitted = request
+        try:
+            request = self._analyze_request(submitted)
+        except Exception as exc:
+            self.repository = self._create_repository(self._fallback_title(submitted))
+            self._record_failure(exc)
+            raise
+        self.repository = self._create_repository(request.title)
         self._configure_provider_callbacks()
         try:
             self._save_request(request)
@@ -161,12 +169,17 @@ class StoryPipeline:
             return request
         return request.model_copy(update={"narrative_profile": self.narrative_profile})
 
-    def _create_repository(self, request: StoryRequest) -> ArtifactRepository:
+    @staticmethod
+    def _fallback_title(request: StoryRequest | str) -> str:
+        """Name a run whose analysis failed, so its failure still lands somewhere readable."""
+        return request.title if isinstance(request, StoryRequest) else request
+
+    def _create_repository(self, title: str) -> ArtifactRepository:
         """Create the run repository and attach artifact event reporting."""
         repository = ArtifactRepository(
             self.output_root,
             self.provider.model_name,
-            request.title,
+            title,
             on_artifact=self._report_artifact,
         )
         if self.on_run_created:

@@ -140,6 +140,88 @@ def test_seed_is_random_when_omitted(tmp_path, maps_dir, monkeypatch) -> None:
     assert (output / "story.mp3").read_bytes() == b"fake-mp3"
 
 
+def test_the_default_agent_count_applies_when_the_flag_is_omitted(
+    tmp_path, maps_dir, monkeypatch
+) -> None:
+    """--agents now defaults to None so --batch can reject it; a normal run still gets two."""
+    import argparse
+    import json
+
+    from asg_escape_room import cli
+    from asg_escape_room.config import Settings
+
+    monkeypatch.setattr(cli, "load_settings", lambda: Settings(None, "test-model", tmp_path))
+    args = argparse.Namespace(
+        map=maps_dir / "minimal_room.json",
+        seed=3,
+        agents=None,
+        tick_limit=100,
+        batch=False,
+        no_llm=True,
+    )
+    output = cli.run_one(args)
+
+    request = json.loads((output / "request.json").read_text(encoding="utf-8"))
+    assert request["agents"] == cli.DEFAULT_AGENTS == 2
+    characters = json.loads((output / "characters.json").read_text(encoding="utf-8"))
+    assert len(characters) == 2
+
+
+def test_the_batch_refuses_the_flags_it_cannot_honour(maps_dir) -> None:
+    """Both flags used to be accepted and dropped: the experiment was never what was asked for."""
+    import argparse
+
+    from asg_escape_room import cli
+
+    def batch_args(**overrides):
+        """Build a batch namespace carrying the requested per-run overrides."""
+        fields = {
+            "map": maps_dir / "minimal_room.json",
+            "seed": None,
+            "agents": None,
+            "tick_limit": 50,
+            "batch": True,
+            "no_llm": True,
+        }
+        return argparse.Namespace(**{**fields, **overrides})
+
+    with pytest.raises(ValueError, match="--seed"):
+        cli.run_batch(batch_args(seed=7))
+    with pytest.raises(ValueError, match="--agents"):
+        cli.run_batch(batch_args(agents=3))
+    with pytest.raises(ValueError, match="--seed y --agents"):
+        cli.run_batch(batch_args(seed=7, agents=3))
+
+
+def test_the_batch_runs_the_fixed_matrix_when_nothing_is_overridden(
+    tmp_path, maps_dir, monkeypatch
+) -> None:
+    """The matrix stays fixed, and experiment.json keeps declaring exactly what ran."""
+    import argparse
+    import json
+
+    from asg_escape_room import cli
+    from asg_escape_room.config import Settings
+
+    monkeypatch.setattr(cli, "load_settings", lambda: Settings(None, "test-model", tmp_path))
+    monkeypatch.setattr(cli, "BATCH_SEEDS", 2)
+    # The full map is the only one with the three agents the matrix asks for.
+    args = argparse.Namespace(
+        map=maps_dir / "escape_room.json",
+        seed=None,
+        agents=None,
+        tick_limit=20,
+        batch=True,
+        no_llm=True,
+    )
+    directory = cli.run_batch(args)
+
+    recorded = json.loads((directory / "experiment.json").read_text(encoding="utf-8"))
+    assert recorded["agent_counts"] == [2, 3]
+    assert recorded["seeds"] == [0, 1]
+    assert recorded["runs"] == 4
+
+
 def test_a_rejected_move_does_not_free_its_cell(room) -> None:
     """A blocked proposal keeps its occupant in place, so nobody may take that cell."""
     model = EscapeRoomModel(room)

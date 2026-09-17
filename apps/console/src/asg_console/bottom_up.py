@@ -63,10 +63,12 @@ class BottomUpMenu:
 
     def _batch(self) -> None:
         """Run and persist the fixed-size batch experiment."""
+        # The batch matrix is fixed, so it configures neither seed nor agent count; run_batch
+        # refuses either of them rather than dropping it silently.
         args = argparse.Namespace(
             map=self._map(),
             seed=None,
-            agents=2,
+            agents=None,
             tick_limit=self._integer("Límite de ticks [300]: ", default=300, minimum=1),
             batch=True,
             no_llm=True,

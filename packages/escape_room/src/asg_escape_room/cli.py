@@ -16,6 +16,8 @@ from .narrative import GeminiNarrativeProvider, generate_story
 from .storage import RunRepository, result_row, save_batch
 from .world import load_room
 
+DEFAULT_AGENTS = 2
+
 
 def parser() -> argparse.ArgumentParser:
     """Build the command-line argument parser."""
@@ -29,10 +31,18 @@ def parser() -> argparse.ArgumentParser:
         default=None,
         help="Semilla reproducible; si se omite se genera una aleatoria",
     )
-    result.add_argument("--agents", type=int, choices=(2, 3), default=2)
+    result.add_argument(
+        "--agents",
+        type=int,
+        choices=(2, 3),
+        default=None,
+        help="Número de agentes [2]; no se aplica a --batch",
+    )
     result.add_argument("--tick-limit", type=int, default=300)
     result.add_argument(
-        "--batch", action="store_true", help="Ejecuta semillas 0–29 con 2 y 3 agentes"
+        "--batch",
+        action="store_true",
+        help="Ejecuta la matriz fija de semillas 0–29 con 2 y 3 agentes; rechaza --seed y --agents",
     )
     result.add_argument(
         "--no-llm", action="store_true", help="Usa directamente el narrador de respaldo"
@@ -64,7 +74,8 @@ def create_run_audio(repository: RunRepository) -> Path | None:
 def run_one(args: argparse.Namespace) -> Path:
     """Handle the run one operation for component."""
     settings = load_settings()
-    room = room_with_agents(args.map, args.agents)
+    agents = args.agents if args.agents is not None else DEFAULT_AGENTS
+    room = room_with_agents(args.map, agents)
     repository = RunRepository(settings.output_root, room.name, settings.model)
     seed = args.seed if args.seed is not None else secrets.randbits(64)
     try:
@@ -73,7 +84,7 @@ def run_one(args: argparse.Namespace) -> Path:
             {
                 "map": str(args.map.resolve()),
                 "seed": seed,
-                "agents": args.agents,
+                "agents": agents,
                 "tick_limit": args.tick_limit,
             },
         )
@@ -103,14 +114,30 @@ def run_one(args: argparse.Namespace) -> Path:
         raise
 
 
-# The batch matrix is fixed on purpose: --seed and --agents do not reach it. Both numbers are
-# written to experiment.json so the artifact declares what was actually run.
+# The batch matrix is fixed on purpose, so that every batch of the corpus stays comparable with
+# every other one. --seed and --agents cannot change it, so run_batch rejects them instead of
+# dropping them silently. Both numbers are written to experiment.json as well, so the artifact
+# declares what was actually run.
 BATCH_AGENT_COUNTS = (2, 3)
 BATCH_SEEDS = 30
 
 
+def reject_batch_overrides(args: argparse.Namespace) -> None:
+    """Refuse the per-run flags that the fixed batch matrix cannot honour."""
+    overrides = (("--seed", args.seed), ("--agents", args.agents))
+    rejected = [flag for flag, value in overrides if value is not None]
+    if not rejected:
+        return
+    verb = "no se aplican" if len(rejected) > 1 else "no se aplica"
+    raise ValueError(
+        f"{' y '.join(rejected)} {verb} a --batch; el lote corre la matriz fija de "
+        f"{list(BATCH_AGENT_COUNTS)} agentes por las semillas 0-{BATCH_SEEDS - 1}"
+    )
+
+
 def run_batch(args: argparse.Namespace) -> Path:
     """Handle the run batch operation for component."""
+    reject_batch_overrides(args)
     settings = load_settings()
     rows = []
     for agents in BATCH_AGENT_COUNTS:

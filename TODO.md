@@ -2,7 +2,7 @@
 
 **Estado medido el 2026-09-13 sobre `263e756` más la intervención de artesanía narrativa de
 `asg-top-down` 6.6.0.** Puerta de calidad limpia: `ruff check .`, `ruff format --check .`
-(126 archivos), 279 pruebas pasan y 2 se omiten, `pip check` sin requisitos rotos, y
+(126 archivos), 283 pruebas pasan y 2 se omiten, `pip check` sin requisitos rotos, y
 `tests/test_sync_railway_stories.ps1` pasa. Las cinco corren en
 `.github/workflows/quality.yml` en cada push y pull request, y en local con `.\quality.ps1`
 (o `make test`). Las mediciones que cita este documento salen del corpus de `Stories/`, hoy 146
@@ -111,15 +111,6 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 - **Hecho cuando.** Las dos cifras significan lo que su nombre dice, y ningún resultado de la tesis
   las cita mal.
 
-### Trazabilidad del fallo del analista
-
-- **Síntoma.** `_analyze_request` corre fuera del `try` de `execute`, y `_record_failure` empieza
-  por `assert self.repository is not None`. Si la primera llamada falla no se crea directorio, no
-  se escribe `error_report.json` y no queda registro de uso: es la única etapa sin trazabilidad.
-- **Qué hacer.** Crear el repositorio antes de analizar, o registrar el fallo de análisis por otra
-  vía.
-- **Hecho cuando.** Un fallo en la primera llamada deja un `error_report.json`, con test.
-
 ### Equiparar los artefactos Bottom-Up con los Top-Down
 
 - **Síntoma.** El Bottom-Up no escribe métricas de historia, ni versión del generador, ni
@@ -162,19 +153,6 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
   los asertos.
 - **Hecho cuando.** Plan, borrador y revisión son unidades con test propio, el estado deja de
   pasarse como parámetros posicionales, y los artefactos generados no cambian.
-
-### `--seed` y `--agents` no llegan al lote del escape room
-
-- **Síntoma.** `run_batch` fija a mano dos y tres agentes y treinta semillas, ignorando `--seed` y
-  `--agents`: el usuario cree haber configurado el experimento y no lo hizo. Desde que el lote
-  escribe `experiment.json` el artefacto ya no miente sobre lo que corrió, pero las banderas
-  siguen aceptándose y descartándose en silencio, y la consola construye su `Namespace` con
-  `seed=None, agents=2` como si sirvieran de algo.
-- **Qué hacer.** Respetar las banderas o rechazarlas explícitamente. Rechazarlas obliga a que
-  `--agents` tenga `default=None` en `parser()` y a ajustar `run_one` y
-  `apps/console/src/asg_console/bottom_up.py`.
-- **Hecho cuando.** Pasar `--seed` o `--agents` junto a `--batch` cambia el experimento o falla,
-  pero no se descarta en silencio.
 
 ### Persistencia real de lo desplegado
 

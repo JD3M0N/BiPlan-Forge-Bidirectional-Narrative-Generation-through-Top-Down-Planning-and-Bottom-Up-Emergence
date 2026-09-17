@@ -597,6 +597,36 @@ def test_an_unclassified_failure_records_the_stage_where_it_happened(tmp_path) -
     assert error_report["code"] == "UNEXPECTED_ERROR"
 
 
+def test_a_failure_in_the_first_call_still_records_an_error_report(tmp_path) -> None:
+    """Analysis used to run before the repository existed, so its failures left no trace."""
+
+    class BrokenAnalystProvider(FakeProvider):
+        def generate_structured(self, *, system_instruction, prompt, schema, profile):
+            if schema is StoryRequest:
+                raise RuntimeError("analyst exploded")
+            return super().generate_structured(
+                system_instruction=system_instruction, prompt=prompt, schema=schema, profile=profile
+            )
+
+    generator = StoryGenerator(BrokenAnalystProvider(), tmp_path)
+    with pytest.raises(RuntimeError):
+        generator.generate("Escribe una historia sobre el mar")
+
+    run_dirs = list(tmp_path.iterdir())
+    assert len(run_dirs) == 1
+    run_dir = run_dirs[0]
+    assert run_dir.name.endswith("-escribe-una-historia-sobre-el-mar")
+
+    metadata = json.loads((run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["status"] == "failed"
+    assert metadata["error_stage"] == "analysis"
+
+    error_report = json.loads((run_dir / "error_report.json").read_text(encoding="utf-8"))
+    assert error_report["stage"] == "analysis"
+    assert error_report["code"] == "UNEXPECTED_ERROR"
+    assert (run_dir / "llm_usage.json").is_file()
+
+
 def test_invalid_initial_plan_is_replaced_once(tmp_path) -> None:
     provider = FakeProvider([invalid_plan(), valid_plan()])
     run = StoryGenerator(provider, tmp_path).generate(make_request())
