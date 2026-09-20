@@ -6,10 +6,14 @@ cualitativos y dejan que el planificador decida los capítulos sin presupuestos
 numéricos de palabras. Desarrollada y Expansiva aplican mínimos estructurales de
 eventos para que la profundidad no se limite a producir escenas más largas.
 
+Los siete casos vienen en las tres variantes de perfil —Esencial, Desarrollada y
+Expansiva—, idénticas salvo la palabra del perfil, de modo que cualquier prompt se
+puede correr en los tres sin que el texto contradiga el `--profile` forzado.
+
 El prompt 1 es el caso canónico de regresión con Gemini. La prueba live lee su
-texto directamente entre los marcadores `PROMPT_01_START` y `PROMPT_01_END`;
-por tanto, este documento es la única fuente del prompt ejecutado. Cambiar ese
-texto cambia deliberadamente el caso de referencia.
+texto directamente entre los marcadores `PROMPT_01_START` y `PROMPT_01_END`, que
+envuelven su variante Expansiva; por tanto, este documento es la única fuente del
+prompt ejecutado. Cambiar ese texto cambia deliberadamente el caso de referencia.
 
 
 ## 1. Fantasía canónica — caballero, princesa y dragón
@@ -20,6 +24,25 @@ texto cambia deliberadamente el caso de referencia.
 triviales, agencia de los personajes, continuidad de objetos y heridas,
 dependencias causales, preparación y resolución del clímax, y cumplimiento de
 restricciones explícitas sin recurrir a soluciones arbitrarias.
+
+Las tres variantes comparten el texto salvo la palabra del perfil, igual que el resto
+del catálogo. La variante Expansiva conserva los marcadores `PROMPT_01_START` y
+`PROMPT_01_END` y es la que ejecuta la prueba live: cambiar su texto cambia
+deliberadamente el caso de referencia.
+
+### Variante Esencial
+
+<!-- PROMPT_01_ESSENTIAL_START -->
+Escribe en español un relato de fantasía épica con perfil narrativo Esencial. Sir Aldren, un caballero veterano atormentado por el fracaso de una misión anterior, debe entrar en una fortaleza levantada sobre un volcán para rescatar a la princesa Elara de un dragón ancestral. Elara no debe ser una víctima pasiva: debe investigar su cautiverio, tomar decisiones arriesgadas y contribuir de forma decisiva a su propia liberación. El dragón debe tener una motivación comprensible relacionada con una antigua promesa rota por el reino, y no ser simplemente un monstruo malvado. Desarrolla una cadena causal clara desde la llegada del caballero hasta el enfrentamiento final; prepara con antelación cualquier objeto, conocimiento o habilidad que resulte decisivo. Mantén la continuidad de lugares, heridas, información y relaciones. Usa un tono aventurero y emotivo, incluye un dilema moral que obligue a Aldren a elegir entre obedecer al rey y hacer lo correcto, y termina con un desenlace cerrado y esperanzador. Evita el deus ex machina, las profecías que resuelven el conflicto por sí solas y las explicaciones sobre el proceso de escritura.
+<!-- PROMPT_01_ESSENTIAL_END -->
+
+### Variante Desarrollada
+
+<!-- PROMPT_01_DEVELOPED_START -->
+Escribe en español un relato de fantasía épica con perfil narrativo Desarrollada. Sir Aldren, un caballero veterano atormentado por el fracaso de una misión anterior, debe entrar en una fortaleza levantada sobre un volcán para rescatar a la princesa Elara de un dragón ancestral. Elara no debe ser una víctima pasiva: debe investigar su cautiverio, tomar decisiones arriesgadas y contribuir de forma decisiva a su propia liberación. El dragón debe tener una motivación comprensible relacionada con una antigua promesa rota por el reino, y no ser simplemente un monstruo malvado. Desarrolla una cadena causal clara desde la llegada del caballero hasta el enfrentamiento final; prepara con antelación cualquier objeto, conocimiento o habilidad que resulte decisivo. Mantén la continuidad de lugares, heridas, información y relaciones. Usa un tono aventurero y emotivo, incluye un dilema moral que obligue a Aldren a elegir entre obedecer al rey y hacer lo correcto, y termina con un desenlace cerrado y esperanzador. Evita el deus ex machina, las profecías que resuelven el conflicto por sí solas y las explicaciones sobre el proceso de escritura.
+<!-- PROMPT_01_DEVELOPED_END -->
+
+### Variante Expansiva
 
 <!-- PROMPT_01_START -->
 Escribe en español un relato de fantasía épica con perfil narrativo Expansiva. Sir Aldren, un caballero veterano atormentado por el fracaso de una misión anterior, debe entrar en una fortaleza levantada sobre un volcán para rescatar a la princesa Elara de un dragón ancestral. Elara no debe ser una víctima pasiva: debe investigar su cautiverio, tomar decisiones arriesgadas y contribuir de forma decisiva a su propia liberación. El dragón debe tener una motivación comprensible relacionada con una antigua promesa rota por el reino, y no ser simplemente un monstruo malvado. Desarrolla una cadena causal clara desde la llegada del caballero hasta el enfrentamiento final; prepara con antelación cualquier objeto, conocimiento o habilidad que resulte decisivo. Mantén la continuidad de lugares, heridas, información y relaciones. Usa un tono aventurero y emotivo, incluye un dilema moral que obligue a Aldren a elegir entre obedecer al rey y hacer lo correcto, y termina con un desenlace cerrado y esperanzador. Evita el deus ex machina, las profecías que resuelven el conflicto por sí solas y las explicaciones sobre el proceso de escritura.
@@ -34,9 +57,27 @@ basado en costes personales.
 transformación interna, precio de la magia y consistencia entre información
 descubierta y decisiones posteriores.
 
-<!-- PROMPT_02_START -->
+Las tres variantes comparten el texto salvo la palabra del perfil, igual que el resto
+del catálogo, para que este caso entre en la matriz por perfil sin que el analista reciba
+un perfil escrito que contradiga el forzado con `--profile`.
+
+### Variante Esencial
+
+<!-- PROMPT_02_ESSENTIAL_START -->
+Escribe en español un relato de fantasía con perfil narrativo Esencial. Naira, una joven cartógrafa incapaz de usar magia, debe internarse en un bosque cuyos caminos cambian cada vez que alguien recuerda el pasado. Busca recuperar el nombre robado de su hermano antes de que él pierda por completo su identidad. En este mundo, toda magia exige entregar un recuerdo verdadero y nadie puede recuperar exactamente lo que sacrificó. Haz que Naira resuelva los obstáculos mediante observación, mapas y decisiones, no gracias a un poder oculto repentino. Incluye a una guardiana del bosque que se oponga a Naira por una razón legítima y cuya relación con ella evolucione a partir de acciones concretas. Introduce temprano al menos dos objetos que tengan usos posteriores coherentes. Mantén reglas mágicas constantes, una progresión causal clara y consecuencias visibles para cada sacrificio. Usa un tono maravilloso y melancólico, explora la tensión entre memoria e identidad y ofrece un final agridulce pero completo. Evita resurrecciones, profecías salvadoras y cambios retroactivos de las reglas.
+<!-- PROMPT_02_ESSENTIAL_END -->
+
+### Variante Desarrollada
+
+<!-- PROMPT_02_DEVELOPED_START -->
 Escribe en español un relato de fantasía con perfil narrativo Desarrollada. Naira, una joven cartógrafa incapaz de usar magia, debe internarse en un bosque cuyos caminos cambian cada vez que alguien recuerda el pasado. Busca recuperar el nombre robado de su hermano antes de que él pierda por completo su identidad. En este mundo, toda magia exige entregar un recuerdo verdadero y nadie puede recuperar exactamente lo que sacrificó. Haz que Naira resuelva los obstáculos mediante observación, mapas y decisiones, no gracias a un poder oculto repentino. Incluye a una guardiana del bosque que se oponga a Naira por una razón legítima y cuya relación con ella evolucione a partir de acciones concretas. Introduce temprano al menos dos objetos que tengan usos posteriores coherentes. Mantén reglas mágicas constantes, una progresión causal clara y consecuencias visibles para cada sacrificio. Usa un tono maravilloso y melancólico, explora la tensión entre memoria e identidad y ofrece un final agridulce pero completo. Evita resurrecciones, profecías salvadoras y cambios retroactivos de las reglas.
-<!-- PROMPT_02_END -->
+<!-- PROMPT_02_DEVELOPED_END -->
+
+### Variante Expansiva
+
+<!-- PROMPT_02_EXPANSIVE_START -->
+Escribe en español un relato de fantasía con perfil narrativo Expansiva. Naira, una joven cartógrafa incapaz de usar magia, debe internarse en un bosque cuyos caminos cambian cada vez que alguien recuerda el pasado. Busca recuperar el nombre robado de su hermano antes de que él pierda por completo su identidad. En este mundo, toda magia exige entregar un recuerdo verdadero y nadie puede recuperar exactamente lo que sacrificó. Haz que Naira resuelva los obstáculos mediante observación, mapas y decisiones, no gracias a un poder oculto repentino. Incluye a una guardiana del bosque que se oponga a Naira por una razón legítima y cuya relación con ella evolucione a partir de acciones concretas. Introduce temprano al menos dos objetos que tengan usos posteriores coherentes. Mantén reglas mágicas constantes, una progresión causal clara y consecuencias visibles para cada sacrificio. Usa un tono maravilloso y melancólico, explora la tensión entre memoria e identidad y ofrece un final agridulce pero completo. Evita resurrecciones, profecías salvadoras y cambios retroactivos de las reglas.
+<!-- PROMPT_02_EXPANSIVE_END -->
 
 ## 3. Misterio — la última luz del faro
 
@@ -47,9 +88,27 @@ personajes y una solución deducible.
 referencias a lugares y objetos, falsas pistas justificadas y revelación final
 sin información nueva decisiva.
 
-<!-- PROMPT_03_START -->
+Las tres variantes comparten el texto salvo la palabra del perfil, igual que el resto
+del catálogo, para que este caso entre en la matriz por perfil sin que el analista reciba
+un perfil escrito que contradiga el forzado con `--profile`.
+
+### Variante Esencial
+
+<!-- PROMPT_03_ESSENTIAL_START -->
+Escribe en español un relato de misterio con perfil narrativo Esencial. Durante una tormenta que deja incomunicada una pequeña isla, la archivista Mara Vela llega al faro para catalogar sus registros y descubre que el farero ha desaparecido de una habitación cerrada por dentro. En el edificio permanecen su hija, un meteorólogo, la médica de la isla y un contrabandista retirado; todos ocultan algo, pero no todos mienten sobre la desaparición. Construye un misterio de juego limpio: presenta antes de la revelación todas las pistas necesarias para deducir qué ocurrió, incluida una anotación alterada, una pieza del mecanismo del faro y una contradicción horaria. Distingue claramente lo que sabe cada personaje y mantén una cronología consistente durante la tormenta. Incluye al menos una pista falsa que tenga una explicación causal y no sea un engaño del narrador. No uses causas sobrenaturales, gemelos secretos, amnesia ni confesiones que sustituyan la investigación. Usa una atmósfera tensa y aislada, permite que Mara resuelva el caso relacionando evidencias observables y termina revelando tanto el método como el motivo y las consecuencias humanas.
+<!-- PROMPT_03_ESSENTIAL_END -->
+
+### Variante Desarrollada
+
+<!-- PROMPT_03_DEVELOPED_START -->
+Escribe en español un relato de misterio con perfil narrativo Desarrollada. Durante una tormenta que deja incomunicada una pequeña isla, la archivista Mara Vela llega al faro para catalogar sus registros y descubre que el farero ha desaparecido de una habitación cerrada por dentro. En el edificio permanecen su hija, un meteorólogo, la médica de la isla y un contrabandista retirado; todos ocultan algo, pero no todos mienten sobre la desaparición. Construye un misterio de juego limpio: presenta antes de la revelación todas las pistas necesarias para deducir qué ocurrió, incluida una anotación alterada, una pieza del mecanismo del faro y una contradicción horaria. Distingue claramente lo que sabe cada personaje y mantén una cronología consistente durante la tormenta. Incluye al menos una pista falsa que tenga una explicación causal y no sea un engaño del narrador. No uses causas sobrenaturales, gemelos secretos, amnesia ni confesiones que sustituyan la investigación. Usa una atmósfera tensa y aislada, permite que Mara resuelva el caso relacionando evidencias observables y termina revelando tanto el método como el motivo y las consecuencias humanas.
+<!-- PROMPT_03_DEVELOPED_END -->
+
+### Variante Expansiva
+
+<!-- PROMPT_03_EXPANSIVE_START -->
 Escribe en español un relato de misterio con perfil narrativo Expansiva. Durante una tormenta que deja incomunicada una pequeña isla, la archivista Mara Vela llega al faro para catalogar sus registros y descubre que el farero ha desaparecido de una habitación cerrada por dentro. En el edificio permanecen su hija, un meteorólogo, la médica de la isla y un contrabandista retirado; todos ocultan algo, pero no todos mienten sobre la desaparición. Construye un misterio de juego limpio: presenta antes de la revelación todas las pistas necesarias para deducir qué ocurrió, incluida una anotación alterada, una pieza del mecanismo del faro y una contradicción horaria. Distingue claramente lo que sabe cada personaje y mantén una cronología consistente durante la tormenta. Incluye al menos una pista falsa que tenga una explicación causal y no sea un engaño del narrador. No uses causas sobrenaturales, gemelos secretos, amnesia ni confesiones que sustituyan la investigación. Usa una atmósfera tensa y aislada, permite que Mara resuelva el caso relacionando evidencias observables y termina revelando tanto el método como el motivo y las consecuencias humanas.
-<!-- PROMPT_03_END -->
+<!-- PROMPT_03_EXPANSIVE_END -->
 
 ## 4. Drama — el cine de los domingos
 
@@ -60,9 +119,9 @@ magia o tecnología extraordinaria.
 graduales de motivación, continuidad de recuerdos y resolución ganada mediante
 decisiones.
 
-Las tres variantes comparten el texto salvo la palabra del perfil, igual que los
-catálogos 6 y 7, para que el drama entre en la matriz por perfil sin que el analista
-reciba un perfil escrito que contradiga el forzado con `--profile`.
+Las tres variantes comparten el texto salvo la palabra del perfil, igual que el resto
+del catálogo, para que el drama entre en la matriz por perfil sin que el analista reciba
+un perfil escrito que contradiga el forzado con `--profile`.
 
 ### Variante Esencial
 
@@ -90,9 +149,27 @@ entre explicación, conflicto personal y consecuencias.
 **Qué pone a prueba:** consistencia tecnológica, preparación de soluciones,
 continuidad espacial, manejo de información desconocida y cierre temático.
 
-<!-- PROMPT_05_START -->
+Las tres variantes comparten el texto salvo la palabra del perfil, igual que el resto
+del catálogo, para que este caso entre en la matriz por perfil sin que el analista reciba
+un perfil escrito que contradiga el forzado con `--profile`.
+
+### Variante Esencial
+
+<!-- PROMPT_05_ESSENTIAL_START -->
+Escribe en español un relato de ciencia ficción con perfil narrativo Esencial. Irena Sol, cartógrafa de una estación orbital envejecida, descubre que varias estrellas parecen cambiar de posición para formar un mensaje que solo es visible desde la órbita de un planeta abandonado. La estación perderá su soporte vital en cuarenta y ocho horas y su comandante quiere usar el último combustible para evacuar, mientras Irena cree que comprender el mensaje puede revelar por qué fracasó la antigua colonia. Establece reglas claras y plausibles para la observación astronómica, las comunicaciones y las limitaciones de combustible; cualquier solución final debe basarse en tecnología o datos presentados previamente. Incluye a un técnico que discrepe honestamente de Irena y cuya relación con ella cambie por las consecuencias de sus decisiones. Mantén consistentes el tiempo disponible, las distancias, los recursos y la información conocida. Usa un tono melancólico y de asombro, combina el descubrimiento científico con un conflicto humano y termina de forma esperanzadora sin viaje temporal, intervención mágica ni rescate externo inesperado.
+<!-- PROMPT_05_ESSENTIAL_END -->
+
+### Variante Desarrollada
+
+<!-- PROMPT_05_DEVELOPED_START -->
 Escribe en español un relato de ciencia ficción con perfil narrativo Desarrollada. Irena Sol, cartógrafa de una estación orbital envejecida, descubre que varias estrellas parecen cambiar de posición para formar un mensaje que solo es visible desde la órbita de un planeta abandonado. La estación perderá su soporte vital en cuarenta y ocho horas y su comandante quiere usar el último combustible para evacuar, mientras Irena cree que comprender el mensaje puede revelar por qué fracasó la antigua colonia. Establece reglas claras y plausibles para la observación astronómica, las comunicaciones y las limitaciones de combustible; cualquier solución final debe basarse en tecnología o datos presentados previamente. Incluye a un técnico que discrepe honestamente de Irena y cuya relación con ella cambie por las consecuencias de sus decisiones. Mantén consistentes el tiempo disponible, las distancias, los recursos y la información conocida. Usa un tono melancólico y de asombro, combina el descubrimiento científico con un conflicto humano y termina de forma esperanzadora sin viaje temporal, intervención mágica ni rescate externo inesperado.
-<!-- PROMPT_05_END -->
+<!-- PROMPT_05_DEVELOPED_END -->
+
+### Variante Expansiva
+
+<!-- PROMPT_05_EXPANSIVE_START -->
+Escribe en español un relato de ciencia ficción con perfil narrativo Expansiva. Irena Sol, cartógrafa de una estación orbital envejecida, descubre que varias estrellas parecen cambiar de posición para formar un mensaje que solo es visible desde la órbita de un planeta abandonado. La estación perderá su soporte vital en cuarenta y ocho horas y su comandante quiere usar el último combustible para evacuar, mientras Irena cree que comprender el mensaje puede revelar por qué fracasó la antigua colonia. Establece reglas claras y plausibles para la observación astronómica, las comunicaciones y las limitaciones de combustible; cualquier solución final debe basarse en tecnología o datos presentados previamente. Incluye a un técnico que discrepe honestamente de Irena y cuya relación con ella cambie por las consecuencias de sus decisiones. Mantén consistentes el tiempo disponible, las distancias, los recursos y la información conocida. Usa un tono melancólico y de asombro, combina el descubrimiento científico con un conflicto humano y termina de forma esperanzadora sin viaje temporal, intervención mágica ni rescate externo inesperado.
+<!-- PROMPT_05_EXPANSIVE_END -->
 
 ## 6. Ciencia ficción — dinosaurios que no se extinguieron
 

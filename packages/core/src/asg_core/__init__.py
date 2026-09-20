@@ -15,7 +15,7 @@ from .craft import (
 )
 from .files import atomic_write_json, atomic_write_text
 from .locks import file_lock
-from .paths import find_project_root, slugify, stories_path
+from .paths import create_unique_directory, find_project_root, slugify, stories_path
 
 __all__ = [
     "AudioArtifact",
@@ -24,6 +24,7 @@ __all__ = [
     "atomic_write_json",
     "atomic_write_text",
     "craft_metrics",
+    "create_unique_directory",
     "create_story_audio",
     "create_story_audio_sync",
     "file_lock",

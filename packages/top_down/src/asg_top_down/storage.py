@@ -8,7 +8,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from asg_core import atomic_write_text, slugify
+from asg_core import atomic_write_text, create_unique_directory, slugify
 from pydantic import BaseModel
 
 from .errors import ASGError
@@ -30,12 +30,7 @@ class ArtifactRepository:
         """Initialize the ArtifactRepository instance."""
         now = datetime.now(UTC)
         base = f"{now.strftime('%Y%m%d-%H%M%S')}-{slugify(title, fallback='historia')}"
-        run_dir = output_root / base
-        suffix = 2
-        while run_dir.exists():
-            run_dir = output_root / f"{base}-{suffix}"
-            suffix += 1
-        run_dir.mkdir(parents=True, exist_ok=False)
+        run_dir = create_unique_directory(output_root, base)
         self.run_dir = run_dir
         self.on_artifact = on_artifact
         self.metadata = RunMetadata(

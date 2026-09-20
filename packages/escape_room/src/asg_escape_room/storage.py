@@ -10,21 +10,10 @@ from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-from asg_core import atomic_write_json, atomic_write_text, slugify
+from asg_core import atomic_write_json, atomic_write_text, create_unique_directory, slugify
 from pydantic import BaseModel
 
 from .contracts import SimulationResult, TickRecord
-
-
-def _timestamped_directory(root: Path, name: str) -> Path:
-    """Create a fresh directory under root, suffixing the name until it does not exist."""
-    directory = root / name
-    suffix = 2
-    while directory.exists():
-        directory = root / f"{name}-{suffix}"
-        suffix += 1
-    directory.mkdir(parents=True)
-    return directory
 
 
 def _package_version() -> str:
@@ -42,7 +31,7 @@ class RunRepository:
         """Initialize the RunRepository instance."""
         now = datetime.now(UTC)
         base = f"{now.strftime('%Y%m%d-%H%M%S')}-{slugify(room_name, fallback='escape-room')}"
-        self.run_dir = _timestamped_directory(root, base)
+        self.run_dir = create_unique_directory(root, base)
         self.metadata = {
             "run_id": self.run_dir.name,
             "model": model,
@@ -158,7 +147,7 @@ def save_batch(root: Path, rows: list[dict], config: dict | None = None) -> Path
     now = datetime.now(UTC)
     # Second resolution used to collide silently under exist_ok=True, overwriting the CSVs of
     # the previous batch; runs have always used the anti-collision suffix instead.
-    directory = _timestamped_directory(root / "experiments", now.strftime("%Y%m%d-%H%M%S"))
+    directory = create_unique_directory(root / "experiments", now.strftime("%Y%m%d-%H%M%S"))
     atomic_write_text(directory / "runs.csv", _csv_text(rows))
     atomic_write_text(directory / "summary.csv", _csv_text(_batch_summary(rows)))
     atomic_write_json(

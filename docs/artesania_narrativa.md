@@ -1,11 +1,14 @@
 # Artesanía narrativa del corpus Top-Down
 
-**Medido el 2026-09-13 con `report-story-craft` de `asg-evaluation` 0.4.0 sobre las 113 historias
-de `Stories/`.** Entran en el informe las **83 con versión de generador o de pipeline 6 o
-posterior**; de ellas **81 están `completed`** y son las que forman las medianas. Las nueve
-historias de la versión 6.5.0 se generaron ese mismo día con Gemini real (`gemini-3.5-flash-lite`)
-como línea base de la artesanía, y las nueve de **6.6.0** repiten esos mismos nueve prompts sobre la
-versión que interviene en el prompt del Drafter: son el par con el que se mide la intervención.
+**Medido el 2026-09-17 con `report-story-craft` de `asg-evaluation` 0.4.0 sobre las 125 historias
+de `Stories/`.** Entran en el informe las **95 con versión de generador o de pipeline 6 o
+posterior**; de ellas **93 están `completed`** y son las que forman las medianas. Las nueve
+historias de la versión 6.5.0 se generaron el 13 de septiembre con Gemini real
+(`gemini-3.5-flash-lite`) como línea base de la artesanía, y las nueve de **6.6.0** repiten esos
+mismos nueve prompts sobre la versión que interviene en el prompt del Drafter: son el par con el que
+se mide la intervención. **Doce historias más, del 17 de septiembre, replican esa matriz sobre la
+misma versión sin tocar nada**: son el suelo de ruido con el que hay que leer cualquier diferencia
+de este documento, y están en «El lote del 2026-09-17».
 
 El documento responde a una pregunta que `story_metrics.json` no podía responder antes: **¿el
 pipeline escribe escena o escribe resumen?** Las palabras, los capítulos y los eventos no
@@ -56,9 +59,14 @@ el crítico sólo recibe texto cuando hay algo que señalar.
 
 ```powershell
 report-story-craft --min-version 6 --csv docs\artesania_narrativa_corpus.csv --group all
-report-story-craft --min-version 6.6.0 --group profile     # aísla el lote nuevo
+report-story-craft --min-version 6.6.0 --group profile     # aísla la versión, no el lote
 report-story-craft --min-version 0 --include-unversioned --group approach   # incluye Bottom-Up
 ```
+
+**Un lote no es una versión.** Los dos lotes de 6.6.0 comparten versión de generador y de pipeline,
+así que `--min-version` no los separa: el lote se aísla filtrando en el CSV las filas cuyo `run_id`
+empieza por su fecha (`20260913-22` y `20260917-`). Cualquier medición que compare réplicas tiene
+que cortar por ahí.
 
 El CSV lleva **una fila por historia y 39 columnas**: identidad y ejes (`approach`, `story`,
 `run_id`, `narrative_profile`, `generator_version`, `pipeline_version`, `status`, `model`,
@@ -84,8 +92,8 @@ Medianas de las historias `completed`, y el contador de historias sin una sola m
 | 6.3.0 | 29 | 32 % | 27,5 | 84,8 | 3495 | 3 |
 | 6.4.1 | 1 | 38 % | 20,5 | 61,5 | 1968 | 0 |
 | 6.5.0 | 9 | 44 % | 22,8 | 68,9 | 4157 | 0 |
-| **6.6.0** | **9** | **47 %** | **28,7** | **34,6** | **3469** | **0** |
-| Total 6.x | 81 | 35 % | 25,9 | 76,9 | 3101 | 7 |
+| **6.6.0** | **21** | **47 %** | **26,8** | **34,6** | **3469** | **0** |
+| Total 6.x | 93 | 39 % | 25,4 | 74,2 | 3101 | 7 |
 
 El rango es tan informativo como la mediana: en 6.1.0 la proporción de diálogo va de 0 % a 54 % y
 las palabras por párrafo de 57 a **195**. La dispersión, no el centro, es el problema.
@@ -94,15 +102,17 @@ las palabras por párrafo de 57 a **195**. La dispersión, no el centro, es el p
 
 | Perfil | n | % diálogo | palabras/frase | palabras/párrafo | palabras | sin diálogo |
 | --- | --- | --- | --- | --- | --- | --- |
-| Esencial | 28 | 21 % | 23,0 | 75,3 | 1842 | 4 |
-| Desarrollada | 22 | 42 % | 24,9 | 68,8 | 3403 | 0 |
-| Expansiva | 31 | 33 % | 29,0 | 84,8 | 3950 | 3 |
+| Esencial | 32 | 32 % | 22,9 | 70,6 | 1836 | 4 |
+| Desarrollada | 26 | 42 % | 24,1 | 64,3 | 3402 | 0 |
+| Expansiva | 35 | 34 % | 28,9 | 81,0 | 3950 | 3 |
 
-Sobre el corpus entero, Esencial parece dramatizar la mitad que Desarrollada. **Esa lectura es
+Sobre el corpus entero, Esencial sigue diez puntos por debajo de Desarrollada. **Esa lectura es
 falsa**, y la sección «Dónde nace el defecto» la desmonta: la brecha viene del contenido y de la
 versión con que se probó cada perfil, no del contrato del perfil. Cuando los tres corren sobre los
-mismos prompts, la diferencia desaparece. Esta tabla se conserva porque es el agregado del corpus
-histórico, no porque el perfil explique lo que muestra.
+mismos prompts, la diferencia desaparece. La propia tabla lo enseña al crecer: los doce runs del
+17-09 añadieron cuatro Esenciales generadas con la versión nueva y su mediana saltó de 21 % a 32 %
+sin que el contrato del perfil cambiara una palabra. Esta tabla se conserva porque es el agregado
+del corpus histórico, no porque el perfil explique lo que muestra.
 
 ## La matriz 6.5.0: nueve historias con Gemini real
 
@@ -279,7 +289,8 @@ desenlace sigue tirando hacia el resumen: el efecto es real pero parcial, y qued
   los tres umbrales, así que `craft_evidence.json` quedó vacío en los nueve y el crítico nunca vio
   el bloque `CRAFT OBSERVATIONS`. **Toda la mejora medida viene del prompt del Drafter.** El canal
   es hoy una red de seguridad sin evidencia propia de que funcione; para probarlo hace falta un caso
-  que dispare los umbrales.
+  que dispare los umbrales, y el lote del 17-09 muestra que provocarlo con estos umbrales y este
+  Drafter no es posible.
 - **Las historias son un 17 % más cortas** (mediana de 4157 a 3469 palabras) con el mismo número de
   capítulos y eventos planificados, salvo el catálogo 4 Esencial, que planificó 2 capítulos y 5
   eventos en lugar de 3 y 6, dentro de su banda. La escena dramatizada gasta menos palabras por
@@ -292,6 +303,142 @@ desenlace sigue tirando hacia el resumen: el efecto es real pero parcial, y qued
   `world_continuity` en ninguno de los dos lotes; el aumento está en `agency` (de 1 a 5). Las dos
   `failed_calls` del lote nuevo son reintentos transitorios que después tuvieron éxito, contados
   como dice la ficha del `TODO.md` sobre esa cifra.
+
+## El lote del 2026-09-17: la réplica que da el suelo de ruido
+
+Doce historias más, **sin ninguna intervención**: el mismo generador 6.6.0, el mismo modelo y el
+mismo procedimiento que la matriz anterior, cuatro días después. Nueve repiten exactamente los nueve
+prompts de las dos matrices; las tres restantes repiten el catálogo 6 en los tres perfiles, buscando
+el caso que dispare los umbrales de `craft_evidence`. La única variable del lote es la ejecución, de
+modo que todo lo que separe estas doce de las nueve del 13-09 es variabilidad del modelo, no del
+pipeline. Eso es justo lo que faltaba: hasta ahora cada versión tenía una sola muestra y ninguna
+forma de saber cuánto vale una diferencia de tres puntos.
+
+Las doce terminaron `completed` al primer intento, sin advertencias y con `chapter_bodies_recovered`
+en verdadero.
+
+| Run | Cat. | Perfil | Cap. | Ev. | Palabras | Párr. | % diálogo | p/frase | p/párrafo | Llamadas | Tokens | Segundos |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `20260917-043723-la-ultima-funcion-del-rex` | 4 | Esencial | 3 | 6 | 2610 | 69 | 54 % | 23,3 | 37,5 | 15 | 84 114 | 148 |
+| `20260917-043959-la-ultima-funcion-del-ideal` | 4 | Desarrollada | 4 | 9 | 3882 | 134 | 40 % | 22,9 | 28,8 | 16 | 113 609 | 179 |
+| `20260917-044306-la-ultima-funcion-del-circulo` | 4 | Expansiva | 5 | 13 | 4879 | 149 | 52 % | 20,3 | 32,5 | 16 | 116 053 | 124 |
+| `20260917-044517-la-era-de-las-garras-y-las-plumas` | 6 | Esencial | 2 | 5 | 1645 | 42 | 45 % | 31,3 | 38,7 | 13 | 53 913 | 72 |
+| `20260917-045757-la-era-de-las-grandes-ideas` | 6 | Esencial * | 3 | 6 | 1400 | 58 | 40 % | 22,3 | 23,8 | 13 | 55 255 | 74 |
+| `20260917-044654-la-era-de-las-escamas-pensantes` | 6 | Desarrollada | 4 | 8 | 2774 | 69 | 62 % | 28,5 | 39,7 | 16 | 86 516 | 134 |
+| `20260917-045917-la-era-de-las-escamas-pensantes` | 6 | Desarrollada * | 4 | 8 | 2986 | 81 | 52 % | 23,1 | 36,5 | 15 | 83 374 | 108 |
+| `20260917-044916-el-dominio-de-la-fronda` | 6 | Expansiva | 5 | 10 | 3798 | 99 | 53 % | 28,8 | 38,0 | 16 | 99 212 | 110 |
+| `20260917-050112-el-imperio-de-la-escama-eterna` | 6 | Expansiva * | 5 | 10 | 3730 | 115 | 43 % | 26,8 | 32,2 | 16 | 108 373 | 136 |
+| `20260917-045114-la-falsificacion-de-medianoche` | 7 | Esencial | 2 | 4 | 1813 | 67 | 37 % | 20,0 | 26,8 | 13 | 55 860 | 91 |
+| `20260917-045255-el-secreto-del-falso-lazaro` | 7 | Desarrollada | 4 | 9 | 3648 | 113 | 44 % | 21,7 | 32,0 | 13 | 78 539 | 106 |
+| `20260917-045448-la-ultima-pincelada` | 7 | Expansiva | 5 | 12 | 4349 | 94 | 67 % | 30,9 | 46,0 | 18 | 129 514 | 181 |
+
+Las filas marcadas con `*` son las tres repeticiones del catálogo 6. Coste: **180 llamadas, 1
+fallida —un reintento transitorio que después tuvo éxito—, 1 064 332 tokens y 24,4 minutos** de
+reloj.
+
+### Lo que cuesta una réplica: unos diez puntos
+
+Los mismos nueve prompts, la misma versión, cuatro días de diferencia:
+
+| Cat. | Perfil | 6.5.0 | 6.6.0 (13-09) | 6.6.0 (17-09) | Δ entre réplicas |
+| --- | --- | --- | --- | --- | --- |
+| 4 | Esencial | 47 % | 41 % | 54 % | +12 |
+| 4 | Desarrollada | 45 % | 48 % | 40 % | −9 |
+| 4 | Expansiva | 44 % | 47 % | 52 % | +5 |
+| 6 | Esencial | 21 % | 42 % | 45 % | +3 |
+| 6 | Desarrollada | 41 % | 47 % | 62 % | +16 |
+| 6 | Expansiva | 30 % | 45 % | 53 % | +7 |
+| 7 | Esencial | 52 % | 44 % | 37 % | −6 |
+| 7 | Desarrollada | 53 % | 49 % | 44 % | −5 |
+| 7 | Expansiva | 44 % | 55 % | 67 % | +12 |
+
+El cambio mediano entre las dos corridas de la misma versión es **+5 puntos**, con desviación de 8,8
+y un rango de −9 a +16. Y las tres repeticiones internas del catálogo 6, donde coinciden prompt,
+versión, modelo y hasta la hora, se separan igual:
+
+| Catálogo 6, mismo prompt dos veces | % diálogo | Δ | palabras | Δ |
+| --- | --- | --- | --- | --- |
+| Esencial | 45 % y 40 % | 6 | 1645 y 1400 | 245 |
+| Desarrollada | 62 % y 52 % | 10 | 2774 y 2986 | 212 |
+| Expansiva | 53 % y 43 % | 9 | 3798 y 3730 | 68 |
+
+La consecuencia es metodológica y vale para todo el documento: **una sola historia dice poco, y con
+n=9 una diferencia de medianas por debajo de unos cinco puntos no se puede leer.** El +3 de 6.5.0 a
+6.6.0 caía dentro de ese margen —la sección anterior ya avisaba de que por sí solo no probaría
+nada—, y ahora está medido contra qué se comparaba.
+
+### El suelo sube; la dispersión no se estrecha
+
+| Lote | n | mediana | IQR | rango | desv. |
+| --- | --- | --- | --- | --- | --- |
+| 6.5.0 | 9 | 44 % | 35-49 (14 pts) | 21-53 (32 pts) | 10,4 |
+| 6.6.0 (13-09) | 9 | 47 % | 43-49 (6 pts) | 41-55 (14 pts) | 4,3 |
+| 6.6.0 (17-09) | 12 | 48 % | 41-53 (13 pts) | 37-67 (30 pts) | 9,2 |
+
+La afirmación de la sección anterior —«el rango se estrecha de 32 puntos a 14»— **no sobrevive a la
+réplica**: con doce historias vuelve a 30 puntos y la desviación regresa al orden de la línea base.
+Lo que se estrechó el 13-09 fue suerte de muestra pequeña. Lo que sí replica es el otro extremo, que
+es el que la intervención perseguía:
+
+| Cifra | 6.5.0 | 6.6.0 (13-09) | 6.6.0 (17-09) |
+| --- | --- | --- | --- |
+| Mínimo por historia | 21 % | 41 % | 37 % |
+| Máximo por historia | 53 % | 55 % | 67 % |
+| Mínimo por capítulo | 0,00 | 0,33 | 0,28 |
+| Capítulos sin una sola marca | 3 | 0 | 0 |
+| Palabras/párrafo, peor capítulo | 217,0 | 52,7 | 64,6 |
+
+**El suelo subió y se quedó arriba; el techo subió también, y por eso el rango no se cierra.**
+Veintiuna historias consecutivas de 6.6.0 sin un solo capítulo mudo, frente a tres capítulos mudos
+en nueve de la línea base, y ningún párrafo-bloque en ninguna de las dos réplicas. Ésa es la parte
+de la intervención que la variabilidad del modelo no se lleva por delante.
+
+### El decaimiento hacia el desenlace replica
+
+| Posición del capítulo | 13-09 (n=9) | 17-09 (n=12) | 6.6.0 completo (n=21) |
+| --- | --- | --- | --- |
+| Primero | 50 % | 50 % | 50 % |
+| Intermedios | 48 % | 56 % | 50 % |
+| Último | 39 % | 43 % | 41 % |
+
+El último capítulo es el que menos dramatiza en los dos lotes, y lo es **en 13 de las 21 historias**
+contadas una a una. Sobre la muestra doble la brecha contra el primer capítulo es de **9 puntos**.
+El vaivén de los intermedios entre réplicas —48 % y 56 %— cabe holgadamente en el ruido que mide la
+sección anterior; el signo de la brecha del último no cambia ni una sola vez. Ésta es la medida
+previa contra la que habrá que juzgar la intervención sobre el desenlace: mover la mediana del
+último capítulo menos de cinco puntos no significará nada, y la cifra que conviene vigilar es
+cuántas historias dejan de tener su capítulo más mudo al final.
+
+### El canal de evidencia no se puede ejercitar con estos umbrales
+
+Cero de doce, otra vez, y **no por poco**. Sobre los 46 capítulos del lote:
+
+| Umbral de `craft_evidence.py` | Lo peor del lote 17-09 | Lo peor de 6.5.0 |
+| --- | --- | --- |
+| `dialogue_ratio` menor que 0,20 | mínimo 0,28 | mínimo 0,00 |
+| `words_per_paragraph` de 120 o más | máximo 64,6 | máximo 217,0 |
+
+Ningún capítulo se queda cerca: el peor está a ocho centésimas del umbral de diálogo y a 55 palabras
+del de párrafo-bloque. Los mismos umbrales sobre la línea base habrían disparado **siete veces** en
+nueve historias. Están calibrados sobre el primer cuartil y el percentil 90 del corpus 6.x, es decir
+sobre una distribución que incluye todo lo anterior a la intervención y que el Drafter **ya no
+produce**.
+
+La vía que proponía el `TODO.md` —provocar el caso con un prompt que tienda al resumen— ya se
+intentó por donde parecía más prometedora: seis corridas del catálogo 6, el peor de la línea base,
+dos por cada perfil. No basta, porque el prompt que resumía ya no resume. Con el Drafter actual el
+canal sólo puede probarse recalibrando los umbrales sobre la distribución nueva, o construyendo el
+borrador a mano en un test. Mientras tanto, 21 historias consecutivas dicen que la red de seguridad
+nunca se ha tensado, y ésa es toda su evidencia disponible.
+
+### Tamaño y planificación
+
+La mediana de palabras del lote es 3317 frente a 3496 del anterior, dentro del ruido. Lo que sí se
+mueve es el plan: el catálogo 4 Expansiva planificó **13 eventos** donde la réplica anterior puso 10,
+el 7 Desarrollada 9 donde puso 8, y dos Esenciales se quedaron en 2 capítulos. Todo cae dentro de la
+banda de su perfil y ninguna corrida disparó `PLOT_VALIDATION_FAILED`, pero conviene recordar que el
+planificador no es más estable que la prosa: el conteo de eventos también es una variable aleatoria
+dentro de su banda, no una constante del perfil.
 
 ## Avisos de lectura
 
@@ -329,12 +476,17 @@ prompt gana a los demás números del sistema—: los umbrales viven en `asg_top
 en código, y sólo su veredicto viaja, redactado en palabras. `craft_evidence.json` deja por escrito
 en cada run qué vio exactamente el crítico, y el manifiesto lo cubre con su sha256.
 
-Lo que esta medición deja abierto:
+Lo que esta medición deja abierto, releído tras la réplica del 17-09:
 
-- **El canal de evidencia sigue sin probarse en vivo.** Los nueve borradores de 6.6.0 salieron
-  sanos, así que nunca se emitió el bloque. Hace falta un caso que dispare los umbrales para saber
-  si el crítico lo usa bien.
-- **El último capítulo sigue dramatizando menos que el primero**, 11 puntos por debajo. El
-  decaimiento se redujo, no se cerró.
+- **El canal de evidencia sigue sin probarse en vivo, y ya se sabe por qué.** Veintiuna historias
+  consecutivas de 6.6.0 dejaron el bloque vacío, y el peor capítulo de las doce últimas está a ocho
+  centésimas del umbral de diálogo y a 55 palabras del de párrafo-bloque. Los umbrales están
+  calibrados sobre una distribución que el Drafter ya no produce: para ejercitarlos hay que
+  recalibrarlos o construir el borrador a mano en un test, no generar más historias.
+- **El último capítulo sigue dramatizando menos que el primero**, 9 puntos por debajo sobre las 21
+  historias de 6.6.0, y es el más mudo en 13 de ellas. El decaimiento se redujo, no se cerró, y
+  replica.
+- **La dispersión no se corrigió.** El estrechamiento del rango que celebraba la matriz del 13-09 no
+  aparece en la réplica; lo que la intervención sostiene es el suelo, no la varianza.
 - **Completar las variantes por perfil del catálogo de prompts**, porque hoy sólo los catálogos 4,
   6 y 7 las tienen y la matriz no puede crecer sin ellas.

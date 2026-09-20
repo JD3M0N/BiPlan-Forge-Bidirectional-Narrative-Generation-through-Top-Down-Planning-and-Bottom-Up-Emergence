@@ -185,7 +185,7 @@ class CharactersArtifact(BaseModel):
 
 
 class ChapterDraft(BaseModel):
-    """Represent ChapterDraft data and behavior."""
+    """One chapter as the planner proposed it, before graph.py has judged the plan."""
 
     id: str = Field(pattern=ID_PATTERN)
     order: int = Field(ge=1)
@@ -198,7 +198,14 @@ class ChapterDraft(BaseModel):
 
 
 class ChapterPlan(ChapterDraft):
-    """Represent ChapterPlan data and behavior."""
+    """One chapter of a plan materialize_plan already validated.
+
+    The fields match ChapterDraft deliberately: what separates the two is provenance,
+    not shape. Only graph.py mints a ChapterPlan, and it does so after the invariants
+    hold, so a signature asking for one cannot be handed raw model output. This mirrors
+    the StoryPlanDraft/StoryPlan split at the level of a single chapter; collapsing it
+    would let unvalidated chapters reach the drafter and the audit.
+    """
 
 
 class PlotEvent(BaseModel):

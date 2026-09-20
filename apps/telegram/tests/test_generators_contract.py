@@ -9,7 +9,7 @@ from asg_telegram.contract import (
     GenerationProgress,
 )
 from asg_top_down import StoryGenerator
-from asg_top_down.errors import ArtifactValidationError
+from asg_top_down.errors import PlotValidationError
 from asg_top_down.profiles import NarrativeProfile
 from asg_top_down.progress import PipelineEvent, ProgressUpdate
 
@@ -82,7 +82,7 @@ def test_adapter_only_calls_methods_the_real_facade_defines(tmp_path, monkeypatc
 def test_adapter_translates_pipeline_errors_into_application_failures(tmp_path, monkeypatch):
     captured: dict = {}
     _patch_facade(monkeypatch, tmp_path, captured)
-    error = ArtifactValidationError("No se pudo completar el capítulo 1.", stage="planning")
+    error = PlotValidationError("No se pudo completar el capítulo 1.")
     error.run_id = "run-7"
 
     def explode(*args, **kwargs):
@@ -98,7 +98,7 @@ def test_adapter_translates_pipeline_errors_into_application_failures(tmp_path, 
         generators_module.TopDownGenerator().generate("Una historia")
 
     failure = raised.value
-    assert failure.code == "ARTIFACT_VALIDATION_FAILED"
+    assert failure.code == "PLOT_VALIDATION_FAILED"
     assert failure.stage == "planning"
     assert failure.run_id == "run-7"
-    assert "ARTIFACT_VALIDATION_FAILED" in failure.public_message()
+    assert "PLOT_VALIDATION_FAILED" in failure.public_message()

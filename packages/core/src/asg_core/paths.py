@@ -31,6 +31,25 @@ def stories_path(*parts: str, root: str | Path | None = None) -> Path:
     return project_root.joinpath("Stories", *parts)
 
 
+def create_unique_directory(root: Path | str, name: str) -> Path:
+    """Create a fresh directory under root, suffixing the name until one is free.
+
+    Both approaches name runs after a second-resolution timestamp, so two runs started
+    within the same second would otherwise overwrite each other. The directory is claimed
+    with an exclusive mkdir rather than an existence check, so concurrent callers cannot
+    both win the same name.
+    """
+    parent = Path(root)
+    candidate, suffix = parent / name, 2
+    while True:
+        try:
+            candidate.mkdir(parents=True, exist_ok=False)
+        except FileExistsError:
+            candidate, suffix = parent / f"{name}-{suffix}", suffix + 1
+        else:
+            return candidate
+
+
 def slugify(value: str, *, fallback: str = "item", max_length: int = 60) -> str:
     """Convert text into a short ASCII slug suitable for directory names."""
     normalized = unicodedata.normalize("NFKD", value)

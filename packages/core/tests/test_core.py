@@ -14,6 +14,7 @@ from asg_core import (
     atomic_write_json,
     atomic_write_text,
     create_story_audio,
+    create_unique_directory,
     file_lock,
     find_project_root,
     markdown_to_speech_text,
@@ -45,6 +46,28 @@ def test_an_explicit_start_outranks_the_configured_root(tmp_path, monkeypatch):
 
     assert find_project_root(nested) == tmp_path / "explicit"
     assert find_project_root() == tmp_path / "configured"
+
+
+def test_create_unique_directory_suffixes_instead_of_reusing(tmp_path):
+    """A taken name yields the next suffix, so a second run never lands on the first one."""
+    first = create_unique_directory(tmp_path, "20260101-120000-historia")
+    (first / "story.md").write_text("original", encoding="utf-8")
+    second = create_unique_directory(tmp_path, "20260101-120000-historia")
+    third = create_unique_directory(tmp_path, "20260101-120000-historia")
+
+    assert first.name == "20260101-120000-historia"
+    assert second.name == "20260101-120000-historia-2"
+    assert third.name == "20260101-120000-historia-3"
+    assert (first / "story.md").read_text(encoding="utf-8") == "original"
+
+
+def test_create_unique_directory_gives_every_concurrent_caller_its_own(tmp_path):
+    """The exclusive mkdir settles the race: no two callers can claim the same name."""
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        claimed = list(pool.map(lambda _: create_unique_directory(tmp_path, "run"), range(8)))
+
+    assert len({directory.name for directory in claimed}) == 8
+    assert all(directory.is_dir() for directory in claimed)
 
 
 def test_slugify_uses_ascii_and_fallback():

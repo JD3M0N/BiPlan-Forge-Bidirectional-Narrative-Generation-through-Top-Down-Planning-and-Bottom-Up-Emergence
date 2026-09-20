@@ -289,16 +289,19 @@ def test_temperature_uses_the_explicit_profile(call, profile, expected_temperatu
     assert config.temperature == expected_temperature
 
 
-def test_unknown_temperature_profile_is_rejected_and_overrides_merge_with_defaults() -> None:
-    """An unknown profile name fails fast, and an explicit override only replaces its entry."""
+def test_unknown_temperature_profile_is_rejected() -> None:
+    """An unknown profile name fails fast instead of silently borrowing another temperature."""
     provider = provider_with(SimpleNamespace(text="respuesta", usage_metadata=None))
     with pytest.raises(ValueError, match="not-a-real-profile"):
         provider.generate_text(
             system_instruction="test", prompt="test", profile="not-a-real-profile"
         )
-    provider.generation_profiles = {
-        **provider_module._DEFAULT_GENERATION_PROFILES,
-        "prose": 1.0,
-    }
-    assert provider._temperature("prose") == 1.0
-    assert provider._temperature("review") == provider_module._DEFAULT_GENERATION_PROFILES["review"]
+
+
+def test_every_named_profile_resolves_to_its_documented_temperature() -> None:
+    """The five named profiles are the only source of temperature, with no per-instance state."""
+    provider = provider_with(SimpleNamespace(text="respuesta", usage_metadata=None))
+    expected = {"extraction": 0.15, "review": 0.2, "planning": 0.5, "prose": 0.9, "rewrite": 0.35}
+    assert provider_module._DEFAULT_GENERATION_PROFILES == expected
+    for profile, temperature in expected.items():
+        assert provider._temperature(profile) == temperature

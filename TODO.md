@@ -1,18 +1,19 @@
 # Hoja de ruta
 
-**Estado medido el 2026-09-13 sobre `263e756` más la intervención de artesanía narrativa de
-`asg-top-down` 6.6.0.** Puerta de calidad limpia: `ruff check .`, `ruff format --check .`
-(126 archivos), 283 pruebas pasan y 2 se omiten, `pip check` sin requisitos rotos, y
-`tests/test_sync_railway_stories.ps1` pasa. Las cinco corren en
-`.github/workflows/quality.yml` en cada push y pull request, y en local con `.\quality.ps1`
-(o `make test`). Las mediciones que cita este documento salen del corpus de `Stories/`, hoy 146
-ejecuciones Top-Down; de las 113 historias con `story.md`,
-105 tienen `evaluation.json` y una sola tiene puntuaciones reales, medido con `report-evaluations`.
+**Estado medido el 2026-09-17 sobre `c5c406d`, con `asg-top-down` 6.6.0 sin cambios.** Puerta de
+calidad limpia: `ruff check .`, `ruff format --check .` (126 archivos), 288 pruebas pasan y 2 se
+omiten, `pip check` sin requisitos rotos, y `tests/test_sync_railway_stories.ps1` pasa. Las cinco
+corren en `.github/workflows/quality.yml` en cada push y pull request, y en local con
+`.\quality.ps1` (o `make test`). Las mediciones que cita este documento salen del corpus de
+`Stories/`, hoy 159 ejecuciones Top-Down; de las 125 historias con `story.md`, 122 tienen
+`evaluation.json` y una sola tiene puntuaciones reales, medido con `report-evaluations`.
 Las cifras de prosa —diálogo, palabras por frase y palabras por párrafo— salen de
-`report-story-craft` sobre las 83 historias de versión 6 en adelante, 81 de ellas terminadas, y
-están documentadas en [docs/artesania_narrativa.md](docs/artesania_narrativa.md), que enfrenta dos
-matrices de 9 historias con Gemini real sobre los mismos prompts (catálogos 4, 6 y 7 por los tres
-perfiles): la línea base 6.5.0 y la intervención 6.6.0.
+`report-story-craft` sobre las 95 historias de versión 6 en adelante, 93 de ellas terminadas, y
+están documentadas en [docs/artesania_narrativa.md](docs/artesania_narrativa.md), que enfrenta la
+línea base 6.5.0 con la intervención 6.6.0 sobre los mismos prompts (catálogos 4, 6 y 7 por los tres
+perfiles) y añade una réplica de doce historias del 2026-09-17 sobre 6.6.0 sin tocar nada: esa
+réplica es el suelo de ruido con el que hay que leer cualquier diferencia. **Una diferencia de
+medianas menor de unos cinco puntos, con n=9, no se puede interpretar.**
 
 ## Cómo leer esto
 
@@ -60,44 +61,39 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 
 ### El desenlace sigue resumiendo
 
-- **Síntoma.** La intervención de 6.6.0 levantó el diálogo de los capítulos intermedios del 41% al
-  48%, pero el último capítulo sólo pasó del 36% al 39% y sigue 11 puntos por debajo del primero.
-  La cláusula «un desenlace es una escena» está en el prompt del Drafter y no basta: el modelo
-  cierra resumiendo cómo acabaron las cosas. Medido sobre las dos matrices de nueve historias en
+- **Síntoma.** Sobre las 21 historias de 6.6.0 —la matriz del 13-09 y su réplica de doce del
+  17-09— el último capítulo dramatiza al 41% frente al 50% del primero, y es el capítulo más mudo
+  de su historia en 13 de las 21. La cláusula «un desenlace es una escena» está en el prompt del
+  Drafter y no basta: el modelo cierra resumiendo cómo acabaron las cosas. El decaimiento se redujo
+  respecto de 6.5.0 y **replica en los dos lotes**, así que no es ruido. Medido en
   `docs/artesania_narrativa.md`.
 - **Qué hacer.** Tratar el último capítulo como caso propio en vez de endurecer el contrato para
   todos: el Drafter ya sabe qué capítulo escribe y en qué posición, así que puede recibir la
   exigencia de desenlace dramatizado sólo donde hace falta.
-- **Hecho cuando.** La mediana de diálogo del último capítulo deja de estar por debajo de la de los
-  intermedios, repitiendo la matriz de nueve.
+- **Hecho cuando.** El último capítulo deja de ser el más mudo en la mayoría de las historias de una
+  matriz nueva. La mediana sola no sirve de criterio: la réplica midió hasta 16 puntos de diferencia
+  entre dos corridas del mismo prompt y la misma versión.
 
-### El canal de evidencia al crítico no se ha ejercitado
+### Los umbrales de `craft_evidence` ya no alcanzan la prosa que escribe el Drafter
 
-- **Síntoma.** `craft_evidence.json` salió vacío en las nueve historias de 6.6.0: los borradores
-  pasaron los tres umbrales de `craft_evidence.py`, así que el crítico dramático nunca recibió el
-  bloque `CRAFT OBSERVATIONS`. Toda la mejora medida viene del prompt del Drafter; del canal sólo
-  se sabe que no estorba. Hay test unitario de los umbrales y de que el bloque llega al prompt,
-  pero ninguna evidencia de que el crítico lo use bien.
-- **Qué hacer.** Provocar el caso: generar con un prompt que tienda al resumen —el catálogo 6 era
-  el peor antes de 6.6.0— hasta disparar un umbral, y comprobar si el crítico levanta la nota
-  `voice_style`/`pacing` sobre el capítulo señalado y si el Writer la aplica.
-- **Hecho cuando.** Existe al menos un run con `craft_evidence.json` no vacío, y está escrito si la
-  nota que produjo mejoró el capítulo o no.
+- **Síntoma.** `craft_evidence.json` salió vacío en las **21 historias de 6.6.0**, así que el crítico
+  dramático no ha recibido el bloque `CRAFT OBSERVATIONS` ni una vez y del canal sólo se sabe que no
+  estorba. Generar más historias no lo va a disparar: se intentó con seis corridas del catálogo 6,
+  el peor de la línea base, y el peor de sus 46 capítulos se queda en `dialogue_ratio` 0,28 contra
+  un umbral de 0,20 y en 64,6 palabras por párrafo contra un umbral de 120. Los mismos umbrales
+  habrían disparado siete veces sobre 6.5.0: están calibrados sobre el primer cuartil y el percentil
+  90 de un corpus anterior a la intervención, y esa distribución ya no se produce.
+- **Qué hacer.** Decidir entre las dos salidas, y escribir cuál: recalibrar los umbrales sobre la
+  distribución de 6.6.0 —que es la que el canal tendría que vigilar— o dejar de esperar un caso vivo
+  y cubrir el camino completo con un test que fabrique el borrador degradado y compruebe que el
+  crítico levanta la nota `voice_style`/`pacing` sobre el capítulo señalado y que el Writer la
+  aplica.
+- **Hecho cuando.** El canal está ejercitado de punta a punta por algún camino, o consta por escrito
+  la decisión de dejarlo como red de seguridad inactiva y por qué.
 
 ---
 
 ## Pendiente
-
-### Completar las variantes por perfil del catálogo de prompts
-
-- **Síntoma.** Sólo los catálogos 4, 6 y 7 de `docs/prompts_top_down.md` tienen variantes
-  Esencial/Desarrollada/Expansiva. En los otros cuatro el perfil viene escrito en el texto, así
-  que una matriz por perfil obliga a forzar `--profile` contra un prompt que dice otra cosa, y el
-  analista ya derivó sus `creative_directions` de la palabra equivocada.
-- **Qué hacer.** Dar variantes por perfil a los prompts 1, 2, 3 y 5, con el mismo patrón de texto
-  idéntico salvo la palabra del perfil.
-- **Hecho cuando.** Cualquier prompt del catálogo se puede correr en los tres perfiles sin
-  contradicción entre el texto y `--profile`.
 
 ### `failed_calls` y `duration_seconds` miden otra cosa de la que dicen
 
@@ -163,28 +159,28 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 - **Hecho cuando.** Artefactos y cola sobreviven a un redeploy sin intervención y el script queda
   como herramienta de archivado opcional.
 
-### Resolver las abstracciones que no sostienen nada
+### `topological_order` se serializa y es derivable
 
-- **Síntoma.** `ArtifactValidationError` no se lanza en ningún `src/` del monorepo; solo la usan dos
-  tests de Telegram como doble genérico. Los kwargs `structured_validation_retries` y
-  `generation_profiles` de `provider.py` no tienen ni un llamador. `ChapterPlan` es una subclase sin
-  campos propios usada como tipo en doce sitios de producción y exportada públicamente.
-  `topological_order` se serializa en cada plan y es derivable: comprobado sobre los planes del
+- **Síntoma.** Se escribe en cada plan aunque se puede deducir: comprobado sobre los planes del
   corpus, **en 71 de 71** coincide exactamente con ordenar los eventos por su campo `order`, que es
-  lo que ya garantizan los invariantes del grafo.
-- **Qué hacer.** Decidir caso por caso: eliminar con migración, o quedarse con una razón escrita.
-- **Hecho cuando.** Cada caso tiene decisión tomada y, si se elimina, un test prueba que nada
-  dependía de él.
+  lo que ya garantizan los invariantes del grafo. Es el único de los cuatro casos de abstracción
+  vacía que sigue abierto; los otros tres se cerraron. Quitarlo no es gratis: lo leen `graph.py` y
+  `pipeline.py`, y está dentro de los artefactos de las 159 ejecuciones ya generadas.
+- **Qué hacer.** Decidir si el campo se deriva en carga en vez de persistirse. Si se quita, sube
+  `PIPELINE_VERSION` y da una lectura compatible a los runs que lo traen: son datos de la tesis.
+- **Hecho cuando.** Hay decisión escrita y, si se elimina, los runs anteriores se siguen abriendo.
 
 ### Subir a `core` lo que está duplicado
 
-- **Síntoma.** El nombrado de directorio de run con sufijo anticolisión está copiado casi carácter
-  a carácter entre los dos `storage.py`. El bloque `Settings` más `load_settings` con dotenv y
-  `GEMINI_API_KEY` está en los dos `config.py`, incluido el literal del nombre del modelo. La
-  consola reimplementa el cuerpo de `cli.run_one` del escape room, y ya divergen en cómo informan
-  del audio.
-- **Qué hacer.** Mover las tres utilidades a `asg_core` y que los dos paquetes las consuman.
-- **Hecho cuando.** No queda ninguna de las tres duplicaciones.
+- **Síntoma.** El bloque `Settings` más `load_settings` con dotenv y `GEMINI_API_KEY` está en los
+  dos `config.py`, incluido el literal del nombre del modelo; comparten tres campos y divergen en
+  que Top-Down exige la clave y añade ocho de cuota, así que sale una base común, no una clase
+  única. La consola reimplementa el cuerpo de `cli.run_one` del escape room, y ya divergen en cómo
+  informan del audio: eso es reconciliar comportamiento, no borrar una copia. El tercer caso, el
+  nombrado de directorio con sufijo anticolisión, ya vive en `asg_core.create_unique_directory`.
+- **Qué hacer.** Subir la configuración compartida a `asg_core` y decidir qué comportamiento de
+  audio es el correcto antes de unificar la consola con `cli.run_one`.
+- **Hecho cuando.** No queda ninguna de las dos duplicaciones que siguen vivas.
 
 ### Documentar los contratos públicos y rellenar el README
 

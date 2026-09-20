@@ -59,18 +59,6 @@ class StructuredResponseError(ProviderError):
     code = "PROVIDER_INVALID_SCHEMA"
 
 
-class ArtifactValidationError(ASGError):
-    """Represent ArtifactValidationError data and behavior."""
-
-    code = "ARTIFACT_VALIDATION_FAILED"
-    stage = "planning"
-
-    def __init__(self, summary: str, *, stage: str = "planning", **kwargs) -> None:
-        """Initialize the ArtifactValidationError instance."""
-        super().__init__(summary, **kwargs)
-        self.stage = stage
-
-
 class PlotValidationError(ASGError):
     """Represent PlotValidationError data and behavior."""
 

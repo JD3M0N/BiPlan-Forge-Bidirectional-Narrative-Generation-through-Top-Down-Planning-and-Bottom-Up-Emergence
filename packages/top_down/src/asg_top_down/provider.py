@@ -32,6 +32,14 @@ from .schemas import LLMUsageRecord
 T = TypeVar("T", bound=BaseModel)
 _LIMITERS: dict[tuple[int, int], SlidingWindowLimiter] = {}
 _LIMITERS_LOCK = threading.Lock()
+# Both settings below are module constants, not constructor arguments: no call site in
+# the repository ever configured them, and the per-instance copies only survived because
+# the code read them through getattr defaults to tolerate a test double that skips
+# __init__. Reading the constant directly keeps one source of truth for the temperatures
+# CLAUDE.md documents, and a future caller that needs to vary them can reintroduce the
+# parameter along with the reason it exists.
+_STRUCTURED_VALIDATION_RETRIES = 1
+
 _DEFAULT_GENERATION_PROFILES: dict[str, float] = {
     "extraction": 0.15,
     "review": 0.2,
@@ -178,8 +186,6 @@ class GeminiProvider:
         max_retries: int = 3,
         max_retry_delay: int = 120,
         request_timeout_ms: int = 120_000,
-        structured_validation_retries: int = 1,
-        generation_profiles: dict[str, float] | None = None,
     ) -> None:
         """Initialize the GeminiProvider instance."""
         from google import genai
@@ -190,7 +196,6 @@ class GeminiProvider:
         self._token_limiter = TokenWindowLimiter(tpm_limit) if tpm_limit else None
         self.max_retries = max_retries
         self.max_retry_delay = max_retry_delay
-        self.structured_validation_retries = max(0, structured_validation_retries)
         capacity = max(1, rpm_limit - rpm_reserve)
         with _LIMITERS_LOCK:
             self._limiter = _LIMITERS.setdefault((capacity, 60), SlidingWindowLimiter(capacity))
@@ -204,13 +209,11 @@ class GeminiProvider:
         self.wait_callback: Callable[[int, str], None] | None = None
         self.usage_callback: Callable[[LLMUsageRecord], None] | None = None
         self.usage_records: list[LLMUsageRecord] = []
-        self.generation_profiles = {**_DEFAULT_GENERATION_PROFILES, **(generation_profiles or {})}
 
     def _temperature(self, profile: str) -> float:
         """Look up the configured temperature for an explicit generation profile."""
-        profiles = getattr(self, "generation_profiles", None) or _DEFAULT_GENERATION_PROFILES
         try:
-            return float(profiles[profile])
+            return float(_DEFAULT_GENERATION_PROFILES[profile])
         except KeyError as exc:
             raise ValueError(f"Unknown generation profile: {profile!r}") from exc
 
@@ -382,7 +385,7 @@ class GeminiProvider:
         from google.genai import types
 
         temperature = self._temperature(profile)
-        validation_retries = max(0, getattr(self, "structured_validation_retries", 1))
+        validation_retries = _STRUCTURED_VALIDATION_RETRIES
         current_prompt = prompt
         last_errors: list[dict[str, str]] = []
         for validation_attempt in range(validation_retries + 1):

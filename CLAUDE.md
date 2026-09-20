@@ -225,7 +225,9 @@ el estado medido cambia sustancialmente.
   corrupto) que nunca puede coincidir, y su glob `*/src/**` es relativo al directorio de trabajo:
   ejecutar pytest desde otro sitio hace que pase en silencio. Es un bug conocido con ficha en el
   `TODO.md`; no lo uses como referencia de qué detecta el filtro.
-- `README.md` está **vacío** (0 bytes). Si lo rellenas, guarda en UTF-8.
+- `README.md` está **vacío** (0 bytes) **a propósito**: se redacta al cerrar el proyecto,
+  cuando los contratos públicos ya no se muevan. No lo rellenes antes aunque parezca una
+  mejora barata; cuando llegue el momento, guárdalo en UTF-8.
 - `.gitignore` ignora `docs/*` salvo tres archivos en lista blanca. Si creas un doc nuevo en
   `docs/` y quieres que se versione, añádelo también a esa lista.
 - `.cache/` contiene sqlite y cachés de pytest de experimentos previos (`pytest-top-down-*`,
