@@ -15,6 +15,7 @@ docs/*
 !docs/artesania_narrativa.md
 !docs/calibracion_perfiles.md
 !docs/evaluation_metrics.md
+!docs/pipeline_top_down.md
 !docs/prompts_top_down.md
 .cache/
 story-comparison.html

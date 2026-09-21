@@ -228,7 +228,7 @@ el estado medido cambia sustancialmente.
 - `README.md` está **vacío** (0 bytes) **a propósito**: se redacta al cerrar el proyecto,
   cuando los contratos públicos ya no se muevan. No lo rellenes antes aunque parezca una
   mejora barata; cuando llegue el momento, guárdalo en UTF-8.
-- `.gitignore` ignora `docs/*` salvo tres archivos en lista blanca. Si creas un doc nuevo en
+- `.gitignore` ignora `docs/*` salvo cinco archivos en lista blanca. Si creas un doc nuevo en
   `docs/` y quieres que se versione, añádelo también a esa lista.
 - `.cache/` contiene sqlite y cachés de pytest de experimentos previos (`pytest-top-down-*`,
   `pytest-profile-*`...). Son artefactos de ejecución: no razonar sobre el estado del proyecto a
@@ -238,6 +238,9 @@ el estado medido cambia sustancialmente.
 
 ## Documentos de referencia
 
+- [docs/pipeline_top_down.md](docs/pipeline_top_down.md) — recorrido de las once etapas del
+  pipeline Top-Down: qué hace cada agente, qué se le inyecta en el prompt y por qué, qué valida
+  `graph.py` después y cómo se repara un plan rechazado. Grafo del flujo y un run de referencia.
 - [docs/calibracion_perfiles.md](docs/calibracion_perfiles.md) — metodología y resultados de la
   calibración de los perfiles narrativos Top-Down.
 - [docs/artesania_narrativa.md](docs/artesania_narrativa.md) — metodología y mediciones de la
