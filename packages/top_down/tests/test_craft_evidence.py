@@ -46,6 +46,13 @@ def test_block_paragraphs_are_reported_alongside_the_dialogue_verdict() -> None:
     assert chapter_observations(narration(150)) == [NO_DIALOGUE, BLOCK_PARAGRAPHS]
 
 
+def test_the_paragraph_ceiling_reaches_the_prose_the_drafter_actually_writes() -> None:
+    # The 6.6.0 corpus tops out at 64.6 words per paragraph, so the old 120 ceiling could never
+    # fire; 100 is the kind of block prose the net exists to catch.
+    assert BLOCK_PARAGRAPHS in chapter_observations(narration(100))
+    assert BLOCK_PARAGRAPHS not in chapter_observations(narration(65))
+
+
 def test_a_dramatized_chapter_produces_no_observation() -> None:
     assert chapter_observations(scene()) == []
 

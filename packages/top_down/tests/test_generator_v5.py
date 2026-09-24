@@ -8,7 +8,7 @@ from asg_top_down import storage as storage_module
 from asg_top_down import version as version_module
 from asg_top_down.agents import AnalystAgent
 from asg_top_down.audit import parse_chapter_bodies
-from asg_top_down.craft_evidence import NO_DIALOGUE
+from asg_top_down.craft_evidence import NO_DIALOGUE, RARE_DIALOGUE
 from asg_top_down.errors import GeminiDailyQuotaError, PlotValidationError
 from asg_top_down.graph import materialize_plan, validate_profile_structure
 from asg_top_down.pipeline import StoryPipeline
@@ -266,6 +266,14 @@ def event_scoped_story_review() -> StoryReview:
 
 def prose(label: str, words: int = 300) -> str:
     return " ".join(f"{label}{index}" for index in range(words))
+
+
+def barely_spoken_prose() -> str:
+    # One spoken paragraph in ten: below the dialogue floor without reaching the block ceiling,
+    # which is the shape of the live 6.6.0 case that first exercised this channel.
+    spoken = "—Nadie mas lo sabe —dijo Ana."
+    narrated = "Ana reviso el archivo sin decir una palabra mas en toda la tarde."
+    return "\n\n".join([spoken, *[narrated] * 9])
 
 
 def scene_prose(label: str = "escena") -> str:
@@ -570,6 +578,29 @@ def test_a_failure_registering_the_audio_artifact_keeps_the_run_completed(
     assert run.run_dir.joinpath("story.md").is_file()
 
 
+def test_an_interrupted_run_is_never_left_stranded_in_running(tmp_path) -> None:
+    class InterruptedWorldProvider(FakeProvider):
+        def generate_structured(self, *, system_instruction, prompt, schema, profile):
+            if schema is WorldArtifact:
+                raise KeyboardInterrupt
+            return super().generate_structured(
+                system_instruction=system_instruction, prompt=prompt, schema=schema, profile=profile
+            )
+
+    with pytest.raises(KeyboardInterrupt):
+        StoryGenerator(InterruptedWorldProvider(), tmp_path).generate(make_request())
+
+    run_dir = next(iter(tmp_path.iterdir()))
+    metadata = json.loads((run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["status"] == "failed"
+    assert metadata["error_code"] == "RUN_INTERRUPTED"
+    assert metadata["error_stage"] == "world"
+
+    report = json.loads((run_dir / "error_report.json").read_text(encoding="utf-8"))
+    assert report["code"] == "RUN_INTERRUPTED"
+    assert report["details"] == {"exception_type": "KeyboardInterrupt"}
+
+
 def test_an_unclassified_failure_records_the_stage_where_it_happened(tmp_path) -> None:
     class BrokenWorldProvider(FakeProvider):
         def generate_structured(self, *, system_instruction, prompt, schema, profile):
@@ -750,6 +781,48 @@ def test_a_dramatized_draft_sends_the_critic_no_craft_observations(tmp_path) -> 
     assert "CRAFT OBSERVATIONS:" not in structured_prompt(provider, "StoryReview")
     assert evidence["prompt_block"] == ""
     assert not any(item["observations"] for item in evidence["chapters"])
+
+
+def test_a_craft_observation_reaches_the_writer_as_a_note_on_that_chapter_alone(
+    tmp_path,
+) -> None:
+    review = StoryReview(
+        strengths=["The causal line is clear."],
+        notes=[
+            RevisionNote(
+                id="chapter-1-dialogue",
+                priority="major",
+                category="voice_style",
+                evidence="chapter-1 reports the confrontation instead of staging it.",
+                instruction="Stage the confrontation as a live spoken scene.",
+                chapter_ids=["chapter-1"],
+            )
+        ],
+    )
+    provider = FakeProvider(
+        drafter_outputs=[barely_spoken_prose(), scene_prose()],
+        story_review=review,
+    )
+    run = StoryGenerator(provider, tmp_path).generate(make_request())
+
+    evidence = json.loads((run.run_dir / "craft_evidence.json").read_text(encoding="utf-8"))
+    assert evidence["chapters"][0]["observations"] == [RARE_DIALOGUE]
+    assert evidence["chapters"][1]["observations"] == []
+
+    critic_prompt = structured_prompt(provider, "StoryReview")
+    assert f"- chapter-1: {RARE_DIALOGUE}." in critic_prompt
+    assert "chapter-2:" not in critic_prompt
+
+    writer_calls = [item for item in provider.text_calls if "final Writer" in item[0]]
+    assert len(writer_calls) == 1
+    assert "REVISION NOTES:" in writer_calls[0][1]
+    assert "Stage the confrontation as a live spoken scene." in writer_calls[0][1]
+
+    report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
+    assert report["chapters"][0]["note_ids"] == ["chapter-1-dialogue"]
+    assert report["chapters"][0]["final_source"] == "revision"
+    assert report["chapters"][1]["note_ids"] == []
+    assert report["chapters"][1]["final_source"] == "draft"
 
 
 def test_the_writer_is_given_the_voices_it_must_preserve(tmp_path) -> None:

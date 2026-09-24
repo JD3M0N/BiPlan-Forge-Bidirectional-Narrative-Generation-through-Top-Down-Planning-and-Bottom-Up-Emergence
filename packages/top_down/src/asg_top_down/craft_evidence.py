@@ -6,12 +6,17 @@ from asg_core import craft_metrics
 
 from .schemas import ChapterCraftEvidence, ChapterPlan, CraftEvidenceArtifact
 
-# Calibrated on the 6.x corpus measured by report-story-craft: a dialogue ratio under the corpus
-# first quartile (0.19) reads as reported summary, and paragraphs at or above its ninetieth
-# percentile (120 words) read as undivided blocks. The figures stay here, in code, and only their
-# verdict travels: profiles.py records why a number written inside a prompt beats every other.
+# Recalibrated on the 90 chapters of the 23 finished 6.6.0 runs, read from the per-chapter figures
+# story_metrics.json has carried since 6.5.0. A safety net belongs just outside the healthy
+# distribution, not at one of its quartiles: a quartile fires on a quarter of healthy chapters and
+# stops meaning anything. The dialogue floor is left where it was, because 0.20 still sits on the
+# real tail -- it caught 1 chapter of 90, the lowest observed being 0.1765. The paragraph ceiling
+# moved, because 6.6.0 tops out at 64.6 words per paragraph (p99 55.9) and 120 had become
+# unreachable: the pre-intervention 6.5.0 corpus reached 217. The figures stay here, in code, and
+# only their verdict travels: profiles.py records why a number written inside a prompt beats every
+# other.
 LOW_DIALOGUE_RATIO = 0.20
-BLOCK_PARAGRAPH_WORDS = 120.0
+BLOCK_PARAGRAPH_WORDS = 90.0
 
 NO_DIALOGUE = "no spoken exchange appears anywhere in this chapter"
 RARE_DIALOGUE = "spoken exchange is rare, so the chapter is reported rather than played out"

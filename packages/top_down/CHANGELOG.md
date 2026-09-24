@@ -1,5 +1,21 @@
 # Historial de cambios
 
+## 6.7.0
+
+- `BLOCK_PARAGRAPH_WORDS` de `craft_evidence.py` baja de 120 a 90 palabras por parrafo. Medido
+  sobre los 90 capitulos de las 23 ejecuciones 6.6.0 terminadas, leyendo el `chapter_metrics` que
+  `story_metrics.json` guarda desde 6.5.0: el maximo observado es 64,6 palabras por parrafo y el
+  p99 es 55,9, asi que el techo de 120 era inalcanzable y el canal no podia avisar de prosa en
+  bloque. El corpus 6.5.0, anterior a la intervencion en el prompt del Drafter, llegaba a 217.
+- `LOW_DIALOGUE_RATIO` se queda en 0,20, con la medicion que lo justifica: disparo en 1 de los 90
+  capitulos, y el minimo observado es 0,1765. Una red de seguridad va justo fuera de la
+  distribucion sana, no en uno de sus cuartiles.
+- Ninguna cifra viaja a ningun prompt: solo el veredicto, como hasta ahora.
+- Las ejecuciones interrumpidas ya no quedan bloqueadas en `running`. `StoryPipeline.execute`
+  captura tambien `BaseException`, de modo que un `KeyboardInterrupt` cierra el run como `failed`
+  con codigo `RUN_INTERRUPTED`, y el nuevo comando `recover-story-runs` cierra o descarta los que
+  ya estaban varados. El conjunto de artefactos no cambia, asi que `PIPELINE_VERSION` sigue en 6.2.
+
 ## 6.5.0
 
 - `story_metrics.json` registra la artesania de la prosa junto al tamano: parrafos, frases y

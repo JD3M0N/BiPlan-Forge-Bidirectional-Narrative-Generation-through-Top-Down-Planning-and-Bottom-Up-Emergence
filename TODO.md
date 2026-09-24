@@ -1,19 +1,19 @@
 # Hoja de ruta
 
-**Estado medido el 2026-09-17 sobre `c5c406d`, con `asg-top-down` 6.6.0 sin cambios.** Puerta de
-calidad limpia: `ruff check .`, `ruff format --check .` (126 archivos), 288 pruebas pasan y 2 se
-omiten, `pip check` sin requisitos rotos, y `tests/test_sync_railway_stories.ps1` pasa. Las cinco
-corren en `.github/workflows/quality.yml` en cada push y pull request, y en local con
-`.\quality.ps1` (o `make test`). Las mediciones que cita este documento salen del corpus de
-`Stories/`, hoy 159 ejecuciones Top-Down; de las 125 historias con `story.md`, 122 tienen
-`evaluation.json` y una sola tiene puntuaciones reales, medido con `report-evaluations`.
-Las cifras de prosa —diálogo, palabras por frase y palabras por párrafo— salen de
-`report-story-craft` sobre las 95 historias de versión 6 en adelante, 93 de ellas terminadas, y
-están documentadas en [docs/artesania_narrativa.md](docs/artesania_narrativa.md), que enfrenta la
-línea base 6.5.0 con la intervención 6.6.0 sobre los mismos prompts (catálogos 4, 6 y 7 por los tres
-perfiles) y añade una réplica de doce historias del 2026-09-17 sobre 6.6.0 sin tocar nada: esa
-réplica es el suelo de ruido con el que hay que leer cualquier diferencia. **Una diferencia de
-medianas menor de unos cinco puntos, con n=9, no se puede interpretar.**
+**Estado medido el 2026-09-21 sobre `8232110`, con `asg-top-down` 6.7.0.** Puerta de calidad
+limpia: `ruff check .`, `ruff format --check .`, 304 pruebas pasan y 2 se omiten, `pip check` sin
+requisitos rotos, y `tests/test_sync_railway_stories.ps1` pasa. Las cinco corren en
+`.github/workflows/quality.yml` en cada push y pull request, y en local con `.\quality.ps1` (o
+`make test`). Las mediciones que cita este documento salen del corpus de `Stories/`, hoy **160
+ejecuciones Top-Down** —119 `completed`, 41 `failed` y **ninguna varada en `running`**— más 6
+Bottom-Up; de las 128 historias, 125 tienen `evaluation.json` y una sola tiene puntuaciones reales,
+medido con `report-evaluations`. Las cifras de prosa —diálogo, palabras por frase y palabras por
+párrafo— salen de `report-story-craft` sobre las 97 historias de versión 6 en adelante, 96 de ellas
+terminadas, y están documentadas en [docs/artesania_narrativa.md](docs/artesania_narrativa.md), que
+enfrenta la línea base 6.5.0 con la intervención 6.6.0 sobre los mismos prompts (catálogos 4, 6 y 7
+por los tres perfiles) y añade una réplica de doce historias del 2026-09-17 sobre 6.6.0 sin tocar
+nada: esa réplica es el suelo de ruido con el que hay que leer cualquier diferencia. **Una
+diferencia de medianas menor de unos cinco puntos, con n=9, no se puede interpretar.**
 
 ## Cómo leer esto
 
@@ -47,18 +47,6 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 - **Hecho cuando.** El gate detecta lo mismo desde cualquier directorio y no queda ningún docstring
   que se limite a repetir el nombre de la función.
 
-### Recuperar las ejecuciones varadas en `running`
-
-- **Síntoma.** Cuatro runs del corpus quedaron en `running` para siempre. Dos de ellos tienen
-  `story.md` completo, uno con métricas de 1674 palabras y seis eventos, pero `StoryRun` se niega a
-  abrir un run incompleto, así que son datos de la tesis inaccesibles. `complete_stage` escribe
-  checkpoints que nadie lee para reanudar.
-- **Qué hacer.** Decidir primero si merece la pena reanudar desde checkpoint. Si no, dar una
-  transición explícita para cerrar o descartar un run interrumpido, y recuperar los cuatro que ya
-  existen.
-- **Hecho cuando.** Ningún run queda bloqueado indefinidamente, los cuatro varados están
-  resueltos, y hay test de la transición.
-
 ### El desenlace sigue resumiendo
 
 - **Síntoma.** Sobre las 21 historias de 6.6.0 —la matriz del 13-09 y su réplica de doce del
@@ -74,22 +62,27 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
   matriz nueva. La mediana sola no sirve de criterio: la réplica midió hasta 16 puntos de diferencia
   entre dos corridas del mismo prompt y la misma versión.
 
-### Los umbrales de `craft_evidence` ya no alcanzan la prosa que escribe el Drafter
+### El Writer acepta una revisión que no repara el déficit que la pidió
 
-- **Síntoma.** `craft_evidence.json` salió vacío en las **21 historias de 6.6.0**, así que el crítico
-  dramático no ha recibido el bloque `CRAFT OBSERVATIONS` ni una vez y del canal sólo se sabe que no
-  estorba. Generar más historias no lo va a disparar: se intentó con seis corridas del catálogo 6,
-  el peor de la línea base, y el peor de sus 46 capítulos se queda en `dialogue_ratio` 0,28 contra
-  un umbral de 0,20 y en 64,6 palabras por párrafo contra un umbral de 120. Los mismos umbrales
-  habrían disparado siete veces sobre 6.5.0: están calibrados sobre el primer cuartil y el percentil
-  90 de un corpus anterior a la intervención, y esa distribución ya no se produce.
-- **Qué hacer.** Decidir entre las dos salidas, y escribir cuál: recalibrar los umbrales sobre la
-  distribución de 6.6.0 —que es la que el canal tendría que vigilar— o dejar de esperar un caso vivo
-  y cubrir el camino completo con un test que fabrique el borrador degradado y compruebe que el
-  crítico levanta la nota `voice_style`/`pacing` sobre el capítulo señalado y que el Writer la
-  aplica.
-- **Hecho cuando.** El canal está ejercitado de punta a punta por algún camino, o consta por escrito
-  la decisión de dejarlo como red de seguridad inactiva y por qué.
+- **Síntoma.** El canal de `craft_evidence` se tensó por primera vez el 2026-09-20 en
+  `20260920-135822-el-computo-de-la-deriva`, y lo recorrió entero: `chapter_1` salió con
+  `dialogue_ratio` 0,1765, el crítico levantó las dos notas que pide su prompt —`voice_style` y
+  `pacing`, sobre ese capítulo y sólo ése— y el Writer reescribió el capítulo de 424 a 589
+  palabras, aceptado al primer intento. **Y el `dialogue_ratio` quedó en 0,1765, exactamente el
+  mismo**, con las palabras por párrafo subiendo de 24,9 a 34,7: las 165 palabras añadidas fueron
+  narración, no escena. `_writer_candidate_issue` sólo rechaza cuerpo vacío, encabezados Markdown y
+  texto idéntico; nunca comprueba que el déficit que originó la nota se haya reparado. Medido en
+  [docs/artesania_narrativa.md](docs/artesania_narrativa.md).
+- **Qué hacer.** Pasar las observaciones del capítulo, que `_critique_and_revise` ya calcula, hasta
+  `_revise_one_chapter`, y si la misma observación sobrevive al primer candidato usarla como
+  `RETRY CORRECTION` del segundo. **Rechazo blando, no duro:** tras dos rechazos el método devuelve
+  hoy `draft_body`, o sea el borrador degradado, así que un rechazo duro entregaría un texto peor
+  que la revisión que acaba de descartar; hay que devolver el mejor candidato, nunca el borrador. El
+  feedback nombra la observación, jamás una cifra: `test_no_measurement_ever_reaches_the_prompt`
+  existe para eso.
+- **Hecho cuando.** Una reescritura pedida por una nota de artesanía que no mueve la observación se
+  reintenta, el capítulo entregado nunca es el borrador degradado, y hay test del camino. Que el
+  cambio además mejore la prosa sólo se puede afirmar con una matriz nueva, que gasta cuota.
 
 ---
 
@@ -113,8 +106,8 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
   manifiesto con SHA-256, ni registro de llamadas o de uso, ni taxonomía de errores, ni perfil
   narrativo. Ninguno de los ejes sobre los que está calibrado el Top-Down existe del otro lado, y
   los lotes no producen `story.md` ni `evaluation.json`, así que ninguna corrida de lote es
-  evaluable. El desequilibrio se ve en los datos: 2 ejecuciones y 3 lotes, todos de julio, frente a
-  121 ejecuciones Top-Down repartidas en seis versiones del generador.
+  evaluable. El desequilibrio se ve en los datos: 6 ejecuciones y 3 lotes frente a 160 ejecuciones
+  Top-Down repartidas en siete versiones del generador.
 - **Qué hacer.** Dar al Bottom-Up el mismo conjunto mínimo de artefactos: métricas de historia,
   versión, manifiesto y códigos de error. Reusar lo que ya existe en `asg_core` en vez de
   duplicarlo; la artesanía de la prosa sale gratis llamando a `asg_core.craft_metrics`, y
@@ -128,10 +121,12 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 - **Síntoma.** `packages/top_down/tests/test_generator_v5.py` contiene más de 60 aserciones sobre
   el texto literal de los prompts de sistema. Cualquier reescritura de un prompt rompe tests que no
   tienen nada que ver con lo que se cambió, y reescribir prompts es el trabajo central de la tesis.
-  Peor, `test_the_story_plan_is_written_from_a_single_guarded_site` lee el código fuente como texto
-  y lo parte por el nombre del método con su indentación exacta, así que es lo primero que se
-  rompe al dividir `pipeline.py`. El doble de proveedor también parsea el prompt del escritor para
-  extraer el cuerpo original.
+  El doble de proveedor también parsea el prompt del escritor para extraer el cuerpo original,
+  partiéndolo por `ORIGINAL CHAPTER BODY:` y `RETRY CORRECTION:`, que son literales de
+  `agents/writer.py`. (El caso que antes citaba esta ficha,
+  `test_the_story_plan_is_written_from_a_single_guarded_site`, que leía el código fuente como texto
+  y lo partía por la indentación exacta del método, **ya no existe**: se borró en `cf45c1b`. Con él
+  desapareció el obstáculo que esta ficha señalaba para dividir `pipeline.py`.)
 - **Qué hacer.** Expresar cada aserción como comportamiento observable en vez de subcadena. Donde
   el contenido del prompt sea de verdad el contrato, concentrarlo en pocos tests declarados como
   tales.
@@ -139,12 +134,16 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 
 ### Dividir `pipeline.py`
 
-- **Síntoma.** 1149 líneas y 56 métodos en una sola clase, mezclando orquestación, reintentos,
+- **Síntoma.** 1190 líneas y 57 métodos en una sola clase, mezclando orquestación, reintentos,
   validación, ensamblado de Markdown, prompts de reparación y telemetría. El campo `repository`
   opcional obliga a 17 `assert self.repository is not None` repartidos por la clase.
-- **Qué hacer.** Empezar por las tres extracciones de riesgo nulo, que son métodos estáticos puros
-  y se mueven literalmente: los prompts de reparación, el ensamblado de Markdown y las reglas de
-  aceptación del escritor. Son unas 250 líneas. Después la telemetría y la contabilidad de uso como
+- **Qué hacer.** Empezar por las tres extracciones de riesgo nulo, que se mueven literalmente
+  porque no tocan `self`, `repository` ni `provider`: los prompts de reparación (`_repair_guidance`
+  y sus seis hermanos, líneas contiguas), el ensamblado de Markdown (`_assemble_story`, que ya
+  delega el formato en `audit.canonical_chapter` y no tiene ni una referencia externa) y las reglas
+  de aceptación del escritor (`_writer_candidate_issue` y `_writer_fallback_warning`). Son unas 250
+  líneas y sólo tres llamadas de test que actualizar. **El obstáculo que citaba la ficha de las
+  aserciones de prompt ya no existe.** Después la telemetría y la contabilidad de uso como
   colaboradores, y solo al final las etapas como clases con estado propio, que es lo que elimina
   los asertos.
 - **Hecho cuando.** Plan, borrador y revisión son unidades con test propio, el estado deja de

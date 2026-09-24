@@ -24,7 +24,7 @@ from .agents import (
 )
 from .audit import canonical_chapter, story_metrics, word_count
 from .craft_evidence import craft_evidence
-from .errors import NON_DEGRADABLE_ERRORS, PlotValidationError
+from .errors import NON_DEGRADABLE_ERRORS, PlotValidationError, RunInterruptedError
 from .graph import (
     materialize_plan,
     relevant_prior_events,
@@ -121,8 +121,8 @@ class StoryPipeline:
             self._record_failure(exc)
             raise
         self.repository = self._create_repository(request.title)
-        self._configure_provider_callbacks()
         try:
+            self._configure_provider_callbacks()
             self._save_request(request)
             blueprint = self._build_blueprint(request)
             world = self._build_world(request)
@@ -147,6 +147,11 @@ class StoryPipeline:
             return self.repository.run_dir
         except Exception as exc:
             self._record_failure(exc)
+            raise
+        except BaseException as exc:
+            # KeyboardInterrupt and SystemExit are not Exception, so without this branch an
+            # abandoned run kept status "running" forever and StoryRun refused to open it.
+            self._record_interruption(exc)
             raise
         finally:
             self._clear_provider_callbacks()
@@ -1127,6 +1132,20 @@ class StoryPipeline:
         self._emit("pipeline_failed", f"fallo la etapa {stage}: {summary}", stage=stage)
         self._save_usage()
         self.repository.fail(error, stage=stage)
+
+    def _record_interruption(self, error: BaseException) -> None:
+        """Close a run the process abandoned, so no run is left stranded in "running"."""
+        assert self.repository is not None
+        stage = self.progress["stage"]
+        interrupted = RunInterruptedError(
+            "La generación se interrumpió antes de terminar.",
+            details={"exception_type": type(error).__name__},
+            recommendations=["Vuelve a lanzar la generación: esta ejecución quedó incompleta."],
+        )
+        interrupted.stage = stage
+        self._emit("pipeline_interrupted", f"se interrumpio la etapa {stage}", stage=stage)
+        self._save_usage()
+        self.repository.fail(interrupted, stage=stage)
 
     def _call_agent(self, name: str, function: Callable[[], T]) -> T:
         """Emit an agent event and execute the supplied agent operation."""

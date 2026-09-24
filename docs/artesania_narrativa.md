@@ -440,6 +440,60 @@ banda de su perfil y ninguna corrida disparó `PLOT_VALIDATION_FAILED`, pero con
 planificador no es más estable que la prosa: el conteo de eventos también es una variable aleatoria
 dentro de su banda, no una constante del perfil.
 
+## El canal de evidencia sí se tensó: el caso del 2026-09-20
+
+La sección anterior cerraba diciendo que 21 historias consecutivas dejaban la red de seguridad sin
+tensar. **Ya no es cierto.** Al crecer el corpus a 23 ejecuciones 6.6.0 terminadas, una de ellas
+—`20260920-135822-el-computo-de-la-deriva`— disparó el canal por primera vez, y lo recorrió entero:
+
+1. `craft_evidence.json` salió con bloque no vacío: `chapter_1`, con `dialogue_ratio` 0,1765,
+   por debajo del umbral de 0,20. El veredicto fue `RARE_DIALOGUE`.
+2. El crítico dramático recibió el bloque `CRAFT OBSERVATIONS` y reaccionó exactamente como pide
+   su instrucción de sistema: dos notas sobre ese capítulo y sólo sobre ése, una `voice_style`
+   («Stage the confrontation and initial discovery as a live spoken scene…») y una `pacing`.
+3. El Writer reescribió el capítulo y el candidato se aceptó al primer intento: 424 → 589 palabras,
+   `final_source` `revision` en `revision_report.json`.
+
+O sea que el canal funciona de punta a punta en producción, no sólo en test. **Pero el lazo no se
+cierra.** Tras la reescritura, el `dialogue_ratio` de `chapter_1` quedó en 0,1765, exactamente el
+mismo, y las palabras por párrafo subieron de 24,9 a 34,7: las 165 palabras añadidas fueron
+narración, no escena. `_writer_candidate_issue` acepta el candidato sin comprobar nunca que el
+déficit que originó la nota se haya reparado. Queda como ficha abierta en el `TODO.md`.
+
+### La recalibración: se mueve un umbral, no los dos
+
+Medido sobre los **90 capítulos de las 23 ejecuciones 6.6.0 terminadas**, leyendo el
+`chapter_metrics` que `story_metrics.json` guarda desde 6.5.0, contra los 36 capítulos de la línea
+base:
+
+| | 6.5.0 (36 cap.) | 6.6.0 (90 cap.) |
+| --- | --- | --- |
+| `dialogue_ratio` mínimo | 0,00 | 0,1765 |
+| capítulos por debajo de 0,20 | 4 | **1** |
+| capítulos sin una sola marca de diálogo | 3 | 0 |
+| `words_per_paragraph` máximo | 217,0 | **64,64** |
+| capítulos de 120 palabras por párrafo o más | 3 | **0** |
+
+Los dos umbrales tienen diagnósticos opuestos, y por eso sólo se mueve uno:
+
+- **`LOW_DIALOGUE_RATIO` se queda en 0,20.** Disparó 1 vez en 90 capítulos, sobre el mínimo real de
+  la distribución. Eso es precisamente lo que debe hacer una red de seguridad, y el caso del 20-09
+  lo demuestra.
+- **`BLOCK_PARAGRAPH_WORDS` baja de 120 a 90.** El máximo observado en 6.6.0 es 64,64 y el p99 es
+  55,9: el techo de 120 estaba a casi el doble de la distribución entera y no era alcanzable. A 90
+  sigue quedando fuera de la prosa sana —no incordia— pero vuelve a ser alcanzable ante una
+  regresión del tipo que producía 6.5.0.
+
+El criterio que gobierna la decisión, y que conviene dejar escrito porque contradice la calibración
+original: **un umbral puesto en un cuartil de la distribución sana dispara sobre un cuarto de los
+capítulos sanos y deja de significar nada.** La calibración de 6.5.0 usaba el primer cuartil y el
+percentil 90 del corpus 6.x; esa elección sólo tenía sentido mientras el corpus mezclaba prosa
+anterior y posterior a la intervención. El umbral correcto de una red de seguridad va justo fuera de
+la distribución sana, no dentro de ella.
+
+El cambio va en `asg-top-down` **6.7.0**, así que las cifras de este documento anteriores a esa
+versión se leen con el techo de 120 y las posteriores con el de 90.
+
 ## Avisos de lectura
 
 - **`prose_words` no es `words`.** `words` cuenta el documento entero, encabezados incluidos;

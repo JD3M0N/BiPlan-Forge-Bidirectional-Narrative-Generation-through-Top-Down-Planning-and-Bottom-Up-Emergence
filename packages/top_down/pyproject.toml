@@ -19,6 +19,7 @@ dependencies = [
 [project.scripts]
 generate-story = "asg_top_down.cli:main"
 compare-story-runs = "asg_top_down.compare:main"
+recover-story-runs = "asg_top_down.recovery:main"
 
 [tool.hatch.version]
 path = "src/asg_top_down/version.py"

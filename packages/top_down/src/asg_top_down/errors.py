@@ -73,6 +73,13 @@ class RunArtifactError(ASGError):
     stage = "loading"
 
 
+class RunInterruptedError(ASGError):
+    """Signal a run the process abandoned, such as a keyboard interrupt or a forced exit."""
+
+    code = "RUN_INTERRUPTED"
+    stage = "unknown"
+
+
 class GeminiRPMError(ProviderError):
     """Represent GeminiRPMError data and behavior."""
 
