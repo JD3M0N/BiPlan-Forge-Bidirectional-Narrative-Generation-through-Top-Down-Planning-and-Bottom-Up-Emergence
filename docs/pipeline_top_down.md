@@ -1,14 +1,15 @@
 # El pipeline Top-Down, etapa por etapa
 
-Este documento explica qué ocurre realmente cuando se ejecuta `generate-story`: las once etapas
-del pipeline, los nueve agentes que llaman al modelo, qué se les inyecta en el prompt y por qué,
+Este documento explica qué ocurre realmente cuando se ejecuta `generate-story`: las doce etapas
+del pipeline, los diez agentes que llaman al modelo, qué se les inyecta en el prompt y por qué,
 qué valida el código después de cada respuesta, y qué pasa cuando algo falla.
 
 Está escrito contra el código, no contra la intención: cada afirmación cita el fichero y la línea
 donde vive, y las cifras del anexo salen de los artefactos de una ejecución real.
 
 **Estado medido el 2026-09-19 sobre `e4fca41`**, con `asg-top-down` 6.6.0 y `PIPELINE_VERSION`
-6.2. Son dos números distintos y conviene no confundirlos: el primero versiona el paquete, el
+6.2. La etapa `promises`, incorporada en 6.8.0, se documenta aquí pero todavía no aparece en las
+cifras del anexo. Son dos números distintos y conviene no confundirlos: el primero versiona el paquete, el
 segundo el conjunto de artefactos que produce un run y su compatibilidad hacia atrás
 (`version.py:1-9`). El run que respalda el documento está en el
 [anexo](#anexo-el-run-que-respalda-este-documento).
@@ -37,7 +38,7 @@ De ahí salen las tres propiedades que hacen al sistema investigable:
 
 ## El grafo del pipeline
 
-Las once etapas viven en `CHECKPOINT_STAGES` (`pipeline.py:61-73`). Las cajas dobles son etapas
+Las doce etapas viven en `CHECKPOINT_STAGES` (`pipeline.py:61-74`). Las cajas dobles son etapas
 sin modelo; los rombos son validaciones que pueden devolver al modelo a trabajar; las flechas
 punteadas son degradaciones, es decir, caminos por los que el run continúa con un aviso en lugar
 de abortar.
@@ -74,16 +75,24 @@ flowchart TD
 
     PERSIST[["<b>_persist_plan</b><br/>revalida y escribe story_plan.json<br/>unico punto de escritura del plan"]]
 
-    PERSIST --> TIT["<b>7a · drafting</b><br/>DrafterAgent.presentation · temp 0.5<br/>plan en ingles → titulos en el idioma pedido"]
-    TIT --> BOR["<b>7b · drafting</b><br/>DrafterAgent.run · temp 0.9<br/>un capitulo por llamada, en orden"]
+    PERSIST --> PROM["<b>7 · promises</b><br/>PromiseLedgerAgent · temp 0.5<br/>contrato PPP anclado a eventos ya existentes"]
+    PROM --> VALP{"promises.py<br/>materialize_ledger"}
+    VALP -->|rechazado| REPP["LEDGER REPAIR REQUIRED<br/>error literal + indice de anclas legales"]
+    REPP -->|2 intentos| PROM
+    VALP -.->|agotados o fallo| SINPROM["aviso · ledger = None<br/>la historia sigue sin obligaciones"]
+    VALP -->|valido| TIT
+    SINPROM --> TIT
+
+    TIT["<b>8a · drafting</b><br/>DrafterAgent.presentation · temp 0.5<br/>plan en ingles → titulos en el idioma pedido"]
+    TIT --> BOR["<b>8b · drafting</b><br/>DrafterAgent.run · temp 0.9<br/>un capitulo por llamada, en orden"]
     BOR --> ENS[["_assemble_story → draft.md<br/>ensamblado por codigo, no por el modelo"]]
 
     ENS --> EVID[["craft_evidence — sin modelo<br/>que capitulos leen como resumen"]]
-    EVID --> DRAMA["<b>8 · critique</b><br/>DramaCriticAgent · temp 0.2<br/>notas coordinadas sobre el borrador completo"]
+    EVID --> DRAMA["<b>9 · critique</b><br/>DramaCriticAgent · temp 0.2<br/>notas coordinadas sobre el borrador completo"]
     DRAMA -.->|falla| ENTREGA(["se entrega el borrador sin revisar"])
     DRAMA --> REV
 
-    REV["<b>9 · revision</b><br/>WriterAgent · temp 0.35<br/>solo los capitulos con notas"]
+    REV["<b>10 · revision</b><br/>WriterAgent · temp 0.35<br/>solo los capitulos con notas"]
     REV --> CHK{"_writer_candidate_issue<br/>vacio · encabezados · sin cambios"}
     CHK -->|rechazado| RETRY["RETRY CORRECTION<br/>diagnostico + instruccion"]
     RETRY -->|2 intentos| REV
@@ -91,8 +100,8 @@ flowchart TD
     CHK -->|aceptado| FIN
     VUELTA --> FIN
 
-    FIN[["<b>10 · story</b> — sin modelo<br/>story_metrics.json · story.md · evaluation.json"]]
-    FIN --> AUD[["<b>11 · audio</b> — sin modelo<br/>edge-tts → story.mp3"]]
+    FIN[["<b>11 · story</b> — sin modelo<br/>story_metrics.json · story.md · evaluation.json"]]
+    FIN --> AUD[["<b>12 · audio</b> — sin modelo<br/>edge-tts → story.mp3"]]
     AUD -.->|falla| SINAUDIO(["aviso AUDIO_GENERATION_FAILED<br/>story.md sigue siendo valido"])
     AUD --> OK(["metadata.status = completed"])
     SINAUDIO --> OK
@@ -126,22 +135,28 @@ El mismo flujo en texto plano, por si el Mermaid no renderiza donde se lea esto:
        |
   == _persist_plan revalida y escribe story_plan.json ==
        |
-  [7] drafting .............. Drafter.presentation 0.5   (titulos localizados)
+  [7] promises .............. PromiseLedger 0.5
+       |        ^
+       |        |   promises.py rechaza -> LEDGER REPAIR REQUIRED
+       |        +-- 2 intentos
+       |            agotados o fallo -> aviso, ledger = None, la historia sigue
+       |
+  [8] drafting .............. Drafter.presentation 0.5   (titulos localizados)
        |                      Drafter.run 0.9            (un capitulo por llamada)
        |                      _assemble_story -> draft.md (codigo, no modelo)
        |
   == craft_evidence mide el borrador sin llamar al modelo ==
        |
-  [8] critique .............. DramaCritic 0.2 ......... (falla) -> se entrega el borrador
+  [9] critique .............. DramaCritic 0.2 ......... (falla) -> se entrega el borrador
        |
-  [9] revision .............. Writer 0.35, hasta 2 intentos por capitulo
+ [10] revision .............. Writer 0.35, hasta 2 intentos por capitulo
        |        ^
        |        +-- rechazo determinista -> RETRY CORRECTION
        |            2 fallos -> aviso, se conserva el borrador de ese capitulo
        |
-  [10] story ................ sin modelo: story_metrics.json, story.md, evaluation.json
+ [11] story ................ sin modelo: story_metrics.json, story.md, evaluation.json
        |
-  [11] audio ................ sin modelo: edge-tts -> story.mp3 (falla) -> aviso
+ [12] audio ................ sin modelo: edge-tts -> story.mp3 (falla) -> aviso
        |
   metadata.status = completed
 ```
@@ -153,13 +168,13 @@ objeto cada vez más restringido, hasta llegar a un plan que un validador acepta
 adelante ese objeto se expande en prosa. Todo el rigor está concentrado antes de escribir una
 sola frase de ficción, que es exactamente donde el modelo es más difícil de corregir después.
 
-**Casi todo puede degradarse; muy poco puede abortar.** De las once etapas sólo dos pueden tumbar
+**Casi todo puede degradarse; muy poco puede abortar.** De las doce etapas sólo dos pueden tumbar
 un run: `analysis`, porque sin contrato no hay nada que hacer, y `planning`, porque sin un DAG
 válido no hay nada que escribir. Las demás tienen una salida por la que el run continúa con un
 aviso en `metadata.json`. La excepción transversal son los errores de configuración y de cuota,
 que abortan desde donde sea (`errors.py:100-107`).
 
-### Los nueve agentes de un vistazo
+### Los diez agentes de un vistazo
 
 Todos menos el Analista y los títulos comparten la misma cabecera de prompt,
 `story_specification_header` (`agents/base.py:33-44`): la especificación de la historia más el
@@ -173,10 +188,11 @@ contrato cualitativo del perfil, y el blueprint sólo cuando corresponde.
 | characters | `CharacterDesignerAgent` | 0,50 | el mundo | `CharactersArtifact` | **sí** |
 | planning | `PlotPlannerAgent` | 0,50 | mundo, reparto, notas de la crítica, feedback de reparación | `StoryPlanDraft` | **sí** |
 | plan_review | `PlanCriticAgent` | 0,20 | mundo, reparto, plan validado | `PlanReview` | no |
+| promises | `PromiseLedgerAgent` | 0,50 | plan validado, índice de eventos anclables, banda de promesas del perfil, feedback de reparación | `PromiseLedgerDraft` | no |
 | drafting (títulos) | `DrafterAgent.presentation` | 0,50 | especificación desnuda + plan en inglés | `StoryPresentation` | no |
-| drafting (prosa) | `DrafterAgent.run` | 0,90 | mundo, personajes del capítulo, plan recortado, títulos, eventos en orden topológico, ancestros causales, capítulo anterior | texto | no |
-| critique | `DramaCriticAgent` | 0,20 | mundo, reparto, plan, títulos, borrador completo, evidencia de artesanía | `StoryReview` | no |
-| revision | `WriterAgent` | 0,35 | personajes, plan, títulos, eventos, notas filtradas, capítulo revisado anterior, cuerpo original, feedback de reintento | texto | no |
+| drafting (prosa) | `DrafterAgent.run` | 0,90 | mundo, personajes del capítulo, plan recortado, títulos, eventos en orden topológico, ancestros causales, capítulo anterior, obligaciones de promesa del capítulo | texto | no |
+| critique | `DramaCriticAgent` | 0,20 | mundo, reparto, plan, títulos, borrador completo, evidencia de artesanía, obligaciones de promesa | `StoryReview` | no |
+| revision | `WriterAgent` | 0,35 | personajes, plan, títulos, eventos, notas filtradas, obligaciones de promesa del capítulo, capítulo revisado anterior, cuerpo original, feedback de reintento | texto | no |
 
 La columna del blueprint resume la decisión de diseño que atraviesa el pipeline: **la inspiración
 estructural llega a quien inventa material y no a quien lo juzga ni a quien lo escribe**. Si el
@@ -185,24 +201,25 @@ que pidió el usuario; si la viera el Drafter, se filtraría al texto que lee el
 
 ## Recorrido de `execute`, línea a línea
 
-Todo el pipeline cabe en treinta líneas (`pipeline.py:111-152`). Lo que sigue explica cada una:
+Todo el pipeline cabe en treinta y pocas líneas (`pipeline.py:127-176`). Lo que sigue explica cada una:
 qué entra, qué agente se llama, qué se le inyecta en el prompt y por qué, qué se valida después,
 qué queda en disco y qué pasa si falla.
 
 ```python
-118  request = self._analyze_request(submitted)                      # analysis
-123  self.repository = self._create_repository(request.title)        # nace el directorio del run
-126  self._save_request(request)
-127  blueprint = self._build_blueprint(request)                      # architecture
-128  world = self._build_world(request)                              # world
-129  characters = self._build_characters(request, world, blueprint)  # characters
-130  plan = self._build_plan(request, world, characters, blueprint)  # planning + plan_review
-131  presentation, draft_bodies, draft = self._draft_chapters(...)   # drafting
-137  story = self._critique_and_revise(...)                          # critique + revision
-146  self._finalize(request, plan, story)                            # story + audio
+134  request = self._analyze_request(submitted)                      # analysis
+139  self.repository = self._create_repository(request.title)        # nace el directorio del run
+142  self._save_request(request)
+143  blueprint = self._build_blueprint(request)                      # architecture
+144  world = self._build_world(request)                              # world
+145  characters = self._build_characters(request, world, blueprint)  # characters
+146  plan = self._build_plan(request, world, characters, blueprint)  # planning + plan_review
+147  ledger = self._build_promise_ledger(request, plan)              # promises
+148  presentation, draft_bodies, draft = self._draft_chapters(...)   # drafting
+155  story = self._critique_and_revise(...)                          # critique + revision
+165  self._finalize(request, plan, story)                            # story + audio
 ```
 
-### Línea 118 — `analysis`: convertir un deseo en un contrato
+### Línea 134 — `analysis`: convertir un deseo en un contrato
 
 ```python
 118  request = self._analyze_request(submitted)
@@ -260,7 +277,7 @@ Si el `--profile` del CLI viene informado, `_with_forced_profile` (`pipeline.py:
 aplica por encima de todo lo anterior, y además cortocircuita la etapa entera cuando se le pasa
 un `StoryRequest` ya construido en lugar de una cadena.
 
-### Línea 123 — nace el directorio del run
+### Línea 139 — nace el directorio del run
 
 ```python
 123  self.repository = self._create_repository(request.title)
@@ -290,11 +307,20 @@ niega a abrir un run cuyo `status` no sea `completed` o cuya versión no esté e
 `SUPPORTED_PIPELINE_VERSIONS`. De ahí la regla del repositorio: si cambia el conjunto de
 artefactos o su significado, se sube la versión en lugar de romper los runs ya generados.
 
+La regla tiene un matiz que conviene no perder, porque ya se aplicó dos veces. Un artefacto
+**aditivo y opcional** no cambia el contrato: `narrative_blueprint.json` se incorporó sin subir
+`PIPELINE_VERSION`, y `promise_ledger.json` y `promise_audit.json` tampoco la subieron. Los dos son
+apagables por configuración, así que la versión no serviría como predicado de «este run lleva el
+dato»; para eso está la presencia del artefacto. Y hay una trampa concreta al subirla:
+`SUPPORTED_PIPELINE_VERSIONS` guarda la versión actual sólo como la referencia `PIPELINE_VERSION`,
+de modo que cambiar el valor sin añadir el literal anterior expulsa del conjunto soportado a todos
+los runs de esa versión, que es casi todo el corpus.
+
 Si la etapa de análisis dejó registros de uso del proveedor antes de que existiera el
 repositorio, `_create_repository` los vuelca ahora (`pipeline.py:187-188`): ninguna llamada al
 modelo se pierde de la contabilidad.
 
-### Línea 126 — cerrar el primer checkpoint
+### Línea 142 — cerrar el primer checkpoint
 
 ```python
 126  self._save_request(request)
@@ -308,11 +334,11 @@ decorativo: es lo que permite mirar un run fallido y saber exactamente hasta dó
 con `["analysis", "architecture", "world"]` y `status: failed` dice, sin abrir nada más, que
 reventó diseñando personajes.
 
-El patrón se repite once veces: **persistir el artefacto primero, marcar la etapa después**. Si
+El patrón se repite doce veces: **persistir el artefacto primero, marcar la etapa después**. Si
 el proceso muere entre ambas cosas, el artefacto está en disco pero la etapa no está marcada, que
 es el error seguro de los dos.
 
-### Línea 127 — `architecture`: inspiración estructural, nunca obligación
+### Línea 143 — `architecture`: inspiración estructural, nunca obligación
 
 ```python
 127  blueprint = self._build_blueprint(request)
@@ -353,7 +379,7 @@ ven los dos críticos ni los dos que escriben prosa. El patrón es limpio: **la 
 quien inventa material, y no a quien lo juzga ni a quien lo escribe**. Si el crítico lo viera,
 acabaría evaluando la historia contra una guía opcional en vez de contra el contrato del usuario.
 
-### Línea 128 — `world`: el vocabulario canónico
+### Línea 144 — `world`: el vocabulario canónico
 
 ```python
 128  world = self._build_world(request)
@@ -380,7 +406,7 @@ Esos ids son la moneda del sistema. Dos etapas más adelante, `graph.py` rechaza
 que mencione un lugar o un objeto que no esté en esta lista (`graph.py:160-163`). El mundo no es
 color de fondo: es el conjunto de referencias legales que el plan puede usar.
 
-### Línea 129 — `characters`: el reparto, y aquí sí entra la inspiración
+### Línea 145 — `characters`: el reparto, y aquí sí entra la inspiración
 
 ```python
 129  characters = self._build_characters(request, world, blueprint)
@@ -406,7 +432,7 @@ incompatibles no hay conflicto que crezca, y el DAG degenera en una lista de cos
 conocido de los modelos: inventar «nivel de amenaza: 7/10» o etiquetas de sistema de juego que
 luego se filtran a la prosa.
 
-### Línea 130 — `planning` y `plan_review`: donde el sistema se juega todo
+### Línea 146 — `planning` y `plan_review`: donde el sistema se juega todo
 
 ```python
 130  plan = self._build_plan(request, world, characters, blueprint)
@@ -567,10 +593,83 @@ escribir. Es redundante por construcción, y esa es la idea: `story_plan.json` e
 run entero, y ningún camino —ni el feliz, ni el refinamiento, ni ninguna degradación— puede
 llevar a disco un plan que no haya pasado la validación inmediatamente antes de escribirse.
 
-### Línea 131 — `drafting`: del plan en inglés a la prosa en español
+### Línea 147 — `promises`: qué espera el lector mientras ocurre el plan
 
 ```python
-131  presentation, draft_bodies, draft = self._draft_chapters(request, world, characters, plan)
+147  ledger = self._build_promise_ledger(request, plan)
+```
+
+Aquí el plan ya está congelado y escrito en disco. Esta etapa no lo toca; lo **anota**.
+
+El problema que resuelve es concreto y se puede leer en el corpus. El Drafter recibía `purpose`,
+`conflict` y `outcome` de cada evento —qué pasa— pero nada sobre **qué está esperando el lector en
+ese punto**. Sanderson llama a ese fallo *middle aburrido*: «progress is missing, or it's
+progressing on the wrong promise». El síntoma en las historias generadas era prosa correcta que se
+lee como relación de hechos.
+
+#### El anclaje es lo que hace imposible que el ledger mueva la estructura
+
+`PromiseLedgerAgent` (`agents/promises.py`) devuelve un `PromiseLedgerDraft`: un conjunto de
+promesas, cada una con su apertura, sus progresos y su pago. La decisión que lo gobierna todo es
+que **cada uno de esos beats cita el `id` de un `PlotEvent` que ya existe**, y el `chapter_id` no
+lo escribe el modelo: se deriva del evento anclado.
+
+De ahí salen tres cosas a la vez. El modelo no puede inventar un beat, porque un beat nuevo
+necesitaría un evento nuevo y el validador sólo acepta ids del plan. El orden promesa → progreso →
+pago se comprueba contra `plan.topological_order`, sin creerle nada al modelo sobre su propio
+orden. Y el brief que llega al Drafter queda pegado a los eventos que ese capítulo ya va a
+dramatizar, que es lo que convierte la guía en prosa en lugar de en teoría.
+
+#### Lo que `promises.py` comprueba
+
+`materialize_ledger` es a este contrato lo que `materialize_plan` es al plan, con la misma regla de
+idioma: **los `ValueError` van en inglés y ASCII** porque `_record_rejected_ledger` los reinyecta
+literalmente, junto con el índice de anclas legales, en el prompt de reparación.
+
+| Invariante | De dónde sale |
+|---|---|
+| todo `event_id` citado existe en el plan | el plan es inmutable |
+| ids de promesa y de progreso únicos | higiene |
+| la promesa primaria existe y es la de `story_direction` | «What's the central promise?» |
+| apertura < todos los progresos < pago, sobre el orden topológico | la tríada misma |
+| cada promesa tiene al menos un progreso | sin signposts el lector abandona |
+| `prepared_by_progress_ids` sólo referencia progresos de su propia promesa | pagos no ganados |
+| el pago de la promesa primaria cae en el último capítulo | el desenlace responde la pregunta |
+| ninguna promesa abre en el último capítulo | promesa impagable |
+| el número de promesas cabe en la banda del perfil | «cut promises now» |
+
+Las dos comprobaciones restantes son **observaciones, no rechazos**, y quedan en el campo
+`observations` del artefacto: dos promesas que abren y pagan en la misma pareja de eventos, y un
+pago que cae sobre un evento cuyo `payoff_of` declara un setup distinto del que la promesa usó
+como apertura. Esta última es deliberadamente blanda: `payoff_of` es opcional en un plan válido, y
+exigir que el ledger lo espeje rechazaría lecturas correctas de planes que simplemente no lo usan.
+
+#### Cuántas promesas, y por qué la banda tiene techo
+
+Sanderson no fija un número. Las dos reglas firmes son que toda promesa hecha se paga y que la
+densidad tiene que caber en el espacio de pagos que queda: *«si has hecho veinte promesas y sólo
+hay sitio para diez pagos, corta promesas ahora»*. Así que la banda se deriva de
+`PROFILE_CHAPTER_BAND` en `promise_band` (`profiles.py`) y sale 2–3, 3–5 y 4–7.
+
+Aquí viajan al prompt **los dos extremos**, y es la excepción consciente a la regla que
+`profiles.py:23-25` documenta para el resto del pipeline. El motivo es que el techo no es un
+presupuesto que compita con otro número: es la regla de oficio misma. Un suelo sin techo permitiría
+justo el fallo que la fuente describe.
+
+#### Dónde acaba el ledger
+
+`promise_brief.py` lo convierte en los bloques que viajan —obligaciones por capítulo para el
+Drafter y el Writer, lista de verificación para el Drama Critic— y esos bloques se guardan dentro
+del propio `promise_ledger.json`, igual que `craft_evidence.json` guarda el suyo: un run terminado
+se audita sin volver a derivar qué se le dijo a cada agente.
+
+La etapa entera es degradable, como la del arquitecto, y se apaga con `ASG_PROMISE_LEDGER=false`.
+Ese interruptor no es cosmético: es el brazo de control de la medición.
+
+### Línea 148 — `drafting`: del plan en inglés a la prosa en español
+
+```python
+148  presentation, draft_bodies, draft = self._draft_chapters(request, world, characters, plan, ledger)
 ```
 
 Dos cosas distintas con el mismo agente.
@@ -632,7 +731,7 @@ orden y emparejándolos con sus cuerpos mediante `zip(..., strict=True)`. Pedirl
 concatene sus propios capítulos sería regalar una oportunidad de reordenarlos, resumirlos o
 añadir un epílogo no planificado, a cambio de nada.
 
-### Línea 137 — `critique` y `revision`: una lectura global, correcciones locales
+### Línea 155 — `critique` y `revision`: una lectura global, correcciones locales
 
 ```python
 137  story = self._critique_and_revise(request, world, characters, plan, presentation, draft_bodies, draft)
@@ -723,7 +822,7 @@ En el run de referencia el único capítulo con notas se aceptó al primer inten
 678 palabras. El crecimiento no se pidió: se pidió un beat de reacción, y las palabras vinieron
 con él.
 
-### Línea 146 — `story` y `audio`: cerrar sin modelo
+### Línea 165 — `story` y `audio`: cerrar sin modelo
 
 ```python
 146  self._finalize(request, plan, story)
@@ -983,6 +1082,7 @@ Los puntos de degradación, y qué se entrega en cada uno:
 | Dónde | Aviso | Qué queda |
 |---|---|---|
 | `_build_blueprint` | `No se pudo trazar el esqueleto narrativo…` | la historia sigue sin inspiración estructural |
+| `_build_promise_ledger` | `No se pudo trazar el contrato de promesas…` | la historia sigue sin obligaciones de promesa |
 | `_critique_plan` (la crítica falla) | `La crítica del plan no pudo completarse…` | el primer plan válido, intacto |
 | `_critique_plan` (el refinamiento no valida) | `La revisión del plan produjo un reemplazo estructuralmente inválido…` | el primer plan válido, intacto |
 | `_critique_and_revise` | `La crítica dramática no pudo completarse…` | el borrador por capítulos, sin revisar |
@@ -1045,7 +1145,8 @@ por cuota. El desglose por operación: 1 análisis, 1 ranking semántico de esqu
 1 mundo, 1 reparto, **2 planificaciones** (la primera rechazada), 1 crítica de plan, 1 localización
 de títulos, 5 borradores de capítulo, 1 crítica dramática y 1 reescritura.
 
-**Las once etapas se completaron** y `warnings` quedó vacío.
+**Las once etapas de entonces se completaron** y `warnings` quedó vacío. El run es anterior a
+`promises`, así que no lleva ni esa etapa ni sus dos artefactos.
 
 **El plan.** 5 capítulos, 10 eventos, 2 por capítulo, 13 dependencias —12 causales y 1 temporal—.
 Rama en `event_4` con tres salientes causales, reunión en `event_7` con dos entrantes. Ocho de los
@@ -1095,5 +1196,5 @@ generate-story "<el texto entre los dos marcadores>" --profile expansive
 ```
 
 El resultado no será idéntico: el pipeline es determinista en su validación y en su ordenación,
-pero no en lo que el modelo responde. Lo que sí debería repetirse es la forma: once etapas, un plan
+pero no en lo que el modelo responde. Lo que sí debería repetirse es la forma: doce etapas, un plan
 que pasa los mismos validadores, y cualquier rechazo documentado en `planning/`.

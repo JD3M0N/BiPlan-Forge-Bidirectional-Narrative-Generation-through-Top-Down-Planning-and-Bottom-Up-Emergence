@@ -1,5 +1,31 @@
 # Historial de cambios
 
+## 6.8.0
+
+- Nueva etapa `promises`, entre `plan_review` y `drafting`. `PromiseLedgerAgent` traza un contrato
+  Promise-Progress-Payoff sobre el plan **ya congelado**: cada apertura, progreso y pago cita el id
+  de un `PlotEvent` que ya existe, y el `chapter_id` se deriva del evento en vez de escribirlo el
+  modelo. El ledger cambia como se escribe el plan, nunca que contiene; hay un test que compara
+  `story_plan.json` con y sin ledger byte a byte.
+- Nuevo `promises.py`, hermano de `graph.py` y con su misma regla de idioma: los `ValueError` van
+  en ingles y ASCII porque `_record_rejected_ledger` los reinyecta literalmente, junto al indice de
+  anclas legales, en el prompt de reparacion. Dos intentos por run.
+- Nuevo `promise_brief.py`, analogo de `craft_evidence.py`: convierte el ledger en obligaciones por
+  capitulo para el Drafter y el Writer y en una lista de verificacion para el Drama Critic.
+  `promise_ledger.json` guarda esos bloques ya renderizados, asi que un run terminado se audita sin
+  volver a derivar que se le dijo a cada agente.
+- `StoryReview` gana `promise_checks`, y `promise_audit.json` cruza el ledger con esos veredictos.
+  Una promesa que el critico no juzgo cuenta como `broken`: el silencio no es un aprobado.
+- `promise_band` en `profiles.py` deriva de `PROFILE_CHAPTER_BAND` cuantas promesas caben: 2-3, 3-5
+  y 4-7. Es la excepcion consciente a la regla de un solo numero por prompt, porque el techo es la
+  regla de oficio misma —toda promesa hecha se paga— y no un presupuesto que compita con otro.
+- Anadido el interruptor `ASG_PROMISE_LEDGER` para la ablacion con y sin contrato; apagado, la
+  etapa no corre y los prompts quedan identicos a la linea base.
+- La etapa es degradable como la del arquitecto: agotados los intentos, queda un aviso en
+  `metadata.json` y la historia se entrega sin obligaciones.
+- Mantenido el contrato de artefactos 6.2: `promise_ledger.json` y `promise_audit.json` son
+  adicionales y opcionales, y las ejecuciones anteriores siguen siendo legibles.
+
 ## 6.7.0
 
 - `BLOCK_PARAGRAPH_WORDS` de `craft_evidence.py` baja de 120 a 90 palabras por parrafo. Medido

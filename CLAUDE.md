@@ -87,8 +87,8 @@ es lo que permite comparar los dos enfoques sin contaminarlos.
 
 El flujo real es `StoryGenerator` (fachada pública en `generator.py`) → `StoryPipeline.execute`
 (`pipeline.py`), que recorre las etapas de `CHECKPOINT_STAGES`: analysis, architecture, world,
-characters, planning, plan_review, drafting, critique, revision, story, audio. Cada etapa llama a
-un agente de `agents/` y persiste su artefacto antes de seguir.
+characters, planning, plan_review, promises, drafting, critique, revision, story, audio. Cada etapa
+llama a un agente de `agents/` y persiste su artefacto antes de seguir.
 
 Lo que hace este pipeline distinto de "pedirle una historia al modelo":
 
@@ -118,14 +118,36 @@ Lo que hace este pipeline distinto de "pedirle una historia al modelo":
 - **`skeletons.py` + `skeleton_match.py`** rankean esqueletos de trama por mezcla léxica y
   semántica y producen un `NarrativeBlueprint` que se inyecta como inspiración en la cabecera
   compartida de prompts (`agents/base.py`). Es guía, no restricción.
+- **El ledger de promesas ancla en eventos, y por eso no puede tocar el plan.** La etapa
+  `promises` corre con el plan ya congelado: `agents/promises.py` traza un contrato
+  Promise-Progress-Payoff en el que cada apertura, progreso y pago **cita el id de un `PlotEvent`
+  que ya existe**; el `chapter_id` no lo escribe el modelo, se deriva del evento. `promises.py`
+  lo valida contra `plan.topological_order` —con mensajes en inglés que se reinyectan igual que
+  los de `graph.py`— y `promise_brief.py` lo convierte en obligaciones por capítulo que viajan al
+  Drafter, al Writer y al Drama Critic. Cambia **cómo se escribe** el plan, nunca qué contiene:
+  hay un test que compara `story_plan.json` con y sin ledger byte a byte. La etapa es degradable
+  como la del arquitecto, y `promise_band` es la excepción consciente a la regla de «un solo
+  número viaja al prompt»: aquí viajan suelo y techo, porque el techo *es* la regla de oficio
+  («si has prometido veinte cosas y solo caben diez pagos, corta promesas»), no un presupuesto
+  que compita con otro.
+- **El ledger se puede apagar, y esa es la medición.** `ASG_PROMISE_LEDGER=false` (o
+  `promise_ledger=False` en la fachada) salta la etapa entera. Es el brazo de control para
+  comparar corpus con y sin contrato de promesas; `promise_audit.json` da la cifra.
 
 ### Top-Down: artefactos de un run
 
 `ArtifactRepository` (`storage.py`) crea `Stories/Top-Down/<AAAAMMDD-HHMMSS>-<slug>/` y escribe
 todo de forma atómica. El run contiene `metadata.json` (estado, etapas completadas, warnings,
 error), `pipeline_manifest.json` (sha256 y tamaño de cada artefacto), `request.json`, `world.json`,
-`characters.json`, `story_plan.json`, `chapters/`, `revisions/`, `draft.md`, `story.md`,
-`story.mp3`, `story_metrics.json`, `llm_calls.jsonl` y `llm_usage.json`.
+`characters.json`, `story_plan.json`, `promise_ledger.json`, `promise_audit.json`, `chapters/`,
+`revisions/`, `draft.md`, `story.md`, `story.mp3`, `story_metrics.json`, `llm_calls.jsonl` y
+`llm_usage.json`.
+
+`promise_ledger.json` guarda el contrato de promesas **y los bloques de prompt exactos** que se
+inyectaron (`chapter_blocks`, `critic_block`), igual que `craft_evidence.json` guarda el suyo: un
+run terminado se audita sin volver a derivar qué se le dijo a cada agente. `promise_audit.json`
+cruza ese contrato con los veredictos del crítico; una promesa que el crítico no juzgó cuenta como
+`broken`, porque el silencio no es un aprobado.
 
 `story_metrics.json` registra tamaño y artesanía observados —palabras, capítulos, eventos,
 proporción de párrafos con diálogo, palabras por frase y palabras por párrafo, también por
@@ -238,7 +260,9 @@ el estado medido cambia sustancialmente.
 
 ## Documentos de referencia
 
-- [docs/pipeline_top_down.md](docs/pipeline_top_down.md) — recorrido de las once etapas del
+- [docs/promesas_ppp.md](docs/promesas_ppp.md) — el contrato Promise-Progress-Payoff: qué dice la
+  fuente, qué invariantes se formalizaron, cuáles se dejaron fuera y cómo se mide el efecto.
+- [docs/pipeline_top_down.md](docs/pipeline_top_down.md) — recorrido de las doce etapas del
   pipeline Top-Down: qué hace cada agente, qué se le inyecta en el prompt y por qué, qué valida
   `graph.py` después y cómo se repara un plan rechazado. Grafo del flujo y un run de referencia.
 - [docs/calibracion_perfiles.md](docs/calibracion_perfiles.md) — metodología y resultados de la

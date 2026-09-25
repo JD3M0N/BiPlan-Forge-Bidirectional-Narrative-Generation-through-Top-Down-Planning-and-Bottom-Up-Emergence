@@ -65,6 +65,7 @@ class DramaCriticAgent(Agent[StoryReview]):
         presentation: StoryPresentation,
         draft: str,
         craft_evidence: str = "",
+        promise_obligations: str = "",
     ) -> StoryReview:
         """Run the global-to-local drama criticism workflow."""
         return self.provider.generate_structured(
@@ -89,8 +90,17 @@ class DramaCriticAgent(Agent[StoryReview]):
                 "confrontation to stage and where to break the beat — again, never a "
                 "word-count or length instruction. Chapters absent from those observations need no "
                 "craft note. Each note needs a unique lowercase ID, priority, category, evidence, "
-                "and a concrete instruction the Writer can apply. Do not score the story or invent "
-                "user requirements."
+                "and a concrete instruction the Writer can apply. "
+                "When PROMISE OBLIGATIONS are supplied, return one promise_checks entry for every "
+                "promise listed there, in that order: say whether the draft opened it, progressed "
+                "it and paid it, give the verdict, and quote the draft itself as evidence. Judge "
+                "what the prose delivers to a reader, not whether the plan intended it. For every "
+                "verdict that is not fulfilled, also raise a setup_payoff note of major or "
+                "critical priority, cite the affected plan event IDs, and instruct the Writer "
+                "which beat to stage so the expectation lands - never a word-count or length "
+                "instruction. Promise IDs belong in promise_checks only: chapter_ids and "
+                "event_ids of a note must contain canonical plan IDs and nothing else. "
+                "Do not score the story or invent user requirements."
             ),
             prompt=(
                 f"{story_specification_header(request)}"
@@ -98,7 +108,12 @@ class DramaCriticAgent(Agent[StoryReview]):
                 f"\n\nCHARACTERS:\n{json_text(characters)}"
                 f"\n\nPLAN:\n{json_text(plan)}"
                 f"\n\nLOCALIZED PRESENTATION:\n{json_text(presentation)}"
-                f"\n\nDRAFT:\n{draft}"
+                + (
+                    f"\n\nPROMISE OBLIGATIONS:\n{promise_obligations}"
+                    if promise_obligations
+                    else ""
+                )
+                + f"\n\nDRAFT:\n{draft}"
                 + (f"\n\nCRAFT OBSERVATIONS:\n{craft_evidence}" if craft_evidence else "")
             ),
             schema=StoryReview,

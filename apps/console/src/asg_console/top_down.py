@@ -43,6 +43,7 @@ class TopDownMenu:
             provider,
             settings.output_root,
             narrative_guidance=settings.narrative_guidance,
+            promise_ledger=settings.promise_ledger,
         )
 
         def report_progress(update) -> None:

@@ -24,6 +24,7 @@ class Settings:
     max_retry_delay: int = 120
     request_timeout_ms: int = 120_000
     narrative_guidance: bool = True
+    promise_ledger: bool = True
 
 
 def _integer(name: str, default: int, *, minimum: int = 0) -> int:
@@ -63,4 +64,5 @@ def load_settings(start: Path | None = None) -> Settings:
         max_retry_delay=_integer("GEMINI_MAX_RETRY_DELAY", 120, minimum=1),
         request_timeout_ms=_integer("GEMINI_REQUEST_TIMEOUT_MS", 120_000, minimum=5_000),
         narrative_guidance=_flag("ASG_NARRATIVE_GUIDANCE", default=True),
+        promise_ledger=_flag("ASG_PROMISE_LEDGER", default=True),
     )

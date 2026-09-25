@@ -74,6 +74,7 @@ def test_top_down_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
             "max_retry_delay": 30,
             "request_timeout_ms": 45000,
             "narrative_guidance": True,
+            "promise_ledger": True,
         },
     )()
     monkeypatch.setattr(top_down_module, "load_top_down_settings", lambda: settings)
@@ -86,7 +87,10 @@ def test_top_down_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
     menu.run()
     assert captured["prompt"] == "Una historia"
     assert captured["provider_options"]["max_retries"] == 4
-    assert captured["generator_options"] == {"narrative_guidance": True}
+    assert captured["generator_options"] == {
+        "narrative_guidance": True,
+        "promise_ledger": True,
+    }
 
 
 def test_console_evaluates_story_and_retries_invalid_values(tmp_path, monkeypatch) -> None:

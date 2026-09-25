@@ -12,7 +12,7 @@ from asg_top_down.craft_evidence import NO_DIALOGUE, RARE_DIALOGUE
 from asg_top_down.errors import GeminiDailyQuotaError, PlotValidationError
 from asg_top_down.graph import materialize_plan, validate_profile_structure
 from asg_top_down.pipeline import StoryPipeline
-from asg_top_down.profiles import profile_event_floor
+from asg_top_down.profiles import profile_event_floor, promise_band
 from asg_top_down.schemas import (
     ChapterDraft,
     ChapterPresentation,
@@ -23,6 +23,12 @@ from asg_top_down.schemas import (
     NarrativeBlueprintDraft,
     PlanReview,
     PlotEvent,
+    PromiseCheck,
+    PromiseContract,
+    PromiseLedgerDraft,
+    PromiseOpening,
+    PromisePayoff,
+    PromiseProgress,
     RevisionNote,
     SemanticSkeletonRanking,
     SemanticSkeletonScore,
@@ -137,6 +143,72 @@ def valid_plan(*, ending: str = "The town chooses to rebuild together") -> Story
             for order in range(1, 4)
         ],
     )
+
+
+PROMISE_KINDS = ("story_direction", "character_conflict", "genre_structure", "tone")
+
+
+def _profile_in(prompt: str) -> str:
+    """Read back the profile the ledger prompt carries, so the fake ledger matches its band."""
+    for profile in NarrativeProfile:
+        if f'"narrative_profile": "{profile.value}"' in prompt:
+            return profile.value
+    return "essential"
+
+
+def promise_ledger(plan: StoryPlanDraft, profile: str = "essential") -> PromiseLedgerDraft:
+    """Draw the smallest ledger the profile accepts over one plan, anchored to its own events."""
+    events = sorted(plan.events, key=lambda item: item.order)
+    low, _ = promise_band(NarrativeProfile(profile))
+    promises = []
+    for index in range(low):
+        # The primary promise pays off last, in the final chapter; the rest land earlier, which
+        # keeps every anchor strictly between the shared opening and its own payoff.
+        payoff_event = events[-1] if index == 0 else events[index + 1]
+        promises.append(
+            PromiseContract(
+                id=f"promise-{index + 1}",
+                kind=PROMISE_KINDS[index % len(PROMISE_KINDS)],
+                subject=f"Subject of promise {index + 1}",
+                dramatic_question=f"Will promise {index + 1} be answered?",
+                opening=PromiseOpening(
+                    event_id=events[0].id,
+                    signal="Ana notices the missing signature.",
+                    reader_expectation="that the archive will be opened",
+                ),
+                progress=[
+                    PromiseProgress(
+                        id=f"progress-{index + 1}",
+                        event_id=events[1].id,
+                        observable_delta="Ana reaches a door she could not open before.",
+                        new_cost_or_information="She owes the favor to the wrong person.",
+                    )
+                ],
+                payoff=PromisePayoff(
+                    event_id=payoff_event.id,
+                    answer="Ana opens the archive in front of everyone.",
+                    cost="She loses her sister's trust.",
+                    prepared_by_progress_ids=[f"progress-{index + 1}"],
+                    surprising_without_breach="The witness she feared becomes her proof.",
+                ),
+            )
+        )
+    return PromiseLedgerDraft(primary_promise_id="promise-1", promises=promises)
+
+
+def promise_checks(ledger: PromiseLedgerDraft, verdict: str = "fulfilled") -> list[PromiseCheck]:
+    """Answer every promise of one ledger with the same verdict."""
+    return [
+        PromiseCheck(
+            promise_id=promise.id,
+            opened=True,
+            progressed=True,
+            paid=verdict == "fulfilled",
+            verdict=verdict,
+            evidence="Ana abrio el archivo delante de todos.",
+        )
+        for promise in ledger.promises
+    ]
 
 
 def sized_plan(event_count: int, *, branch_and_join: bool = False) -> StoryPlanDraft:
@@ -299,12 +371,21 @@ class FakeProvider:
         fail_semantic_ranking=False,
         fail_architect=False,
         drafter_outputs: list[str] | None = None,
+        ledgers: list[PromiseLedgerDraft] | None = None,
+        fail_promise_ledger=False,
+        promise_verdict: str = "fulfilled",
     ) -> None:
         self.plans = list(plans or [valid_plan()])
+        self.ledgers = list(ledgers) if ledgers is not None else None
+        self.fail_promise_ledger = fail_promise_ledger
+        self.promise_verdict = promise_verdict
+        self.last_plan: StoryPlanDraft | None = None
+        self.last_ledger: PromiseLedgerDraft | None = None
         self.fail_quality = fail_quality
         self.quota_error_at = quota_error_at
         self.plan_review = plan_review or PlanReview(approved=True)
         self.story_review = story_review or StoryReview(strengths=["Clear progression"])
+        self.explicit_review = story_review is not None
         self.writer_identical_once = writer_identical_once
         if fail_writer_call is None:
             self.fail_writer_calls: set[int] = set()
@@ -332,7 +413,10 @@ class FakeProvider:
         if schema is CharactersArtifact:
             return make_characters()
         if schema is StoryPlanDraft:
-            return self.plans.pop(0)
+            self.last_plan = self.plans.pop(0)
+            return self.last_plan
+        if schema is PromiseLedgerDraft:
+            return self._promise_response(prompt)
         if schema is PlanReview:
             if self.quota_error_at == "plan_critic":
                 raise GeminiDailyQuotaError("daily quota exhausted")
@@ -346,16 +430,34 @@ class FakeProvider:
                 ],
             )
         if schema is StoryReview:
-            if self.fail_quality:
-                raise RuntimeError("review unavailable")
-            if self.quota_error_at == "drama_critic":
-                raise GeminiDailyQuotaError("daily quota exhausted")
-            return self.story_review
+            return self._review_response()
         if schema is StoryRequest:
             return self.analyzed_request
         if schema in (SemanticSkeletonRanking, NarrativeBlueprintDraft):
             return self._architecture_response(schema)
         raise AssertionError(schema)
+
+    def _review_response(self):
+        if self.fail_quality:
+            raise RuntimeError("review unavailable")
+        if self.quota_error_at == "drama_critic":
+            raise GeminiDailyQuotaError("daily quota exhausted")
+        if self.explicit_review or self.last_ledger is None:
+            return self.story_review
+        return self.story_review.model_copy(
+            update={"promise_checks": promise_checks(self.last_ledger, self.promise_verdict)}
+        )
+
+    def _promise_response(self, prompt):
+        if self.fail_promise_ledger:
+            raise RuntimeError("promise architect unavailable")
+        if self.quota_error_at == "promise_ledger":
+            raise GeminiDailyQuotaError("daily quota exhausted")
+        if self.ledgers is not None:
+            self.last_ledger = self.ledgers.pop(0)
+        else:
+            self.last_ledger = promise_ledger(self.last_plan, _profile_in(prompt))
+        return self.last_ledger
 
     def _architecture_response(self, schema):
         if schema is SemanticSkeletonRanking:
@@ -404,6 +506,11 @@ def structured_prompt(provider, schema_name: str) -> str:
     return next(prompt for name, _, prompt in provider.structured_calls if name == schema_name)
 
 
+def structured_prompt_at(provider, schema_name: str, index: int) -> str:
+    prompts = [prompt for name, _, prompt in provider.structured_calls if name == schema_name]
+    return prompts[index]
+
+
 def structured_prompt_system(provider, schema_name: str) -> str:
     return next(system for name, system, _ in provider.structured_calls if name == schema_name)
 
@@ -428,6 +535,8 @@ def test_complete_pipeline_saves_v60_artifacts_and_agent_order(tmp_path) -> None
         "characters.json",
         "plan_review.json",
         "story_plan.json",
+        "promise_ledger.json",
+        "promise_audit.json",
         "draft_presentation.json",
         "draft.md",
         "review.json",
@@ -451,6 +560,8 @@ def test_complete_pipeline_saves_v60_artifacts_and_agent_order(tmp_path) -> None
     completed_stages = metadata["completed_stages"]
     assert completed_stages == sorted(completed_stages, key=pipeline_module.CHECKPOINT_STAGES.index)
     assert completed_stages.index("planning") < completed_stages.index("plan_review")
+    assert completed_stages.index("plan_review") < completed_stages.index("promises")
+    assert metadata["warnings"] == []
     assert any(update.stage == "story" for update in progress)
     manifest = json.loads((run.run_dir / "pipeline_manifest.json").read_text(encoding="utf-8"))
     assert manifest["artifacts"]["story.mp3"]["bytes"] == len(b"fake-mp3")
@@ -740,7 +851,7 @@ def test_late_critic_failure_delivers_the_draft_with_warning(tmp_path) -> None:
 
 @pytest.mark.parametrize(
     "quota_error_at",
-    ["plan_critic", "drama_critic", "writer", "architect", "semantic_ranking"],
+    ["plan_critic", "drama_critic", "writer", "architect", "semantic_ranking", "promise_ledger"],
 )
 def test_quota_errors_abort_instead_of_becoming_a_warning(tmp_path, quota_error_at) -> None:
     provider = FakeProvider(
@@ -1107,6 +1218,158 @@ def test_disabled_guidance_removes_the_stage_and_its_vocabulary(tmp_path) -> Non
     for character in characters["characters"]:
         assert character["functional_role"] == ""
         assert character["persona"] == ""
+
+
+def test_the_ledger_reaches_the_drafter_and_the_writer_as_chapter_obligations(tmp_path) -> None:
+    provider = FakeProvider(story_review=major_story_review())
+    run = StoryGenerator(provider, tmp_path).generate(make_request())
+
+    ledger = json.loads((run.run_dir / "promise_ledger.json").read_text(encoding="utf-8"))
+    assert ledger["primary_promise_id"] == "promise-1"
+    assert {promise["id"] for promise in ledger["promises"]} == {"promise-1", "promise-2"}
+    assert ledger["chapter_by_event"]["event-1"] == "chapter-1"
+
+    drafts = [item for item in provider.text_calls if "first-draft fiction chapter" in item[0]]
+    writes = [item for item in provider.text_calls if "final Writer" in item[0]]
+    assert "PROMISE OBLIGATIONS:" in drafts[0][1]
+    assert "OPEN promise-1" in drafts[0][1]
+    assert "PAY OFF promise-1" in drafts[-1][1]
+    assert "PROMISE OBLIGATIONS:" in writes[0][1]
+    # The obligations must sit ahead of the body the Writer is asked to improve, or the retry
+    # diagnostics would read them back as part of the chapter.
+    body_at = writes[0][1].index("ORIGINAL CHAPTER BODY:")
+    assert writes[0][1].index("PROMISE OBLIGATIONS:") < body_at
+    assert "PROMISE OBLIGATIONS:" in structured_prompt(provider, "StoryReview")
+
+
+def test_the_ledger_never_teaches_a_count_or_touches_the_plan(tmp_path) -> None:
+    with_ledger = FakeProvider()
+    without = FakeProvider()
+    left = StoryGenerator(with_ledger, tmp_path / "con").generate(make_request())
+    right = StoryGenerator(without, tmp_path / "sin", promise_ledger=False).generate(make_request())
+
+    assert (left.run_dir / "story_plan.json").read_bytes() == (
+        right.run_dir / "story_plan.json"
+    ).read_bytes()
+    ledger_prompt = structured_prompt(with_ledger, "PromiseLedgerDraft")
+    assert "EXACT EVENT COUNTS" not in ledger_prompt
+    assert "word budget" not in ledger_prompt
+    assert "NARRATIVE INSPIRATION" not in ledger_prompt
+    drafts = [item for item in with_ledger.text_calls if "first-draft" in item[0]]
+    own_events = [("event-1", "event-2"), ("event-3", "event-4")]
+    for (_, prompt), owned in zip(drafts, own_events, strict=True):
+        obligations = prompt.split("PROMISE OBLIGATIONS:\n", 1)[1]
+        cited = {line.split(" | ")[0].removeprefix("- ") for line in obligations.splitlines()[1:]}
+        assert cited <= set(owned)
+
+
+def test_disabled_ledger_removes_the_stage_and_its_vocabulary(tmp_path) -> None:
+    provider = FakeProvider()
+    run = StoryGenerator(provider, tmp_path, promise_ledger=False).generate(make_request())
+
+    assert not (run.run_dir / "promise_ledger.json").exists()
+    assert not (run.run_dir / "promise_audit.json").exists()
+    metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert "promises" not in metadata["completed_stages"]
+    assert not metadata["warnings"]
+    assert all(name != "PromiseLedgerDraft" for name, _, _ in provider.structured_calls)
+    for _, prompt in provider.text_calls:
+        assert "PROMISE OBLIGATIONS" not in prompt
+
+
+def test_a_rejected_ledger_is_repaired_against_the_frozen_plan(tmp_path) -> None:
+    broken = promise_ledger(valid_plan())
+    broken.promises[0].payoff.event_id = "event-99"
+    provider = FakeProvider(ledgers=[broken, promise_ledger(valid_plan())])
+    run = StoryGenerator(provider, tmp_path).generate(make_request())
+
+    assert (run.run_dir / "promise_ledger.json").is_file()
+    rejected = json.loads(
+        (run.run_dir / "promises" / "attempt-001.json").read_text(encoding="utf-8")
+    )
+    assert "event-99" in rejected["issue"]
+    assert rejected["issue"].isascii()
+    repair = structured_prompt_at(provider, "PromiseLedgerDraft", 1)
+    assert "LEDGER REPAIR REQUIRED" in repair
+    assert rejected["issue"] in repair
+    metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert not metadata["warnings"]
+
+
+def test_an_unrepairable_ledger_only_costs_the_guidance(tmp_path) -> None:
+    broken = promise_ledger(valid_plan())
+    broken.promises[0].payoff.event_id = "event-99"
+    provider = FakeProvider(ledgers=[broken, broken.model_copy(deep=True)])
+    run = StoryGenerator(provider, tmp_path).generate(make_request())
+
+    assert run.story_path.is_file()
+    assert not (run.run_dir / "promise_ledger.json").exists()
+    metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert "promises" not in metadata["completed_stages"]
+    assert any("promesas" in warning for warning in metadata["warnings"])
+    assert (run.run_dir / "promises" / "attempt-002.json").is_file()
+
+
+def test_the_ledger_failing_outright_still_delivers_the_story(tmp_path) -> None:
+    provider = FakeProvider(fail_promise_ledger=True)
+    run = StoryGenerator(provider, tmp_path).generate(make_request())
+
+    assert run.story_path.is_file()
+    assert not (run.run_dir / "promise_ledger.json").exists()
+    metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert any("promesas" in warning for warning in metadata["warnings"])
+
+
+def test_the_audit_records_what_the_critic_said_about_every_promise(tmp_path) -> None:
+    provider = FakeProvider(promise_verdict="weak")
+    run = StoryGenerator(provider, tmp_path).generate(make_request())
+
+    audit = json.loads((run.run_dir / "promise_audit.json").read_text(encoding="utf-8"))
+    assert audit["promises"] == 2
+    assert audit["weak"] == 2
+    assert audit["fulfilled"] == 0
+    assert audit["fulfilled_ratio"] == 0.0
+    assert [entry["primary"] for entry in audit["entries"]] == [True, False]
+
+
+def test_a_promise_the_critic_never_judged_counts_as_broken(tmp_path) -> None:
+    provider = FakeProvider(story_review=major_story_review())
+    run = StoryGenerator(provider, tmp_path).generate(make_request())
+
+    audit = json.loads((run.run_dir / "promise_audit.json").read_text(encoding="utf-8"))
+    assert audit["broken"] == audit["promises"] == 2
+    assert all(entry["verdict"] == "broken" for entry in audit["entries"])
+    assert all("no verdict" in entry["evidence"] for entry in audit["entries"])
+
+
+def test_a_promise_id_in_note_event_ids_costs_the_whole_revision(tmp_path) -> None:
+    """Pin the cost of the mistake the critic prompt is written to prevent.
+
+    _validate_note_references rejects the review, _critique_and_revise degrades, and the draft
+    ships unrevised behind a warning. Nothing here is broken, but the loss is large and invisible
+    from the story alone, which is why the Drama Critic is told in as many words that promise IDs
+    belong in promise_checks and nowhere else.
+    """
+    review = StoryReview(
+        notes=[
+            RevisionNote(
+                id="misplaced",
+                priority="major",
+                category="setup_payoff",
+                evidence="The promise never lands.",
+                instruction="Stage the confrontation.",
+                event_ids=["promise-1"],
+            )
+        ]
+    )
+    provider = FakeProvider(story_review=review)
+    run = StoryGenerator(provider, tmp_path).generate(make_request())
+
+    metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["status"] == "completed"
+    assert any("crítica dramática" in warning for warning in metadata["warnings"])
+    assert "PROMISE OBLIGATIONS" in structured_prompt(provider, "StoryReview")
+    assert "promise_checks only" in structured_prompt_system(provider, "StoryReview")
 
 
 def test_architect_failure_only_costs_the_guidance(tmp_path) -> None:

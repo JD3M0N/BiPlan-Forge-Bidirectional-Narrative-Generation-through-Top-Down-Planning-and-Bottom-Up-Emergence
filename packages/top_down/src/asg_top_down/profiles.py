@@ -110,3 +110,27 @@ def profile_event_aim(profile: NarrativeProfile) -> int:
     """Return the event count the planner is told to aim at, away from the rejection boundary."""
     low, high = profile_event_target(profile)
     return (low + high) // 2
+
+
+# Sanderson fixes no promise count. The two rules that are firm are that every promise made gets
+# paid, and that promise density has to fit the room later chapters leave for payoffs: "if you've
+# made twenty promises and only have room for ten payoffs, cut promises now". So the band is
+# derived from the chapter band instead of written by hand: at most one promise per chapter, and
+# about three per four chapters at the low end, never below two, since a single promise gives the
+# reader nothing to hold while the main one is still open. Unlike the event target, both ends of
+# this band are taught to the model and enforced: the ceiling is the craft rule itself, not a
+# budget competing with another number.
+MIN_PROMISES = 2
+
+
+def promise_band(profile: NarrativeProfile) -> tuple[int, int]:
+    """Return the promise count range the profile's chapter band leaves room to pay off."""
+    low_chapters, high_chapters = profile_chapter_band(profile)
+    low = max(MIN_PROMISES, -(-(low_chapters * 3) // 4))
+    return low, max(high_chapters, low)
+
+
+def promise_aim(profile: NarrativeProfile) -> int:
+    """Return the promise count the ledger agent aims at, away from either rejection boundary."""
+    low, high = promise_band(profile)
+    return (low + high) // 2

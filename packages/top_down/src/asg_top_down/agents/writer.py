@@ -46,6 +46,7 @@ class DrafterAgent(Agent[str]):
         events: list[PlotEvent],
         relevant_history: list[PlotEvent],
         previous_chapter: str,
+        promise_brief: str = "",
     ) -> str:
         """Draft one fiction chapter from its validated event context."""
         plan_context = {
@@ -69,8 +70,10 @@ class DrafterAgent(Agent[str]):
                 "resolution is a scene, not an account of how matters ended. Expand Developed and "
                 "Expansive stories through meaningful action, reaction, and consequence rather "
                 "than repetition or decorative filler. Respect world rules, character intentions, "
-                "continuity, and the qualitative narrative profile. Do not expose internal IDs or "
-                "planning terminology."
+                "continuity, and the qualitative narrative profile. When PROMISE OBLIGATIONS are "
+                "supplied, deliver each one inside the event it names, through what happens and "
+                "what is said, so the reader is left expecting, or satisfied, without ever being "
+                "told so. Do not expose internal IDs or planning terminology."
             ),
             prompt=(
                 f"{story_specification_header(request)}"
@@ -82,6 +85,7 @@ class DrafterAgent(Agent[str]):
                 f"\n\nORDERED EVENTS:\n{json_text(events)}"
                 f"\n\nRELEVANT PRIOR EVENTS:\n{json_text(relevant_history)}"
                 f"\n\nPREVIOUS CHAPTER:\n{previous_chapter or 'none'}"
+                + (f"\n\nPROMISE OBLIGATIONS:\n{promise_brief}" if promise_brief else "")
             ),
             profile="prose",
         )
@@ -104,6 +108,7 @@ class WriterAgent(Agent[str]):
         draft_body: str,
         previous_revised_chapter: str,
         retry_feedback: str = "",
+        promise_brief: str = "",
     ) -> str:
         """Rewrite one chapter body in the requested fiction language."""
         return self.provider.generate_text(
@@ -117,7 +122,9 @@ class WriterAgent(Agent[str]):
                 "decorative filler. Preserve the dramatized scene you are given: keep every "
                 "character speaking in the voice recorded in their profile, never turn a spoken "
                 "exchange into reported summary, and never merge separated beats back into one "
-                "block. Coordinate the opening with the previously revised chapter."
+                "block. Coordinate the opening with the previously revised chapter. When PROMISE "
+                "OBLIGATIONS are supplied, the rewrite must still deliver every one of them "
+                "inside the event it names: never drop an expectation the draft already planted."
             ),
             prompt=(
                 f"{story_specification_header(request)}"
@@ -127,7 +134,10 @@ class WriterAgent(Agent[str]):
                 f"\n\nCURRENT CHAPTER:\n{json_text(chapter)}"
                 f"\n\nORDERED EVENTS:\n{json_text(events)}"
                 f"\n\nREVISION NOTES:\n{json_text(notes)}"
-                f"\n\nPREVIOUS REVISED CHAPTER:\n{previous_revised_chapter or 'none'}"
+                # Ahead of the original body on purpose: everything after that marker is read
+                # back as the chapter body itself, by the retry diagnostics and by the tests.
+                + (f"\n\nPROMISE OBLIGATIONS:\n{promise_brief}" if promise_brief else "")
+                + f"\n\nPREVIOUS REVISED CHAPTER:\n{previous_revised_chapter or 'none'}"
                 f"\n\nORIGINAL CHAPTER BODY:\n{draft_body}"
                 f"{retry_feedback}"
             ),

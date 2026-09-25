@@ -78,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
             provider,
             settings.output_root,
             narrative_guidance=settings.narrative_guidance,
+            promise_ledger=settings.promise_ledger,
             narrative_profile=args.profile,
             audio=not args.no_audio,
         )

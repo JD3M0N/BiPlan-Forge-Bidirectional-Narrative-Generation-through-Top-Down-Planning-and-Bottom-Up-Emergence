@@ -72,6 +72,7 @@ class TopDownGenerator:
             self._provider,
             self._settings.output_root,
             narrative_guidance=self._settings.narrative_guidance,
+            promise_ledger=self._settings.promise_ledger,
             narrative_profile=NarrativeProfile(narrative_profile) if narrative_profile else None,
         )
         try:

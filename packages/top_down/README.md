@@ -1,10 +1,10 @@
-# ASG Top-Down 6.1
+# ASG Top-Down 6.8
 
-Top-Down 6.1 genera historias con el contrato de artefactos 6.1:
+Top-Down 6.8 genera historias con el contrato de artefactos 6.2:
 
 ```text
-Analyst → World → Characters → Plot Planner → Plan Critic
-→ Drafter → Drama Critic → Writer → métricas observadas
+Analyst → Architect → World → Characters → Plot Planner → Plan Critic
+→ Promise Ledger → Drafter → Drama Critic → Writer → métricas observadas
 ```
 
 Todos los prompts y artefactos internos permanecen en inglés. El idioma pedido
@@ -40,8 +40,10 @@ anterior que pagar, `payoff_of` debe ser una lista vacía.
 
 El primer DAG dispone de dos intentos estructurales. `Plan Critic` puede pedir
 una única sustitución completa; si esa sustitución es inválida se conserva el
-primer plan válido. Después de congelar el plan, los únicos agentes son
-`Drafter`, `Drama Critic` y `Writer`.
+primer plan válido. Después de congelar el plan ningún agente vuelve a tocarlo:
+`Promise Ledger` lo anota con un contrato Promise-Progress-Payoff cuyos beats
+citan eventos que ya existen, y `Drafter`, `Drama Critic` y `Writer` trabajan
+sobre esa anotación. El ledger es opcional y se apaga con `ASG_PROMISE_LEDGER`.
 
 `Writer` corrige por capítulos y dispone de un reintento cuando devuelve texto
 idéntico pese a notas importantes o introduce encabezados. Ningún candidato se
@@ -59,6 +61,9 @@ plan_review.json
 story_plan.json
 planning/attempt-*.json
 planning/refined-candidate*.json
+promise_ledger.json
+promises/attempt-*.json
+promise_audit.json
 draft_presentation.json
 chapters/chapter-*.md
 draft.md
@@ -79,8 +84,11 @@ Todos los intentos del Writer quedan archivados con su validación estructurada.
 `story_metrics.json` registra palabras, capítulos, eventos y artesanía de la
 prosa observados —proporción de párrafos con diálogo, palabras por frase y
 palabras por párrafo, también capítulo a capítulo— sin objetivos ni indicadores
-de cumplimiento. Los runs nuevos usan `pipeline_version: 6.1`; `StoryRun` puede
-abrir runs terminados 5.0, 5.1, 5.2, 5.3, 6.0 y 6.1. El MP3 se registra en el
+de cumplimiento. `promise_ledger.json` guarda el contrato de promesas junto a los
+bloques de prompt exactos que se inyectaron, y `promise_audit.json` cruza ese
+contrato con los veredictos del crítico. Los runs nuevos usan
+`pipeline_version: 6.2`; `StoryRun` puede abrir runs terminados 5.0, 5.1, 5.2,
+5.3, 6.0, 6.1 y 6.2. El MP3 se registra en el
 manifiesto, pero un fallo de TTS solo añade `AUDIO_GENERATION_FAILED`:
 `story.md` continúa válido.
 `compare-story-runs` continúa aceptando cualquier run con `story.md`.

@@ -18,6 +18,7 @@ from .agents import (
     DramaCriticAgent,
     PlanCriticAgent,
     PlotPlannerAgent,
+    PromiseLedgerAgent,
     StoryArchitectAgent,
     WorldBuilderAgent,
     WriterAgent,
@@ -33,6 +34,8 @@ from .graph import (
 )
 from .profiles import MIN_EVENTS_PER_CHAPTER, NarrativeProfile, profile_event_target
 from .progress import PipelineEvent, PipelineEventCallback, ProgressCallback, ProgressUpdate
+from .promise_brief import critic_obligations, event_index, rendered_ledger
+from .promises import materialize_ledger
 from .schemas import (
     ChapterPlan,
     ChapterRevisionAttempt,
@@ -42,6 +45,11 @@ from .schemas import (
     LLMUsageArtifact,
     NarrativeBlueprint,
     PlotEvent,
+    PromiseAuditArtifact,
+    PromiseAuditEntry,
+    PromiseCheck,
+    PromiseLedger,
+    PromiseLedgerDraft,
     RevisionNote,
     RevisionReport,
     StoryPlan,
@@ -65,6 +73,7 @@ CHECKPOINT_STAGES = (
     "characters",
     "planning",
     "plan_review",
+    "promises",
     "drafting",
     "critique",
     "revision",
@@ -78,6 +87,11 @@ DEFAULT_PLAN_ATTEMPTS = 3
 PLAN_ATTEMPTS_BY_PROFILE: dict[NarrativeProfile, int] = {
     NarrativeProfile.EXPANSIVE: 4,
 }
+
+# The promise ledger annotates a plan that is already valid, so a rejected candidate has far less
+# to repair than a rejected plan: one repair round is enough, and the stage degrades rather than
+# spending more of the quota on prose guidance the story can do without.
+PROMISE_ATTEMPTS = 2
 
 
 class StoryPipeline:
@@ -94,11 +108,13 @@ class StoryPipeline:
         narrative_guidance: bool = True,
         narrative_profile: NarrativeProfile | None = None,
         audio: bool = True,
+        promise_ledger: bool = True,
     ) -> None:
         """Store pipeline dependencies and optional lifecycle callbacks."""
         self.provider = provider
         self.output_root = Path(output_root)
         self.narrative_guidance = narrative_guidance
+        self.promise_ledger = promise_ledger
         self.narrative_profile = narrative_profile
         self.audio = audio
         self.on_progress = on_progress
@@ -128,11 +144,13 @@ class StoryPipeline:
             world = self._build_world(request)
             characters = self._build_characters(request, world, blueprint)
             plan = self._build_plan(request, world, characters, blueprint)
+            ledger = self._build_promise_ledger(request, plan)
             presentation, draft_bodies, draft = self._draft_chapters(
                 request,
                 world,
                 characters,
                 plan,
+                ledger,
             )
             story = self._critique_and_revise(
                 request,
@@ -142,6 +160,7 @@ class StoryPipeline:
                 presentation,
                 draft_bodies,
                 draft,
+                ledger,
             )
             self._finalize(request, plan, story)
             return self.repository.run_dir
@@ -672,12 +691,91 @@ class StoryPipeline:
         ]
         return json.dumps(rules, ensure_ascii=False, indent=2)
 
+    def _build_promise_ledger(
+        self,
+        request: StoryRequest,
+        plan: StoryPlan,
+    ) -> PromiseLedger | None:
+        """Draw the promise contract over the frozen plan, or let the story continue without it.
+
+        The ledger changes how the plan is rendered, never what it contains, so losing it costs
+        prose guidance and nothing else. That is why this stage degrades like the architect
+        instead of aborting like planning.
+        """
+        assert self.repository is not None
+        if not self.promise_ledger:
+            return None
+        self._notify(49, "promises", "Trazando las promesas de la historia")
+        try:
+            ledger = self._attempt_promise_ledger(request, plan)
+        except NON_DEGRADABLE_ERRORS:
+            raise
+        except Exception:
+            ledger = None
+        if ledger is None:
+            warning = "No se pudo trazar el contrato de promesas; la historia continua sin el."
+            self.repository.add_warning(warning)
+            self._emit("promises_skipped", warning, stage="promises")
+            return None
+        self.repository.save_json("promise_ledger.json", ledger)
+        self.repository.complete_stage("promises")
+        return ledger
+
+    def _attempt_promise_ledger(
+        self,
+        request: StoryRequest,
+        plan: StoryPlan,
+    ) -> PromiseLedger | None:
+        """Run the bounded repair loop and return the first ledger that validates."""
+        feedback = ""
+        for attempt in range(1, PROMISE_ATTEMPTS + 1):
+
+            def draw_ledger(feedback_snapshot: str = feedback):
+                """Draw one ledger candidate with feedback bound to this attempt."""
+                return PromiseLedgerAgent(self.provider).run(request, plan, feedback_snapshot)
+
+            draft = self._call_agent("promise_ledger", draw_ledger)
+            try:
+                ledger = materialize_ledger(draft, plan, request.narrative_profile)
+            except ValueError as exc:
+                feedback = self._record_rejected_ledger(draft, attempt, exc, plan)
+                continue
+            return rendered_ledger(ledger, plan)
+        return None
+
+    def _record_rejected_ledger(
+        self,
+        draft: PromiseLedgerDraft,
+        attempt: int,
+        error: ValueError,
+        plan: StoryPlan,
+    ) -> str:
+        """Persist one rejected ledger and build the repair block reinjected verbatim."""
+        assert self.repository is not None
+        issue = str(error).strip() or type(error).__name__
+        self.repository.save_data(
+            f"promises/attempt-{attempt:03d}.json",
+            {"attempt": attempt, "issue": issue, "ledger": draft.model_dump(mode="json")},
+        )
+        return (
+            "\n\nLEDGER REPAIR REQUIRED. RETURN A COMPLETE REPLACEMENT LEDGER. "
+            f"The previous ledger was rejected: {issue}. The storyline stays frozen: repair the "
+            "ledger, never the plan, and anchor every beat to one of these event IDs.\n"
+            f"{event_index(plan)}"
+        )
+
+    @staticmethod
+    def _promise_brief(ledger: PromiseLedger | None, chapter_id: str) -> str:
+        """Return what one chapter owes the reader, or nothing when it owes nothing."""
+        return ledger.chapter_blocks.get(chapter_id, "") if ledger else ""
+
     def _draft_chapters(
         self,
         request: StoryRequest,
         world: WorldArtifact,
         characters: CharactersArtifact,
         plan: StoryPlan,
+        ledger: PromiseLedger | None = None,
     ) -> tuple[StoryPresentation, list[str], str]:
         """Use Drafter to localize titles and create the first story."""
         assert self.repository is not None
@@ -709,6 +807,7 @@ class StoryPipeline:
                 event_snapshot=events,
                 history_snapshot=history,
                 previous_body: str = bodies[-1] if bodies else "",
+                brief: str = self._promise_brief(ledger, chapter.id),
             ):
                 """Draft one chapter with loop values bound to this iteration."""
                 return drafter.run(
@@ -721,6 +820,7 @@ class StoryPipeline:
                     event_snapshot,
                     history_snapshot,
                     previous_body,
+                    brief,
                 )
 
             body = self._call_agent("drafter", draft_chapter).strip()
@@ -772,12 +872,14 @@ class StoryPipeline:
         presentation: StoryPresentation,
         draft_bodies: list[str],
         draft: str,
+        ledger: PromiseLedger | None = None,
     ) -> str:
         """Critique the complete draft, then let Writer revise chapter by chapter."""
         assert self.repository is not None
         self._notify(78, "critique", "Analizando el drama del borrador completo")
         evidence = craft_evidence(plan.chapters, draft_bodies)
         self.repository.save_json("craft_evidence.json", evidence)
+        obligations = critic_obligations(ledger)
         try:
 
             def critique_story():
@@ -790,11 +892,13 @@ class StoryPipeline:
                     presentation,
                     draft,
                     evidence.prompt_block,
+                    obligations,
                 )
 
             review = self._call_agent("drama_critic", critique_story)
             self.repository.save_json("review.json", review)
             self._validate_note_references(review.notes, plan)
+            self._audit_promises(ledger, review)
             self.repository.complete_stage("critique")
         except NON_DEGRADABLE_ERRORS:
             raise
@@ -813,6 +917,53 @@ class StoryPipeline:
             presentation,
             draft_bodies,
             review,
+            ledger,
+        )
+
+    def _audit_promises(self, ledger: PromiseLedger | None, review: StoryReview) -> None:
+        """Cross the ledger with the critic's verdicts and record what the story delivered.
+
+        A promise the critic never judged counts as broken. Silence is not a pass: the whole
+        point of the ledger is that every expectation the story opened gets an answer, and an
+        unanswered question about one is exactly what the audit exists to surface.
+        """
+        assert self.repository is not None
+        if ledger is None:
+            return
+        checks = {check.promise_id: check for check in review.promise_checks}
+        entries = [
+            self._promise_entry(promise, checks.get(promise.id), ledger)
+            for promise in ledger.promises
+        ]
+        verdicts = Counter(entry.verdict for entry in entries)
+        self.repository.save_json(
+            "promise_audit.json",
+            PromiseAuditArtifact(
+                promises=len(entries),
+                fulfilled=verdicts["fulfilled"],
+                weak=verdicts["weak"],
+                broken=verdicts["broken"],
+                fulfilled_ratio=round(verdicts["fulfilled"] / len(entries), 4) if entries else 0.0,
+                entries=entries,
+            ),
+        )
+
+    @staticmethod
+    def _promise_entry(
+        promise,
+        check: PromiseCheck | None,
+        ledger: PromiseLedger,
+    ) -> PromiseAuditEntry:
+        """Pair one promise of the ledger with the verdict the critic returned for it."""
+        return PromiseAuditEntry(
+            promise_id=promise.id,
+            kind=promise.kind,
+            primary=promise.id == ledger.primary_promise_id,
+            verdict=check.verdict if check else "broken",
+            opened=check.opened if check else False,
+            progressed=check.progressed if check else False,
+            paid=check.paid if check else False,
+            evidence=check.evidence if check else "the critic returned no verdict for this promise",
         )
 
     @staticmethod
@@ -834,6 +985,7 @@ class StoryPipeline:
         presentation: StoryPresentation,
         draft_bodies: list[str],
         review: StoryReview,
+        ledger: PromiseLedger | None = None,
     ) -> str:
         """Run Writer for every chapter with one bounded corrective retry."""
         assert self.repository is not None
@@ -874,6 +1026,7 @@ class StoryPipeline:
                     draft_body,
                     revised_bodies[-1] if revised_bodies else "",
                     index,
+                    self._promise_brief(ledger, chapter.id),
                 )
             else:
                 accepted, result = (
@@ -946,6 +1099,7 @@ class StoryPipeline:
         draft_body: str,
         previous_revised: str,
         chapter_index: int,
+        promise_brief: str = "",
     ) -> tuple[str, ChapterRevisionResult]:
         """Return the first valid Writer candidate or the safe original fallback."""
         assert self.repository is not None
@@ -969,6 +1123,7 @@ class StoryPipeline:
                         draft_body,
                         previous_revised,
                         feedback_snapshot,
+                        promise_brief,
                     )
 
                 candidate = self._call_agent("writer", revise_chapter).strip()

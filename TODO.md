@@ -1,8 +1,8 @@
 # Hoja de ruta
 
-**Estado medido el 2026-09-21 sobre `8232110`, con `asg-top-down` 6.7.0.** Puerta de calidad
-limpia: `ruff check .`, `ruff format --check .`, 304 pruebas pasan y 2 se omiten, `pip check` sin
-requisitos rotos, y `tests/test_sync_railway_stories.ps1` pasa. Las cinco corren en
+**Estado medido el 2026-09-24 sobre `75adc6c` mas el ledger de promesas, con `asg-top-down`
+6.8.0.** Puerta de calidad limpia: `ruff check .`, `ruff format --check .`, 340 pruebas pasan y 2
+se omiten, `pip check` sin requisitos rotos, y `tests/test_sync_railway_stories.ps1` pasa. Las cinco corren en
 `.github/workflows/quality.yml` en cada push y pull request, y en local con `.\quality.ps1` (o
 `make test`). Las mediciones que cita este documento salen del corpus de `Stories/`, hoy **160
 ejecuciones Top-Down** —119 `completed`, 41 `failed` y **ninguna varada en `running`**— más 6
@@ -58,6 +58,10 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 - **Qué hacer.** Tratar el último capítulo como caso propio en vez de endurecer el contrato para
   todos: el Drafter ya sabe qué capítulo escribe y en qué posición, así que puede recibir la
   exigencia de desenlace dramatizado sólo donde hace falta.
+- **Ojo al medir.** El ledger de promesas de 6.8.0 ataca el mismo síntoma por otra vía: obliga a
+  que la promesa primaria pague en el último capítulo y le da al Drafter una obligación concreta
+  que dramatizar ahí. Una matriz nueva medirá las dos intervenciones a la vez salvo que se separen
+  con `ASG_PROMISE_LEDGER`. Ver [docs/promesas_ppp.md](docs/promesas_ppp.md).
 - **Hecho cuando.** El último capítulo deja de ser el más mudo en la mayoría de las historias de una
   matriz nueva. La mediana sola no sirve de criterio: la réplica midió hasta 16 puntos de diferencia
   entre dos corridas del mismo prompt y la misma versión.

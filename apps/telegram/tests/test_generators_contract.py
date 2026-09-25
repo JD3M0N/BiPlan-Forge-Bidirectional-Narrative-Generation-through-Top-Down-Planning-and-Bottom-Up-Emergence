@@ -14,7 +14,14 @@ from asg_top_down.profiles import NarrativeProfile
 from asg_top_down.progress import PipelineEvent, ProgressUpdate
 
 
-def _patch_facade(monkeypatch, tmp_path, captured, *, narrative_guidance=True):
+def _patch_facade(
+    monkeypatch,
+    tmp_path,
+    captured,
+    *,
+    narrative_guidance=True,
+    promise_ledger=True,
+):
     def build(provider, output_root, **kwargs):
         captured["provider"] = provider
         captured["output_root"] = output_root
@@ -37,7 +44,10 @@ def _patch_facade(monkeypatch, tmp_path, captured, *, narrative_guidance=True):
     facade.side_effect = build
     provider = object()
     settings = SimpleNamespace(
-        output_root=tmp_path, narrative_guidance=narrative_guidance, model="fake"
+        output_root=tmp_path,
+        narrative_guidance=narrative_guidance,
+        promise_ledger=promise_ledger,
+        model="fake",
     )
     monkeypatch.setattr(generators_module, "StoryGenerator", facade)
     monkeypatch.setattr(generators_module, "load_top_down_settings", lambda: settings)
@@ -64,7 +74,11 @@ def test_adapter_only_calls_methods_the_real_facade_defines(tmp_path, monkeypatc
     assert captured["prompt"] == "Una historia sobre un faro"
     assert captured["provider"] is provider
     assert captured["output_root"] == tmp_path
-    assert captured["options"] == {"narrative_guidance": True, "narrative_profile": None}
+    assert captured["options"] == {
+        "narrative_guidance": True,
+        "promise_ledger": True,
+        "narrative_profile": None,
+    }
     assert captured["on_run_created"] is run_created
     assert progress == [GenerationProgress(40, "writing", "Escribiendo el capítulo 2")]
     assert events == [GenerationEvent("Reintento 1", "writing")]
@@ -76,7 +90,16 @@ def test_adapter_only_calls_methods_the_real_facade_defines(tmp_path, monkeypatc
     # The guidance setting is forwarded, not hardcoded.
     _patch_facade(monkeypatch, tmp_path, captured, narrative_guidance=False)
     generators_module.TopDownGenerator().generate("Otra historia")
-    assert captured["options"] == {"narrative_guidance": False, "narrative_profile": None}
+    assert captured["options"] == {
+        "narrative_guidance": False,
+        "promise_ledger": True,
+        "narrative_profile": None,
+    }
+
+    # So is the promise ledger, which is the ablation arm of the measurement.
+    _patch_facade(monkeypatch, tmp_path, captured, promise_ledger=False)
+    generators_module.TopDownGenerator().generate("Una tercera historia")
+    assert captured["options"]["promise_ledger"] is False
 
 
 def test_adapter_translates_pipeline_errors_into_application_failures(tmp_path, monkeypatch):
