@@ -1,4 +1,5 @@
 import json
+import re
 
 import pytest
 from asg_core import AudioGenerationError
@@ -14,6 +15,8 @@ from asg_top_down.graph import materialize_plan, validate_profile_structure
 from asg_top_down.pipeline import StoryPipeline
 from asg_top_down.profiles import profile_event_floor, promise_band
 from asg_top_down.schemas import (
+    ActScriptDraft,
+    CastNote,
     ChapterDraft,
     ChapterPresentation,
     CharacterProfile,
@@ -30,6 +33,11 @@ from asg_top_down.schemas import (
     PromisePayoff,
     PromiseProgress,
     RevisionNote,
+    SceneCastMember,
+    ScriptFrame,
+    ScriptLine,
+    ScriptPresentation,
+    ScriptSceneDraft,
     SemanticSkeletonRanking,
     SemanticSkeletonScore,
     StoryPlanDraft,
@@ -353,6 +361,75 @@ def scene_prose(label: str = "escena") -> str:
     return "\n\n".join([spoken, f"Ana cerro el archivo {label}."] * 4)
 
 
+_ANCHOR_CHAPTER = re.compile(r"ACT ANCHOR INDEX \((\S+)\)")
+
+
+def script_presentation() -> ScriptPresentation:
+    """Localize titles and the printed-script frame for the two-chapter fixture plan."""
+    return ScriptPresentation(
+        title="El precio de la verdad",
+        chapters=[
+            ChapterPresentation(chapter_id="chapter-1", title="El archivo"),
+            ChapterPresentation(chapter_id="chapter-2", title="La eleccion"),
+        ],
+        frame=ScriptFrame(
+            cast_heading="Personajes",
+            act_label="Acto",
+            scene_label="Escena",
+            cast=[CastNote(character_id="ana", description="archivista")],
+        ),
+    )
+
+
+def script_frame() -> ScriptFrame:
+    """Build a minimal printed-script frame, as the Script Adapter would create it."""
+    return ScriptFrame(
+        cast_heading="Personajes",
+        act_label="Acto",
+        scene_label="Escena",
+        cast=[CastNote(character_id="ana", description="archivista")],
+    )
+
+
+def script_act(plan: StoryPlanDraft, chapter_id: str) -> ActScriptDraft:
+    """Build the smallest valid act for one chapter: one scene per event, cast from its plan."""
+    events = [
+        event
+        for event in sorted(plan.events, key=lambda item: item.order)
+        if event.chapter_id == chapter_id
+    ]
+    scenes = []
+    for event in events:
+        cast_ids = event.character_ids or ["ana"]
+        scenes.append(
+            ScriptSceneDraft(
+                event_ids=[event.id],
+                location_id=event.location_id,
+                setting=f"Escenario de {event.title}.",
+                cast=[
+                    SceneCastMember(character_id=item, objective=f"Resolve {event.id}")
+                    for item in cast_ids
+                ],
+                lines=[
+                    ScriptLine(kind="direction", actor_ids=cast_ids[:1], text="Entra en escena."),
+                    ScriptLine(kind="dialogue", speaker_id=cast_ids[0], text="Nadie mas lo sabe."),
+                ],
+            )
+        )
+    return ActScriptDraft(scenes=scenes)
+
+
+def _touched_act(draft: ActScriptDraft) -> ActScriptDraft:
+    """Return a copy of a script act with its first dialogue line visibly changed."""
+    scenes = [scene.model_copy(deep=True) for scene in draft.scenes]
+    for scene in scenes:
+        for line in scene.lines:
+            if line.kind == "dialogue":
+                line.text = f"{line.text} (revisado)"
+                return ActScriptDraft(scenes=scenes)
+    return ActScriptDraft(scenes=scenes)
+
+
 class FakeProvider:
     model_name = "fake-model"
 
@@ -374,6 +451,13 @@ class FakeProvider:
         ledgers: list[PromiseLedgerDraft] | None = None,
         fail_promise_ledger=False,
         promise_verdict: str = "fulfilled",
+        act_outputs: list[ActScriptDraft] | None = None,
+        script_writer_outputs: list[ActScriptDraft] | None = None,
+        script_writer_identical_once=False,
+        fail_act_call: int | set[int] | None = None,
+        fail_script_writer_call: int | set[int] | None = None,
+        fail_script_critic=False,
+        fail_script_frame=False,
     ) -> None:
         self.plans = list(plans or [valid_plan()])
         self.ledgers = list(ledgers) if ledgers is not None else None
@@ -405,48 +489,119 @@ class FakeProvider:
         self.text_calls = []
         self.draft_number = 0
         self.writer_number = 0
+        self.act_outputs = list(act_outputs) if act_outputs is not None else None
+        self.script_writer_outputs = (
+            list(script_writer_outputs) if script_writer_outputs is not None else None
+        )
+        self.script_writer_identical_once = script_writer_identical_once
+        if fail_act_call is None:
+            self.fail_act_calls: set[int] = set()
+        elif isinstance(fail_act_call, int):
+            self.fail_act_calls = {fail_act_call}
+        else:
+            self.fail_act_calls = set(fail_act_call)
+        if fail_script_writer_call is None:
+            self.fail_script_writer_calls: set[int] = set()
+        elif isinstance(fail_script_writer_call, int):
+            self.fail_script_writer_calls = {fail_script_writer_call}
+        else:
+            self.fail_script_writer_calls = set(fail_script_writer_call)
+        self.fail_script_critic = fail_script_critic
+        self.fail_script_frame = fail_script_frame
+        self.act_number = 0
+        self.script_writer_number = 0
 
     def generate_structured(self, *, system_instruction, prompt, schema, profile):
         self.structured_calls.append((schema.__name__, system_instruction, prompt))
-        if schema is WorldArtifact:
-            return make_world()
-        if schema is CharactersArtifact:
-            return make_characters()
-        if schema is StoryPlanDraft:
-            self.last_plan = self.plans.pop(0)
-            return self.last_plan
-        if schema is PromiseLedgerDraft:
-            return self._promise_response(prompt)
-        if schema is PlanReview:
-            if self.quota_error_at == "plan_critic":
-                raise GeminiDailyQuotaError("daily quota exhausted")
-            return self.plan_review
-        if schema is StoryPresentation:
-            return StoryPresentation(
-                title="El precio de la verdad",
-                chapters=[
-                    ChapterPresentation(chapter_id="chapter-1", title="El archivo"),
-                    ChapterPresentation(chapter_id="chapter-2", title="La elección"),
-                ],
-            )
-        if schema is StoryReview:
-            return self._review_response()
-        if schema is StoryRequest:
-            return self.analyzed_request
-        if schema in (SemanticSkeletonRanking, NarrativeBlueprintDraft):
-            return self._architecture_response(schema)
-        raise AssertionError(schema)
+        handlers = {
+            WorldArtifact: lambda: make_world(),
+            CharactersArtifact: lambda: make_characters(),
+            StoryPlanDraft: self._plan_response,
+            PromiseLedgerDraft: lambda: self._promise_response(prompt),
+            PlanReview: self._plan_review_response,
+            StoryPresentation: self._narrative_presentation_response,
+            ScriptPresentation: lambda: script_presentation(),
+            ScriptFrame: self._script_frame_response,
+            ActScriptDraft: lambda: self._script_act_response(system_instruction, prompt),
+            StoryReview: lambda: self._review_response(system_instruction),
+            StoryRequest: lambda: self.analyzed_request,
+            SemanticSkeletonRanking: lambda: self._architecture_response(schema),
+            NarrativeBlueprintDraft: lambda: self._architecture_response(schema),
+        }
+        handler = handlers.get(schema)
+        if handler is None:
+            raise AssertionError(schema)
+        return handler()
 
-    def _review_response(self):
-        if self.fail_quality:
+    def _plan_response(self):
+        self.last_plan = self.plans.pop(0)
+        return self.last_plan
+
+    def _plan_review_response(self):
+        if self.quota_error_at == "plan_critic":
+            raise GeminiDailyQuotaError("daily quota exhausted")
+        return self.plan_review
+
+    @staticmethod
+    def _narrative_presentation_response():
+        return StoryPresentation(
+            title="El precio de la verdad",
+            chapters=[
+                ChapterPresentation(chapter_id="chapter-1", title="El archivo"),
+                ChapterPresentation(chapter_id="chapter-2", title="La elección"),
+            ],
+        )
+
+    def _review_response(self, system_instruction: str = ""):
+        if "Script Critic" in system_instruction:
+            if self.fail_script_critic:
+                raise RuntimeError("script critic unavailable")
+            if self.quota_error_at == "script_critic":
+                raise GeminiDailyQuotaError("daily quota exhausted")
+        elif self.fail_quality:
             raise RuntimeError("review unavailable")
-        if self.quota_error_at == "drama_critic":
+        elif self.quota_error_at == "drama_critic":
             raise GeminiDailyQuotaError("daily quota exhausted")
         if self.explicit_review or self.last_ledger is None:
             return self.story_review
         return self.story_review.model_copy(
             update={"promise_checks": promise_checks(self.last_ledger, self.promise_verdict)}
         )
+
+    def _script_frame_response(self):
+        if self.fail_script_frame:
+            raise RuntimeError("frame unavailable")
+        if self.quota_error_at == "script_adapter":
+            raise GeminiDailyQuotaError("daily quota exhausted")
+        return script_frame()
+
+    def _script_act_response(self, system_instruction: str, prompt: str):
+        if "Script Writer" in system_instruction:
+            self.script_writer_number += 1
+            if self.script_writer_number in self.fail_script_writer_calls:
+                raise RuntimeError("script writer unavailable")
+            if self.quota_error_at == "script_writer":
+                raise GeminiDailyQuotaError("daily quota exhausted")
+            original_text = prompt.split("ORIGINAL ACT:\n", 1)[1].split("\n\nRETRY CORRECTION:", 1)[
+                0
+            ]
+            original = ActScriptDraft.model_validate_json(original_text)
+            if self.script_writer_identical_once and self.script_writer_number == 1:
+                return original
+            if self.script_writer_outputs is not None:
+                return self.script_writer_outputs.pop(0)
+            return _touched_act(original)
+        self.act_number += 1
+        if self.act_number in self.fail_act_calls:
+            raise RuntimeError("act unavailable")
+        role = "playwright" if "Playwright" in system_instruction else "script_adapter"
+        if self.quota_error_at == role:
+            raise GeminiDailyQuotaError("daily quota exhausted")
+        if self.act_outputs is not None:
+            return self.act_outputs.pop(0)
+        match = _ANCHOR_CHAPTER.search(prompt)
+        chapter_id = match.group(1) if match else "chapter-1"
+        return script_act(self.last_plan, chapter_id)
 
     def _promise_response(self, prompt):
         if self.fail_promise_ledger:

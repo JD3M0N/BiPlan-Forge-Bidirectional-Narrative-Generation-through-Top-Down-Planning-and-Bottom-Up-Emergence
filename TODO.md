@@ -1,8 +1,8 @@
 # Hoja de ruta
 
-**Estado medido el 2026-09-24 sobre `75adc6c` mas el ledger de promesas, con `asg-top-down`
-6.8.0.** Puerta de calidad limpia: `ruff check .`, `ruff format --check .`, 340 pruebas pasan y 2
-se omiten, `pip check` sin requisitos rotos, y `tests/test_sync_railway_stories.ps1` pasa. Las cinco corren en
+**Estado medido el 2026-09-25 sobre la salida en guion teatral, con `asg-top-down` 6.9.0.** Puerta
+de calidad limpia: `ruff check .`, `ruff format --check .`, 399 pruebas pasan y 2 se omiten,
+`pip check` sin requisitos rotos, y `tests/test_sync_railway_stories.ps1` pasa. Las cinco corren en
 `.github/workflows/quality.yml` en cada push y pull request, y en local con `.\quality.ps1` (o
 `make test`). Las mediciones que cita este documento salen del corpus de `Stories/`, hoy **160
 ejecuciones Top-Down** —119 `completed`, 41 `failed` y **ninguna varada en `running`**— más 6
@@ -31,6 +31,22 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 ---
 
 ## Lo siguiente
+
+### Medir guion nativo frente a adaptado y quedarse con uno
+
+- **Síntoma.** 6.9.0 añadió dos métodos para la salida en guion teatral —nativo y adaptado—
+  precisamente porque no se sabía cuál daría mejor guion. Los dos comparten contrato
+  (`script.json` más `story.md`) para que la comparación sea posible, pero todavía no hay ninguna
+  medición: ningún run real de guion existe en `Stories/` a la fecha de este documento.
+  Ver [docs/guion_teatral.md](docs/guion_teatral.md).
+- **Qué hacer.** Generar una matriz pequeña con los dos métodos sobre los mismos prompts,
+  comparar a ciegas con `compare-story-runs`, y leer `script_metrics.json`, la tasa de intentos
+  rechazados en `acts/*-attempt-*.json` / `adaptation/*-attempt-*.json`, la tasa de
+  `SCRIPT_VALIDATION_FAILED` y de avisos `SCRIPT_REVISION_REJECTED`, y el coste en
+  `llm_usage.json`. La comparación no está emparejada por plan todavía —cada run genera el suyo—,
+  así que hay que leer las cifras con el mismo cuidado de ruido que el resto del corpus.
+- **Hecho cuando.** Hay una decisión escrita, con cifras, en `docs/guion_teatral.md`, y se ha
+  borrado el método que pierda: su agente, sus prompts, sus tests y `ASG_SCRIPT_METHOD`.
 
 ### El gate de documentación pasa en vacío
 
@@ -199,6 +215,27 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 ---
 
 ## Ideas
+
+### Forzar los dos métodos de guion a partir de un mismo plan congelado
+
+Nativo y adaptado generan cada uno su propio plan, así que la varianza de planificación se mezcla
+con la del método al comparar. Reutilizar `story_plan.json` de un run como entrada congelada de
+los dos métodos aislaría la comparación a solo la escritura.
+
+### Guion teatral leído por el Bottom-Up
+
+El objetivo declarado de la salida en guion es servir de entrada a una simulación donde los
+personajes se interpretan como actores. `script.json` ya guarda un objetivo de actor por
+personaje y por escena pensando en esto, pero `packages/escape_room` no lo lee todavía, y
+`top_down`/`escape_room` siguen sin conocerse entre sí a propósito. Haría falta decidir dónde
+vive el lector: en `escape_room` (rompería la regla de que no se conocen) o en `core` (el
+contrato ya está documentado como JSON puro, sin tipos de Pydantic, precisamente para esto).
+
+### Audio a varias voces desde el guion
+
+`create_story_audio` sintetiza con una sola voz todo el documento. `script.json` ya distingue
+quién habla en cada línea; una narración de guion con una voz por personaje sería una mejora
+natural, pero cambia el contrato de `audio.json` y merece su propia medición.
 
 ### Probar si la taxonomía de arquetipos mejora las historias
 

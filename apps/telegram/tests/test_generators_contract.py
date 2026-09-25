@@ -10,6 +10,7 @@ from asg_telegram.contract import (
 )
 from asg_top_down import StoryGenerator
 from asg_top_down.errors import PlotValidationError
+from asg_top_down.formats import ScriptMethod, StoryFormat
 from asg_top_down.profiles import NarrativeProfile
 from asg_top_down.progress import PipelineEvent, ProgressUpdate
 
@@ -21,6 +22,8 @@ def _patch_facade(
     *,
     narrative_guidance=True,
     promise_ledger=True,
+    story_format=StoryFormat.NARRATIVE,
+    script_method=ScriptMethod.NATIVE,
 ):
     def build(provider, output_root, **kwargs):
         captured["provider"] = provider
@@ -47,6 +50,8 @@ def _patch_facade(
         output_root=tmp_path,
         narrative_guidance=narrative_guidance,
         promise_ledger=promise_ledger,
+        story_format=story_format,
+        script_method=script_method,
         model="fake",
     )
     monkeypatch.setattr(generators_module, "StoryGenerator", facade)
@@ -78,6 +83,8 @@ def test_adapter_only_calls_methods_the_real_facade_defines(tmp_path, monkeypatc
         "narrative_guidance": True,
         "promise_ledger": True,
         "narrative_profile": None,
+        "story_format": StoryFormat.NARRATIVE,
+        "script_method": ScriptMethod.NATIVE,
     }
     assert captured["on_run_created"] is run_created
     assert progress == [GenerationProgress(40, "writing", "Escribiendo el capítulo 2")]
@@ -94,12 +101,24 @@ def test_adapter_only_calls_methods_the_real_facade_defines(tmp_path, monkeypatc
         "narrative_guidance": False,
         "promise_ledger": True,
         "narrative_profile": None,
+        "story_format": StoryFormat.NARRATIVE,
+        "script_method": ScriptMethod.NATIVE,
     }
 
     # So is the promise ledger, which is the ablation arm of the measurement.
     _patch_facade(monkeypatch, tmp_path, captured, promise_ledger=False)
     generators_module.TopDownGenerator().generate("Una tercera historia")
     assert captured["options"]["promise_ledger"] is False
+
+    # And so is the output format, chosen per job in the conversation.
+    _patch_facade(monkeypatch, tmp_path, captured)
+    generators_module.TopDownGenerator().generate("Una historia", story_format="script-adapted")
+    assert captured["options"]["story_format"] is StoryFormat.SCRIPT
+    assert captured["options"]["script_method"] is ScriptMethod.ADAPTED
+
+    with pytest.raises(GenerationFailure) as unknown_format:
+        generators_module.TopDownGenerator().generate("Una historia", story_format="stage-play")
+    assert unknown_format.value.code == "UNKNOWN_STORY_FORMAT"
 
 
 def test_adapter_translates_pipeline_errors_into_application_failures(tmp_path, monkeypatch):

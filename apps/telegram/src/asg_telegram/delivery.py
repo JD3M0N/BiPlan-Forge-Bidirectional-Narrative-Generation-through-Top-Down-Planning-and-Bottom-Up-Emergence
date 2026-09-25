@@ -15,18 +15,28 @@ from .prompts import telegram_story_chunks
 
 LOGGER = logging.getLogger(__name__)
 RETRY_DELAYS = (1, 2, 4)
+DEFAULT_DOCUMENT_CAPTION = "Historia completa en formato Markdown."
 
 
 class TelegramDelivery:
     """Deliver stories with retry and safe-notice behavior."""
 
-    async def _deliver_story(self, *, context, chat_id: int, user, story_path: Path) -> bool:
+    async def _deliver_story(
+        self,
+        *,
+        context,
+        chat_id: int,
+        user,
+        story_path: Path,
+        caption: str = DEFAULT_DOCUMENT_CAPTION,
+    ) -> bool:
         """Send the complete file first and then best-effort HTML fragments."""
         if not await self._send_document_with_retry(
             context=context,
             chat_id=chat_id,
             user=user,
             story_path=story_path,
+            caption=caption,
         ):
             return False
         story = await asyncio.to_thread(story_path.read_text, encoding="utf-8")
@@ -175,6 +185,7 @@ class TelegramDelivery:
         chat_id: int,
         user,
         story_path: Path,
+        caption: str = DEFAULT_DOCUMENT_CAPTION,
     ) -> bool:
         """Send a story document with bounded retries for network failures."""
 
@@ -185,7 +196,7 @@ class TelegramDelivery:
                     chat_id=chat_id,
                     document=document,
                     filename=story_path.name,
-                    caption="Historia completa en formato Markdown.",
+                    caption=caption,
                 )
 
         return await self._send_with_retry(

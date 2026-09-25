@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .config import load_settings
 from .errors import ASGError
+from .formats import ScriptMethod, StoryFormat
 from .generator import StoryGenerator
 from .profiles import NarrativeProfile
 from .progress import format_progress
@@ -50,6 +51,19 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Omite la narración en audio, que domina el tiempo de una tanda de experimentos",
     )
+    result.add_argument(
+        "--format",
+        dest="story_format",
+        type=StoryFormat,
+        choices=list(StoryFormat),
+        help="Formato de salida: historia narrativa o guion teatral",
+    )
+    result.add_argument(
+        "--script-method",
+        type=ScriptMethod,
+        choices=list(ScriptMethod),
+        help="Con --format script: escrito por escenas o adaptado de la prosa final",
+    )
     return result
 
 
@@ -81,6 +95,8 @@ def main(argv: list[str] | None = None) -> int:
             promise_ledger=settings.promise_ledger,
             narrative_profile=args.profile,
             audio=not args.no_audio,
+            story_format=args.story_format or settings.story_format,
+            script_method=args.script_method or settings.script_method,
         )
 
         def report_progress(update) -> None:
@@ -97,7 +113,11 @@ def main(argv: list[str] | None = None) -> int:
             on_progress=report_progress,
             on_event=report_event,
         )
-        print(f"\nHistoria terminada: {output.story_path}")
+        if output.story_format is StoryFormat.SCRIPT:
+            print(f"\nGuion terminado: {output.story_path}")
+            print(f"Guion estructurado: {output.script_path}")
+        else:
+            print(f"\nHistoria terminada: {output.story_path}")
         if output.audio_path.is_file():
             print(f"Audio disponible en: {output.audio_path}")
         elif not args.no_audio:

@@ -40,6 +40,7 @@ class FakeGenerator:
         prompt: str,
         *,
         narrative_profile=None,
+        story_format=None,
         on_progress=None,
         on_run_created=None,
         on_event=None,

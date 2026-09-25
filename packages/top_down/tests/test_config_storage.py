@@ -5,6 +5,7 @@ import pytest
 from asg_top_down import __version__
 from asg_top_down.config import load_settings
 from asg_top_down.errors import ConfigurationError, RunArtifactError
+from asg_top_down.formats import ScriptMethod, StoryFormat
 from asg_top_down.generator import StoryRun
 from asg_top_down.storage import ArtifactRepository
 from asg_top_down.version import GENERATOR_NAME, GENERATOR_VERSION, PIPELINE_VERSION
@@ -27,6 +28,42 @@ def test_missing_api_key_is_actionable(tmp_path, monkeypatch) -> None:
     root = project(tmp_path)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     with pytest.raises(ConfigurationError, match="GEMINI_API_KEY"):
+        load_settings(root)
+
+
+def test_output_format_defaults_to_narrative_and_native(tmp_path, monkeypatch) -> None:
+    root = project(tmp_path)
+    monkeypatch.setenv("GEMINI_API_KEY", "secret")
+    monkeypatch.delenv("ASG_STORY_FORMAT", raising=False)
+    monkeypatch.delenv("ASG_SCRIPT_METHOD", raising=False)
+    settings = load_settings(root)
+    assert settings.story_format is StoryFormat.NARRATIVE
+    assert settings.script_method is ScriptMethod.NATIVE
+
+
+def test_output_format_reads_environment_case_insensitively(tmp_path, monkeypatch) -> None:
+    root = project(tmp_path)
+    monkeypatch.setenv("GEMINI_API_KEY", "secret")
+    monkeypatch.setenv("ASG_STORY_FORMAT", "Script")
+    monkeypatch.setenv("ASG_SCRIPT_METHOD", "ADAPTED")
+    settings = load_settings(root)
+    assert settings.story_format is StoryFormat.SCRIPT
+    assert settings.script_method is ScriptMethod.ADAPTED
+
+
+def test_invalid_story_format_names_the_variable(tmp_path, monkeypatch) -> None:
+    root = project(tmp_path)
+    monkeypatch.setenv("GEMINI_API_KEY", "secret")
+    monkeypatch.setenv("ASG_STORY_FORMAT", "screenplay")
+    with pytest.raises(ConfigurationError, match="ASG_STORY_FORMAT"):
+        load_settings(root)
+
+
+def test_invalid_script_method_names_the_variable(tmp_path, monkeypatch) -> None:
+    root = project(tmp_path)
+    monkeypatch.setenv("GEMINI_API_KEY", "secret")
+    monkeypatch.setenv("ASG_SCRIPT_METHOD", "improvised")
+    with pytest.raises(ConfigurationError, match="ASG_SCRIPT_METHOD"):
         load_settings(root)
 
 

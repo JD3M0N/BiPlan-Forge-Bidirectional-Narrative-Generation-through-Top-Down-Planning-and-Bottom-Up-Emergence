@@ -87,7 +87,8 @@ es lo que permite comparar los dos enfoques sin contaminarlos.
 
 El flujo real es `StoryGenerator` (fachada pública en `generator.py`) → `StoryPipeline.execute`
 (`pipeline.py`), que recorre las etapas de `CHECKPOINT_STAGES`: analysis, architecture, world,
-characters, planning, plan_review, promises, drafting, critique, revision, story, audio. Cada etapa
+characters, planning, plan_review, promises, drafting, critique, revision, adaptation, story,
+audio. `adaptation` solo corre en el método adaptado del formato guion (ver abajo). Cada etapa
 llama a un agente de `agents/` y persiste su artefacto antes de seguir.
 
 Lo que hace este pipeline distinto de "pedirle una historia al modelo":
@@ -133,6 +134,32 @@ Lo que hace este pipeline distinto de "pedirle una historia al modelo":
 - **El ledger se puede apagar, y esa es la medición.** `ASG_PROMISE_LEDGER=false` (o
   `promise_ledger=False` en la fachada) salta la etapa entera. Es el brazo de control para
   comparar corpus con y sin contrato de promesas; `promise_audit.json` da la cifra.
+
+### Top-Down: salida en guion teatral, dos métodos, un solo contrato
+
+`ASG_STORY_FORMAT=script` (o `story_format=StoryFormat.SCRIPT` en la fachada) pide un guion
+teatral por escenas en vez de la prosa narrativa de siempre; `narrative` sigue siendo el defecto,
+así que no elegir nada no cambia nada. Hay dos métodos, seleccionables con `ASG_SCRIPT_METHOD`
+(`native` por defecto, o `adapted`), porque no se sabe cuál da mejor guion: se implementaron los
+dos para compararlos a ciegas y quedarse con uno (ítem abierto en `TODO.md`).
+
+- **Nativo**: tras `promises`, `PlaywrightAgent` escribe cada capítulo del plan directamente como
+  un acto de escenas estructurado, con el mismo bucle de reparación que `graph.py` y
+  `promises.py`; lo revisa `ScriptCriticAgent` y lo corrige `ScriptWriterAgent`.
+- **Adaptado**: el pipeline narrativo corre entero sin tocar sus prompts, guarda su prosa como
+  `prose.md`, y `ScriptAdapterAgent` convierte cada capítulo final en un acto a través del
+  **mismo** validador.
+
+Los dos terminan en el mismo contrato: `script.json` (`PlayScript`) más un `story.md` renderizado
+por `script_render.py`. `script.py`, hermano de `graph.py` y `promises.py`, valida cada acto
+contra el plan congelado con la misma regla de idioma: sus `ValueError` van en inglés ASCII
+porque se reinyectan literales en el prompt de reparación. Normaliza más de lo que rechaza —una
+forma con una sola corrección posible se corrige, no se rechaza—; lo que sí rechaza son los
+anclajes a eventos, el orden de las escenas, la ubicación y el reparto. La orquestación de las
+dos etapas de guion vive aparte, en `script_stages.py`, precisamente porque el experimento es
+temporal: borrar el método perdedor toca un solo archivo. Detalles, contrato de `script.json` y
+cómo comparar los dos métodos en
+[docs/guion_teatral.md](docs/guion_teatral.md).
 
 ### Top-Down: artefactos de un run
 
@@ -226,8 +253,8 @@ deterministas, que consumen el `audit.py` del Top-Down y el recolector de `asg_e
   no tautológicas. Lo exige `tests/test_source_documentation.py`, que falla si falta el docstring o
   si no es ASCII. Exige docstring incluso en closures.
 - **Texto visible para el usuario, artefactos e historias**: en **español**.
-- Excepción deliberada: los mensajes de `ValueError` de `graph.py` van en inglés porque se envían
-  al modelo (ver arriba).
+- Excepción deliberada: los mensajes de `ValueError` de `graph.py`, `promises.py` y `script.py`
+  van en inglés porque se envían al modelo (ver arriba).
 - `Stories/`, PDFs y experimentos son datos de investigación: **nunca** se eliminan en tareas de
   limpieza aunque estén gitignored.
 
@@ -250,7 +277,7 @@ el estado medido cambia sustancialmente.
 - `README.md` está **vacío** (0 bytes) **a propósito**: se redacta al cerrar el proyecto,
   cuando los contratos públicos ya no se muevan. No lo rellenes antes aunque parezca una
   mejora barata; cuando llegue el momento, guárdalo en UTF-8.
-- `.gitignore` ignora `docs/*` salvo cinco archivos en lista blanca. Si creas un doc nuevo en
+- `.gitignore` ignora `docs/*` salvo siete archivos en lista blanca. Si creas un doc nuevo en
   `docs/` y quieres que se versione, añádelo también a esa lista.
 - `.cache/` contiene sqlite y cachés de pytest de experimentos previos (`pytest-top-down-*`,
   `pytest-profile-*`...). Son artefactos de ejecución: no razonar sobre el estado del proyecto a
@@ -260,6 +287,9 @@ el estado medido cambia sustancialmente.
 
 ## Documentos de referencia
 
+- [docs/guion_teatral.md](docs/guion_teatral.md) — el formato de salida en guion teatral: los dos
+  métodos (nativo y adaptado), el contrato de `script.json`, qué valida `script.py` y qué solo
+  corrige, y cómo comparar los dos métodos.
 - [docs/promesas_ppp.md](docs/promesas_ppp.md) — el contrato Promise-Progress-Payoff: qué dice la
   fuente, qué invariantes se formalizaron, cuáles se dejaron fuera y cómo se mide el efecto.
 - [docs/pipeline_top_down.md](docs/pipeline_top_down.md) — recorrido de las doce etapas del

@@ -45,11 +45,20 @@ class ProfileOption:
 
 
 @dataclass(frozen=True, slots=True)
+class FormatOption:
+    """One selectable output choice, such as narrative prose or a theater script."""
+
+    value: str
+    label: str
+
+
+@dataclass(frozen=True, slots=True)
 class RunSummary:
     """What a finished run reports back to the chat once artifacts are read."""
 
     usage: str | None = None
     warnings: tuple[str, ...] = field(default_factory=tuple)
+    document_caption: str | None = None
 
 
 class GenerationFailure(Exception):
@@ -118,11 +127,17 @@ class StoryGeneratorAdapter(Protocol):
         """Return the narrative profiles a user may choose between."""
         ...
 
+    @property
+    def formats(self) -> tuple[FormatOption, ...]:
+        """Return the output choices a user may choose between."""
+        ...
+
     def generate(
         self,
         prompt: str,
         *,
         narrative_profile: str | None = None,
+        story_format: str | None = None,
         on_progress: ProgressCallback | None = None,
         on_run_created: RunCreatedCallback | None = None,
         on_event: EventCallback | None = None,

@@ -66,6 +66,13 @@ class PlotValidationError(ASGError):
     stage = "planning"
 
 
+class ScriptValidationError(ASGError):
+    """Raised when no proposed act satisfies script.py's staging rules within its attempts."""
+
+    code = "SCRIPT_VALIDATION_FAILED"
+    stage = "drafting"
+
+
 class RunArtifactError(ASGError):
     """Represent RunArtifactError data and behavior."""
 

@@ -12,6 +12,7 @@ from asg_core import atomic_write_text, create_unique_directory, slugify
 from pydantic import BaseModel
 
 from .errors import ASGError
+from .formats import ScriptMethod, StoryFormat
 from .schemas import ErrorReport, GeneratorVersionArtifact, LLMUsageRecord, RunMetadata
 from .version import PIPELINE_VERSION
 
@@ -26,6 +27,8 @@ class ArtifactRepository:
         title: str,
         *,
         on_artifact: Callable[[str, bool], None] | None = None,
+        story_format: StoryFormat = StoryFormat.NARRATIVE,
+        script_method: ScriptMethod | None = None,
     ) -> None:
         """Initialize the ArtifactRepository instance."""
         now = datetime.now(UTC)
@@ -40,6 +43,8 @@ class ArtifactRepository:
             updated_at=now,
             status="running",
             pipeline_version=PIPELINE_VERSION,
+            story_format=story_format,
+            script_method=script_method,
         )
         self.manifest: dict = {
             "pipeline_version": PIPELINE_VERSION,

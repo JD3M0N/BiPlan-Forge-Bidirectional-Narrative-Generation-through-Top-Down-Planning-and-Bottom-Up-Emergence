@@ -26,6 +26,7 @@ from .agents import (
 from .audit import canonical_chapter, story_metrics, word_count
 from .craft_evidence import craft_evidence
 from .errors import NON_DEGRADABLE_ERRORS, PlotValidationError, RunInterruptedError
+from .formats import ScriptMethod, StoryFormat
 from .graph import (
     materialize_plan,
     relevant_prior_events,
@@ -60,6 +61,7 @@ from .schemas import (
     WorldArtifact,
     WriterCandidateDiagnostic,
 )
+from .script_stages import ScriptStagesMixin
 from .storage import ArtifactRepository
 
 T = TypeVar("T")
@@ -77,6 +79,7 @@ CHECKPOINT_STAGES = (
     "drafting",
     "critique",
     "revision",
+    "adaptation",
     "story",
     "audio",
 )
@@ -94,7 +97,7 @@ PLAN_ATTEMPTS_BY_PROFILE: dict[NarrativeProfile, int] = {
 PROMISE_ATTEMPTS = 2
 
 
-class StoryPipeline:
+class StoryPipeline(ScriptStagesMixin):
     """Execute one Top-Down request through explicit, testable stages."""
 
     def __init__(
@@ -109,6 +112,8 @@ class StoryPipeline:
         narrative_profile: NarrativeProfile | None = None,
         audio: bool = True,
         promise_ledger: bool = True,
+        story_format: StoryFormat = StoryFormat.NARRATIVE,
+        script_method: ScriptMethod = ScriptMethod.NATIVE,
     ) -> None:
         """Store pipeline dependencies and optional lifecycle callbacks."""
         self.provider = provider
@@ -117,6 +122,8 @@ class StoryPipeline:
         self.promise_ledger = promise_ledger
         self.narrative_profile = narrative_profile
         self.audio = audio
+        self.story_format = story_format
+        self.script_method = script_method
         self.on_progress = on_progress
         self.on_run_created = on_run_created
         self.on_event = on_event
@@ -145,6 +152,13 @@ class StoryPipeline:
             characters = self._build_characters(request, world, blueprint)
             plan = self._build_plan(request, world, characters, blueprint)
             ledger = self._build_promise_ledger(request, plan)
+            if (
+                self.story_format is StoryFormat.SCRIPT
+                and self.script_method is ScriptMethod.NATIVE
+            ):
+                play = self._write_script(request, world, characters, plan, ledger)
+                self._finalize_script(request, plan, play)
+                return self.repository.run_dir
             presentation, draft_bodies, draft = self._draft_chapters(
                 request,
                 world,
@@ -152,7 +166,7 @@ class StoryPipeline:
                 plan,
                 ledger,
             )
-            story = self._critique_and_revise(
+            bodies = self._critique_and_revise(
                 request,
                 world,
                 characters,
@@ -162,7 +176,14 @@ class StoryPipeline:
                 draft,
                 ledger,
             )
-            self._finalize(request, plan, story)
+            story = self._assemble_story(plan, presentation, bodies)
+            if self.story_format is StoryFormat.SCRIPT:
+                play = self._adapt_story(
+                    request, world, characters, plan, presentation, bodies, story, ledger
+                )
+                self._finalize_script(request, plan, play)
+            else:
+                self._finalize(request, plan, story)
             return self.repository.run_dir
         except Exception as exc:
             self._record_failure(exc)
@@ -205,6 +226,8 @@ class StoryPipeline:
             self.provider.model_name,
             title,
             on_artifact=self._report_artifact,
+            story_format=self.story_format,
+            script_method=self.script_method if self.story_format is StoryFormat.SCRIPT else None,
         )
         if self.on_run_created:
             self.on_run_created(repository.run_dir)
@@ -873,8 +896,12 @@ class StoryPipeline:
         draft_bodies: list[str],
         draft: str,
         ledger: PromiseLedger | None = None,
-    ) -> str:
-        """Critique the complete draft, then let Writer revise chapter by chapter."""
+    ) -> list[str]:
+        """Critique the complete draft, then let Writer revise chapter by chapter.
+
+        Returns the final per-chapter bodies, not the assembled story: execute() assembles
+        them, so a script run's adapter can reach the same bodies without reparsing Markdown.
+        """
         assert self.repository is not None
         self._notify(78, "critique", "Analizando el drama del borrador completo")
         evidence = craft_evidence(plan.chapters, draft_bodies)
@@ -909,7 +936,7 @@ class StoryPipeline:
             )
             self.repository.add_warning(warning)
             self._emit("quality_fallback", warning, stage=self.progress["stage"])
-            return draft
+            return draft_bodies
         return self._revise_chapters(
             request,
             characters,
@@ -986,7 +1013,7 @@ class StoryPipeline:
         draft_bodies: list[str],
         review: StoryReview,
         ledger: PromiseLedger | None = None,
-    ) -> str:
+    ) -> list[str]:
         """Run Writer for every chapter with one bounded corrective retry."""
         assert self.repository is not None
         writer = WriterAgent(self.provider)
@@ -1045,7 +1072,7 @@ class StoryPipeline:
                 RevisionReport(chapters=revision_results),
             )
         self.repository.complete_stage("revision")
-        return self._assemble_story(plan, presentation, revised_bodies)
+        return revised_bodies
 
     @staticmethod
     def _notes_for_chapter(
@@ -1244,14 +1271,24 @@ class StoryPipeline:
             "story_metrics.json",
             story_metrics(request, plan, story),
         )
-        self._notify(98, "story", "Guardando la historia")
-        self.repository.save_text("story.md", story)
+        self._publish(story, "Guardando la historia", "Historia terminada")
+
+    def _publish(self, rendered: str, saving_message: str, done_message: str) -> None:
+        """Write the final artifact, close the run, and report completion.
+
+        Shared by the narrative story and the theater-script tails, so both formats leave the
+        run in the same completed shape: story.md, the evaluation template, optional audio,
+        usage, and a completed status.
+        """
+        assert self.repository is not None
+        self._notify(98, "story", saving_message)
+        self.repository.save_text("story.md", rendered)
         create_evaluation_template(self.repository.run_dir)
         self.repository.complete_stage("story")
         self._create_audio()
         self._save_usage()
         self.repository.complete()
-        self._notify(100, "completed", "Historia terminada")
+        self._notify(100, "completed", done_message)
 
     def _create_audio(self) -> None:
         """Create optional narration without invalidating a completed story."""

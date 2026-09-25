@@ -1,5 +1,32 @@
 # Historial de cambios
 
+## 6.9.0
+
+- Nuevo formato de salida `script`, con dos métodos para llegar a él: `native` (un Dramaturgo
+  escribe cada capítulo directamente como un acto de escenas estructurado) y `adapted` (el
+  pipeline narrativo corre entero y un Adaptador convierte cada capítulo final de prosa al mismo
+  contrato). Ambos métodos producen exactamente el mismo contrato — `script.json` más un
+  `story.md` renderizado — para poder compararlos a ciegas y quedarse con uno; ver
+  [docs/guion_teatral.md](../../docs/guion_teatral.md).
+- Nuevo `script.py`, hermano de `graph.py` y `promises.py` y con su misma regla de idioma: los
+  `ValueError` van en inglés ASCII porque se reinyectan literalmente, junto al índice de anclas
+  legales, en el prompt de reparación del acto. Normaliza más de lo que rechaza: solo hay una
+  corrección posible para los espacios, los paréntesis, el `speaker_id` sobrante de una acotación
+  o una ubicación deducible, así que esos casos se corrigen en vez de gastar un intento.
+- Nueva etapa `adaptation`, entre `revision` y `story`, exclusiva del método adaptado.
+- Cuatro agentes nuevos: `PlaywrightAgent`, `ScriptWriterAgent`, `ScriptAdapterAgent` y
+  `ScriptCriticAgent`. Los prompts narrativos (`DrafterAgent`, `WriterAgent`,
+  `DramaCriticAgent`) no se tocaron: la suite narrativa pasa sin cambiar ni un byte de sus
+  artefactos.
+- La orquestación de las dos etapas de guion vive en `script_stages.py`, un mixin aparte de
+  `pipeline.py` a propósito: los dos métodos son un experimento abierto (ver `TODO.md`), y el
+  método que pierda se borra tocando un solo archivo.
+- Nuevo interruptor `ASG_STORY_FORMAT` (`narrative` por defecto) y `ASG_SCRIPT_METHOD` (`native`
+  por defecto), expuestos también como `--format`/`--script-method` en `generate-story`, en el
+  menú de la consola y como paso de conversación en el bot de Telegram.
+- Mantenido el contrato de artefactos 6.2: el formato de salida es aditivo y conmutable, así que
+  el predicado de qué trae un run es `metadata.story_format`, no la versión del pipeline.
+
 ## 6.8.0
 
 - Nueva etapa `promises`, entre `plan_review` y `drafting`. `PromiseLedgerAgent` traza un contrato

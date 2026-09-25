@@ -255,3 +255,100 @@ def test_a_story_that_cannot_be_read_is_reported_as_empty_prose(corpus):
     assert record.craft.paragraphs == 0
     assert record.craft.dialogue_ratio == 0.0
     assert reported == [directory / "story.md"]
+
+
+def test_script_runs_declare_their_format_and_method(tmp_path):
+    """A theater-script run's format and method come from its own metadata.json."""
+    stories = tmp_path / "Stories"
+    make_run(
+        stories,
+        "Top-Down/run-narrative",
+        metadata={"status": "completed", "pipeline_version": "6.2"},
+    )
+    make_run(
+        stories,
+        "Top-Down/run-script",
+        metadata={
+            "status": "completed",
+            "pipeline_version": "6.2",
+            "story_format": "script",
+            "script_method": "adapted",
+        },
+    )
+    records = {record.story: record for record in collect_story_craft(stories)}
+    assert records["Top-Down/run-narrative"].story_format == "narrative"
+    assert records["Top-Down/run-narrative"].script_method is None
+    assert records["Top-Down/run-script"].story_format == "script"
+    assert records["Top-Down/run-script"].script_method == "adapted"
+    assert CRAFT_GROUPINGS["format"](records["Top-Down/run-script"]) == "script/adapted"
+    assert CRAFT_GROUPINGS["format"](records["Top-Down/run-narrative"]) == "narrative"
+
+
+def test_filter_records_excludes_scripts_by_default(tmp_path):
+    """A prose-metric report keeps narrative runs and drops scripts unless asked otherwise."""
+    stories = tmp_path / "Stories"
+    make_run(
+        stories,
+        "Top-Down/run-narrative",
+        version="6.9.0",
+        metadata={"status": "completed", "pipeline_version": "6.2"},
+    )
+    make_run(
+        stories,
+        "Top-Down/run-script",
+        version="6.9.0",
+        metadata={
+            "status": "completed",
+            "pipeline_version": "6.2",
+            "story_format": "script",
+            "script_method": "native",
+        },
+    )
+    records = collect_story_craft(stories)
+    default = filter_records(records, minimum_version="0")
+    assert {record.story for record in default} == {"Top-Down/run-narrative"}
+    everything = filter_records(records, minimum_version="0", story_format=None)
+    assert {record.story for record in everything} == {
+        "Top-Down/run-narrative",
+        "Top-Down/run-script",
+    }
+
+
+def test_craft_cli_format_flag_selects_the_output_axis(tmp_path, capsys):
+    """--format all recovers the script run the default narrative filter drops."""
+    stories = tmp_path / "Stories"
+    make_run(
+        stories,
+        "Top-Down/run-script",
+        version="6.9.0",
+        metadata={
+            "status": "completed",
+            "pipeline_version": "6.2",
+            "story_format": "script",
+            "script_method": "native",
+        },
+    )
+    csv_path = tmp_path / "craft.csv"
+    assert main(["--stories", str(stories), "--min-version", "0", "--csv", str(csv_path)]) == 0
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        assert list(csv.reader(handle))[1:] == []
+    assert (
+        main(
+            [
+                "--stories",
+                str(stories),
+                "--min-version",
+                "0",
+                "--format",
+                "all",
+                "--csv",
+                str(csv_path),
+            ]
+        )
+        == 0
+    )
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.reader(handle))
+    assert rows[0] == list(CRAFT_COLUMNS)
+    story_format_index = CRAFT_COLUMNS.index("story_format")
+    assert rows[1][story_format_index] == "script"

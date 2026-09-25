@@ -8,6 +8,7 @@ from enum import StrEnum
 class ConversationState(StrEnum):
     """Name every state a user's conversation can be parked in."""
 
+    CHOOSE_FORMAT = "choose_format"
     CHOOSE_MODE = "choose_mode"
     FREE_PROMPT = "free_prompt"
     GUIDED = "guided"

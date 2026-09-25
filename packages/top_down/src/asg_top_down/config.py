@@ -8,6 +8,7 @@ from asg_core import find_project_root
 from dotenv import load_dotenv
 
 from .errors import ConfigurationError
+from .formats import ScriptMethod, StoryFormat
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,8 @@ class Settings:
     request_timeout_ms: int = 120_000
     narrative_guidance: bool = True
     promise_ledger: bool = True
+    story_format: StoryFormat = StoryFormat.NARRATIVE
+    script_method: ScriptMethod = ScriptMethod.NATIVE
 
 
 def _integer(name: str, default: int, *, minimum: int = 0) -> int:
@@ -46,6 +49,18 @@ def _flag(name: str, *, default: bool) -> bool:
     return raw.strip().casefold() in {"1", "true", "yes", "on"}
 
 
+def _choice(name: str, enum_cls, default):
+    """Read a named enum switch, treating an unset or invalid value as an error to name."""
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return enum_cls(raw.strip().casefold())
+    except ValueError as exc:
+        allowed = ", ".join(item.value for item in enum_cls)
+        raise ConfigurationError(f"{name} debe ser uno de: {allowed}.") from exc
+
+
 def load_settings(start: Path | None = None) -> Settings:
     """Load settings."""
     root = find_project_root(start)
@@ -65,4 +80,6 @@ def load_settings(start: Path | None = None) -> Settings:
         request_timeout_ms=_integer("GEMINI_REQUEST_TIMEOUT_MS", 120_000, minimum=5_000),
         narrative_guidance=_flag("ASG_NARRATIVE_GUIDANCE", default=True),
         promise_ledger=_flag("ASG_PROMISE_LEDGER", default=True),
+        story_format=_choice("ASG_STORY_FORMAT", StoryFormat, StoryFormat.NARRATIVE),
+        script_method=_choice("ASG_SCRIPT_METHOD", ScriptMethod, ScriptMethod.NATIVE),
     )

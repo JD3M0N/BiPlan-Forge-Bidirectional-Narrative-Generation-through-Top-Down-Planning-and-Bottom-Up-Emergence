@@ -1,7 +1,7 @@
 """Version identifiers persisted with every generated story."""
 
 GENERATOR_NAME = "asg-top-down"
-__version__ = "6.8.0"
+__version__ = "6.9.0"
 GENERATOR_VERSION = __version__
 PIPELINE_VERSION = "6.2"
 SUPPORTED_PIPELINE_VERSIONS = frozenset(

@@ -8,7 +8,7 @@ import pytest
 from asg_telegram import app as app_module
 from asg_telegram.app import TelegramStoryBot
 from asg_telegram.config import TelegramConfigurationError
-from asg_telegram.contract import GenerationProgress, ProfileOption, RunSummary
+from asg_telegram.contract import FormatOption, GenerationProgress, ProfileOption, RunSummary
 from asg_telegram.generators import summarize_run
 from asg_telegram.queue import SCHEMA_VERSION, QueueRepository
 from asg_telegram.states import ConversationState
@@ -18,6 +18,12 @@ PROFILES = (
     ProfileOption("essential", "Esencial", ("essential", "esencial")),
     ProfileOption("developed", "Desarrollada", ("developed", "desarrollada")),
     ProfileOption("expansive", "Expansiva", ("expansive", "expansiva")),
+)
+
+FORMATS = (
+    FormatOption("narrative", "Historia narrativa"),
+    FormatOption("script-native", "Guion teatral · escrito por escenas"),
+    FormatOption("script-adapted", "Guion teatral · adaptado de la prosa"),
 )
 
 
@@ -40,6 +46,7 @@ class FakeBot:
 class RecordingGenerator:
     display_name = "Fake"
     profiles = PROFILES
+    formats = FORMATS
 
     def __init__(self, story_directory: Path):
         self.story_directory = story_directory
@@ -50,11 +57,18 @@ class RecordingGenerator:
         prompt,
         *,
         narrative_profile=None,
+        story_format=None,
         on_progress=None,
         on_run_created=None,
         on_event=None,
     ):
-        self.calls.append({"prompt": prompt, "narrative_profile": narrative_profile})
+        self.calls.append(
+            {
+                "prompt": prompt,
+                "narrative_profile": narrative_profile,
+                "story_format": story_format,
+            }
+        )
         return self.story_directory
 
     def summarize(self, run_dir):
@@ -249,23 +263,114 @@ def test_a_legacy_database_migrates_once_and_keeps_its_jobs(tmp_path):
     assert reopened.get(job.id).narrative_profile == "expansive"
 
 
+def test_a_v2_database_migrates_to_v3_and_keeps_story_format(tmp_path):
+    """A schema-2 database gains story_format and round-trips it once migrated."""
+    path = tmp_path / "v2.sqlite3"
+    legacy = sqlite3.connect(path)
+    legacy.execute(
+        """CREATE TABLE jobs (
+            id TEXT PRIMARY KEY, user_id INTEGER NOT NULL,
+            username TEXT NOT NULL, chat_id INTEGER NOT NULL,
+            prompt TEXT NOT NULL, status TEXT NOT NULL,
+            enqueued_at TEXT NOT NULL, started_at TEXT, finished_at TEXT,
+            progress_message_id INTEGER, run_dir TEXT,
+            recovery_count INTEGER NOT NULL DEFAULT 0,
+            duration_seconds REAL, error_code TEXT,
+            narrative_profile TEXT,
+            cancel_requested INTEGER NOT NULL DEFAULT 0
+        )"""
+    )
+    legacy.execute(
+        "INSERT INTO jobs(id,user_id,username,chat_id,prompt,status,enqueued_at,"
+        "narrative_profile) VALUES('v2-job',11,'ana',20,'Un cuento','queued','2026-01-01',"
+        "'developed')"
+    )
+    legacy.execute("PRAGMA user_version = 2")
+    legacy.commit()
+    legacy.close()
+
+    queue = QueueRepository(path)
+    restored = queue.get("v2-job")
+    assert restored is not None
+    assert restored.narrative_profile == "developed"
+    assert restored.story_format is None
+    with queue._connect() as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+
+    job = queue.enqueue(
+        user_id=12,
+        username="luis",
+        chat_id=21,
+        prompt="Un guion",
+        story_format="script-native",
+    ).job
+    assert queue.get(job.id).story_format == "script-native"
+
+
 # --- conversation handlers ---------------------------------------------------
 
 
 def test_conversation_routes_text_by_state(tmp_path):
-    """`/newstory` opens the mode choice; text with no state is pointed back at the command."""
+    """`/newstory` opens the format choice; text with no state is pointed back at the command."""
     handler = TelegramStoryBot(RecordingGenerator(make_story(tmp_path)))
 
     replies: list = []
     context, _ = make_context(FakeBot())
     asyncio.run(handler.new_story(make_update(replies=replies), context))
-    assert context.user_data["state"] == ConversationState.CHOOSE_MODE
-    assert "¿Cómo quieres describir la historia?" in replies
+    assert context.user_data["state"] == ConversationState.CHOOSE_FORMAT
+    assert "¿Qué quieres generar?" in replies
 
     stray: list = []
     stateless, _ = make_context(FakeBot())
     asyncio.run(handler.text_input(make_update(replies=stray), stateless))
     assert stray == ["Usa /newstory para crear una historia."]
+
+
+def test_choose_format_then_mode_reaches_the_generator(tmp_path):
+    """Picking an output format advances to the mode choice, then reaches the generator."""
+    generator = RecordingGenerator(make_story(tmp_path))
+    handler = TelegramStoryBot(generator)
+    replies: list = []
+    context, tasks = make_context(FakeBot())
+    asyncio.run(handler.new_story(make_update(replies=replies), context))
+    assert context.user_data["state"] == ConversationState.CHOOSE_FORMAT
+
+    callback_update = make_update(replies=replies)
+    callback_update.callback_query = SimpleNamespace(
+        data="format:script-adapted",
+        answer=_async_noop,
+        edit_message_text=_record_edit(replies),
+    )
+    asyncio.run(handler.choose_format(callback_update, context))
+    assert context.user_data["state"] == ConversationState.CHOOSE_MODE
+    assert context.user_data["story_format"] == "script-adapted"
+
+    mode_update = make_update(replies=replies)
+    mode_update.callback_query = SimpleNamespace(
+        data="mode:free",
+        answer=_async_noop,
+        edit_message_text=_record_edit(replies),
+    )
+    asyncio.run(handler.choose_mode(mode_update, context))
+    asyncio.run(handler.text_input(make_update(text="Un relato", replies=replies), context))
+    assert len(tasks) == 1
+    asyncio.run(tasks[0])
+    assert generator.calls[0]["story_format"] == "script-adapted"
+
+
+async def _async_noop(*args, **kwargs) -> None:
+    """Stand in for a Telegram callback query's answer coroutine."""
+
+
+def _record_edit(replies: list):
+    """Build an edit_message_text stub that appends its text to the given list."""
+
+    async def edit(text=None, **kwargs) -> None:
+        """Append one edited message's text to the bound replies list."""
+        if text is not None:
+            replies.append(text)
+
+    return edit
 
 
 def test_guided_flow_validates_and_sends_the_chosen_profile(tmp_path):

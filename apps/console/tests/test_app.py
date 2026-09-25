@@ -7,6 +7,7 @@ from asg_console import top_down as top_down_module
 from asg_console.app import ConsoleApp, TopDownMenu
 from asg_top_down import StoryGenerator
 from asg_top_down import provider as top_down_provider_module
+from asg_top_down.formats import ScriptMethod, StoryFormat
 
 
 class MenuSpy:
@@ -75,13 +76,15 @@ def test_top_down_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
             "request_timeout_ms": 45000,
             "narrative_guidance": True,
             "promise_ledger": True,
+            "story_format": StoryFormat.NARRATIVE,
+            "script_method": ScriptMethod.NATIVE,
         },
     )()
     monkeypatch.setattr(top_down_module, "load_top_down_settings", lambda: settings)
     monkeypatch.setattr(top_down_provider_module, "GeminiProvider", Provider)
     monkeypatch.setattr(top_down_module, "StoryGenerator", Orchestrator)
     menu = TopDownMenu(
-        input_fn=input_sequence(["1", "Una historia", "0"]),
+        input_fn=input_sequence(["1", "Una historia", "", "0"]),
         output=lambda message: None,
     )
     menu.run()
@@ -90,7 +93,60 @@ def test_top_down_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
     assert captured["generator_options"] == {
         "narrative_guidance": True,
         "promise_ledger": True,
+        "story_format": StoryFormat.NARRATIVE,
+        "script_method": ScriptMethod.NATIVE,
     }
+
+
+def test_top_down_accepts_a_script_output_choice(tmp_path, monkeypatch) -> None:
+    captured = {}
+
+    class Provider:
+        def __init__(self, api_key, model, **kwargs):
+            self.model_name = model
+
+    def build_generator(provider, output_root, **kwargs):
+        captured["generator_options"] = kwargs
+        instance = create_autospec(StoryGenerator, spec_set=True, instance=True)
+
+        def generate(request, on_progress=None, on_run_created=None, on_event=None):
+            return SimpleNamespace(run_dir=tmp_path)
+
+        instance.generate.side_effect = generate
+        return instance
+
+    Orchestrator = create_autospec(StoryGenerator, spec_set=True)
+    Orchestrator.side_effect = build_generator
+
+    settings = type(
+        "Settings",
+        (),
+        {
+            "api_key": "test",
+            "model": "fake",
+            "output_root": tmp_path,
+            "rpm_limit": 10,
+            "rpm_reserve": 2,
+            "tpm_limit": 3000,
+            "max_retries": 4,
+            "max_retry_delay": 30,
+            "request_timeout_ms": 45000,
+            "narrative_guidance": True,
+            "promise_ledger": True,
+            "story_format": StoryFormat.NARRATIVE,
+            "script_method": ScriptMethod.NATIVE,
+        },
+    )()
+    monkeypatch.setattr(top_down_module, "load_top_down_settings", lambda: settings)
+    monkeypatch.setattr(top_down_provider_module, "GeminiProvider", Provider)
+    monkeypatch.setattr(top_down_module, "StoryGenerator", Orchestrator)
+    menu = TopDownMenu(
+        input_fn=input_sequence(["1", "Una historia", "3", "0"]),
+        output=lambda message: None,
+    )
+    menu.run()
+    assert captured["generator_options"]["story_format"] is StoryFormat.SCRIPT
+    assert captured["generator_options"]["script_method"] is ScriptMethod.ADAPTED
 
 
 def test_console_evaluates_story_and_retries_invalid_values(tmp_path, monkeypatch) -> None:

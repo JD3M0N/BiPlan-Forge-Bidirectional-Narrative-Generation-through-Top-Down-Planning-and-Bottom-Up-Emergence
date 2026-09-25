@@ -68,6 +68,16 @@ def _mode_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def _format_keyboard(formats) -> InlineKeyboardMarkup:
+    """Build the output-format selection keyboard, one button per choice."""
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton(option.label, callback_data=f"format:{option.value}")]
+            for option in formats
+        ]
+    )
+
+
 def _score_keyboard(metric: str) -> InlineKeyboardMarkup:
     """Build a two-row keyboard containing scores one through ten."""
     rows = [
@@ -129,8 +139,36 @@ class TelegramStoryBot(GenerationCoordinator):
             )
             return
         context.user_data.clear()
+        formats = getattr(self.generator, "formats", ())
+        if len(formats) > 1:
+            context.user_data["state"] = ConversationState.CHOOSE_FORMAT
+            await update.effective_message.reply_text(
+                "¿Qué quieres generar?",
+                reply_markup=_format_keyboard(formats),
+            )
+            return
         context.user_data["state"] = ConversationState.CHOOSE_MODE
         await update.effective_message.reply_text(
+            "¿Cómo quieres describir la historia?",
+            reply_markup=_mode_keyboard(),
+        )
+
+    async def choose_format(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Store the chosen output format and move to the prompt-mode selection."""
+        query = update.callback_query
+        await query.answer()
+        if context.user_data.get("state") != ConversationState.CHOOSE_FORMAT:
+            await query.edit_message_text("Esta selección ya no está activa.")
+            return
+        value = query.data.split(":", 1)[1]
+        formats = getattr(self.generator, "formats", ())
+        if value not in {option.value for option in formats}:
+            await query.edit_message_text("Formato desconocido.")
+            return
+        _user_log(update, f"seleccionó el formato {value}")
+        context.user_data["story_format"] = value
+        context.user_data["state"] = ConversationState.CHOOSE_MODE
+        await query.edit_message_text(
             "¿Cómo quieres describir la historia?",
             reply_markup=_mode_keyboard(),
         )
@@ -194,7 +232,12 @@ class TelegramStoryBot(GenerationCoordinator):
             if not text.strip():
                 await update.effective_message.reply_text("La descripción no puede estar vacía.")
                 return
-            await self._launch_generation(update, context, text.strip())
+            await self._launch_generation(
+                update,
+                context,
+                text.strip(),
+                story_format=context.user_data.get("story_format"),
+            )
         elif state == ConversationState.GUIDED:
             await self._guided_input(update, context, text)
         elif state == ConversationState.EVALUATING:
@@ -231,6 +274,7 @@ class TelegramStoryBot(GenerationCoordinator):
             context,
             build_guided_prompt(values, profiles),
             next((option.value for option in profiles if option.value == chosen), None),
+            story_format=context.user_data.get("story_format"),
         )
 
     async def _begin_evaluation(self, context, chat_id: int, user, story_directory: Path) -> None:

@@ -15,12 +15,14 @@ from typing import Any
 from asg_top_down import StoryGenerator
 from asg_top_down.config import load_settings as load_top_down_settings
 from asg_top_down.errors import ASGError
+from asg_top_down.formats import OUTPUT_CHOICES, output_choice_for
 from asg_top_down.profiles import PROFILE_LABELS, NarrativeProfile
 from asg_top_down.progress import PipelineEvent, ProgressUpdate
 from asg_top_down.provider import provider_from_settings
 
 from .contract import (
     EventCallback,
+    FormatOption,
     GenerationEvent,
     GenerationFailure,
     GenerationProgress,
@@ -58,22 +60,41 @@ class TopDownGenerator:
             for profile, label in PROFILE_LABELS.items()
         )
 
+    @property
+    def formats(self) -> tuple[FormatOption, ...]:
+        """Return the output choices a user may choose between."""
+        return tuple(FormatOption(choice.key, choice.label) for choice in OUTPUT_CHOICES)
+
     def generate(
         self,
         prompt: str,
         *,
         narrative_profile: str | None = None,
+        story_format: str | None = None,
         on_progress: ProgressCallback | None = None,
         on_run_created: RunCreatedCallback | None = None,
         on_event: EventCallback | None = None,
     ) -> Path:
         """Generate one story and return its run directory."""
+        if story_format:
+            try:
+                choice = output_choice_for(story_format)
+            except ValueError as exc:
+                raise GenerationFailure(
+                    "Formato de salida desconocido.",
+                    code="UNKNOWN_STORY_FORMAT",
+                    stage="configuration",
+                ) from exc
+        else:
+            choice = None
         generator = StoryGenerator(
             self._provider,
             self._settings.output_root,
             narrative_guidance=self._settings.narrative_guidance,
             promise_ledger=self._settings.promise_ledger,
             narrative_profile=NarrativeProfile(narrative_profile) if narrative_profile else None,
+            story_format=choice.story_format if choice else self._settings.story_format,
+            script_method=choice.script_method if choice else self._settings.script_method,
         )
         try:
             return generator.generate(
@@ -92,7 +113,18 @@ class TopDownGenerator:
 
 def summarize_run(run_dir: Path) -> RunSummary:
     """Describe one finished Top-Down run from the artifacts it left behind."""
-    return RunSummary(usage=_usage_line(run_dir), warnings=tuple(_run_warnings(run_dir)))
+    metadata = _read_json(run_dir / "metadata.json")
+    is_script = isinstance(metadata, dict) and metadata.get("story_format") == "script"
+    caption = (
+        "Guion teatral completo en formato Markdown."
+        if is_script
+        else "Historia completa en formato Markdown."
+    )
+    return RunSummary(
+        usage=_usage_line(run_dir),
+        warnings=tuple(_run_warnings(run_dir)),
+        document_caption=caption,
+    )
 
 
 def _translate_progress(callback: ProgressCallback | None) -> Callable | None:

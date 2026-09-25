@@ -3,6 +3,7 @@
 from ..schemas import (
     CharactersArtifact,
     PlanReview,
+    ScriptPresentation,
     StoryPlan,
     StoryPresentation,
     StoryRequest,
@@ -115,6 +116,66 @@ class DramaCriticAgent(Agent[StoryReview]):
                 )
                 + f"\n\nDRAFT:\n{draft}"
                 + (f"\n\nCRAFT OBSERVATIONS:\n{craft_evidence}" if craft_evidence else "")
+            ),
+            schema=StoryReview,
+            profile="review",
+        )
+
+
+class ScriptCriticAgent(Agent[StoryReview]):
+    """Read the complete draft script and create coordinated staging revision notes."""
+
+    name = "script_critic"
+
+    def run(
+        self,
+        request: StoryRequest,
+        world: WorldArtifact,
+        characters: CharactersArtifact,
+        plan: StoryPlan,
+        presentation: ScriptPresentation,
+        script: str,
+        staging: str,
+        promise_obligations: str = "",
+    ) -> StoryReview:
+        """Run the global-to-local staging criticism workflow over a rendered script."""
+        return self.provider.generate_structured(
+            system_instruction=(
+                "You are the Script Critic. Read the complete draft theater script and return "
+                "coordinated revision notes in English; never rewrite the script. Check every "
+                "explicit constraint plus causal and world continuity, character motivation and "
+                "agency, dramatic structure, pacing and tension, setup/payoff, qualitative "
+                "narrative-profile compliance, originality, voice, and requested-language "
+                "consistency. Flag any stage direction that reports thoughts, backstory, or "
+                "narration instead of what an audience can see or hear; flag dialogue that "
+                "explains rather than dramatizes a conflict; and flag a cast member the STAGING "
+                "SUMMARY shows on stage but idle against the objective it lists for them there. "
+                "A correct scene or event count does not by itself satisfy the profile. Use "
+                "empty chapter_ids for global notes and exact canonical chapter IDs for local "
+                "notes; a note may cite plan event IDs but never a scene number or scene ID. "
+                "When PROMISE OBLIGATIONS are supplied, return one promise_checks entry for "
+                "every promise listed there, in that order: say whether the script opened it, "
+                "progressed it and paid it, give the verdict, and quote the script itself as "
+                "evidence. Judge what the script stages and says, not whether the plan intended "
+                "it. For every verdict that is not fulfilled, also raise a setup_payoff note of "
+                "major or critical priority, citing the affected plan event IDs. Each note needs "
+                "a unique lowercase ID, priority, category, evidence, and a concrete staging "
+                "instruction the Script Writer can apply. Do not score the script or invent "
+                "user requirements."
+            ),
+            prompt=(
+                f"{story_specification_header(request)}"
+                f"\n\nWORLD:\n{json_text(world)}"
+                f"\n\nCHARACTERS:\n{json_text(characters)}"
+                f"\n\nPLAN:\n{json_text(plan)}"
+                f"\n\nLOCALIZED PRESENTATION:\n{json_text(presentation)}"
+                + (
+                    f"\n\nPROMISE OBLIGATIONS:\n{promise_obligations}"
+                    if promise_obligations
+                    else ""
+                )
+                + f"\n\nDRAFT SCRIPT:\n{script}"
+                f"\n\nSTAGING SUMMARY:\n{staging}"
             ),
             schema=StoryReview,
             profile="review",

@@ -139,3 +139,16 @@ def test_a_broken_file_is_reported_without_hiding_the_rest(corpus, capsys):
 def test_a_missing_stories_root_is_rejected(tmp_path, capsys):
     assert main(["--stories", str(tmp_path / "nope")]) == 2
     assert "no existe el directorio" in capsys.readouterr().err
+
+
+def test_format_grouping_names_the_script_method(tmp_path):
+    """A run without metadata.json is narrative; a script run names its method too."""
+    stories = tmp_path / "Stories"
+    make_story(stories, "Top-Down/run-narrative")
+    script = make_story(stories, "Top-Down/run-script")
+    (script / "metadata.json").write_text(
+        json.dumps({"story_format": "script", "script_method": "native"}), encoding="utf-8"
+    )
+    records = {record.story: record for record in collect_evaluations(stories)}
+    assert GROUPINGS["format"](records["Top-Down/run-narrative"]) == "narrative"
+    assert GROUPINGS["format"](records["Top-Down/run-script"]) == "script/native"

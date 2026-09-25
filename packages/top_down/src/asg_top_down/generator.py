@@ -7,6 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from .errors import RunArtifactError
+from .formats import ScriptMethod, StoryFormat
 from .pipeline import StoryPipeline
 from .profiles import NarrativeProfile
 from .progress import PipelineEventCallback, ProgressCallback
@@ -36,6 +37,9 @@ class StoryRun:
                 f"Only completed Top-Down runs with pipeline versions {supported} "
                 "can be opened as StoryRun"
             )
+        self.story_format = StoryFormat(metadata.get("story_format") or StoryFormat.NARRATIVE)
+        method = metadata.get("script_method")
+        self.script_method = ScriptMethod(method) if method else None
 
     @property
     def story_path(self) -> Path:
@@ -46,6 +50,11 @@ class StoryRun:
     def audio_path(self) -> Path:
         """Return the optional MP3 narration path."""
         return self.run_dir / "story.mp3"
+
+    @property
+    def script_path(self) -> Path:
+        """Return the structured theater-script path, populated only for script runs."""
+        return self.run_dir / "script.json"
 
     def __fspath__(self) -> str:
         """Expose the run directory through the filesystem path protocol."""
@@ -64,6 +73,8 @@ class StoryGenerator:
         narrative_profile: NarrativeProfile | None = None,
         audio: bool = True,
         promise_ledger: bool = True,
+        story_format: StoryFormat = StoryFormat.NARRATIVE,
+        script_method: ScriptMethod = ScriptMethod.NATIVE,
     ) -> None:
         """Configure a generator with its provider and output directory."""
         self.provider = provider
@@ -72,6 +83,8 @@ class StoryGenerator:
         self.promise_ledger = promise_ledger
         self.narrative_profile = narrative_profile
         self.audio = audio
+        self.story_format = story_format
+        self.script_method = script_method
 
     def generate(
         self,
@@ -91,5 +104,7 @@ class StoryGenerator:
             promise_ledger=self.promise_ledger,
             narrative_profile=self.narrative_profile,
             audio=self.audio,
+            story_format=self.story_format,
+            script_method=self.script_method,
         )
         return StoryRun(pipeline.execute(request))

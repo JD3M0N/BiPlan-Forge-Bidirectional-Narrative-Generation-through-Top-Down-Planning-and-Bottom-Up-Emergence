@@ -18,7 +18,7 @@ from .contract import (
     StoryGeneratorAdapter,
     format_progress,
 )
-from .delivery import TelegramDelivery
+from .delivery import DEFAULT_DOCUMENT_CAPTION, TelegramDelivery
 from .queue import QueueRepository
 from .states import ConversationState
 
@@ -70,6 +70,7 @@ class GenerationCoordinator(TelegramDelivery):
                     progress_message_id=job.progress_message_id,
                     job_id=job.id,
                     narrative_profile=job.narrative_profile,
+                    story_format=job.story_format,
                 )
             )
         await self._refresh_queue(application)
@@ -100,7 +101,12 @@ class GenerationCoordinator(TelegramDelivery):
                 LOGGER.warning("No se pudo avisar el trabajo interrumpido %s", job.id)
 
     async def _launch_generation(
-        self, update, context, prompt: str, narrative_profile: str | None = None
+        self,
+        update,
+        context,
+        prompt: str,
+        narrative_profile: str | None = None,
+        story_format: str | None = None,
     ) -> None:
         """Enqueue and schedule one user generation request."""
         user_id = update.effective_user.id
@@ -127,7 +133,7 @@ class GenerationCoordinator(TelegramDelivery):
             )
         )
         job_id = await self._enqueue(
-            update, context, prompt, progress_message.message_id, narrative_profile
+            update, context, prompt, progress_message.message_id, narrative_profile, story_format
         )
         if self.queue and job_id is None:
             return
@@ -140,6 +146,7 @@ class GenerationCoordinator(TelegramDelivery):
                 progress_message_id=progress_message.message_id,
                 job_id=job_id,
                 narrative_profile=narrative_profile,
+                story_format=story_format,
             ),
             update=update,
         )
@@ -151,6 +158,7 @@ class GenerationCoordinator(TelegramDelivery):
         prompt: str,
         progress_message_id: int,
         narrative_profile: str | None,
+        story_format: str | None = None,
     ) -> str | None:
         """Persist a queue job, telling the user when one was already active."""
         if not self.queue:
@@ -162,6 +170,7 @@ class GenerationCoordinator(TelegramDelivery):
             prompt=prompt,
             progress_message_id=progress_message_id,
             narrative_profile=narrative_profile,
+            story_format=story_format,
         )
         if not result.created:
             context.user_data.clear()
@@ -184,6 +193,7 @@ class GenerationCoordinator(TelegramDelivery):
         progress_message_id: int | None = None,
         job_id: str | None = None,
         narrative_profile: str | None = None,
+        story_format: str | None = None,
     ) -> None:
         """Serialize generation while keeping progress reporting thread-safe."""
         loop = asyncio.get_running_loop()
@@ -226,6 +236,7 @@ class GenerationCoordinator(TelegramDelivery):
                     progress_message_id=progress_message_id,
                     job_id=job_id,
                     narrative_profile=narrative_profile,
+                    story_format=story_format,
                     report_progress=report_progress,
                     last_progress=last_progress,
                 )
@@ -255,6 +266,7 @@ class GenerationCoordinator(TelegramDelivery):
         progress_message_id,
         job_id,
         narrative_profile,
+        story_format,
         report_progress,
         last_progress,
     ) -> None:
@@ -265,6 +277,7 @@ class GenerationCoordinator(TelegramDelivery):
                 user,
                 job_id,
                 narrative_profile,
+                story_format,
                 report_progress,
             )
         except Exception as exc:
@@ -281,12 +294,13 @@ class GenerationCoordinator(TelegramDelivery):
         if job_id and self.queue:
             self.queue.set_run_dir(job_id, str(story_directory))
         self._log_generation_complete(user, story_directory)
+        summary = self.generator.summarize(Path(story_directory))
         await self._report_run_metadata(
             context,
             chat_id,
             user,
-            Path(story_directory),
             progress_message_id,
+            summary,
         )
         await self._deliver_completed_run(
             context,
@@ -294,9 +308,12 @@ class GenerationCoordinator(TelegramDelivery):
             user,
             Path(story_directory),
             job_id,
+            summary,
         )
 
-    async def _generate_story(self, prompt, user, job_id, narrative_profile, report_progress):
+    async def _generate_story(
+        self, prompt, user, job_id, narrative_profile, story_format, report_progress
+    ):
         """Invoke the configured generator through the application contract."""
 
         def report_event(event: GenerationEvent) -> None:
@@ -318,6 +335,7 @@ class GenerationCoordinator(TelegramDelivery):
             lambda: self.generator.generate(
                 prompt,
                 narrative_profile=narrative_profile,
+                story_format=story_format,
                 on_progress=report_progress,
                 on_run_created=record_run if job_id and self.queue else None,
                 on_event=report_event,
@@ -401,11 +419,10 @@ class GenerationCoordinator(TelegramDelivery):
         context,
         chat_id: int,
         user,
-        story_directory: Path,
         progress_message_id: int | None,
+        summary,
     ) -> None:
         """Report final usage and quality warnings for a completed run."""
-        summary = self.generator.summarize(story_directory)
         if progress_message_id is not None and summary.usage:
             await self._safe_edit_progress(
                 context,
@@ -444,6 +461,7 @@ class GenerationCoordinator(TelegramDelivery):
         user,
         story_directory: Path,
         job_id: str | None,
+        summary,
     ) -> None:
         """Serialize story delivery and hand a success to evaluation handlers."""
         context.user_data["state"] = ConversationState.DELIVERING
@@ -454,6 +472,7 @@ class GenerationCoordinator(TelegramDelivery):
             action="Esperando turno para entregar la historia",
             category="entrega",
         )
+        caption = summary.document_caption or DEFAULT_DOCUMENT_CAPTION
         try:
             async with self.delivery_semaphore:
                 delivered = await self._deliver_story(
@@ -461,6 +480,7 @@ class GenerationCoordinator(TelegramDelivery):
                     chat_id=chat_id,
                     user=user,
                     story_path=story_directory / "story.md",
+                    caption=caption,
                 )
                 if not delivered:
                     context.user_data.clear()

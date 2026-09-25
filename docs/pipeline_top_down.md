@@ -14,6 +14,10 @@ segundo el conjunto de artefactos que produce un run y su compatibilidad hacia a
 (`version.py:1-9`). El run que respalda el documento está en el
 [anexo](#anexo-el-run-que-respalda-este-documento).
 
+**6.9.0 añade una tercera salida posible**, el guion teatral, con una etapa `adaptation` que solo
+corre en uno de sus dos métodos. No está descrita en este documento, que sigue centrado en la
+salida narrativa; ver [docs/guion_teatral.md](guion_teatral.md) para el pipeline de guion.
+
 ## La idea que separa esto de pedirle una historia al modelo
 
 Un pipeline ingenuo escribe un plan en prosa y confía en que el modelo lo siga. Aquí el plan es

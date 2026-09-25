@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
 CANCELLABLE_STATUSES = ("queued", "recovery_pending")
 MINIMUM_SAMPLES_FOR_ESTIMATE = 3
@@ -27,13 +27,15 @@ _SCHEMA = """CREATE TABLE IF NOT EXISTS jobs (
     recovery_count INTEGER NOT NULL DEFAULT 0,
     duration_seconds REAL, error_code TEXT,
     narrative_profile TEXT,
-    cancel_requested INTEGER NOT NULL DEFAULT 0
+    cancel_requested INTEGER NOT NULL DEFAULT 0,
+    story_format TEXT
 )"""
 
 # Columns introduced after the first unversioned schema, added by migration.
 _ADDED_COLUMNS = (
     ("narrative_profile", "narrative_profile TEXT"),
     ("cancel_requested", "cancel_requested INTEGER NOT NULL DEFAULT 0"),
+    ("story_format", "story_format TEXT"),
 )
 
 
@@ -54,6 +56,7 @@ class QueueJob:
     error_code: str | None = None
     narrative_profile: str | None = None
     cancel_requested: int = 0
+    story_format: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +121,7 @@ class QueueRepository:
         prompt: str,
         progress_message_id: int | None = None,
         narrative_profile: str | None = None,
+        story_format: str | None = None,
     ) -> EnqueueResult:
         """Append a job unless the user already has an active request."""
         with self._lock, self._connect() as db:
@@ -137,10 +141,11 @@ class QueueRepository:
                 datetime.now(UTC).isoformat(),
                 progress_message_id,
                 narrative_profile=narrative_profile,
+                story_format=story_format,
             )
             db.execute(
                 "INSERT INTO jobs(id,user_id,username,chat_id,prompt,status,enqueued_at,"
-                "progress_message_id,narrative_profile) VALUES(?,?,?,?,?,?,?,?,?)",
+                "progress_message_id,narrative_profile,story_format) VALUES(?,?,?,?,?,?,?,?,?,?)",
                 (
                     job.id,
                     job.user_id,
@@ -151,6 +156,7 @@ class QueueRepository:
                     job.enqueued_at,
                     progress_message_id,
                     narrative_profile,
+                    story_format,
                 ),
             )
             return EnqueueResult(job, created=True)

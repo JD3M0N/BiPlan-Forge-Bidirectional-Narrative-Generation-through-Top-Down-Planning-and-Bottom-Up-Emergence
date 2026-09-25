@@ -26,6 +26,8 @@ class StoryEvaluations:
     generator_version: str | None
     pipeline_version: str | None
     evaluations: tuple[dict, ...]
+    story_format: str = "narrative"
+    script_method: str | None = None
 
 
 @dataclass(frozen=True)
@@ -87,6 +89,13 @@ def _describe(
     return relative.as_posix(), approach, profile, generator, pipeline
 
 
+def _output_axes(directory: Path) -> tuple[str, str | None]:
+    """Read one run's output format and script method, defaulting to narrative prose."""
+    story_format = _json_field(directory / "metadata.json", "story_format") or "narrative"
+    script_method = _json_field(directory / "metadata.json", "script_method")
+    return story_format, script_method
+
+
 def collect_evaluations(
     stories_root: str | Path,
     *,
@@ -102,6 +111,7 @@ def collect_evaluations(
     records = []
     for directory in discover_stories(root):
         story, approach, profile, generator, pipeline = _describe(directory, root)
+        story_format, script_method = _output_axes(directory)
         try:
             evaluations = tuple(read_evaluations(directory))
         except ValueError as error:
@@ -119,6 +129,8 @@ def collect_evaluations(
                 generator_version=generator,
                 pipeline_version=pipeline,
                 evaluations=evaluations,
+                story_format=story_format,
+                script_method=script_method,
             )
         )
     return records
@@ -134,12 +146,20 @@ def _profile_of(record: StoryEvaluations) -> str:
     return record.narrative_profile or NO_PROFILE
 
 
+def _format_of(record: StoryEvaluations) -> str:
+    """Name the output format, and its method for a theater script."""
+    if record.story_format == "script" and record.script_method:
+        return f"script/{record.script_method}"
+    return record.story_format
+
+
 GROUPINGS: dict[str, Callable[[StoryEvaluations], str]] = {
     "story": lambda record: record.story,
     "profile": _profile_of,
     "version": _version_of,
     "version-profile": lambda record: f"{_version_of(record)} / {_profile_of(record)}",
     "approach": lambda record: record.approach,
+    "format": _format_of,
 }
 
 

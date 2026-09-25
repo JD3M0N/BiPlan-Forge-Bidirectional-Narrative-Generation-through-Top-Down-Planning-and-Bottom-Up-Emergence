@@ -44,6 +44,7 @@ def build_application(token: str, bot: TelegramStoryBot) -> Application:
     application.add_handler(CommandHandler("help", bot.help))
     application.add_handler(CommandHandler("newstory", bot.new_story))
     application.add_handler(CommandHandler("cancel", bot.cancel))
+    application.add_handler(CallbackQueryHandler(bot.choose_format, pattern=r"^format:[a-z0-9-]+$"))
     application.add_handler(CallbackQueryHandler(bot.choose_mode, pattern=r"^mode:(free|guided)$"))
     application.add_handler(
         CallbackQueryHandler(

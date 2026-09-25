@@ -12,7 +12,7 @@ from pathlib import Path
 from asg_core import CraftMetrics, craft_metrics
 
 from .evaluation import discover_stories
-from .report import NO_PROFILE, UNKNOWN, _describe
+from .report import NO_PROFILE, UNKNOWN, _describe, _output_axes
 
 STORY_FILENAME = "story.md"
 METRICS_FILENAME = "story_metrics.json"
@@ -58,6 +58,8 @@ class StoryCraft:
     recorded: dict
     counts: RunCounts
     blueprint_macroplot: str | None
+    story_format: str = "narrative"
+    script_method: str | None = None
 
 
 @dataclass(frozen=True)
@@ -97,6 +99,8 @@ CRAFT_COLUMNS = (
     "narrative_profile",
     "generator_version",
     "pipeline_version",
+    "story_format",
+    "script_method",
     "status",
     "model",
     "warnings",
@@ -227,6 +231,7 @@ def read_story_craft(
     """Measure one story directory and gather every metadata axis beside it."""
     run_dir, root = Path(directory), Path(stories_root)
     story, approach, profile, generator, pipeline = _describe(run_dir, root)
+    story_format, script_method = _output_axes(run_dir)
     metadata = _load_document(run_dir / "metadata.json", on_error)
     blueprint = _load_document(run_dir / "narrative_blueprint.json", on_error)
     return StoryCraft(
@@ -247,6 +252,8 @@ def read_story_craft(
         recorded=_load_document(run_dir / METRICS_FILENAME, on_error),
         counts=_run_counts(run_dir, on_error),
         blueprint_macroplot=_text(blueprint, "macroplot_id"),
+        story_format=story_format,
+        script_method=script_method,
     )
 
 
@@ -284,6 +291,13 @@ def record_profile(record: StoryCraft) -> str:
     return record.narrative_profile or NO_PROFILE
 
 
+def record_format(record: StoryCraft) -> str:
+    """Name the output format, and its method for a theater script."""
+    if record.story_format == "script" and record.script_method:
+        return f"script/{record.script_method}"
+    return record.story_format
+
+
 CRAFT_GROUPINGS: dict[str, Callable[[StoryCraft], str]] = {
     "story": lambda record: record.story,
     "profile": record_profile,
@@ -291,6 +305,7 @@ CRAFT_GROUPINGS: dict[str, Callable[[StoryCraft], str]] = {
     "version-profile": lambda record: f"{record_version(record)} / {record_profile(record)}",
     "approach": lambda record: record.approach,
     "status": lambda record: record.status or UNKNOWN,
+    "format": record_format,
 }
 
 
@@ -301,11 +316,15 @@ def filter_records(
     approach: str | None = None,
     include_unversioned: bool = False,
     completed_only: bool = False,
+    story_format: str | None = "narrative",
 ) -> list[StoryCraft]:
-    """Keep the records that belong in one report, by version, approach and status.
+    """Keep the records that belong in one report, by version, approach, status and format.
 
     ``completed_only`` drops the runs that declare an unfinished status, and keeps the
     ones that declare none at all: a run without ``metadata.json`` never claimed to fail.
+    ``story_format`` defaults to narrative prose: craft_metrics reads dialogue by quote marks
+    and a leading em dash, so a theater script's "NOMBRE.-texto" lines would measure as almost
+    no dialogue and poison the medians of a prose corpus. Pass None to include every format.
     """
     floor = version_key(minimum_version)
     selected = []
@@ -319,6 +338,8 @@ def filter_records(
         if approach is not None and record.approach != approach:
             continue
         if completed_only and record.status not in (None, "completed"):
+            continue
+        if story_format is not None and record.story_format != story_format:
             continue
         selected.append(record)
     return selected
@@ -334,6 +355,8 @@ def craft_row(record: StoryCraft) -> list[object]:
         record.narrative_profile,
         record.generator_version,
         record.pipeline_version,
+        record.story_format,
+        record.script_method,
         record.status,
         record.model,
         record.warnings,

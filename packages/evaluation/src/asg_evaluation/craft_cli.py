@@ -70,6 +70,16 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Resume también las ejecuciones que no terminaron; por defecto solo entran al CSV",
     )
+    result.add_argument(
+        "--format",
+        dest="story_format",
+        choices=("narrative", "script", "all"),
+        default="narrative",
+        help=(
+            "Formato de salida a incluir; por defecto solo narrativa, porque craft_metrics "
+            "mide diálogo por comillas o raya inicial y un guion mediría casi 0%% de diálogo"
+        ),
+    )
     return result
 
 
@@ -150,14 +160,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{path}: {error}", file=sys.stderr)
 
     records = collect_story_craft(stories_root, on_error=report_broken)
+    requested_format = None if args.story_format == "all" else args.story_format
     selected = filter_records(
         records,
         minimum_version=args.min_version,
         approach=args.approach,
         include_unversioned=args.include_unversioned,
+        story_format=requested_format,
     )
     summarized = filter_records(
-        selected, completed_only=not args.all_status, include_unversioned=True
+        selected,
+        completed_only=not args.all_status,
+        include_unversioned=True,
+        story_format=None,
     )
     print(_coverage(records, selected, summarized, stories_root))
     print(_report(summarized, args.group))
