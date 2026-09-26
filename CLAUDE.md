@@ -6,12 +6,18 @@ Guía para agentes que trabajen en este repositorio de tesis.
 
 ## Qué es este proyecto
 
-Monorepo de investigación que genera y evalúa historias narrativas con dos enfoques opuestos:
+Monorepo de investigación que genera y evalúa historias narrativas con tres enfoques:
 
-- **Top-Down** (`packages/top_down`): pipeline de agentes LLM sobre Gemini que planifica primero
-  (mundo, personajes, grafo de eventos) y escribe después.
+- **Top-Down** (`packages/stagecraft`, formatos `narrative` y `script`): pipeline de agentes LLM
+  sobre Gemini que planifica primero (mundo, personajes, grafo de eventos) y escribe después.
+- **Híbrido** (`packages/stagecraft`, formato `simulated`): el mismo plan se escribe como guion,
+  los personajes lo **representan** con memoria propia, y la historia se narra del log de esa
+  función. Ver [docs/simulacion_escenica.md](docs/simulacion_escenica.md).
 - **Bottom-Up** (`packages/escape_room`): simulación multiagente determinista de una sala de
   escape; la historia se narra a partir del log de eventos ya ocurridos.
+
+El paquete se llama `stagecraft` (antes `top_down`) porque ya no es solo top-down: planifica de
+arriba abajo y, en el formato simulado, deja que los personajes actúen de abajo arriba.
 
 `packages/evaluation` guarda las evaluaciones humanas, `packages/core` las utilidades compartidas.
 `apps/console` es la interfaz de terminal y `apps/telegram` expone el generador como bot.
@@ -29,7 +35,7 @@ falsos y `run-escape-room --no-llm` genera la historia de respaldo determinista.
 
 Comandos expuestos (detalles en [commands.md](commands.md)): `asg-console`, `generate-story`,
 `compare-story-runs`, `recover-story-runs`, `run-escape-room`, `report-evaluations`,
-`report-story-craft`, `asg-telegram`, `asg-telegram-run`.
+`report-story-craft`, `report-simulations`, `asg-telegram`, `asg-telegram-run`.
 
 ### Calidad — ejecutar siempre antes de dar por terminado un cambio
 
@@ -57,9 +63,9 @@ directorio de trabajo y pasa en vacío desde cualquier otro sitio.
 ### Iterar rápido
 
 ```powershell
-python -m pytest packages/top_down/tests -q          # un subsistema
-python -m pytest packages/top_down/tests/test_graph.py -q
-python -m pytest packages/top_down/tests/test_generator_v5.py -q -k revision
+python -m pytest packages/stagecraft/tests -q          # un subsistema
+python -m pytest packages/stagecraft/tests/test_graph.py -q
+python -m pytest packages/stagecraft/tests/test_generator_v5.py -q -k revision
 ```
 
 `pyproject.toml` fija `testpaths = ["packages", "apps", "tests"]`, así que `pytest` sin argumentos
@@ -68,7 +74,7 @@ de PowerShell que hay que lanzar a mano en local, aunque `.github/workflows/qual
 ejecuta en cada push y pull request.
 
 Las pruebas de Top-Down y Bottom-Up usan proveedores falsos y nunca llaman a la API real, salvo
-`packages/top_down/tests/test_gemini_live.py`, que se omite a menos que `RUN_GEMINI_LIVE=1`. **No
+`packages/stagecraft/tests/test_gemini_live.py`, que se omite a menos que `RUN_GEMINI_LIVE=1`. **No
 activarlo** sin que lo pida explícitamente quien manda la tarea: consume cuota real.
 
 ## Arquitectura
@@ -76,24 +82,32 @@ activarlo** sin que lo pida explícitamente quien manda la tarea: consume cuota 
 ### Dependencias entre paquetes
 
 ```text
-core  ←  evaluation  ←  top_down, escape_room  ←  console, telegram
+core  ←  evaluation  ←  stagecraft, escape_room  ←  console, telegram
 ```
 
-`core` no depende de nada del repo; `top_down` y `escape_room` no se conocen entre sí. `telegram`
-depende de `top_down` pero **no** de `escape_room`; `console` sí de los dos. Respetar esa dirección:
-es lo que permite comparar los dos enfoques sin contaminarlos.
+`core` no depende de nada del repo; `stagecraft` y `escape_room` no se conocen entre sí. `telegram`
+depende de `stagecraft` pero **no** de `escape_room`; `console` sí de los dos. Respetar esa
+dirección: es lo que permite comparar los enfoques sin contaminarlos.
+
+Dentro de `stagecraft`, los módulos van por subpaquete: `runtime/` (configuración, proveedor,
+cuota, almacenamiento, errores, progreso), `planning/` (perfiles, grafo, esqueletos, promesas,
+reparación), `writing/` (auditoría, evidencia de artesanía, ensamblado, aceptación), `script/`
+(validación, render, etapas, métricas del guion), `stage/` (la función simulada) y `tools/` (los
+comandos). En la raíz quedan la fachada y el contrato: `__init__`, `version`, `formats`, `schemas`,
+`generator`, `pipeline` y `agents/`.
 
 ### Top-Down: el plan es un DAG validado, no texto
 
 El flujo real es `StoryGenerator` (fachada pública en `generator.py`) → `StoryPipeline.execute`
 (`pipeline.py`), que recorre las etapas de `CHECKPOINT_STAGES`: analysis, architecture, world,
-characters, planning, plan_review, promises, drafting, critique, revision, adaptation, story,
-audio. `adaptation` solo corre en el método adaptado del formato guion (ver abajo). Cada etapa
+characters, planning, plan_review, promises, drafting, critique, revision, adaptation,
+casting, performance, narration, story, audio. `adaptation` solo corre en el método adaptado del
+formato guion, y `casting`, `performance` y `narration` solo en el formato simulado. Cada etapa
 llama a un agente de `agents/` y persiste su artefacto antes de seguir.
 
 Lo que hace este pipeline distinto de "pedirle una historia al modelo":
 
-- **`graph.py` es el árbitro.** `materialize_plan` valida invariantes objetivos (ids únicos,
+- **`planning/graph.py` es el árbitro.** `materialize_plan` valida invariantes objetivos (ids únicos,
   órdenes consecutivos, dependencias sin ciclos, referencias a capítulos/personajes/objetos
   existentes, `payoff_of` apuntando siempre hacia atrás) y calcula el único orden de eventos en el
   que confía el resto del sistema, vía un Kahn estable. Un plan que no valida se rechaza y se
@@ -113,7 +127,7 @@ Lo que hace este pipeline distinto de "pedirle una historia al modelo":
   para que no apunte a la frontera de rechazo.
 - **Los reintentos son por perfil.** `PLAN_ATTEMPTS_BY_PROFILE` da a Expansiva un intento extra
   porque es la única con contrato de rama y reunión causal (`validate_profile_structure`).
-- **Los fallos se clasifican.** `errors.py` define `ASGError` con código, etapa, resumen seguro y
+- **Los fallos se clasifican.** `runtime/errors.py` define `ASGError` con código, etapa, resumen seguro y
   recomendaciones. `NON_DEGRADABLE_ERRORS` (configuración y cuotas de Gemini) aborta el run; el
   resto se degrada a warning en `metadata.json` y la historia sigue.
 - **`skeletons.py` + `skeleton_match.py`** rankean esqueletos de trama por mezcla léxica y
@@ -163,7 +177,7 @@ cómo comparar los dos métodos en
 
 ### Top-Down: artefactos de un run
 
-`ArtifactRepository` (`storage.py`) crea `Stories/Top-Down/<AAAAMMDD-HHMMSS>-<slug>/` y escribe
+`ArtifactRepository` (`runtime/storage.py`) crea `Stories/Stagecraft/<AAAAMMDD-HHMMSS>-<slug>/` y escribe
 todo de forma atómica. El run contiene `metadata.json` (estado, etapas completadas, warnings,
 error), `pipeline_manifest.json` (sha256 y tamaño de cada artefacto), `request.json`, `world.json`,
 `characters.json`, `story_plan.json`, `promise_ledger.json`, `promise_audit.json`, `chapters/`,
@@ -183,13 +197,17 @@ capítulo— y ninguna de esas cifras viaja a ningún prompt: son observaciones,
 los runs anteriores a 6.5.0 que no las traen; la metodología y las mediciones están en
 [docs/artesania_narrativa.md](docs/artesania_narrativa.md).
 
-`version.py` fija `PIPELINE_VERSION` y `SUPPORTED_PIPELINE_VERSIONS`; `StoryRun` se niega a abrir
-un run incompleto o de una versión no soportada. Si cambias el conjunto de artefactos o su
+`version.py` fija `PIPELINE_VERSION` (7.0) y `SUPPORTED_PIPELINE_VERSIONS`; `StoryRun` se niega a
+abrir un run incompleto o de una versión no soportada. Si cambias el conjunto de artefactos o su
 significado, sube la versión en vez de romper los runs ya generados: son datos de la tesis.
+
+Las 160 ejecuciones anteriores al renombrado siguen en `Stories/Top-Down/` y se siguen leyendo:
+las versiones 5.0 a 6.2 están en `SUPPORTED_PIPELINE_VERSIONS` y `report-story-craft` las agrupa
+igual que antes. `recover-story-runs --stories Stories/Top-Down` las recupera.
 
 ### Top-Down: proveedor y cuota
 
-`provider.py` expone el `Protocol` `LanguageModelProvider` (`generate_structured` con esquema
+`runtime/provider.py` expone el `Protocol` `LanguageModelProvider` (`generate_structured` con esquema
 Pydantic y `generate_text`) e implementa `GeminiProvider`. Detalles que importan al tocarlo:
 
 - La temperatura sale de perfiles nombrados (`extraction`, `review`, `planning`, `prose`,
@@ -197,12 +215,45 @@ Pydantic y `generate_text`) e implementa `GeminiProvider`. Detalles que importan
 - `_gemini_response_schema` borra `additionalProperties` del esquema Pydantic porque algunos
   modelos Gemini lo rechazan; Pydantic sigue siendo la autoridad local con `extra="forbid"`.
 - `_safe_provider_error` clasifica los fallos sin filtrar credenciales ni el contenido del prompt.
-- `quota.py` mantiene limitadores de ventana deslizante **compartidos a nivel de proceso**
+- `runtime/quota.py` mantiene limitadores de ventana deslizante **compartidos a nivel de proceso**
   (`_LIMITERS`), así que dos generaciones concurrentes respetan un único presupuesto de RPM/TPM.
 
-Los tests inyectan un `FakeProvider` (ver `packages/top_down/tests/test_generator_v5.py`), que es
+Los tests inyectan un `FakeProvider` (ver `packages/stagecraft/tests/test_generator_v5.py`), que es
 la forma canónica de probar el pipeline: se le pasa una secuencia de respuestas estructuradas y
 puede forzar fallos en llamadas concretas.
+
+### Híbrido: la función simulada
+
+`ASG_STORY_FORMAT=simulated` (o `--format simulated`) añade tres etapas tras el guion nativo. El
+diseño completo está en [docs/simulacion_escenica.md](docs/simulacion_escenica.md); lo que hay que
+saber antes de tocar `stage/`:
+
+- **Los actores nunca ven el guion.** Al intérprete le llegan las circunstancias, su objetivo, la
+  nota del director y su propia memoria. Nada del plan: ni ids, ni títulos, ni escenas futuras.
+  `stage/validation.strip_internal_ids` limpia el objetivo y el escenario porque los escribió el
+  Dramaturgo mirando el plan. Hay un test que recorre un run entero comprobándolo.
+- **La memoria propia es la aportación.** Cada personaje tiene su flujo y solo entra lo que
+  percibió: un turno público lo ven los que están en escena, un susurro solo sus destinatarios, y
+  un pensamiento solo quien lo piensa. **No hay almacén común del que filtrar**: lo que no se
+  presenció no se escribió. `--actor-memory shared` es el brazo de control de esa medición.
+- **La recuperación es determinista y sin embeddings.** Relevancia léxica, recencia por escenas,
+  importancia y compañía, con los pesos documentados en `stage/memory.py`. Mismo run, misma
+  puntuación, en cualquier máquina y sin servicios externos.
+- **Las relaciones se consolidan, no se acumulan.** La reflexión sustituye la postura anterior; el
+  historial se queda en los registros. Un actor que guardara «aliada» y «me traicionó» a la vez
+  jugaría mal las dos.
+- **El director sugiere, nunca dicta.** Da motivaciones, no réplicas. Cuando un beat agota su
+  presupuesto (`ASG_STAGE_TURNS_PER_BEAT`, 8) lo cierra con un `stage_event`: algo que hace el
+  mundo, visible, que entra al log como un turno más. Así el log sigue siendo la única fuente.
+- **Los `ValueError` de `stage/validation.py` y `stage/casting.py` van en inglés ASCII**, por la
+  misma razón que los de `graph.py`: se reinyectan literales en el prompt de reparación.
+- **El punto de vista es modular.** `stage/voices.py` tiene una estrategia por voz, cada una con su
+  filtro determinista sobre el log. Añadir un punto de vista es añadir una estrategia, nunca una
+  rama en el prompt del narrador. El defecto es `omniscient`.
+- **El narrador cura, no transcribe.** Puede cortar, fundir y reordenar dentro de un capítulo; no
+  puede inventar un beat. Donde el plan y el log no coincidan, manda el log.
+- **Ninguna cifra viaja a un prompt**, como en el resto del pipeline, y hay un test que lo
+  comprueba sobre las etapas nuevas.
 
 ### Bottom-Up: simulación determinista
 
@@ -218,7 +269,7 @@ un único `random.Random(seed)`. No introducir iteración no determinista ni est
 
 `narrative.py` convierte el `EventLog` en prosa, con `GeminiNarrativeProvider` o, si no hay clave o
 falla, un narrador de respaldo determinista: el respaldo es parte del contrato, no un apaño.
-`storage.py` escribe cada run en `Stories/Bottom-Up/Escape-Room/` y los lotes (`--batch`) en
+`runtime/storage.py` escribe cada run en `Stories/Bottom-Up/Escape-Room/` y los lotes (`--batch`) en
 `experiments/<timestamp>/runs.csv` + `summary.csv`.
 
 ### Telegram: el bot no conoce el pipeline
@@ -242,19 +293,21 @@ tests recorren los menús sin terminal. Mantener esa inyección al añadir panta
 
 `find_project_root` sube por el árbol buscando un directorio con `Stories/` y `packages/`, y se
 puede forzar con `ASG_PROJECT_ROOT` (útil en contenedores; ver `Dockerfile`, que instala solo
-core + evaluation + top_down + telegram). `files.py` da escritura atómica UTF-8, `audio.py` la
+core + evaluation + stagecraft + telegram). `files.py` da escritura atómica UTF-8, `audio.py` la
 narración con edge-tts y `craft.py` las cifras de artesanía de la prosa (`craft_metrics`), puras y
-deterministas, que consumen el `audit.py` del Top-Down y el recolector de `asg_evaluation`. Vive en
+deterministas, que consumen el `writing/audit.py` de Stagecraft y el recolector de `asg_evaluation`. Vive en
 `core` porque `evaluation` no puede importar `top_down`.
 
 ## Convenciones de idioma (con verificación automática)
 
 - **Docstrings de código de producción** (`apps/*/src`, `packages/*/src`): en **inglés**, breves y
   no tautológicas. Lo exige `tests/test_source_documentation.py`, que falla si falta el docstring o
-  si no es ASCII. Exige docstring incluso en closures.
+  si no es ASCII. Exige docstring incluso en closures. Ojo con los guiones largos y las comillas
+  tipográficas: no son ASCII y el gate los rechaza.
 - **Texto visible para el usuario, artefactos e historias**: en **español**.
-- Excepción deliberada: los mensajes de `ValueError` de `graph.py`, `promises.py` y `script.py`
-  van en inglés porque se envían al modelo (ver arriba).
+- Excepción deliberada: los mensajes de `ValueError` de `planning/graph.py`,
+  `planning/promises.py`, `script/validation.py`, `stage/validation.py` y `stage/casting.py` van en
+  inglés porque se reinyectan en el prompt del modelo (ver arriba).
 - `Stories/`, PDFs y experimentos son datos de investigación: **nunca** se eliminan en tareas de
   limpieza aunque estén gitignored.
 
@@ -282,11 +335,21 @@ el estado medido cambia sustancialmente.
 - `.cache/` contiene sqlite y cachés de pytest de experimentos previos (`pytest-top-down-*`,
   `pytest-profile-*`...). Son artefactos de ejecución: no razonar sobre el estado del proyecto a
   partir de sus nombres.
-- `pipeline.py` pasa de 1100 líneas y `skeletons.py` de 1400. Dividirlos está en «Pendiente» del
-  `TODO.md`; no lo hagas de paso dentro de otro cambio.
+- `pipeline.py` sigue pasando de 1100 líneas y `skeletons.py` de 1400. La reorganización 7.0.0
+  sacó de `pipeline.py` los prompts de reparación (`planning/repair.py`), el ensamblado
+  (`writing/assembly.py`) y las reglas de aceptación (`writing/acceptance.py`); lo que queda está
+  en «Pendiente» del `TODO.md`. No lo hagas de paso dentro de otro cambio.
+- `materialize_act` pone en el acto el título del **plan**, que está en inglés, no el localizado.
+  Los títulos localizados viven en `script_presentation.json`. El formato simulado los lee de ahí;
+  el formato guion todavía imprime los del plan, y es una ficha abierta del `TODO.md`.
 
 ## Documentos de referencia
 
+- [docs/simulacion_escenica.md](docs/simulacion_escenica.md) — la función simulada: por qué los
+  actores no ven el guion, cómo funciona la memoria propia y su ablación, el bucle de escena, el
+  punto de vista modular, los artefactos y qué se mide.
+- [docs/estado_del_arte_simulacion.md](docs/estado_del_arte_simulacion.md) — las cuarenta
+  referencias que sostienen ese diseño, con qué se tomó y qué se descartó de cada una.
 - [docs/guion_teatral.md](docs/guion_teatral.md) — el formato de salida en guion teatral: los dos
   métodos (nativo y adaptado), el contrato de `script.json`, qué valida `script.py` y qué solo
   corrige, y cómo comparar los dos métodos.

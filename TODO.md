@@ -1,7 +1,11 @@
 # Hoja de ruta
 
-**Estado medido el 2026-09-25 sobre la salida en guion teatral, con `asg-top-down` 6.9.0.** Puerta
-de calidad limpia: `ruff check .`, `ruff format --check .`, 399 pruebas pasan y 2 se omiten,
+**Estado medido el 2026-09-26 sobre la función simulada, con `asg-stagecraft` 7.0.0.** El paquete
+`top_down` pasa a llamarse `stagecraft` y gana un tercer formato, `simulated`, en el que los
+personajes representan el guion con memoria propia y la historia se narra del log de esa función
+(ver [docs/simulacion_escenica.md](docs/simulacion_escenica.md)). Los runs nuevos van a
+`Stories/Stagecraft/`; los 160 anteriores se quedan en `Stories/Top-Down/` y se siguen leyendo.
+Puerta de calidad limpia: `ruff check .`, `ruff format --check .`, 470 pruebas pasan y 2 se omiten,
 `pip check` sin requisitos rotos, y `tests/test_sync_railway_stories.ps1` pasa. Las cinco corren en
 `.github/workflows/quality.yml` en cada push y pull request, y en local con `.\quality.ps1` (o
 `make test`). Las mediciones que cita este documento salen del corpus de `Stories/`, hoy **160
@@ -31,6 +35,34 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 ---
 
 ## Lo siguiente
+
+### Medir la historia simulada contra la narrativa
+
+- **Síntoma.** 7.0.0 añadió el formato `simulated` y toda su instrumentación, pero **no existe
+  todavía ningún run real**: los 470 tests corren con proveedores falsos. No se sabe si una
+  historia narrada desde una función es mejor, peor o simplemente distinta de una escrita
+  directamente, ni cuánto cuesta de verdad.
+- **Qué hacer.** Una matriz pequeña con los mismos prompts canónicos en `narrative` y en
+  `simulated`, con el mismo perfil. Comparar a ciegas con `compare-story-runs`, leer
+  `report-story-craft --format prose --group format` para la artesanía y `report-simulations`
+  para la función. Mirar en particular `script_echo` (si sale alto, los actores recitaron y la
+  simulación no aporta), `beat_completion_ratio` y el coste en `llm_usage.json`.
+- **Ojo al medir.** Un run simulado gasta entre 150 y 220 llamadas frente a las ~25 de uno
+  narrativo, así que la matriz hay que dimensionarla contra la cuota diaria.
+- **Hecho cuando.** Hay una decisión escrita, con cifras, en `docs/simulacion_escenica.md`, con el
+  mismo cuidado de ruido que el resto del corpus: una diferencia de medianas menor de unos cinco
+  puntos, con n=9, no se puede interpretar.
+
+### Medir la ablación de memoria propia contra memoria compartida
+
+- **Síntoma.** `--actor-memory shared` existe como brazo de control y nadie lo ha corrido. Es la
+  medición que sostiene la afirmación central de la tesis: que dar a cada personaje solo lo que
+  presenció produce mejores escenas que darles todo lo público.
+- **Qué hacer.** Dos matrices idénticas salvo en `--actor-memory`, sobre los mismos prompts. El
+  proxy determinista es `unknown_mentions` en `simulation_metrics.json`; la medición seria la da
+  `audit-stage-run`, que juzga escena a escena si alguien habló de algo que no podía saber.
+- **Hecho cuando.** Hay una cifra de fuga de frontera de conocimiento para cada brazo, y una
+  comparación a ciegas de las historias que salieron de cada uno.
 
 ### Medir guion nativo frente a adaptado y quedarse con uno
 
@@ -110,7 +142,7 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 
 ### `failed_calls` y `duration_seconds` miden otra cosa de la que dicen
 
-- **Síntoma.** `_record_failure`, en `provider.py`, emite un registro por **cada intento** fallido,
+- **Síntoma.** `_record_failure`, en `runtime/provider.py`, emite un registro por **cada intento** fallido,
   incluidos los reintentos transitorios que después tienen éxito, así que `failed_calls` cuenta
   intentos y no llamadas perdidas. Y `started` no se reinicia entre intentos, de modo que
   `duration_seconds` incluye los intentos fallidos y las esperas de cuota: no es latencia. Un run
@@ -119,6 +151,47 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
   intento que tuvo éxito.
 - **Hecho cuando.** Las dos cifras significan lo que su nombre dice, y ningún resultado de la tesis
   las cita mal.
+
+### El acto imprime el título del plan, en inglés, en vez del localizado
+
+- **Síntoma.** `materialize_act` mint el acto con `title=chapter.title`, que viene del plan y está
+  en inglés, mientras los títulos localizados que escribió el Dramaturgo se quedan sin usar en
+  `script_presentation.json`. Un `story.md` de formato guion imprime «## Acto I. The Archive» con
+  el resto de la obra en español. El formato simulado ya lo esquiva leyendo el artefacto, pero el
+  formato guion sigue afectado.
+- **Qué hacer.** Pasar la presentación a `materialize_act`, o resolver el título en
+  `assemble_play`, que ya recibe la presentación. Lo segundo es menos invasivo.
+- **Hecho cuando.** Un run de guion imprime sus actos en el idioma de la ficción, y hay un test que
+  lo fija.
+
+### Aplicar las notas del crítico a la prosa narrada
+
+- **Síntoma.** En el formato simulado la crítica dramática no corre: la historia se publica tal
+  como la narró el narrador. Se decidió así porque reescribir sin el log delante alejaría la prosa
+  de lo que se representó, que es justo lo que el formato quiere demostrar.
+- **Qué hacer.** Pasar al Writer el log de las escenas del capítulo junto con la nota, y validar
+  la reescritura contra el log como se valida un acto contra el plan: una reescritura que invente
+  un beat que nadie representó se rechaza.
+- **Hecho cuando.** Una historia simulada se puede revisar sin que la revisión introduzca sucesos
+  ausentes del log, y hay un test del camino.
+
+### Reanudar una función interrumpida
+
+- **Síntoma.** Una función de 9 escenas son unas 170 llamadas. Si el proceso muere en la escena 8,
+  se pierde todo, aunque `stage/<escena>/turns.jsonl` tenga las siete primeras completas y
+  `cast_bible.json` esté escrito.
+- **Qué hacer.** Leer las escenas ya representadas del run y arrancar desde la primera que falte,
+  reconstruyendo las memorias con los turnos ya registrados. El log en JSONL ya es reproducible
+  por diseño.
+- **Hecho cuando.** Un run simulado interrumpido se retoma sin repetir ninguna llamada ya hecha.
+
+### Elegir el punto de vista desde Telegram
+
+- **Síntoma.** El bot ofrece los cuatro formatos, pero una historia simulada se narra siempre con
+  la voz que tenga configurada el despliegue: no hay paso de conversación para elegirla.
+- **Qué hacer.** Un cuarto paso, solo cuando el formato elegido es simulado, como el que ya existe
+  para el perfil y el formato. La cola tendría que guardar la voz como guarda `story_format`.
+- **Hecho cuando.** Un usuario puede pedir una historia simulada en primera persona desde el chat.
 
 ### Equiparar los artefactos Bottom-Up con los Top-Down
 
@@ -138,7 +211,7 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 
 ### Sacar las aserciones de prompt literal de los tests
 
-- **Síntoma.** `packages/top_down/tests/test_generator_v5.py` contiene más de 60 aserciones sobre
+- **Síntoma.** `packages/stagecraft/tests/test_generator_v5.py` contiene más de 60 aserciones sobre
   el texto literal de los prompts de sistema. Cualquier reescritura de un prompt rompe tests que no
   tienen nada que ver con lo que se cambió, y reescribir prompts es el trabajo central de la tesis.
   El doble de proveedor también parsea el prompt del escritor para extraer el cuerpo original,
@@ -157,15 +230,11 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 - **Síntoma.** 1190 líneas y 57 métodos en una sola clase, mezclando orquestación, reintentos,
   validación, ensamblado de Markdown, prompts de reparación y telemetría. El campo `repository`
   opcional obliga a 17 `assert self.repository is not None` repartidos por la clase.
-- **Qué hacer.** Empezar por las tres extracciones de riesgo nulo, que se mueven literalmente
-  porque no tocan `self`, `repository` ni `provider`: los prompts de reparación (`_repair_guidance`
-  y sus seis hermanos, líneas contiguas), el ensamblado de Markdown (`_assemble_story`, que ya
-  delega el formato en `audit.canonical_chapter` y no tiene ni una referencia externa) y las reglas
-  de aceptación del escritor (`_writer_candidate_issue` y `_writer_fallback_warning`). Son unas 250
-  líneas y sólo tres llamadas de test que actualizar. **El obstáculo que citaba la ficha de las
-  aserciones de prompt ya no existe.** Después la telemetría y la contabilidad de uso como
-  colaboradores, y solo al final las etapas como clases con estado propio, que es lo que elimina
-  los asertos.
+- **Qué hacer.** Las tres extracciones de riesgo nulo **ya están hechas** en 7.0.0: los prompts
+  de reparación viven en `planning/repair.py`, el ensamblado en `writing/assembly.py` y las reglas
+  de aceptación en `writing/acceptance.py`. Lo que queda es la telemetría y la contabilidad de uso
+  como colaboradores, y solo al final las etapas como clases con estado propio, que es lo que
+  elimina los `assert self.repository is not None`.
 - **Hecho cuando.** Plan, borrador y revisión son unidades con test propio, el estado deja de
   pasarse como parámetros posicionales, y los artefactos generados no cambian.
 
@@ -206,7 +275,7 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 - **Síntoma.** `README.md` de la raíz está vacío, 0 bytes, y versionado. Las fachadas de los cuatro
   paquetes no tienen documentación con ejemplos que se ejecuten, y los READMEs de paquete mezclan
   español e inglés.
-- **Qué hacer.** Cubrir las fachadas de `asg_core`, `asg_top_down`, `asg_evaluation` y
+- **Qué hacer.** Cubrir las fachadas de `asg_core`, `asg_stagecraft`, `asg_evaluation` y
   `asg_escape_room` con ejemplos mínimos de entrada, salida y fallo. Escribir el README de la raíz
   en UTF-8.
 - **Hecho cuando.** Los ejemplos se validan en los tests o en CI, y la documentación describe el
@@ -222,14 +291,11 @@ Nativo y adaptado generan cada uno su propio plan, así que la varianza de plani
 con la del método al comparar. Reutilizar `story_plan.json` de un run como entrada congelada de
 los dos métodos aislaría la comparación a solo la escritura.
 
-### Guion teatral leído por el Bottom-Up
+### Audio a varias voces desde la función
 
-El objetivo declarado de la salida en guion es servir de entrada a una simulación donde los
-personajes se interpretan como actores. `script.json` ya guarda un objetivo de actor por
-personaje y por escena pensando en esto, pero `packages/escape_room` no lo lee todavía, y
-`top_down`/`escape_room` siguen sin conocerse entre sí a propósito. Haría falta decidir dónde
-vive el lector: en `escape_room` (rompería la regla de que no se conocen) o en `core` (el
-contrato ya está documentado como JSON puro, sin tipos de Pydantic, precisamente para esto).
+Ahora que el log distingue quién dice cada réplica, una narración con una voz por personaje sale
+casi gratis del `performance.json`, sin pasar por `script.json`. Cambia el contrato de
+`audio.json` y merece su propia medición.
 
 ### Audio a varias voces desde el guion
 
@@ -296,7 +362,7 @@ condiciones, guardando lo necesario para repetir el experimento.
 ### Cerrar los huecos de cobertura
 
 `policy.py` del escape room, con 283 líneas, no tiene ni un test directo: solo se ejercita de
-rebote. `progress.py` del Top-Down no tiene ninguno. El `storage.py` del Top-Down tiene uno solo, y
+rebote. `runtime/progress.py` de Stagecraft no tiene ninguno. Su `runtime/storage.py` tiene uno solo, y
 ni los hashes del manifiesto, ni `register_existing`, ni la rama de `fail` con un error no
 clasificado se comprueban. Tampoco `collect_metrics`, `result_row` ni `run_batch`; de esa lista
 sólo `save_batch` tiene test propio.

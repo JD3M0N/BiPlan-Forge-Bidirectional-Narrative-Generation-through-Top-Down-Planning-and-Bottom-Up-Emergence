@@ -14,10 +14,12 @@ Stories/
 docs/*
 !docs/artesania_narrativa.md
 !docs/calibracion_perfiles.md
+!docs/estado_del_arte_simulacion.md
 !docs/evaluation_metrics.md
 !docs/guion_teatral.md
 !docs/pipeline_top_down.md
 !docs/promesas_ppp.md
 !docs/prompts_top_down.md
+!docs/simulacion_escenica.md
 .cache/
 story-comparison.html
