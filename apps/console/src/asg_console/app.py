@@ -6,7 +6,7 @@ import argparse
 
 from .bottom_up import BottomUpMenu
 from .evaluation import EvaluationMenu
-from .top_down import TopDownMenu
+from .stagecraft import StagecraftMenu
 from .types import InputFn, OutputFn
 
 
@@ -17,14 +17,14 @@ class ConsoleApp:
         self,
         input_fn: InputFn = input,
         output: OutputFn = print,
-        top_down: TopDownMenu | None = None,
+        stagecraft: StagecraftMenu | None = None,
         bottom_up: BottomUpMenu | None = None,
         evaluation: EvaluationMenu | None = None,
     ) -> None:
         """Configure console I/O and injectable menu collaborators."""
         self.input = input_fn
         self.output = output
-        self.top_down = top_down or TopDownMenu(input_fn, output)
+        self.stagecraft = stagecraft or StagecraftMenu(input_fn, output)
         self.bottom_up = bottom_up or BottomUpMenu(input_fn, output)
         self.evaluation = evaluation or EvaluationMenu(input_fn, output)
 
@@ -33,7 +33,8 @@ class ConsoleApp:
         self.output("Automatic Story Generation — Consola unificada")
         while True:
             self.output(
-                "\nMenú principal\n  1. Top-Down\n  2. Bottom-Up\n  3. Evaluar historia\n  0. Salir"
+                "\nMenú principal\n  1. Stagecraft\n  2. Bottom-Up\n"
+                "  3. Evaluar historia\n  0. Salir"
             )
             try:
                 choice = self.input("> ").strip()
@@ -41,7 +42,7 @@ class ConsoleApp:
                     self.output("Hasta luego.")
                     return 0
                 actions = {
-                    "1": self.top_down.run,
+                    "1": self.stagecraft.run,
                     "2": self.bottom_up.run,
                     "3": self._evaluate_story,
                 }

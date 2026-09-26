@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 
-from asg_top_down.errors import ASGError
+from asg_stagecraft.runtime.errors import ASGError
 from telegram import Update
 from telegram.error import TelegramError
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters

@@ -9,14 +9,14 @@ WORKDIR /app
 # Copy local packages before installing them so pip resolves monorepo dependencies.
 COPY packages/core/ ./packages/core/
 COPY packages/evaluation/ ./packages/evaluation/
-COPY packages/top_down/ ./packages/top_down/
+COPY packages/stagecraft/ ./packages/stagecraft/
 COPY apps/telegram/ ./apps/telegram/
 
 RUN python -m pip install --no-cache-dir \
         ./packages/core \
         ./packages/evaluation \
-        ./packages/top_down \
+        ./packages/stagecraft \
         ./apps/telegram \
-    && mkdir -p /app/Stories/Top-Down
+    && mkdir -p /app/Stories/Stagecraft
 
 CMD ["asg-telegram-run"]

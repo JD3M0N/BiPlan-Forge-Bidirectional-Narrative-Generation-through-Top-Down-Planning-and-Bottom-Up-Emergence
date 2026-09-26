@@ -1,7 +1,7 @@
 """Application-owned contract every story generator adapter must satisfy.
 
 The bot speaks only these types. Keeping them here, instead of importing the
-Top-Down pipeline types directly, means a second approach can be plugged in
+Stagecraft pipeline types directly, means a second approach can be plugged in
 without touching conversation, delivery or console code.
 """
 

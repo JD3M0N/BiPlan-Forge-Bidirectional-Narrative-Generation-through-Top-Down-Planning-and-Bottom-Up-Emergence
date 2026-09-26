@@ -122,7 +122,7 @@ if ($command -match '^service files download ') {
     $remotePath = $CliArgs[3]
     $localPath = $CliArgs[4]
     $parts = @(($remotePath.Replace("\", "/").Trim("/")) -split "/")
-    $rootIndex = [Array]::IndexOf($parts, "Top-Down")
+    $rootIndex = [Array]::IndexOf($parts, "Stagecraft")
     $name = $parts[$rootIndex + 1]
     $relativeParts = @($parts | Select-Object -Skip ($rootIndex + 2))
     if ($relativeParts.Count -eq 0) {
@@ -173,7 +173,7 @@ exit 2
     Set-Content -LiteralPath (Join-Path $fakeBin "railway.ps1") `
         -Value $fakeRailway -Encoding UTF8
 
-    $localRuns = Join-Path $testRepo "Stories\Top-Down"
+    $localRuns = Join-Path $testRepo "Stories\Stagecraft"
     New-Item -ItemType Directory -Path $localRuns -Force | Out-Null
     $existing = New-TestRun -Root $localRuns -Name "existing-run"
     $existingRemote = New-TestRun -Root $fakeRemote -Name "existing-run"
@@ -194,7 +194,7 @@ exit 2
 
     & $powershellExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $testRepo "sync-railway-stories.ps1")
     Assert-True ($LASTEXITCODE -eq 0) "La sincronización inicial falló."
-    Assert-True (Test-Path (Join-Path $testRepo "Stories\Top-Down\new-run\story.md")) `
+    Assert-True (Test-Path (Join-Path $testRepo "Stories\Stagecraft\new-run\story.md")) `
         "No se descargó la ejecución nueva."
     Assert-True ((Get-Content (Join-Path $existing "local-marker.txt")) -eq "local") `
         "Se modificó una ejecución local existente."

@@ -1,6 +1,6 @@
 """Adapters translating concrete pipelines into the application contract.
 
-This is the only module allowed to import ``asg_top_down``. Everything the bot
+This is the only module allowed to import ``asg_stagecraft``. Everything the bot
 needs from a pipeline -- progress, events, failures, warnings, profiles -- is
 translated here into the types declared in :mod:`asg_telegram.contract`.
 """
@@ -12,13 +12,13 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from asg_top_down import StoryGenerator
-from asg_top_down.config import load_settings as load_top_down_settings
-from asg_top_down.errors import ASGError
-from asg_top_down.formats import OUTPUT_CHOICES, output_choice_for
-from asg_top_down.profiles import PROFILE_LABELS, NarrativeProfile
-from asg_top_down.progress import PipelineEvent, ProgressUpdate
-from asg_top_down.provider import provider_from_settings
+from asg_stagecraft import StoryGenerator
+from asg_stagecraft.formats import OUTPUT_CHOICES, output_choice_for
+from asg_stagecraft.planning.profiles import PROFILE_LABELS, NarrativeProfile
+from asg_stagecraft.runtime.config import load_settings as load_stagecraft_settings
+from asg_stagecraft.runtime.errors import ASGError
+from asg_stagecraft.runtime.progress import PipelineEvent, ProgressUpdate
+from asg_stagecraft.runtime.provider import provider_from_settings
 
 from .contract import (
     EventCallback,
@@ -34,8 +34,8 @@ from .contract import (
 )
 
 
-class TopDownGenerator:
-    """Adapt the Top-Down pipeline to the Telegram application contract."""
+class StagecraftGenerator:
+    """Adapt the Stagecraft pipeline to the Telegram application contract."""
 
     def __init__(self) -> None:
         """Resolve settings and build the shared provider exactly once.
@@ -44,13 +44,13 @@ class TopDownGenerator:
         fail at start-up instead of inside a user's chat, and lets every job
         share one provider so the Gemini quota limiter spans all of them.
         """
-        self._settings = load_top_down_settings()
+        self._settings = load_stagecraft_settings()
         self._provider = provider_from_settings(self._settings)
 
     @property
     def display_name(self) -> str:
         """Return the generator name shown to Telegram users."""
-        return "Top-Down"
+        return "Stagecraft"
 
     @property
     def profiles(self) -> tuple[ProfileOption, ...]:
@@ -95,6 +95,11 @@ class TopDownGenerator:
             narrative_profile=NarrativeProfile(narrative_profile) if narrative_profile else None,
             story_format=choice.story_format if choice else self._settings.story_format,
             script_method=choice.script_method if choice else self._settings.script_method,
+            # The bot exposes no point-of-view step yet, so a simulated run narrates with
+            # whatever the deployment configured. Tracked in TODO.md.
+            narrative_voice=self._settings.narrative_voice,
+            actor_memory=self._settings.actor_memory,
+            turns_per_beat=self._settings.turns_per_beat,
         )
         try:
             return generator.generate(
@@ -112,14 +117,13 @@ class TopDownGenerator:
 
 
 def summarize_run(run_dir: Path) -> RunSummary:
-    """Describe one finished Top-Down run from the artifacts it left behind."""
+    """Describe one finished Stagecraft run from the artifacts it left behind."""
     metadata = _read_json(run_dir / "metadata.json")
-    is_script = isinstance(metadata, dict) and metadata.get("story_format") == "script"
-    caption = (
-        "Guion teatral completo en formato Markdown."
-        if is_script
-        else "Historia completa en formato Markdown."
-    )
+    story_format = metadata.get("story_format") if isinstance(metadata, dict) else None
+    caption = {
+        "script": "Guion teatral completo en formato Markdown.",
+        "simulated": "Historia simulada por los personajes, en formato Markdown.",
+    }.get(story_format, "Historia completa en formato Markdown.")
     return RunSummary(
         usage=_usage_line(run_dir),
         warnings=tuple(_run_warnings(run_dir)),
@@ -288,7 +292,10 @@ class GeneratorRegistry:
 
 
 DEFAULT_REGISTRY = GeneratorRegistry()
-DEFAULT_REGISTRY.register("top-down", TopDownGenerator)
+DEFAULT_REGISTRY.register("stagecraft", StagecraftGenerator)
+# "top-down" stays registered as an alias: STORY_GENERATOR is set in deployed
+# environments that predate the rename, and a missing name aborts start-up.
+DEFAULT_REGISTRY.register("top-down", StagecraftGenerator)
 
 
 def create_generator(

@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from asg_stagecraft.runtime.errors import ConfigurationError
 from asg_telegram import app as app_module
 from asg_telegram.app import TelegramStoryBot
 from asg_telegram.config import TelegramConfigurationError
@@ -12,7 +13,6 @@ from asg_telegram.contract import FormatOption, GenerationProgress, ProfileOptio
 from asg_telegram.generators import summarize_run
 from asg_telegram.queue import SCHEMA_VERSION, QueueRepository
 from asg_telegram.states import ConversationState
-from asg_top_down.errors import ConfigurationError
 
 PROFILES = (
     ProfileOption("essential", "Esencial", ("essential", "esencial")),
@@ -445,13 +445,13 @@ def test_a_second_request_is_refused_instead_of_silently_dropped(tmp_path):
 # --- start-up validation -----------------------------------------------------
 
 
-def _break_top_down_configuration(monkeypatch, tmp_path):
+def _break_stagecraft_configuration(monkeypatch, tmp_path):
     """Make the Top-Down generator fail to build while Telegram settings load fine."""
     monkeypatch.setattr(
         app_module,
         "load_settings",
         lambda: SimpleNamespace(
-            telegram_token="t", generator_name="top-down", project_root=tmp_path
+            telegram_token="t", generator_name="stagecraft", project_root=tmp_path
         ),
     )
 
@@ -472,8 +472,8 @@ def _break_telegram_settings(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize(
     "break_configuration",
-    [_break_top_down_configuration, _break_telegram_settings],
-    ids=["broken-top-down-configuration", "missing-telegram-token"],
+    [_break_stagecraft_configuration, _break_telegram_settings],
+    ids=["broken-stagecraft-configuration", "missing-telegram-token"],
 )
 def test_main_reports_broken_configuration_as_exit_code_two(
     monkeypatch, tmp_path, break_configuration

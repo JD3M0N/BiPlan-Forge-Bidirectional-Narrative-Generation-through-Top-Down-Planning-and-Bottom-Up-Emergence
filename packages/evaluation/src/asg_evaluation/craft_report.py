@@ -298,6 +298,9 @@ def record_format(record: StoryCraft) -> str:
     return record.story_format
 
 
+# The two formats whose story.md is prose, so craft_metrics measures the same thing in both.
+PROSE_FORMATS = frozenset({"narrative", "simulated"})
+
 CRAFT_GROUPINGS: dict[str, Callable[[StoryCraft], str]] = {
     "story": lambda record: record.story,
     "profile": record_profile,
@@ -324,7 +327,9 @@ def filter_records(
     ones that declare none at all: a run without ``metadata.json`` never claimed to fail.
     ``story_format`` defaults to narrative prose: craft_metrics reads dialogue by quote marks
     and a leading em dash, so a theater script's "NOMBRE.-texto" lines would measure as almost
-    no dialogue and poison the medians of a prose corpus. Pass None to include every format.
+    no dialogue and poison the medians of a prose corpus. Pass None to include every format, or
+    "prose" for the two formats that do deliver prose - narrative and simulated - which is the
+    comparison the hybrid pipeline exists to make.
     """
     floor = version_key(minimum_version)
     selected = []
@@ -339,10 +344,19 @@ def filter_records(
             continue
         if completed_only and record.status not in (None, "completed"):
             continue
-        if story_format is not None and record.story_format != story_format:
+        if not _format_matches(record.story_format, story_format):
             continue
         selected.append(record)
     return selected
+
+
+def _format_matches(actual: str, requested: str | None) -> bool:
+    """Say whether one run's output format belongs in a report asking for another."""
+    if requested is None:
+        return True
+    if requested == "prose":
+        return actual in PROSE_FORMATS
+    return actual == requested
 
 
 def craft_row(record: StoryCraft) -> list[object]:

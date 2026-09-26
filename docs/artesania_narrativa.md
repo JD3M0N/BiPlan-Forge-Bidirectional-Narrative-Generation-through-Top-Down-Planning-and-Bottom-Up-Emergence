@@ -49,7 +49,7 @@ Para los runs anteriores no hay nada que migrar. `report-story-craft` recalcula 
 `story.md`, así que las 65 historias 6.0-6.4.1 son comparables con las de 6.5.0 y 6.6.0.
 
 Desde **6.6.0** (`pipeline_version: 6.2`) hay un segundo artefacto, `craft_evidence.json`, que no
-mide: **traduce**. `asg_top_down.craft_evidence` aplica tres umbrales a cada capítulo del borrador
+mide: **traduce**. `asg_stagecraft.craft_evidence` aplica tres umbrales a cada capítulo del borrador
 —sin diálogo, diálogo escaso, párrafo-bloque— y escribe el veredicto en palabras, más el bloque
 exacto que se le entregó al crítico dramático. Los umbrales viven en código y ninguna cifra entra
 en el prompt. Un capítulo sin carencias no genera línea, y un borrador sano deja el bloque vacío:
@@ -491,7 +491,7 @@ percentil 90 del corpus 6.x; esa elección sólo tenía sentido mientras el corp
 anterior y posterior a la intervención. El umbral correcto de una red de seguridad va justo fuera de
 la distribución sana, no dentro de ella.
 
-El cambio va en `asg-top-down` **6.7.0**, así que las cifras de este documento anteriores a esa
+El cambio va en `asg-stagecraft` **6.7.0**, así que las cifras de este documento anteriores a esa
 versión se leen con el techo de 120 y las posteriores con el de 90.
 
 ## Avisos de lectura
@@ -526,7 +526,7 @@ una sola marca y el párrafo-bloque se reduce a la mitad, sin coste extra de tok
 continuidad nuevas.
 
 La forma de la intervención respeta la regla que `profiles.py` documenta —un número dentro de un
-prompt gana a los demás números del sistema—: los umbrales viven en `asg_top_down.craft_evidence`,
+prompt gana a los demás números del sistema—: los umbrales viven en `asg_stagecraft.craft_evidence`,
 en código, y sólo su veredicto viaja, redactado en palabras. `craft_evidence.json` deja por escrito
 en cada run qué vio exactamente el crítico, y el manifiesto lo cubre con su sha256.
 

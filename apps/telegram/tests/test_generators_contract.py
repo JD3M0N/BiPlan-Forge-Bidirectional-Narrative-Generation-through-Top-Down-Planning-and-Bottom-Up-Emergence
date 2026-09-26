@@ -2,17 +2,17 @@ from types import SimpleNamespace
 from unittest.mock import create_autospec
 
 import pytest
+from asg_stagecraft import StoryGenerator
+from asg_stagecraft.formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
+from asg_stagecraft.planning.profiles import NarrativeProfile
+from asg_stagecraft.runtime.errors import PlotValidationError
+from asg_stagecraft.runtime.progress import PipelineEvent, ProgressUpdate
 from asg_telegram import generators as generators_module
 from asg_telegram.contract import (
     GenerationEvent,
     GenerationFailure,
     GenerationProgress,
 )
-from asg_top_down import StoryGenerator
-from asg_top_down.errors import PlotValidationError
-from asg_top_down.formats import ScriptMethod, StoryFormat
-from asg_top_down.profiles import NarrativeProfile
-from asg_top_down.progress import PipelineEvent, ProgressUpdate
 
 
 def _patch_facade(
@@ -52,10 +52,13 @@ def _patch_facade(
         promise_ledger=promise_ledger,
         story_format=story_format,
         script_method=script_method,
+        narrative_voice=NarrativeVoice.OMNISCIENT,
+        actor_memory=ActorMemory.OWN,
+        turns_per_beat=8,
         model="fake",
     )
     monkeypatch.setattr(generators_module, "StoryGenerator", facade)
-    monkeypatch.setattr(generators_module, "load_top_down_settings", lambda: settings)
+    monkeypatch.setattr(generators_module, "load_stagecraft_settings", lambda: settings)
     monkeypatch.setattr(generators_module, "provider_from_settings", lambda _: provider)
     return provider
 
@@ -68,7 +71,7 @@ def test_adapter_only_calls_methods_the_real_facade_defines(tmp_path, monkeypatc
     progress: list = []
     events: list = []
 
-    run_dir = generators_module.TopDownGenerator().generate(
+    run_dir = generators_module.StagecraftGenerator().generate(
         "Una historia sobre un faro",
         on_progress=progress.append,
         on_run_created=run_created,
@@ -85,39 +88,45 @@ def test_adapter_only_calls_methods_the_real_facade_defines(tmp_path, monkeypatc
         "narrative_profile": None,
         "story_format": StoryFormat.NARRATIVE,
         "script_method": ScriptMethod.NATIVE,
+        "narrative_voice": NarrativeVoice.OMNISCIENT,
+        "actor_memory": ActorMemory.OWN,
+        "turns_per_beat": 8,
     }
     assert captured["on_run_created"] is run_created
     assert progress == [GenerationProgress(40, "writing", "Escribiendo el capítulo 2")]
     assert events == [GenerationEvent("Reintento 1", "writing")]
 
     # A chosen profile arrives as the pipeline's own enum, not as the string the bot holds.
-    generators_module.TopDownGenerator().generate("Una historia", narrative_profile="essential")
+    generators_module.StagecraftGenerator().generate("Una historia", narrative_profile="essential")
     assert captured["options"]["narrative_profile"] is NarrativeProfile.ESSENTIAL
 
     # The guidance setting is forwarded, not hardcoded.
     _patch_facade(monkeypatch, tmp_path, captured, narrative_guidance=False)
-    generators_module.TopDownGenerator().generate("Otra historia")
+    generators_module.StagecraftGenerator().generate("Otra historia")
     assert captured["options"] == {
         "narrative_guidance": False,
         "promise_ledger": True,
         "narrative_profile": None,
         "story_format": StoryFormat.NARRATIVE,
         "script_method": ScriptMethod.NATIVE,
+        "narrative_voice": NarrativeVoice.OMNISCIENT,
+        "actor_memory": ActorMemory.OWN,
+        "turns_per_beat": 8,
     }
 
     # So is the promise ledger, which is the ablation arm of the measurement.
     _patch_facade(monkeypatch, tmp_path, captured, promise_ledger=False)
-    generators_module.TopDownGenerator().generate("Una tercera historia")
+    generators_module.StagecraftGenerator().generate("Una tercera historia")
     assert captured["options"]["promise_ledger"] is False
 
     # And so is the output format, chosen per job in the conversation.
     _patch_facade(monkeypatch, tmp_path, captured)
-    generators_module.TopDownGenerator().generate("Una historia", story_format="script-adapted")
+    generators_module.StagecraftGenerator().generate("Una historia", story_format="script-adapted")
     assert captured["options"]["story_format"] is StoryFormat.SCRIPT
     assert captured["options"]["script_method"] is ScriptMethod.ADAPTED
 
     with pytest.raises(GenerationFailure) as unknown_format:
-        generators_module.TopDownGenerator().generate("Una historia", story_format="stage-play")
+        generators_module.StagecraftGenerator().generate("Una historia", story_format="stage-play")
     assert unknown_format.value.code == "UNKNOWN_STORY_FORMAT"
 
 
@@ -137,7 +146,7 @@ def test_adapter_translates_pipeline_errors_into_application_failures(tmp_path, 
     )
 
     with pytest.raises(GenerationFailure) as raised:
-        generators_module.TopDownGenerator().generate("Una historia")
+        generators_module.StagecraftGenerator().generate("Una historia")
 
     failure = raised.value
     assert failure.code == "PLOT_VALIDATION_FAILED"

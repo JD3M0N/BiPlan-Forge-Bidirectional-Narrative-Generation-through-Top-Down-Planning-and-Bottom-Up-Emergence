@@ -32,5 +32,5 @@ def load_settings(start: Path | None = None) -> TelegramSettings:
         raise TelegramConfigurationError(
             "Falta TELEGRAM_BOT_TOKEN. Añádelo al archivo .env de la raíz."
         )
-    generator_name = os.getenv("STORY_GENERATOR", "top-down").strip().lower()
-    return TelegramSettings(token, generator_name or "top-down", root)
+    generator_name = os.getenv("STORY_GENERATOR", "stagecraft").strip().lower()
+    return TelegramSettings(token, generator_name or "stagecraft", root)

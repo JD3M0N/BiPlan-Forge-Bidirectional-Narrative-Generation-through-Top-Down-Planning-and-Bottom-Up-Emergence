@@ -3,11 +3,11 @@ from types import SimpleNamespace
 from unittest.mock import create_autospec
 
 from asg_console import evaluation as evaluation_module
-from asg_console import top_down as top_down_module
-from asg_console.app import ConsoleApp, TopDownMenu
-from asg_top_down import StoryGenerator
-from asg_top_down import provider as top_down_provider_module
-from asg_top_down.formats import ScriptMethod, StoryFormat
+from asg_console import stagecraft as stagecraft_module
+from asg_console.app import ConsoleApp, StagecraftMenu
+from asg_stagecraft import StoryGenerator
+from asg_stagecraft.formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
+from asg_stagecraft.runtime import provider as stagecraft_provider_module
 
 
 class MenuSpy:
@@ -30,7 +30,7 @@ def test_main_menu_navigates_both_models_and_rejects_bad_input() -> None:
     application = ConsoleApp(
         input_fn=input_sequence(["1", "2", "x", "0"]),
         output=messages.append,
-        top_down=top,
+        stagecraft=top,
         bottom_up=bottom,
     )
     assert application.run() == 0
@@ -39,7 +39,7 @@ def test_main_menu_navigates_both_models_and_rejects_bad_input() -> None:
     assert "Opción inválida." in messages
 
 
-def test_top_down_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
+def test_stagecraft_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
     captured = {}
 
     class Provider:
@@ -78,12 +78,15 @@ def test_top_down_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
             "promise_ledger": True,
             "story_format": StoryFormat.NARRATIVE,
             "script_method": ScriptMethod.NATIVE,
+            "narrative_voice": NarrativeVoice.OMNISCIENT,
+            "actor_memory": ActorMemory.OWN,
+            "turns_per_beat": 8,
         },
     )()
-    monkeypatch.setattr(top_down_module, "load_top_down_settings", lambda: settings)
-    monkeypatch.setattr(top_down_provider_module, "GeminiProvider", Provider)
-    monkeypatch.setattr(top_down_module, "StoryGenerator", Orchestrator)
-    menu = TopDownMenu(
+    monkeypatch.setattr(stagecraft_module, "load_stagecraft_settings", lambda: settings)
+    monkeypatch.setattr(stagecraft_provider_module, "GeminiProvider", Provider)
+    monkeypatch.setattr(stagecraft_module, "StoryGenerator", Orchestrator)
+    menu = StagecraftMenu(
         input_fn=input_sequence(["1", "Una historia", "", "0"]),
         output=lambda message: None,
     )
@@ -95,10 +98,13 @@ def test_top_down_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
         "promise_ledger": True,
         "story_format": StoryFormat.NARRATIVE,
         "script_method": ScriptMethod.NATIVE,
+        "narrative_voice": NarrativeVoice.OMNISCIENT,
+        "actor_memory": ActorMemory.OWN,
+        "turns_per_beat": 8,
     }
 
 
-def test_top_down_accepts_a_script_output_choice(tmp_path, monkeypatch) -> None:
+def test_stagecraft_accepts_a_script_output_choice(tmp_path, monkeypatch) -> None:
     captured = {}
 
     class Provider:
@@ -135,12 +141,15 @@ def test_top_down_accepts_a_script_output_choice(tmp_path, monkeypatch) -> None:
             "promise_ledger": True,
             "story_format": StoryFormat.NARRATIVE,
             "script_method": ScriptMethod.NATIVE,
+            "narrative_voice": NarrativeVoice.OMNISCIENT,
+            "actor_memory": ActorMemory.OWN,
+            "turns_per_beat": 8,
         },
     )()
-    monkeypatch.setattr(top_down_module, "load_top_down_settings", lambda: settings)
-    monkeypatch.setattr(top_down_provider_module, "GeminiProvider", Provider)
-    monkeypatch.setattr(top_down_module, "StoryGenerator", Orchestrator)
-    menu = TopDownMenu(
+    monkeypatch.setattr(stagecraft_module, "load_stagecraft_settings", lambda: settings)
+    monkeypatch.setattr(stagecraft_provider_module, "GeminiProvider", Provider)
+    monkeypatch.setattr(stagecraft_module, "StoryGenerator", Orchestrator)
+    menu = StagecraftMenu(
         input_fn=input_sequence(["1", "Una historia", "3", "0"]),
         output=lambda message: None,
     )
@@ -172,7 +181,7 @@ def test_console_evaluates_story_and_retries_invalid_values(tmp_path, monkeypatc
             ]
         ),
         output=messages.append,
-        top_down=MenuSpy(),
+        stagecraft=MenuSpy(),
         bottom_up=MenuSpy(),
     )
     application._evaluate_story()

@@ -80,13 +80,29 @@ def _describe(
 ) -> tuple[str, str, str | None, str | None, str | None]:
     """Collect the grouping axes of one run from its sidecar artifacts."""
     relative = directory.relative_to(stories_root)
-    approach = relative.parts[0] if relative.parts else UNKNOWN
+    collection = relative.parts[0] if relative.parts else UNKNOWN
+    approach = _approach(directory, collection)
     profile = _json_field(directory / "request.json", "narrative_profile")
     generator = _json_field(directory / "generator_version.json", "generator_version")
     pipeline = _json_field(directory / "generator_version.json", "pipeline_version")
     if pipeline is None:
         pipeline = _json_field(directory / "metadata.json", "pipeline_version")
     return relative.as_posix(), approach, profile, generator, pipeline
+
+
+def _approach(directory: Path, collection: str) -> str:
+    """Name which of the three approaches produced one run.
+
+    The collection folder is not enough on its own: Stories/Stagecraft holds both top-down runs
+    (narrative prose and theater script) and hybrid ones (the characters perform the script and
+    the story is narrated from that log), so the format decides. Runs generated before the
+    rename keep their own folder and stay grouped as Top-Down, which is what lets the old corpus
+    be compared against the new one.
+    """
+    if collection not in {"Stagecraft", "Top-Down"}:
+        return collection
+    story_format = _json_field(directory / "metadata.json", "story_format")
+    return "Hybrid" if story_format == "simulated" else "Top-Down"
 
 
 def _output_axes(directory: Path) -> tuple[str, str | None]:

@@ -73,11 +73,12 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument(
         "--format",
         dest="story_format",
-        choices=("narrative", "script", "all"),
+        choices=("narrative", "script", "simulated", "prose", "all"),
         default="narrative",
         help=(
             "Formato de salida a incluir; por defecto solo narrativa, porque craft_metrics "
-            "mide diálogo por comillas o raya inicial y un guion mediría casi 0%% de diálogo"
+            "mide diálogo por comillas o raya inicial y un guion mediría casi 0%% de diálogo. "
+            "'prose' junta narrativa y simulada, que sí son comparables entre sí"
         ),
     )
     return result

@@ -13,6 +13,7 @@ dependencies = ["asg-core>=0.3.0"]
 [project.scripts]
 report-evaluations = "asg_evaluation.cli:main"
 report-story-craft = "asg_evaluation.craft_cli:main"
+report-simulations = "asg_evaluation.simulation_cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/asg_evaluation"]

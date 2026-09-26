@@ -7,7 +7,7 @@ qué valida el código después de cada respuesta, y qué pasa cuando algo falla
 Está escrito contra el código, no contra la intención: cada afirmación cita el fichero y la línea
 donde vive, y las cifras del anexo salen de los artefactos de una ejecución real.
 
-**Estado medido el 2026-09-19 sobre `e4fca41`**, con `asg-top-down` 6.6.0 y `PIPELINE_VERSION`
+**Estado medido el 2026-09-19 sobre `e4fca41`**, con `asg-stagecraft` 6.6.0 y `PIPELINE_VERSION`
 6.2. La etapa `promises`, incorporada en 6.8.0, se documenta aquí pero todavía no aparece en las
 cifras del anexo. Son dos números distintos y conviene no confundirlos: el primero versiona el paquete, el
 segundo el conjunto de artefactos que produce un run y su compatibilidad hacia atrás
@@ -1140,7 +1140,7 @@ Perfil     expansive, forzado con --profile
 Modelo     gemini-3.5-flash-lite
 Comando    generate-story "<prompt 01 Expansiva>" --profile expansive
 Fecha      2026-09-20, 02:18:49 - 02:22:20 UTC (3 min 31 s)
-Generador  asg-top-down 6.6.0, pipeline_version 6.2
+Generador  asg-stagecraft 6.6.0, pipeline_version 6.2
 Estado     completed, sin advertencias, 33 artefactos
 ```
 

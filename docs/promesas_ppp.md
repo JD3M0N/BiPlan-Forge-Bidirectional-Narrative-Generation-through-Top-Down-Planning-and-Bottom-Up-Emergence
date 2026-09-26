@@ -3,7 +3,7 @@
 Qué se formalizó de la tríada de Sanderson, qué se dejó fuera a propósito, por qué el contrato no
 puede tocar la estructura de la historia, y cómo se mide si sirve de algo.
 
-**Escrito contra la implementación de `asg-top-down` 6.8.0.** El contrato de artefactos sigue en
+**Escrito contra la implementación de `asg-stagecraft` 6.8.0.** El contrato de artefactos sigue en
 `PIPELINE_VERSION` 6.2: los dos artefactos que añade son aditivos y opcionales.
 
 ## El problema que resuelve
@@ -177,10 +177,10 @@ que nadie tenga que redescubrirlo.
 
 | Pieza | Fichero |
 |---|---|
-| esquemas del ledger y de los veredictos | `packages/top_down/src/asg_top_down/schemas.py` |
-| validador e invariantes | `packages/top_down/src/asg_top_down/promises.py` |
-| banda de promesas por perfil | `packages/top_down/src/asg_top_down/profiles.py` |
-| agente y su prompt | `packages/top_down/src/asg_top_down/agents/promises.py` |
-| bloques que viajan al prompt | `packages/top_down/src/asg_top_down/promise_brief.py` |
-| etapa, reparación, degradación y auditoría | `packages/top_down/src/asg_top_down/pipeline.py` |
+| esquemas del ledger y de los veredictos | `packages/stagecraft/src/asg_stagecraft/schemas.py` |
+| validador e invariantes | `packages/stagecraft/src/asg_stagecraft/promises.py` |
+| banda de promesas por perfil | `packages/stagecraft/src/asg_stagecraft/profiles.py` |
+| agente y su prompt | `packages/stagecraft/src/asg_stagecraft/agents/promises.py` |
+| bloques que viajan al prompt | `packages/stagecraft/src/asg_stagecraft/promise_brief.py` |
+| etapa, reparación, degradación y auditoría | `packages/stagecraft/src/asg_stagecraft/pipeline.py` |
 | recorrido de la etapa en el pipeline | [pipeline_top_down.md](pipeline_top_down.md) |

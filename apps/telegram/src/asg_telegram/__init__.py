@@ -3,13 +3,13 @@
 from .contract import StoryGeneratorAdapter
 from .generators import (
     GeneratorRegistry,
-    TopDownGenerator,
+    StagecraftGenerator,
     create_generator,
 )
 
 __all__ = [
     "GeneratorRegistry",
     "StoryGeneratorAdapter",
-    "TopDownGenerator",
+    "StagecraftGenerator",
     "create_generator",
 ]

@@ -12,7 +12,7 @@ contrato de salida, para poder compararlos a ciegas y quedarse con uno. Ese es j
 ## Cómo se elige
 
 `StoryFormat` (`narrative` | `script`) y `ScriptMethod` (`native` | `adapted`) viven en
-`packages/top_down/src/asg_top_down/formats.py`. El formato por defecto es `narrative`, así que
+`packages/stagecraft/src/asg_stagecraft/formats.py`. El formato por defecto es `narrative`, así que
 no elegir nada no cambia nada.
 
 - CLI: `generate-story "<prompt>" --format script --script-method native`

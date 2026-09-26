@@ -36,7 +36,7 @@ produzca un cambio de prosa visible, sin ninguna medición añadida.
 | Elemento | Valor |
 |---|---|
 | Commit | working tree con el arreglo aplicado sobre `1bea0f1` |
-| Generador | `asg-top-down`, `pipeline_version` 6.0 |
+| Generador | `asg-stagecraft`, `pipeline_version` 6.0 |
 | Modelo | `gemini-3.5-flash-lite`, ~14 peticiones por minuto efectivas |
 | Fecha | 2026-09-03, 21:27–22:15 UTC |
 | Prompts | `docs/prompts_top_down.md`, catálogo 6 (dinosaurios, línea base de `a67ba98`), catálogo

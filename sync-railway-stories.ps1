@@ -1,12 +1,16 @@
 ﻿<#
 .SYNOPSIS
-Descarga desde Railway las ejecuciones Top-Down que no existen localmente.
+Descarga desde Railway las ejecuciones que no existen localmente.
 
 .DESCRIPTION
-Compara las carpetas de /app/Stories/Top-Down del servicio Railway enlazado
-con Stories/Top-Down del repositorio. Archiva cada ejecución terminal, valida
-su manifiesto y elimina la copia remota solamente después de comprobar la
-integridad local.
+Compara las carpetas de /app/Stories/<Collection> del servicio Railway enlazado
+con Stories/<Collection> del repositorio. Archiva cada ejecución terminal,
+valida su manifiesto y elimina la copia remota solamente después de comprobar
+la integridad local.
+
+.PARAMETER Collection
+Colección de ejecuciones a sincronizar: Stagecraft (predeterminada) o Top-Down,
+que son las ejecuciones anteriores a la versión 7.0.
 
 .PARAMETER Concurrency
 Cantidad máxima de archivos que Railway descarga simultáneamente. El valor
@@ -54,14 +58,17 @@ param(
     [int]$DownloadRetryAttempts = 3,
 
     [ValidateRange(0, 60)]
-    [int]$RetryDelaySeconds = 2
+    [int]$RetryDelaySeconds = 2,
+
+    [ValidateSet("Stagecraft", "Top-Down")]
+    [string]$Collection = "Stagecraft"
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$remoteRoot = "/app/Stories/Top-Down"
-$localRoot = Join-Path $PSScriptRoot "Stories\Top-Down"
+$remoteRoot = "/app/Stories/$Collection"
+$localRoot = Join-Path $PSScriptRoot (Join-Path "Stories" $Collection)
 $stagingRoot = Join-Path $PSScriptRoot "Stories\.railway-sync"
 
 # Return the first matching property value from a flexible CLI object.
