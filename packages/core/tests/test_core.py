@@ -11,6 +11,8 @@ from pathlib import Path
 import pytest
 from asg_core import (
     AudioGenerationError,
+    artifact_json,
+    atomic_write_csv,
     atomic_write_json,
     atomic_write_text,
     create_story_audio,
@@ -83,6 +85,23 @@ def test_atomic_writers_replace_complete_files(tmp_path):
 
     assert text_path.read_text(encoding="utf-8") == "hello"
     assert json.loads(json_path.read_text(encoding="utf-8")) == {"value": "á"}
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_artifact_json_is_exactly_what_the_json_writer_persists(tmp_path):
+    """Keep one repository JSON format, so a hash of the text matches the file on disk."""
+    data = {"título": "Ñandú", "items": [1, 2]}
+    path = atomic_write_json(tmp_path / "data.json", data)
+
+    assert path.read_bytes() == artifact_json(data).encode("utf-8")
+    assert artifact_json(data) == '{\n  "título": "Ñandú",\n  "items": [\n    1,\n    2\n  ]\n}\n'
+
+
+def test_atomic_csv_writer_puts_the_header_first_and_quotes_like_csv(tmp_path):
+    """Write the header row and let the csv module quote the awkward cells."""
+    path = atomic_write_csv(tmp_path / "table.csv", ("a", "b"), iter([(1, "x,y"), (2, None)]))
+
+    assert path.read_bytes() == b'a,b\r\n1,"x,y"\r\n2,\r\n'
     assert not list(tmp_path.glob("*.tmp"))
 
 

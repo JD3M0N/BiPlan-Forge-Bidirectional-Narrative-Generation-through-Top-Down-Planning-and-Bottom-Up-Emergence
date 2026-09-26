@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import argparse
-import csv
-import io
-import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from asg_core import atomic_write_text, find_project_root
+from asg_core import atomic_write_csv, stories_path, use_utf8_output
 
 from .simulation_report import (
     SIMULATION_COLUMNS,
@@ -85,21 +82,14 @@ def render(summaries: Sequence[SimulationSummary], axis: str) -> str:
 
 def write_csv(path: Path, records: Sequence[SimulationRecord]) -> None:
     """Write one row per performance, atomically, in the declared column order."""
-    buffer = io.StringIO(newline="")
-    writer = csv.writer(buffer)
-    writer.writerow(SIMULATION_COLUMNS)
-    writer.writerows(simulation_row(record) for record in records)
-    atomic_write_text(path, buffer.getvalue())
+    atomic_write_csv(path, SIMULATION_COLUMNS, (simulation_row(record) for record in records))
 
 
 def main(argv: list[str] | None = None) -> int:
     """Run the simulation report entry point."""
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None:
-            reconfigure(encoding="utf-8", errors="replace")
+    use_utf8_output()
     args = parser().parse_args(argv)
-    stories_root = Path(args.stories) if args.stories else find_project_root() / "Stories"
+    stories_root = Path(args.stories) if args.stories else stories_path()
 
     records = collect_simulations(stories_root)
     selected = [

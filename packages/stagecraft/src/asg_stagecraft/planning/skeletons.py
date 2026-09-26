@@ -1425,11 +1425,6 @@ def _validate_catalog() -> None:
 _validate_catalog()
 
 
-def skeletons_for_layer(layer: Layer) -> tuple[PlotSkeleton, ...]:
-    """Return every catalog entry that can occupy the requested narrative layer."""
-    return tuple(item for item in PLOT_SKELETONS if layer in item.layers)
-
-
 def find_skeleton(skeleton_id: str) -> PlotSkeleton | None:
     """Return one catalog entry, or None when the id is unknown."""
     return SKELETONS_BY_ID.get(skeleton_id)

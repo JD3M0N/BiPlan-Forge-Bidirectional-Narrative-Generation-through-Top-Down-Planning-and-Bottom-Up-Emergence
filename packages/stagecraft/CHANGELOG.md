@@ -1,5 +1,18 @@
 # Historial de cambios
 
+## 7.1.1
+
+Limpieza sin cambio de contrato: `PIPELINE_VERSION` sigue en 7.1 y los artefactos son los mismos.
+
+- Retirado el código que nadie llamaba: `PerformanceEngine.full_transcript`,
+  `CharacterMemory.working_memory`, `intensity_word` (con su tabla `_INTENSITY`) y
+  `skeletons_for_layer`, que solo usaba un test.
+- `ArtifactRepository` y `recover-story-runs` serializan con `asg_core.artifact_json`, el mismo
+  formato que antes en un solo sitio; `audit-stage-run` escribe `audit.json` de forma atómica.
+- Todos los comandos configuran la salida con `asg_core.use_utf8_output`; `compare-story-runs`,
+  que no lo hacía, deja de imprimir mojibake en una consola de Windows. Exige `asg-core` 0.5.0.
+- Los docstrings de `stage/` dejan de citar el escape room, retirado del monorepo.
+
 ## 7.1.0
 
 Arregla lo que destapó el primer run real del formato simulado (dos historias del prompt 03,

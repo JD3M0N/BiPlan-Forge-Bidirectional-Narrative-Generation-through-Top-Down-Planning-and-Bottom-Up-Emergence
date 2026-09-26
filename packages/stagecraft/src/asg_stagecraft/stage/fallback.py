@@ -1,9 +1,9 @@
 """A deterministic narrator for when the model one cannot be run.
 
-Part of the contract rather than a patch, exactly like the escape room's backup narrator: a
-performance that was played must not be lost because the narration call failed. It also earns
-its keep as a measurement, because it is the floor the model narrator is compared against - the
-same log, rendered with no interpretation at all.
+Part of the contract rather than a patch: a performance that was played must not be lost
+because the narration call failed. It also earns its keep as a measurement, because it is the
+floor the model narrator is compared against - the same log, rendered with no interpretation at
+all.
 
 It invents nothing. Speech becomes dialogue under the Spanish dash convention, actions become
 sentences, thoughts become reported interiority, and that is all.

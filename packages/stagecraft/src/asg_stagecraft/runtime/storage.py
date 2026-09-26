@@ -8,7 +8,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from asg_core import atomic_write_text, create_unique_directory, slugify
+from asg_core import artifact_json, atomic_write_text, create_unique_directory, slugify
 from pydantic import BaseModel
 
 from ..formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
@@ -76,7 +76,7 @@ class ArtifactRepository:
 
     def save_data(self, filename: str, value) -> None:
         """Save data."""
-        content = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
+        content = artifact_json(value)
         destination = self.run_dir / filename
         created = not destination.exists()
         atomic_write_text(destination, content)
@@ -192,14 +192,12 @@ class ArtifactRepository:
 
     def _write_metadata(self) -> None:
         """Handle the write metadata operation for ArtifactRepository."""
-        content = (
-            json.dumps(self.metadata.model_dump(mode="json"), ensure_ascii=False, indent=2) + "\n"
-        )
+        content = artifact_json(self.metadata.model_dump(mode="json"))
         atomic_write_text(self.run_dir / "metadata.json", content)
         if hasattr(self, "manifest"):
             self._record("metadata.json", content)
 
     def _write_manifest(self) -> None:
         """Handle the write manifest operation for ArtifactRepository."""
-        content = json.dumps(self.manifest, ensure_ascii=False, indent=2) + "\n"
+        content = artifact_json(self.manifest)
         atomic_write_text(self.run_dir / "pipeline_manifest.json", content)

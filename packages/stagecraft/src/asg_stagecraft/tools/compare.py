@@ -8,6 +8,8 @@ import string
 from collections.abc import Sequence
 from pathlib import Path
 
+from asg_core import use_utf8_output
+
 
 def build_comparison(runs: Sequence[Path], output: Path) -> Path:
     """Build comparison."""
@@ -36,6 +38,7 @@ antes de revelar qué versión es cada una.</p>
 
 def main(argv: list[str] | None = None) -> int:
     """Run the command-line entry point."""
+    use_utf8_output()
     parser = argparse.ArgumentParser(
         description="Compara visualmente dos o más ejecuciones o archivos story.md"
     )

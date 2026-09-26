@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0] - 2026-09-26
+
+- Added `artifact_json`, the repository JSON format on its own, for writers that must hash the
+  exact text they persist; `atomic_write_json` now builds on it.
+- Added `atomic_write_csv` and `use_utf8_output`, which replace the copies the report and
+  tool entry points of evaluation and Stagecraft carried.
+
 ## [0.4.0] - 2026-09-13
 
 - Added `craft_metrics`, `prose_paragraphs` and `split_sentences`: deterministic prose

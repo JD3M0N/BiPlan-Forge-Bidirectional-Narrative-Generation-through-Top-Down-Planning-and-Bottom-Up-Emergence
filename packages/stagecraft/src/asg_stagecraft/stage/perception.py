@@ -2,8 +2,8 @@
 
 Pure and deterministic, and the reason a character can be wrong about the story: an actor is
 only ever told what its own memory holds, and this module decides what reaches that memory.
-It is the drama counterpart of the escape room's partial beliefs, where an agent's policy reads
-its beliefs and never the world state.
+It is the drama counterpart of partial beliefs in agent simulations, where a policy reads what
+the agent believes and never the world state.
 
 The rule is small enough to state in full: a public turn is perceived by everyone on stage, a
 whisper only by its speaker and the characters it is addressed to, and a thought only by whoever

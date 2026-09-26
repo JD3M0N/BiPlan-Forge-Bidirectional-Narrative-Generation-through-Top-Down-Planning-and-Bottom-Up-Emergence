@@ -2,16 +2,13 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug historia Top-Down — prompt canónico 1 (Gemini)",
+            "name": "Debug Stagecraft — prompt canónico 1 (Gemini)",
             "type": "debugpy",
             "request": "launch",
             "module": "asg_stagecraft.tools.generate",
             "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
             "cwd": "${workspaceFolder}",
             "envFile": "${workspaceFolder}\\.env",
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}\\packages\\core\\src;${workspaceFolder}\\packages\\evaluation\\src;${workspaceFolder}\\packages\\top_down\\src"
-            },
             "console": "integratedTerminal",
             "stopOnEntry": false,
             "justMyCode": true,
@@ -23,16 +20,13 @@
             ]
         },
         {
-            "name": "Debug Top-Down - run real corto (essential, sin audio)",
+            "name": "Debug Stagecraft - run real corto (essential, sin audio)",
             "type": "debugpy",
             "request": "launch",
             "module": "asg_stagecraft.tools.generate",
             "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
             "cwd": "${workspaceFolder}",
             "envFile": "${workspaceFolder}\\.env",
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}\\packages\\core\\src;${workspaceFolder}\\packages\\evaluation\\src;${workspaceFolder}\\packages\\top_down\\src"
-            },
             "console": "integratedTerminal",
             "stopOnEntry": false,
             "justMyCode": true,

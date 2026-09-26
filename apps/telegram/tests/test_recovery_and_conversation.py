@@ -7,10 +7,10 @@ from types import SimpleNamespace
 import pytest
 from asg_stagecraft.runtime.errors import ConfigurationError
 from asg_telegram import app as app_module
-from asg_telegram.app import TelegramStoryBot
 from asg_telegram.config import TelegramConfigurationError
 from asg_telegram.contract import FormatOption, GenerationProgress, ProfileOption, RunSummary
 from asg_telegram.generators import summarize_run
+from asg_telegram.handlers import TelegramStoryBot
 from asg_telegram.queue import SCHEMA_VERSION, QueueRepository
 from asg_telegram.states import ConversationState
 
@@ -156,7 +156,7 @@ def test_running_generation_stops_when_the_user_cancels(tmp_path):
     class CancellingGenerator(RecordingGenerator):
         def generate(self, prompt, *, on_progress=None, **kwargs):
             on_progress(GenerationProgress(10, "analysis", "Analizando"))
-            queue.request_cancellation(job.id)
+            assert queue.cancel_user(11) == "requested"
             on_progress(GenerationProgress(20, "world", "Construyendo el mundo"))
             raise AssertionError("la generación debió detenerse")
 
@@ -491,7 +491,7 @@ def test_main_reports_broken_configuration_as_exit_code_two(
         lambda run: None,
         lambda run: (
             (run / "metadata.json").write_text("{no es json", encoding="utf-8"),
-            (run / "llm_usage_summary.json").write_text(json.dumps([1, 2]), encoding="utf-8"),
+            (run / "llm_usage.json").write_text(json.dumps([1, 2]), encoding="utf-8"),
         ),
     ],
     ids=["no-json-artifacts-at-all", "broken-json-artifacts"],

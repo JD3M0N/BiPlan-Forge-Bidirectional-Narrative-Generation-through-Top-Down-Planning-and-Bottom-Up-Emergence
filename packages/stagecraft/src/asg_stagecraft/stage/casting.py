@@ -59,8 +59,8 @@ def materialize_bible(
 def fallback_bible(cast_ids: list[str], characters: CharactersArtifact) -> CastBible:
     """Derive a thin cast bible from characters.json when the casting stage cannot be run.
 
-    Deterministic and offline, like the escape room's backup narrator: the run continues with a
-    poorer dossier rather than failing, and the artifact records that it did.
+    Deterministic and offline: the run continues with a poorer dossier rather than failing, and
+    the artifact records that it did.
     """
     by_id = {item.id: item for item in characters.characters}
     dossiers = [

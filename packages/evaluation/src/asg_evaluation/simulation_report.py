@@ -13,11 +13,12 @@ reading them as 0 would make the older corpus look spotless on exactly the probl
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from statistics import median
+
+from .artifacts import discover_runs, group_by, load_json_object, number_field, text_field
 
 METRICS_FILENAME = "simulation_metrics.json"
 UNKNOWN = "desconocido"
@@ -99,20 +100,17 @@ SIMULATION_GROUPINGS: dict[str, Callable[[SimulationRecord], str]] = {
 
 def discover_simulations(stories_root: str | Path) -> list[Path]:
     """Return every run directory that holds a performance, in a stable order."""
-    root = Path(stories_root)
-    if not root.is_dir():
-        return []
-    return sorted(path.parent for path in root.rglob(METRICS_FILENAME) if path.is_file())
+    return discover_runs(stories_root, METRICS_FILENAME)
 
 
 def read_simulation(directory: str | Path, stories_root: str | Path) -> SimulationRecord | None:
     """Describe one performed run, or None when its metrics cannot be read."""
     run_dir, root = Path(directory), Path(stories_root)
-    metrics = _load(run_dir / METRICS_FILENAME)
+    metrics = load_json_object(run_dir / METRICS_FILENAME)
     if not metrics:
         return None
-    metadata = _load(run_dir / "metadata.json")
-    version = _load(run_dir / "generator_version.json")
+    metadata = load_json_object(run_dir / "metadata.json")
+    version = load_json_object(run_dir / "generator_version.json")
     return SimulationRecord(
         directory=run_dir,
         run_id=run_dir.name,
@@ -125,7 +123,7 @@ def read_simulation(directory: str | Path, stories_root: str | Path) -> Simulati
         generator_version=_text(version, "generator_version"),
         status=_text(metadata, "status"),
         warnings=len(metadata.get("warnings") or []),
-        values={name: _number(metrics, name) for name in SIMULATION_FIELDS},
+        values={name: number_field(metrics, name) for name in SIMULATION_FIELDS},
     )
 
 
@@ -141,12 +139,8 @@ def summarize_simulations(
     key: Callable[[SimulationRecord], str],
 ) -> list[SimulationSummary]:
     """Group performances and report the mean and median of every field that was measured."""
-    grouped: dict[str, list[SimulationRecord]] = {}
-    for record in records:
-        grouped.setdefault(key(record) or UNKNOWN, []).append(record)
     summaries = []
-    for label in sorted(grouped):
-        group = grouped[label]
+    for label, group in group_by(records, lambda record: key(record) or UNKNOWN).items():
         values = {}
         for name in SIMULATION_FIELDS:
             numbers = [value for record in group if (value := record.values[name]) is not None]
@@ -185,24 +179,6 @@ SIMULATION_COLUMNS: tuple[str, ...] = (
 )
 
 
-def _load(path: Path) -> dict:
-    """Read one JSON artifact, treating a missing or broken file as absent."""
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return document if isinstance(document, dict) else {}
-
-
 def _text(document: dict, field_name: str) -> str:
     """Read one string field, falling back to a stable placeholder."""
-    value = document.get(field_name)
-    return value if isinstance(value, str) and value.strip() else UNKNOWN
-
-
-def _number(document: dict, field_name: str) -> float | None:
-    """Read one numeric field, or None when the run never measured it."""
-    value = document.get(field_name)
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return float(value)
+    return text_field(document, field_name) or UNKNOWN

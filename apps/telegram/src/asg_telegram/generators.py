@@ -176,7 +176,7 @@ def _read_json(path: Path) -> Any:
 
 def _usage_line(run_dir: Path) -> str | None:
     """Summarize Gemini consumption for a finished run, when it was recorded."""
-    usage = _read_json(run_dir / "llm_usage_summary.json")
+    usage = _read_json(run_dir / "llm_usage.json")
     if not isinstance(usage, dict):
         return None
     return (
@@ -203,25 +203,15 @@ def _run_warnings(run_dir: Path) -> list[str]:
 
 
 def _revision_warning_details(run_dir: Path) -> list[str]:
-    """Format structured Writer fallbacks and the resulting length impact."""
+    """Format the structured Writer fallbacks recorded in the revision report."""
     report = _read_json(run_dir / "revision_report.json")
     if not isinstance(report, dict):
         return []
-    details = [
+    return [
         _chapter_warning(chapter)
         for chapter in report.get("chapters", [])
         if chapter.get("warning_code") == "WRITER_REVISION_REJECTED"
     ]
-    if not details:
-        return details
-    audit = _read_json(run_dir / "length_audit.json")
-    total = audit.get("total", {}) if isinstance(audit, dict) else {}
-    if total and not total.get("within_tolerance", True):
-        details.append(
-            f"Longitud final: {total.get('actual_words')} palabras; mínimo esperado "
-            f"{total.get('minimum_words')} y objetivo {total.get('target_words')}."
-        )
-    return details
 
 
 def _chapter_warning(chapter: dict) -> str:
@@ -232,18 +222,6 @@ def _chapter_warning(chapter: dict) -> str:
         for attempt in attempts
         if attempt.get("status") == "rejected" and attempt.get("diagnostic")
     ]
-    if diagnostics and all(
-        diagnostic.get("code") == "WORD_COUNT_OUT_OF_RANGE" for diagnostic in diagnostics
-    ):
-        counts = " y ".join(str(diagnostic.get("actual_words", "?")) for diagnostic in diagnostics)
-        latest = diagnostics[-1]
-        return (
-            f"Capítulo {chapter.get('chapter_index')}: {len(diagnostics)} "
-            f"revisiones descartadas por longitud ({counts} palabras; rango válido "
-            f"{latest.get('minimum_words')}-{latest.get('maximum_words')}). "
-            f"Se entregó el borrador de {chapter.get('draft_words')} palabras. "
-            "Código: WRITER_REVISION_REJECTED."
-        )
     failed = [
         attempt.get("exception_type", "error interno")
         for attempt in attempts

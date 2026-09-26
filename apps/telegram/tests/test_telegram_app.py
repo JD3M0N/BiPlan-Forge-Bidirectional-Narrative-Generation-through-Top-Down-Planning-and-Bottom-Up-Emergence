@@ -7,7 +7,6 @@ import pytest
 from asg_core import AudioGenerationError
 from asg_telegram import delivery as delivery_module
 from asg_telegram import generation as generation_module
-from asg_telegram.app import TelegramStoryBot, _evaluator_name
 from asg_telegram.contract import (
     GenerationEvent,
     GenerationFailure,
@@ -15,6 +14,7 @@ from asg_telegram.contract import (
     ProfileOption,
 )
 from asg_telegram.generators import summarize_run
+from asg_telegram.handlers import TelegramStoryBot, _evaluator_name
 from telegram.error import BadRequest, TimedOut
 
 PROFILES = (
@@ -256,37 +256,14 @@ def test_generation_reports_quality_warnings_and_still_evaluates(tmp_path):
                             {
                                 "status": "rejected",
                                 "diagnostic": {
-                                    "code": "WORD_COUNT_OUT_OF_RANGE",
-                                    "actual_words": 499,
-                                    "minimum_words": 675,
-                                    "maximum_words": 900,
+                                    "code": "UNCHANGED_SIGNIFICANT_NOTES",
+                                    "actual_words": 470,
                                 },
                             },
-                            {
-                                "status": "rejected",
-                                "diagnostic": {
-                                    "code": "WORD_COUNT_OUT_OF_RANGE",
-                                    "actual_words": 550,
-                                    "minimum_words": 675,
-                                    "maximum_words": 900,
-                                },
-                            },
+                            {"status": "failed", "exception_type": "TimeoutError"},
                         ],
                     }
                 ]
-            }
-        ),
-        encoding="utf-8",
-    )
-    (structured / "length_audit.json").write_text(
-        json.dumps(
-            {
-                "total": {
-                    "actual_words": 1295,
-                    "minimum_words": 1350,
-                    "target_words": 1500,
-                    "within_tolerance": False,
-                }
             }
         ),
         encoding="utf-8",
@@ -298,10 +275,9 @@ def test_generation_reports_quality_warnings_and_still_evaluates(tmp_path):
         handler._generate_and_deliver(context=context, chat_id=20, user=user, prompt="Historia")
     )
     warning = next(message["text"] for message in bot.messages if "Código:" in message["text"])
-    assert "499 y 550 palabras" in warning
+    assert "Capítulo 1: no hubo una revisión válida" in warning
+    assert "(UNCHANGED_SIGNIFICANT_NOTES, TimeoutError)" in warning
     assert "borrador de 470 palabras" in warning
-    assert "Longitud final: 1295 palabras" in warning
-    assert "mínimo esperado 1350" in warning
 
 
 def test_generation_reports_actionable_safe_error() -> None:

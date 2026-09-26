@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import statistics
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
@@ -11,12 +10,22 @@ from pathlib import Path
 
 from asg_core import CraftMetrics, craft_metrics
 
+from .artifacts import (
+    UNKNOWN,
+    ErrorHandler,
+    group_by,
+    load_json_object,
+    number_field,
+    record_format,
+    record_profile,
+    record_version,
+    text_field,
+)
 from .evaluation import discover_stories
-from .report import NO_PROFILE, UNKNOWN, _describe, _output_axes
+from .report import _describe, _output_axes
 
 STORY_FILENAME = "story.md"
 METRICS_FILENAME = "story_metrics.json"
-ErrorHandler = Callable[[Path, str], None]
 
 
 @dataclass(frozen=True)
@@ -137,19 +146,6 @@ CRAFT_COLUMNS = (
 )
 
 
-def _load_document(path: Path, on_error: ErrorHandler | None) -> dict:
-    """Read one JSON artifact, reporting a broken or unreadable file as empty."""
-    if not path.is_file():
-        return {}
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        if on_error is not None:
-            on_error(path, str(error))
-        return {}
-    return document if isinstance(document, dict) else {}
-
-
 def _read_story(directory: Path, on_error: ErrorHandler | None) -> str:
     """Read the Markdown of one story, reporting an unreadable file as empty."""
     path = directory / STORY_FILENAME
@@ -173,23 +169,9 @@ def _integer(document: dict, field: str) -> int | None:
     return int(value) if isinstance(value, int) and not isinstance(value, bool) else None
 
 
-def _decimal(document: dict, field: str) -> float | None:
-    """Read one numeric field as a float, ignoring booleans and other types."""
-    value = document.get(field)
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return None
-    return float(value)
-
-
-def _text(document: dict, field: str) -> str | None:
-    """Read one non-empty string field, or None when it is absent."""
-    value = document.get(field)
-    return value if isinstance(value, str) and value.strip() else None
-
-
 def _wall_duration(metadata: dict) -> float | None:
     """Measure the wall-clock seconds between the first and the last metadata write."""
-    started, ended = _text(metadata, "created_at"), _text(metadata, "updated_at")
+    started, ended = text_field(metadata, "created_at"), text_field(metadata, "updated_at")
     if started is None or ended is None:
         return None
     try:
@@ -201,11 +183,11 @@ def _wall_duration(metadata: dict) -> float | None:
 
 def _run_counts(directory: Path, on_error: ErrorHandler | None) -> RunCounts:
     """Collect the countable sidecar artifacts of one run."""
-    plan = _load_document(directory / "story_plan.json", on_error)
-    characters = _load_document(directory / "characters.json", on_error)
-    world = _load_document(directory / "world.json", on_error)
-    review = _load_document(directory / "review.json", on_error)
-    usage = _load_document(directory / "llm_usage.json", on_error)
+    plan = load_json_object(directory / "story_plan.json", on_error)
+    characters = load_json_object(directory / "characters.json", on_error)
+    world = load_json_object(directory / "world.json", on_error)
+    review = load_json_object(directory / "review.json", on_error)
+    usage = load_json_object(directory / "llm_usage.json", on_error)
     return RunCounts(
         plan_chapters=_length(plan, "chapters"),
         plan_events=_length(plan, "events"),
@@ -218,7 +200,7 @@ def _run_counts(directory: Path, on_error: ErrorHandler | None) -> RunCounts:
         llm_calls=_integer(usage, "calls"),
         llm_failed_calls=_integer(usage, "failed_calls"),
         llm_total_tokens=_integer(usage, "total_tokens"),
-        llm_total_wait_seconds=_decimal(usage, "total_wait_seconds"),
+        llm_total_wait_seconds=number_field(usage, "total_wait_seconds"),
     )
 
 
@@ -232,8 +214,8 @@ def read_story_craft(
     run_dir, root = Path(directory), Path(stories_root)
     story, approach, profile, generator, pipeline = _describe(run_dir, root)
     story_format, script_method = _output_axes(run_dir)
-    metadata = _load_document(run_dir / "metadata.json", on_error)
-    blueprint = _load_document(run_dir / "narrative_blueprint.json", on_error)
+    metadata = load_json_object(run_dir / "metadata.json", on_error)
+    blueprint = load_json_object(run_dir / "narrative_blueprint.json", on_error)
     return StoryCraft(
         directory=run_dir,
         story=story,
@@ -242,16 +224,16 @@ def read_story_craft(
         narrative_profile=profile,
         generator_version=generator,
         pipeline_version=pipeline,
-        status=_text(metadata, "status"),
-        model=_text(metadata, "model"),
+        status=text_field(metadata, "status"),
+        model=text_field(metadata, "model"),
         warnings=len(metadata.get("warnings") or []),
-        created_at=_text(metadata, "created_at"),
-        updated_at=_text(metadata, "updated_at"),
+        created_at=text_field(metadata, "created_at"),
+        updated_at=text_field(metadata, "updated_at"),
         duration_seconds=_wall_duration(metadata),
         craft=craft_metrics(_read_story(run_dir, on_error)),
-        recorded=_load_document(run_dir / METRICS_FILENAME, on_error),
+        recorded=load_json_object(run_dir / METRICS_FILENAME, on_error),
         counts=_run_counts(run_dir, on_error),
-        blueprint_macroplot=_text(blueprint, "macroplot_id"),
+        blueprint_macroplot=text_field(blueprint, "macroplot_id"),
         story_format=story_format,
         script_method=script_method,
     )
@@ -279,23 +261,6 @@ def version_key(version: str | None) -> tuple[int, ...]:
             break
         parts.append(int(piece))
     return tuple(parts)
-
-
-def record_version(record: StoryCraft) -> str:
-    """Pick the version axis that separates generator releases, not pipeline contracts."""
-    return record.generator_version or record.pipeline_version or UNKNOWN
-
-
-def record_profile(record: StoryCraft) -> str:
-    """Name the narrative profile of a run that may not declare one."""
-    return record.narrative_profile or NO_PROFILE
-
-
-def record_format(record: StoryCraft) -> str:
-    """Name the output format, and its method for a theater script."""
-    if record.story_format == "script" and record.script_method:
-        return f"script/{record.script_method}"
-    return record.story_format
 
 
 # The two formats whose story.md is prose, so craft_metrics measures the same thing in both.
@@ -444,7 +409,4 @@ def summarize_craft(
     material = list(records)
     if key is None:
         return {"total": _summary_of("total", material)}
-    grouped: dict[str, list[StoryCraft]] = {}
-    for record in material:
-        grouped.setdefault(key(record), []).append(record)
-    return {label: _summary_of(label, grouped[label]) for label in sorted(grouped)}
+    return {label: _summary_of(label, group) for label, group in group_by(material, key).items()}

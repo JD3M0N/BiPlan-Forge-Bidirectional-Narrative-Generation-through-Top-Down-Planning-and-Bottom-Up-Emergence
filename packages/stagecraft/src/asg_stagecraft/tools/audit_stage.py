@@ -33,6 +33,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
+from asg_core import atomic_write_json, use_utf8_output
 from pydantic import BaseModel, Field
 
 from ..runtime.config import load_settings
@@ -278,10 +279,7 @@ def main(argv: list[str] | None = None) -> int:
     """Run the stage-audit entry point."""
     from dataclasses import replace
 
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None:
-            reconfigure(encoding="utf-8", errors="replace")
+    use_utf8_output()
     args = parser().parse_args(argv)
     run_dir = Path(args.run)
     if not (run_dir / "performance.json").is_file():
@@ -304,9 +302,7 @@ def main(argv: list[str] | None = None) -> int:
     kept = keep_previous(destination)
     if kept is not None:
         print(f"El informe anterior se conserva en {kept.name}")
-    destination.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    atomic_write_json(destination, report)
     print(f"\nFugas de frontera de conocimiento: {report['knowledge_leaks']}")
     print(f"Puntuación de conocimiento: {report['knowledge_score']}")
     print(f"Puntuación de fidelidad de la narración: {report['narration_score']}")

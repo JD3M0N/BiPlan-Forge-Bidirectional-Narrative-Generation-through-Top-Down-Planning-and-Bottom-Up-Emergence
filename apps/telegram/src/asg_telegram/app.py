@@ -13,12 +13,12 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Mess
 from .config import TelegramConfigurationError, load_settings
 from .console import configure_console_logging
 from .generators import create_generator
-from .handlers import TelegramStoryBot, _evaluator_name
+from .handlers import TelegramStoryBot
 from .queue import QueueRepository
 
 LOGGER = logging.getLogger(__name__)
 
-__all__ = ["TelegramStoryBot", "_evaluator_name", "build_application", "main"]
+__all__ = ["build_application", "main"]
 
 
 def build_application(token: str, bot: TelegramStoryBot) -> Application:

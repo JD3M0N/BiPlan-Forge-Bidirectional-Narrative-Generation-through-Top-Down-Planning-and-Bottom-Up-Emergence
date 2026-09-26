@@ -11,12 +11,17 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from asg_core import atomic_write_text, stories_path
+from asg_core import (
+    artifact_json,
+    atomic_write_json,
+    atomic_write_text,
+    stories_path,
+    use_utf8_output,
+)
 
 from ..runtime.errors import RunArtifactError
 from ..schemas import ErrorReport
@@ -171,12 +176,12 @@ def _write_metadata(run_dir: Path, metadata: dict) -> None:
         "sha256": hashlib.sha256(encoded).hexdigest(),
         "bytes": len(encoded),
     }
-    atomic_write_text(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+    atomic_write_json(manifest_path, manifest)
 
 
 def _write_json(run_dir: Path, filename: str, value: dict) -> str:
     """Write one JSON artifact the way ArtifactRepository does, and return its text."""
-    content = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
+    content = artifact_json(value)
     atomic_write_text(run_dir / filename, content)
     return content
 
@@ -213,10 +218,7 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     """Run the stalled-run recovery entry point."""
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None:
-            reconfigure(encoding="utf-8", errors="replace")
+    use_utf8_output()
     args = parser().parse_args(argv)
     root = Path(args.stories) if args.stories else stories_path("Stagecraft")
     close = args.close or args.all

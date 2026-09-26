@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.0] - 2026-09-26
+
+- Added the internal `artifacts` module with the tolerant readers the three reports copied:
+  JSON loading, string and number fields, the version, profile and format labels, run
+  discovery and grouping. The reports' output and CSV bytes are unchanged.
+- The three report commands use `asg_core.atomic_write_csv`, `stories_path` and
+  `use_utf8_output`, so they now require `asg-core` 0.5.0.
+- `docs/evaluation_metrics.md` moved into this README, which now also covers
+  `report-story-craft` and `report-simulations`.
+
 ## [0.4.0] - 2026-09-13
 
 - Added `report-story-craft` and the `craft_report` module: prose craft recomputed from

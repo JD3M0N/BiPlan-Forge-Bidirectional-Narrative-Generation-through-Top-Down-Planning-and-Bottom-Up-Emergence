@@ -25,11 +25,6 @@ from .schemas import (
 )
 from .validation import strip_internal_ids
 
-# Intensity reaches a prompt as a word, never as a number: a measurement in a prompt competes
-# with the craft instructions around it, which is the same reason no metric travels anywhere
-# else in this pipeline.
-_INTENSITY = ((0.75, "muy"), (0.4, "bastante"), (0.0, "algo"))
-
 
 def actor_system_prompt(
     dossier: ActorDossier,
@@ -286,11 +281,3 @@ def _state_line(state: CharacterState, names: dict[str, str]) -> str:
         other = names.get(item.character_id, item.character_id)
         pieces.append(f"con {other}: {item.stance}")
     return "; ".join(pieces) or "sin nada que te pese"
-
-
-def intensity_word(value: float) -> str:
-    """Turn an intensity between 0 and 1 into the adverb a prompt may carry."""
-    for threshold, word in _INTENSITY:
-        if value >= threshold:
-            return word
-    return "algo"

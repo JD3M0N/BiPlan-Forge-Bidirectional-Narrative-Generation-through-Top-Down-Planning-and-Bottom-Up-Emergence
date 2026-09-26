@@ -8,6 +8,8 @@ from pathlib import Path
 
 from asg_core import atomic_write_json, file_lock
 
+from .artifacts import discover_runs
+
 METRICS = (
     "coherence",
     "pacing",
@@ -136,7 +138,4 @@ def add_evaluation(
 
 def discover_stories(stories_root: str | Path) -> list[Path]:
     """Return story directories while excluding experiments without story.md."""
-    root = Path(stories_root)
-    if not root.is_dir():
-        return []
-    return sorted(path.parent for path in root.rglob("story.md") if path.is_file())
+    return discover_runs(stories_root, "story.md")

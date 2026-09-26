@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import argparse
-import csv
-import io
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from asg_core import atomic_write_text, find_project_root
+from asg_core import atomic_write_csv, stories_path, use_utf8_output
 
 from .craft_report import (
     CRAFT_COLUMNS,
@@ -133,23 +131,16 @@ def _report(records: Sequence[StoryCraft], group: str) -> str:
 
 def _export_csv(records: Sequence[StoryCraft], destination: Path) -> int:
     """Write one row per measured story and report how many rows it holds."""
-    buffer = io.StringIO()
-    writer = csv.writer(buffer)
-    writer.writerow(CRAFT_COLUMNS)
     rows = [craft_row(record) for record in records]
-    writer.writerows(rows)
-    atomic_write_text(destination, buffer.getvalue())
+    atomic_write_csv(destination, CRAFT_COLUMNS, rows)
     return len(rows)
 
 
 def main(argv: list[str] | None = None) -> int:
     """Run the story-craft report entry point."""
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None:
-            reconfigure(encoding="utf-8", errors="replace")
+    use_utf8_output()
     args = parser().parse_args(argv)
-    stories_root = Path(args.stories) if args.stories else find_project_root() / "Stories"
+    stories_root = Path(args.stories) if args.stories else stories_path()
     if not stories_root.is_dir():
         print(f"Error: no existe el directorio {stories_root}", file=sys.stderr)
         return 2

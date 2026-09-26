@@ -5,6 +5,8 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+from asg_core import use_utf8_output
+
 from ..formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
 from ..generator import StoryGenerator
 from ..planning.profiles import NarrativeProfile
@@ -85,10 +87,7 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     """Run the command-line entry point."""
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None:
-            reconfigure(encoding="utf-8", errors="replace")
+    use_utf8_output()
     args = parser().parse_args(argv)
     print("Generador automático de historias — Stagecraft")
     print("\nEjemplo de prompt ideal:\n")

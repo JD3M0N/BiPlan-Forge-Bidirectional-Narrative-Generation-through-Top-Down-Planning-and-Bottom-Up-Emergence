@@ -1,12 +1,8 @@
 import json
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
-SOURCE = Path(__file__).parents[1] / "src"
-sys.path.insert(0, str(SOURCE))
 
 
 @pytest.fixture(autouse=True)

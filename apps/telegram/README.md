@@ -11,7 +11,7 @@ evaluación humana inmediatamente después.
 
 ```dotenv
 TELEGRAM_BOT_TOKEN=token_entregado_por_BotFather
-STORY_GENERATOR=top-down
+STORY_GENERATOR=stagecraft
 GEMINI_API_KEY=tu_clave
 GEMINI_MODEL=gemini-2.5-flash
 TTS_FALLBACK_VOICE=
@@ -49,10 +49,12 @@ falla, el bot informa al usuario y continúa con el texto y la evaluación.
 
 `STORY_GENERATOR` selecciona el enfoque ASG y `GEMINI_MODEL` selecciona el
 modelo de lenguaje usado por ese enfoque. Actualmente está registrado
-`top-down`.
+`stagecraft`, que es el valor por defecto; `top-down` sigue aceptándose como alias
+porque los despliegues antiguos lo tienen configurado.
 
-Para probar otro enfoque, implementa el protocolo `StoryGenerator` en
-`asg_telegram.generators` y regístralo:
+Para probar otro enfoque, implementa el protocolo `StoryGeneratorAdapter` de
+`asg_telegram.contract`, escribe su adaptador en `asg_telegram.generators` y
+regístralo:
 
 ```python
 DEFAULT_REGISTRY.register("mi-modelo", MiGenerador)

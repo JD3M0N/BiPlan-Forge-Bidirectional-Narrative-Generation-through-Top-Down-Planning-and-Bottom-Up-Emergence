@@ -226,14 +226,6 @@ class QueueRepository:
                 (job_id,),
             )
 
-    def request_cancellation(self, job_id: str) -> None:
-        """Flag a running job so its next progress callback can abort it."""
-        with self._lock, self._connect() as db:
-            db.execute(
-                "UPDATE jobs SET cancel_requested=1 WHERE id=? AND status='running'",
-                (job_id,),
-            )
-
     def cancellation_requested(self, job_id: str) -> bool:
         """Report whether a running job has been asked to stop."""
         with self._lock, self._connect() as db:

@@ -193,10 +193,6 @@ class CharacterMemory:
             self._document_frequency[token] += 1
         return record
 
-    def working_memory(self, scene_number: int) -> list[MemoryRecord]:
-        """Return the current scene in full, as this character perceived it."""
-        return [record for record in self.records if record.scene_number == scene_number]
-
     def recall(
         self,
         query: str,

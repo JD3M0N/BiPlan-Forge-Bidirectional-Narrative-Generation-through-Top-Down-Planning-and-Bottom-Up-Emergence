@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
-import json
 import statistics
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from .artifacts import (
+    UNKNOWN,
+    group_by,
+    load_json_object,
+    record_format,
+    record_profile,
+    record_version,
+    text_field,
+)
 from .evaluation import EVALUATION_FILENAME, METRICS, _load, discover_stories
-
-UNKNOWN = "desconocida"
-NO_PROFILE = "sin perfil"
 
 
 @dataclass(frozen=True)
@@ -65,14 +70,7 @@ def read_evaluations(story_directory: str | Path) -> list[dict]:
 
 def _json_field(path: Path, field: str) -> str | None:
     """Read one string field from a JSON artifact that may be absent or broken."""
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    if not isinstance(document, dict):
-        return None
-    value = document.get(field)
-    return value if isinstance(value, str) and value.strip() else None
+    return text_field(load_json_object(path), field)
 
 
 def _describe(
@@ -152,30 +150,13 @@ def collect_evaluations(
     return records
 
 
-def _version_of(record: StoryEvaluations) -> str:
-    """Pick the version axis that separates generator releases, not pipeline contracts."""
-    return record.generator_version or record.pipeline_version or UNKNOWN
-
-
-def _profile_of(record: StoryEvaluations) -> str:
-    """Name the narrative profile of a run that may not declare one."""
-    return record.narrative_profile or NO_PROFILE
-
-
-def _format_of(record: StoryEvaluations) -> str:
-    """Name the output format, and its method for a theater script."""
-    if record.story_format == "script" and record.script_method:
-        return f"script/{record.script_method}"
-    return record.story_format
-
-
 GROUPINGS: dict[str, Callable[[StoryEvaluations], str]] = {
     "story": lambda record: record.story,
-    "profile": _profile_of,
-    "version": _version_of,
-    "version-profile": lambda record: f"{_version_of(record)} / {_profile_of(record)}",
+    "profile": record_profile,
+    "version": record_version,
+    "version-profile": lambda record: f"{record_version(record)} / {record_profile(record)}",
     "approach": lambda record: record.approach,
-    "format": _format_of,
+    "format": record_format,
 }
 
 
@@ -227,7 +208,4 @@ def summarize(
     material = [record for record in records if record.evaluations]
     if key is None:
         return {"total": _summary_of("total", material)}
-    grouped: dict[str, list[StoryEvaluations]] = {}
-    for record in material:
-        grouped.setdefault(key(record), []).append(record)
-    return {label: _summary_of(label, grouped[label]) for label in sorted(grouped)}
+    return {label: _summary_of(label, group) for label, group in group_by(material, key).items()}

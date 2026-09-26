@@ -597,8 +597,8 @@ class PlayCastMember(BaseModel):
 class PlayScript(BaseModel):
     """The complete theater script contract: script.json.
 
-    This is a documented JSON contract, not a shared Python type: a future Bottom-Up reader
-    cannot import asg_stagecraft, so every field here is meant to be read from the file itself.
+    This is a documented JSON contract, not a shared Python type: a reader outside this package
+    need not import asg_stagecraft, so every field here is meant to be read from the file itself.
     """
 
     contract_version: str = "1"

@@ -18,7 +18,6 @@ from asg_stagecraft.planning.skeletons import (
     Layer,
     blueprint_guidance,
     find_skeleton,
-    skeletons_for_layer,
 )
 from asg_stagecraft.schemas import (
     ID_PATTERN,
@@ -80,7 +79,7 @@ def test_catalog_is_internally_consistent() -> None:
             assert reference != item.id
     subplot_only = [item for item in PLOT_SKELETONS if item.layers == (Layer.SUBPLOT,)]
     assert len(subplot_only) >= 6
-    assert len(skeletons_for_layer(Layer.MACROPLOT)) >= 20
+    assert sum(Layer.MACROPLOT in item.layers for item in PLOT_SKELETONS) >= 20
     for reference in FALLBACK_SHORTLIST:
         assert reference in SKELETONS_BY_ID
 

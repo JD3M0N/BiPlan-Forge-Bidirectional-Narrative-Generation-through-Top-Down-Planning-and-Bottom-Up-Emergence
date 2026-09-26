@@ -34,7 +34,7 @@ from ..runtime.errors import NON_DEGRADABLE_ERRORS, StagePerformanceError
 from . import policy
 from .memory import CharacterMemory
 from .perception import witnesses
-from .render import actor_turn_context, director_beat_context, scene_log, transcript
+from .render import actor_turn_context, director_beat_context, scene_log
 from .schemas import (
     ActorDossier,
     ActorTurnDraft,
@@ -753,7 +753,3 @@ class PerformanceEngine:
         """Report one performance milestone when a callback is configured."""
         if self.on_event:
             self.on_event(kind, message)
-
-    def full_transcript(self, turns: list[StageTurn]) -> str:
-        """Render a performed scene for a human reader of the run."""
-        return transcript(turns, self.names)

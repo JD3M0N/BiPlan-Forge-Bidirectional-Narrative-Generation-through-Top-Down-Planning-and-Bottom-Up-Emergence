@@ -1,5 +1,14 @@
 # Historial de cambios
 
+## [2.0.1] - 2026-09-26
+
+- Corregida la línea de consumo de Gemini del resumen: leía `llm_usage_summary.json`, que el
+  pipeline dejó de escribir, y desde entonces no aparecía. Ahora lee `llm_usage.json`.
+- Retirada la lectura de `length_audit.json` y del diagnóstico `WORD_COUNT_OUT_OF_RANGE`: los
+  escribía el pipeline 5.x y el bot solo resume runs que acaba de generar.
+- Retirados `QueueRepository.request_cancellation`, que solo usaban los tests y duplicaba
+  `cancel_user`, y la reexportación de `TelegramStoryBot` y `_evaluator_name` desde `app`.
+
 ## 2.0.0
 
 - Reemplazada la pregunta guiada de palabras por la selección opcional de perfil
