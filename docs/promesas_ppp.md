@@ -23,8 +23,8 @@ Había ya dos rastros de la idea en el código, y los dos eran demasiado débile
   y `relevant_prior_events` ni siquiera recorre ese campo, así que un setup enlazado sólo por ahí
   no llegaba al prompt del Drafter.
 - `setup_payoff` existía como categoría de nota de revisión, sin estructura detrás. Sobre el
-  corpus medido en [artesania_narrativa.md](artesania_narrativa.md), los críticos levantaron **una
-  sola** nota de esa categoría en todas las historias.
+  corpus de 6.5 y 6.6 medido con `report-story-craft`, los críticos levantaron **una sola** nota
+  de esa categoría en todas las historias.
 
 ## Qué dice la fuente
 
@@ -178,9 +178,8 @@ que nadie tenga que redescubrirlo.
 | Pieza | Fichero |
 |---|---|
 | esquemas del ledger y de los veredictos | `packages/stagecraft/src/asg_stagecraft/schemas.py` |
-| validador e invariantes | `packages/stagecraft/src/asg_stagecraft/promises.py` |
-| banda de promesas por perfil | `packages/stagecraft/src/asg_stagecraft/profiles.py` |
+| validador e invariantes | `packages/stagecraft/src/asg_stagecraft/planning/promises.py` |
+| banda de promesas por perfil | `packages/stagecraft/src/asg_stagecraft/planning/profiles.py` |
 | agente y su prompt | `packages/stagecraft/src/asg_stagecraft/agents/promises.py` |
-| bloques que viajan al prompt | `packages/stagecraft/src/asg_stagecraft/promise_brief.py` |
+| bloques que viajan al prompt | `packages/stagecraft/src/asg_stagecraft/planning/promise_brief.py` |
 | etapa, reparación, degradación y auditoría | `packages/stagecraft/src/asg_stagecraft/pipeline.py` |
-| recorrido de la etapa en el pipeline | [pipeline_top_down.md](pipeline_top_down.md) |

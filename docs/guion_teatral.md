@@ -1,9 +1,9 @@
 # Guion teatral: un contrato, dos métodos
 
 El Top-Down puede entregar, además de la historia narrativa de siempre, un **guion teatral**
-por actos y escenas: reparto, diálogos y acotaciones. Es el paso previo a una simulación
-Bottom-Up donde los personajes se interpretan como actores, así que el guion tiene que ser
-legible por máquina, no solo por una persona.
+por actos y escenas: reparto, diálogos y acotaciones. Es también lo que representan los
+personajes en el formato `simulated` (ver [simulacion_escenica.md](simulacion_escenica.md)), así
+que el guion tiene que ser legible por máquina, no solo por una persona.
 
 No sabíamos qué método daría un mejor guion, así que se implementaron **los dos**, con el mismo
 contrato de salida, para poder compararlos a ciegas y quedarse con uno. Ese es justamente el
@@ -22,14 +22,14 @@ no elegir nada no cambia nada.
 
 ## Dos métodos, un solo contrato
 
-- **Nativo** (`script_stages.ScriptStagesMixin._write_script`): tras la etapa `promises`, el
+- **Nativo** (`script/stages.py`, `ScriptStagesMixin._write_script`): tras la etapa `promises`, el
   `PlaywrightAgent` escribe cada capítulo del plan directamente como un acto de escenas
   estructurado, con el mismo bucle de reparación que usan `graph.py` y `promises.py`. Después lo
   revisa el `ScriptCriticAgent` y lo corrige el `ScriptWriterAgent`.
 - **Adaptado** (`_adapt_story`): el pipeline narrativo corre entero, sin tocar — mismo Drafter,
   mismo Writer, mismo Drama Critic, mismos prompts —, guarda su prosa final como `prose.md`, y
   el `ScriptAdapterAgent` convierte cada capítulo final en un acto a través del **mismo**
-  validador (`script.py`).
+  validador (`script/validation.py`).
 
 Los dos terminan en el mismo `assemble_play(...)` y en el mismo `PlayScript`, guardado como
 `script.json` y renderizado a `story.md`. Eso es lo que hace comparables los dos métodos:
@@ -50,7 +50,7 @@ ambos.
 | `acts[].scenes[].cast[].objective` | **En inglés**, como el plan y los personajes: qué persigue ese personaje en esa escena. Nunca se imprime |
 | `acts[].scenes[].lines[]` | Diálogo (`speaker_id`, `parenthetical`, `text`) o acotación (`actor_ids`, `text`) |
 
-## Qué valida `script.py` y qué solo corrige
+## Qué valida `script/validation.py` y qué solo corrige
 
 El validador normaliza más de lo que rechaza: cuando una forma tiene una sola corrección
 posible, se corrige en vez de gastar un intento pidiéndole al modelo que la repare. Se
@@ -83,7 +83,7 @@ adaptado, donde `prose.md` queda pero `story.md` nunca se escribe.
 
 ## Convención de render
 
-`script_render.py` sigue la convención española de teatro impreso: `NOMBRE.—(parentético) texto`
+`script/render.py` sigue la convención española de teatro impreso: `NOMBRE.—(parentético) texto`
 para el diálogo, y `(texto)` en párrafo aparte para las acotaciones. No usa `*` ni `_`: Telegram
 escapa todo lo que no sea un encabezado, el lector de audio quita las marcas de Markdown pero no
 sus caracteres, y el HTML de comparación a ciegas los mostraría tal cual. Solo el código emite
@@ -105,8 +105,8 @@ encabezados `#`/`##`/`###`; el modelo nunca puede colar uno.
 
 ## Versionado
 
-`PIPELINE_VERSION` se queda en 6.2: el formato de salida es aditivo y conmutable, así que el
-predicado de qué trae un run es `metadata.story_format` (o la presencia de `script.json`), no la
+El formato guion no subió `PIPELINE_VERSION` (6.9.0 lo dejó en 6.2): es aditivo y conmutable, así
+que el predicado de qué trae un run es `metadata.story_format` (o la presencia de `script.json`), no la
 versión del pipeline. Ojo con esto al leer un `story.md` con herramientas pensadas para prosa:
 `report-story-craft` filtra los guiones por defecto porque `craft_metrics` mide diálogo por
 comillas o raya inicial de párrafo, y `NOMBRE.—texto` no cumple ninguna de las dos: mediría casi

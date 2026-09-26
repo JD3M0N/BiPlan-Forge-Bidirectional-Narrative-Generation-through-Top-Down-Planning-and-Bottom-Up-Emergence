@@ -1,24 +1,26 @@
 # Hoja de ruta
 
-**Estado medido el 2026-09-26 sobre la función simulada, con `asg-stagecraft` 7.1.0.** El paquete
-`top_down` pasa a llamarse `stagecraft` y gana un tercer formato, `simulated`, en el que los
-personajes representan el guion con memoria propia y la historia se narra del log de esa función
-(ver [docs/simulacion_escenica.md](docs/simulacion_escenica.md)); 7.1.0 corrige lo que destaparon
-sus dos primeros runs reales. Los runs nuevos van a `Stories/Stagecraft/`; los 160 anteriores se
-quedan en `Stories/Top-Down/` y se siguen leyendo.
-Puerta de calidad limpia: `ruff check .`, `ruff format --check .`, 542 pruebas pasan y 2 se omiten,
+**Estado medido el 2026-09-26 con `asg-stagecraft` 7.1.1, tras retirar el escape room.** El
+monorepo tiene un solo generador, Stagecraft, con tres formatos: `narrative`, `script` y
+`simulated`, en el que los personajes representan el guion con memoria propia y la historia se
+narra del log de esa función (ver [docs/simulacion_escenica.md](docs/simulacion_escenica.md));
+7.1.0 corrige lo que destaparon sus dos primeros runs reales. Los runs nuevos van a
+`Stories/Stagecraft/`; los 160 anteriores al renombrado siguen en `Stories/Top-Down/`, y los 6
+del escape room retirado en `Stories/Bottom-Up/`. Todos se siguen leyendo.
+Puerta de calidad limpia: `ruff check .`, `ruff format --check .`, 526 pruebas pasan y 2 se omiten,
 `pip check` sin requisitos rotos, y `tests/test_sync_railway_stories.ps1` pasa. Las cinco corren en
 `.github/workflows/quality.yml` en cada push y pull request, y en local con `.\quality.ps1` (o
-`make test`). Las mediciones que cita este documento salen del corpus de `Stories/`, hoy **160
-ejecuciones Top-Down** —119 `completed`, 41 `failed` y **ninguna varada en `running`**— más 6
-Bottom-Up; de las 128 historias, 125 tienen `evaluation.json` y una sola tiene puntuaciones reales,
-medido con `report-evaluations`. Las cifras de prosa —diálogo, palabras por frase y palabras por
-párrafo— salen de `report-story-craft` sobre las 97 historias de versión 6 en adelante, 96 de ellas
-terminadas, y están documentadas en [docs/artesania_narrativa.md](docs/artesania_narrativa.md), que
-enfrenta la línea base 6.5.0 con la intervención 6.6.0 sobre los mismos prompts (catálogos 4, 6 y 7
-por los tres perfiles) y añade una réplica de doce historias del 2026-09-17 sobre 6.6.0 sin tocar
-nada: esa réplica es el suelo de ruido con el que hay que leer cualquier diferencia. **Una
-diferencia de medianas menor de unos cinco puntos, con n=9, no se puede interpretar.**
+`make test`). Las mediciones que cita este documento salen del corpus de `Stories/`: **160
+ejecuciones Top-Down** —119 `completed`, 41 `failed` y **ninguna varada en `running`**— más las 6
+del escape room; de las 128 historias, 125 tienen `evaluation.json` y una sola tiene puntuaciones
+reales, medido con `report-evaluations`. Las cifras de prosa —diálogo, palabras por frase y
+palabras por párrafo— salen de `report-story-craft` sobre las 97 historias de versión 6 en
+adelante, 96 de ellas terminadas: la línea base 6.5.0 contra la intervención 6.6.0 sobre los
+mismos prompts (catálogos 4, 6 y 7 por los tres perfiles), más una réplica de doce historias del
+2026-09-17 sobre 6.6.0 sin tocar nada, que es el suelo de ruido con el que hay que leer cualquier
+diferencia. El informe completo de esa medición se retiró del árbol en 7.1.1 y sigue en git:
+`git show 38b3b8e:docs/artesania_narrativa.md`. **Una diferencia de medianas menor de unos cinco
+puntos, con n=9, no se puede interpretar.**
 
 ## Cómo leer esto
 
@@ -99,7 +101,8 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 - **Síntoma.** 6.9.0 añadió dos métodos para la salida en guion teatral —nativo y adaptado—
   precisamente porque no se sabía cuál daría mejor guion. Los dos comparten contrato
   (`script.json` más `story.md`) para que la comparación sea posible, pero todavía no hay ninguna
-  medición: ningún run real de guion existe en `Stories/` a la fecha de este documento.
+  medición: solo existen seis runs reales de guion, tres nativos y tres adaptados, todos del
+  2026-09-25 y con pipeline 6.2 (`Stories/Top-Down/20260925-16*`), y nadie los ha comparado.
   Ver [docs/guion_teatral.md](docs/guion_teatral.md).
 - **Qué hacer.** Generar una matriz pequeña con los dos métodos sobre los mismos prompts,
   comparar a ciegas con `compare-story-runs`, y leer `script_metrics.json`, la tasa de intentos
@@ -131,8 +134,8 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
   17-09— el último capítulo dramatiza al 41% frente al 50% del primero, y es el capítulo más mudo
   de su historia en 13 de las 21. La cláusula «un desenlace es una escena» está en el prompt del
   Drafter y no basta: el modelo cierra resumiendo cómo acabaron las cosas. El decaimiento se redujo
-  respecto de 6.5.0 y **replica en los dos lotes**, así que no es ruido. Medido en
-  `docs/artesania_narrativa.md`.
+  respecto de 6.5.0 y **replica en los dos lotes**, así que no es ruido. Medido con
+  `report-story-craft`; el detalle está en el informe retirado que cita la cabecera.
 - **Qué hacer.** Tratar el último capítulo como caso propio en vez de endurecer el contrato para
   todos: el Drafter ya sabe qué capítulo escribe y en qué posición, así que puede recibir la
   exigencia de desenlace dramatizado sólo donde hace falta.
@@ -156,8 +159,8 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
   palabras, aceptado al primer intento. **Y el `dialogue_ratio` quedó en 0,1765, exactamente el
   mismo**, con las palabras por párrafo subiendo de 24,9 a 34,7: las 165 palabras añadidas fueron
   narración, no escena. `_writer_candidate_issue` sólo rechaza cuerpo vacío, encabezados Markdown y
-  texto idéntico; nunca comprueba que el déficit que originó la nota se haya reparado. Medido en
-  [docs/artesania_narrativa.md](docs/artesania_narrativa.md).
+  texto idéntico; nunca comprueba que el déficit que originó la nota se haya reparado. El caso
+  completo está en el informe retirado que cita la cabecera.
 - **Qué hacer.** Pasar las observaciones del capítulo, que `_critique_and_revise` ya calcula, hasta
   `_revise_one_chapter`, y si la misma observación sobrevive al primer candidato usarla como
   `RETRY CORRECTION` del segundo. **Rechazo blando, no duro:** tras dos rechazos el método devuelve
@@ -246,22 +249,6 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
   para el perfil y el formato. La cola tendría que guardar la voz como guarda `story_format`.
 - **Hecho cuando.** Un usuario puede pedir una historia simulada en primera persona desde el chat.
 
-### Equiparar los artefactos Bottom-Up con los Top-Down
-
-- **Síntoma.** El Bottom-Up no escribe métricas de historia, ni versión del generador, ni
-  manifiesto con SHA-256, ni registro de llamadas o de uso, ni taxonomía de errores, ni perfil
-  narrativo. Ninguno de los ejes sobre los que está calibrado el Top-Down existe del otro lado, y
-  los lotes no producen `story.md` ni `evaluation.json`, así que ninguna corrida de lote es
-  evaluable. El desequilibrio se ve en los datos: 6 ejecuciones y 3 lotes frente a 160 ejecuciones
-  Top-Down repartidas en siete versiones del generador.
-- **Qué hacer.** Dar al Bottom-Up el mismo conjunto mínimo de artefactos: métricas de historia,
-  versión, manifiesto y códigos de error. Reusar lo que ya existe en `asg_core` en vez de
-  duplicarlo; la artesanía de la prosa sale gratis llamando a `asg_core.craft_metrics`, y
-  `report-story-craft` ya mide cualquier `story.md` de los dos enfoques. La escritura atómica de
-  los lotes ya pasa por `asg_core.atomic_write_text`; el resto de `storage.py` sigue sin ella.
-- **Hecho cuando.** Un lector común puede abrir un run de cualquiera de los dos enfoques y obtener
-  las mismas cifras, y un lote produce historias evaluables.
-
 ### Sacar las aserciones de prompt literal de los tests
 
 - **Síntoma.** `packages/stagecraft/tests/test_generator_v5.py` contiene más de 60 aserciones sobre
@@ -280,9 +267,10 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 
 ### Dividir `pipeline.py`
 
-- **Síntoma.** 1190 líneas y 57 métodos en una sola clase, mezclando orquestación, reintentos,
-  validación, ensamblado de Markdown, prompts de reparación y telemetría. El campo `repository`
-  opcional obliga a 17 `assert self.repository is not None` repartidos por la clase.
+- **Síntoma.** 1197 líneas y 48 métodos en `StoryPipeline`, mezclando orquestación, reintentos,
+  validación y telemetría, más los mixins de `script/stages.py` y `stage/stages.py`. El campo
+  `repository` opcional obliga a 22 `assert self.repository is not None` en `pipeline.py`, 37
+  contando los mixins.
 - **Qué hacer.** Las tres extracciones de riesgo nulo **ya están hechas** en 7.0.0: los prompts
   de reparación viven en `planning/repair.py`, el ensamblado en `writing/assembly.py` y las reglas
   de aceptación en `writing/acceptance.py`. Lo que queda es la telemetría y la contabilidad de uso
@@ -311,28 +299,15 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
   `PIPELINE_VERSION` y da una lectura compatible a los runs que lo traen: son datos de la tesis.
 - **Hecho cuando.** Hay decisión escrita y, si se elimina, los runs anteriores se siguen abriendo.
 
-### Subir a `core` lo que está duplicado
-
-- **Síntoma.** El bloque `Settings` más `load_settings` con dotenv y `GEMINI_API_KEY` está en los
-  dos `config.py`, incluido el literal del nombre del modelo; comparten tres campos y divergen en
-  que Top-Down exige la clave y añade ocho de cuota, así que sale una base común, no una clase
-  única. La consola reimplementa el cuerpo de `cli.run_one` del escape room, y ya divergen en cómo
-  informan del audio: eso es reconciliar comportamiento, no borrar una copia. El tercer caso, el
-  nombrado de directorio con sufijo anticolisión, ya vive en `asg_core.create_unique_directory`.
-- **Qué hacer.** Subir la configuración compartida a `asg_core` y decidir qué comportamiento de
-  audio es el correcto antes de unificar la consola con `cli.run_one`.
-- **Hecho cuando.** No queda ninguna de las dos duplicaciones que siguen vivas.
-
 ### Documentar los contratos públicos y rellenar el README
 
-- **Síntoma.** `README.md` de la raíz está vacío, 0 bytes, y versionado. Las fachadas de los cuatro
-  paquetes no tienen documentación con ejemplos que se ejecuten, y los READMEs de paquete mezclan
-  español e inglés.
-- **Qué hacer.** Cubrir las fachadas de `asg_core`, `asg_stagecraft`, `asg_evaluation` y
-  `asg_escape_room` con ejemplos mínimos de entrada, salida y fallo. Escribir el README de la raíz
-  en UTF-8.
+- **Síntoma.** `README.md` de la raíz está vacío, 0 bytes, y versionado. Las fachadas de los tres
+  paquetes no tienen ejemplos que se ejecuten, y los READMEs de paquete mezclan español e inglés
+  (`asg_core` sigue en inglés).
+- **Qué hacer.** Cubrir las fachadas de `asg_core`, `asg_stagecraft` y `asg_evaluation` con
+  ejemplos mínimos de entrada, salida y fallo. Escribir el README de la raíz en UTF-8.
 - **Hecho cuando.** Los ejemplos se validan en los tests o en CI, y la documentación describe el
-  contrato Top-Down 6.0 y su compatibilidad con runs anteriores.
+  contrato de artefactos 7.1 y su compatibilidad con runs anteriores.
 
 ---
 
@@ -367,38 +342,20 @@ si hay mejora, se añade como brief opcional y auditable.
 
 ### Externalizar el catálogo de esqueletos
 
-`skeletons.py` tiene 1490 líneas, de las que unas 1290 son las 34 entradas literales del catálogo;
-la lógica real son unas 95. `PlotSkeleton` ya es un modelo Pydantic y el validador que corre al
+`skeletons.py` tiene 1485 líneas, de las que unas 1290 son las 34 entradas literales del catálogo;
+la lógica real son unas 90. `PlotSkeleton` ya es un modelo Pydantic y el validador que corre al
 importar ya trata el catálogo como datos externos, así que cargarlo desde JSON es casi mecánico y
 permitiría editar el corpus de la tesis sin tocar Python. Se pierde el chequeo en tiempo de edición;
 se gana un diff limpio al añadir esqueletos.
 
-### Hacer que los puzzles del mapa dejen de ser decorativos
-
-`contracts.py` valida la sección `puzzles` con detección de ciclos y referencias, pero ninguna línea
-de `actions.py` la lee: los cuatro acertijos están codificados a mano, igual que los identificadores
-`battery`, `flashlight` y `lever`, de modo que cualquier mapa nuevo debe reusarlos. El número de
-agentes que exige un puzzle, el cierre de una feature y el rol de cada agente tampoco se leen nunca.
-Mientras siga así, la simulación admite variaciones de plano pero no de contenido.
-
-### Reescribir el narrador de respaldo y cortar el spam de comunicación
-
-Medido sobre una corrida propia de 126 turnos con dos agentes: el `story.md` de respaldo tiene 52
-líneas de contenido, de las que **46 son las dos mismas frases repetidas 23 veces cada una**, y
-mezcla español con identificadores en inglés («B recogió flashlight.»). El título está fijo y miente
-en cualquier mapa que no sea el de la linterna. La causa está en la política, que dispara la
-comunicación en cuanto cambia el snapshot de creencias, y ese snapshot incluye las celdas conocidas,
-así que cualquier movimiento lo invalida. Los mismos agentes replanifican 91 y 93 veces en 126
-turnos.
-
 ### Unificar los contratos de prompt duplicados
 
 La regla «cada evento debe cambiar conflicto, conocimiento, relaciones, recursos, riesgos o
-consecuencias» está escrita casi literal cuatro veces: dos en `profiles.py`, una en `planner.py` y
-una en `pipeline.py`. La de rama y reunión causal, tres veces. Y los alias de perfil están
-duplicados carácter a carácter entre `agents/analyst.py` y `apps/telegram/src/asg_telegram/prompts.py`,
-sin que `profiles.py` exponga ningún mapa que pudieran compartir. Cerrarlo daría además una
-detección de perfil consistente entre la consola, el bot y el analista.
+consecuencias» está escrita casi literal tres veces: dos en `planning/profiles.py` y una en
+`planning/repair.py`. Y `agents/analyst.py` repite a mano, en `PROFILE_ALIASES` y en la expresión
+`EXPLICIT_PROFILE`, los nombres de perfil que `NarrativeProfile` y `PROFILE_LABELS` ya dan; el bot
+de Telegram ya los deriva de `PROFILE_LABELS`. Cerrarlo daría una detección de perfil consistente
+entre la consola, el bot y el analista.
 
 ### Grafo explícito de lugares
 
@@ -414,8 +371,6 @@ condiciones, guardando lo necesario para repetir el experimento.
 
 ### Cerrar los huecos de cobertura
 
-`policy.py` del escape room, con 283 líneas, no tiene ni un test directo: solo se ejercita de
-rebote. `runtime/progress.py` de Stagecraft no tiene ninguno. Su `runtime/storage.py` tiene uno solo, y
+`runtime/progress.py` de Stagecraft no tiene ni un test. Su `runtime/storage.py` tiene uno solo, y
 ni los hashes del manifiesto, ni `register_existing`, ni la rama de `fail` con un error no
-clasificado se comprueban. Tampoco `collect_metrics`, `result_row` ni `run_batch`; de esa lista
-sólo `save_batch` tiene test propio.
+clasificado se comprueban.

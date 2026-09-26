@@ -173,7 +173,7 @@ En 7.0 eran texto libre y salieron en español pese al contrato, así que no se 
 
 ### Qué se normaliza y qué se rechaza
 
-Como en `script.py`: se normaliza lo que tiene una sola lectura posible y se rechaza lo que
+Como en `script/validation.py`: se normaliza lo que tiene una sola lectura posible y se rechaza lo que
 corrompería el log. Los mensajes van en **inglés ASCII** porque se reinyectan literales.
 
 - **Se normaliza**: comillas y rayas envolventes (en bucle, porque el modelo suele poner las dos),
@@ -253,8 +253,8 @@ turnos que su narrador percibió, que son exactamente los que ya están en su fl
 
 Si el narrador no puede correr, `stage/fallback.py` convierte el log en prosa sin interpretarlo:
 habla a diálogo con raya, acciones a frases, pensamientos a interioridad referida. Es parte del
-contrato, como el narrador de respaldo del escape room, y además sirve de suelo de comparación: el
-mismo log, sin ninguna interpretación.
+contrato, no un apaño: una función representada no se pierde porque falle la narración. Y además
+sirve de suelo de comparación: el mismo log, sin ninguna interpretación.
 
 ## Artefactos de un run simulado
 
@@ -387,8 +387,8 @@ tope, y la coda 2 turnos por obra; si los beats caen antes, el coste baja. Los m
 - **Contra el suelo**: el narrador de respaldo sobre el mismo log dice cuánto aporta el narrador
   LLM.
 
-Como con cualquier medición de este repositorio, un n pequeño no basta: la réplica documentada en
-[artesania_narrativa.md](artesania_narrativa.md) midió hasta 16 puntos de diferencia entre dos
+Como con cualquier medición de este repositorio, un n pequeño no basta: la réplica de doce
+historias de 6.6.0 medida con `report-story-craft` dio hasta 16 puntos de diferencia entre dos
 corridas del mismo prompt y la misma versión.
 
 ## Lo que destapó el primer run real

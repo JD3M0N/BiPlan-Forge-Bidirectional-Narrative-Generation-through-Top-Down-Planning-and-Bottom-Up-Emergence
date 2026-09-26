@@ -106,7 +106,7 @@ turnos frente a 25,9–41,2 de los baselines.
 
 **Tomado**: la consolidación de relaciones, que aquí hace la reflexión al cerrar cada escena.
 **Descartado**: su maquinaria de puesta en escena generativa, innecesaria porque el guion ya fija
-ubicación y reparto y `script.py` ya los valida.
+ubicación y reparto y `script/validation.py` ya los valida.
 
 ---
 
@@ -383,7 +383,7 @@ al. con simulación de personajes. Justifica que el paso de función aporte algo
 | Actor global centralizado | Open-Theatre | Más barato y más coherente, pero imposibilita las fronteras de conocimiento separadas, que es lo que se mide |
 | Memoria por embeddings | Generative Agents, BookWorld | Rompe el determinismo y añade un servicio externo; la recuperación léxica basta para escenas cortas |
 | Doble evaluación | Aylett y Louchart | Duplica las llamadas; el director hace ese papel desde fuera |
-| Mapa geoespacial con distancias | BookWorld | El guion ya fija ubicación y reparto, y `script.py` ya los valida |
+| Mapa geoespacial con distancias | BookWorld | El guion ya fija ubicación y reparto, y `script/validation.py` ya los valida |
 | Memoria de mundo estructurada | WSE-bench (WMEM) | Su propia evaluación muestra que no da beneficio estable de consistencia y reduce la cobertura |
 | Puesta en escena generativa | EvoSpark | El guion validado ya resuelve el problema que ataca |
 | A-MEM con enlaces evolutivos | A-MEM | Una llamada por escritura de memoria, y aquí hay una por testigo y turno |
