@@ -10,6 +10,12 @@ scripted line it replaced, so a value near 1 means the actors recited and the si
 nothing. ``unknown_mentions`` counts a speaker naming a character absent from its own memory: a
 cheap, deterministic proxy for a knowledge-boundary leak, which the optional LLM audit then
 measures properly.
+
+Two more were misread once and are documented so they are not misread again.
+``repetition_ratio`` compares speech word for word, so it is blind to paraphrase and to
+gestures; ``action_repetition_ratio`` covers the gestures. ``dialogue_survival`` near 1 is not
+fidelity: it means the narrator transcribed the log instead of curating it, which
+``compression_ratio`` above 1 confirms.
 """
 
 from __future__ import annotations
@@ -21,9 +27,24 @@ from pydantic import BaseModel, Field
 from ..formats import ActorMemory, NarrativeVoice
 from ..planning.profiles import NarrativeProfile
 from ..schemas import ID_PATTERN
+from .casting import gates_known_by_discoverer
 from .memory import CharacterMemory
-from .schemas import PerformanceArtifact, ScenePerformance, StageTurn
-from .validation import REPETITION_THRESHOLD, echo_of, similarity
+from .schemas import (
+    YIELDING_TACTICS,
+    CastBible,
+    PerformanceArtifact,
+    ScenePerformance,
+    StageTurn,
+)
+from .validation import (
+    ACTION_CONTAINMENT,
+    MAX_SPEECH_WORDS,
+    REPETITION_THRESHOLD,
+    containment,
+    echo_of,
+    is_first_person_action,
+    similarity,
+)
 
 
 class ActorMetrics(BaseModel):
@@ -54,8 +75,11 @@ class SceneMetrics(BaseModel):
     beats: int = Field(default=0, ge=0)
     beats_achieved: int = Field(default=0, ge=0)
     beats_forced: int = Field(default=0, ge=0)
+    beats_intervened: int = Field(default=0, ge=0)
     checks: int = Field(default=0, ge=0)
     stage_events: int = Field(default=0, ge=0)
+    reaction_turns: int = Field(default=0, ge=0)
+    coda_turns: int = Field(default=0, ge=0)
     rejected_turns: int = Field(default=0, ge=0)
     skipped_turns: int = Field(default=0, ge=0)
     script_echo: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -72,10 +96,14 @@ class SimulationMetrics(BaseModel):
     beats: int = Field(default=0, ge=0)
     beats_achieved: int = Field(default=0, ge=0)
     beats_forced: int = Field(default=0, ge=0)
+    # Reached only after the world stepped in. Counted inside beats_achieved as well.
+    beats_intervened: int = Field(default=0, ge=0)
     beat_completion_ratio: float = Field(default=0.0, ge=0.0, le=1.0)
     turns_per_beat: float = Field(default=0.0, ge=0.0)
     director_checks: int = Field(default=0, ge=0)
     stage_events: int = Field(default=0, ge=0)
+    reaction_turns: int = Field(default=0, ge=0)
+    coda_turns: int = Field(default=0, ge=0)
     rejected_turns: int = Field(default=0, ge=0)
     skipped_turns: int = Field(default=0, ge=0)
     speech_words: int = Field(default=0, ge=0)
@@ -83,6 +111,13 @@ class SimulationMetrics(BaseModel):
     thought_words: int = Field(default=0, ge=0)
     whispers: int = Field(default=0, ge=0)
     repetition_ratio: float = Field(default=0.0, ge=0.0, le=1.0)
+    action_repetition_ratio: float = Field(default=0.0, ge=0.0, le=1.0)
+    first_person_actions: int = Field(default=0, ge=0)
+    thought_ratio: float = Field(default=0.0, ge=0.0, le=1.0)
+    long_speeches: int = Field(default=0, ge=0)
+    yields: int = Field(default=0, ge=0)
+    max_tactic_streak: int = Field(default=0, ge=0)
+    gates_known_by_discoverer: int = Field(default=0, ge=0)
     mean_self_similarity: float = Field(default=0.0, ge=0.0, le=1.0)
     script_echo: float = Field(default=0.0, ge=0.0, le=1.0)
     unknown_mentions: int = Field(default=0, ge=0)
@@ -90,6 +125,8 @@ class SimulationMetrics(BaseModel):
     retrievals: int = Field(default=0, ge=0)
     narration_source_fallbacks: int = Field(default=0, ge=0)
     narrated_words: int = Field(default=0, ge=0)
+    log_words: int = Field(default=0, ge=0)
+    compression_ratio: float = Field(default=0.0, ge=0.0)
     dialogue_survival: float = Field(default=0.0, ge=0.0, le=1.0)
     scene_metrics: list[SceneMetrics] = Field(default_factory=list)
     actor_metrics: list[ActorMetrics] = Field(default_factory=list)
@@ -104,10 +141,18 @@ def simulation_metrics(
     names: dict[str, str],
     story: str,
     narration_fallbacks: int,
+    bible: CastBible | None = None,
 ) -> SimulationMetrics:
     """Measure one finished performance and the prose narrated from it."""
     scenes = performance.scenes
     all_turns = [turn for scene in scenes for turn in scene.turns]
+    acted = [turn for turn in all_turns if turn.kind == "actor"]
+    actions = [turn.action for turn in acted if turn.action]
+    log_words = sum(
+        len(turn.speech.split()) + len(turn.action.split()) + len(turn.thought.split())
+        for turn in all_turns
+    )
+    narrated_words = len(story.split())
     scene_metrics = [
         _scene_metrics(scene, scripted_by_scene.get(scene.scene_id, [])) for scene in scenes
     ]
@@ -116,6 +161,7 @@ def simulation_metrics(
     beats = sum(len(scene.beats) for scene in scenes)
     achieved = sum(1 for scene in scenes for beat in scene.beats if beat.achieved)
     forced = sum(1 for scene in scenes for beat in scene.beats if beat.forced)
+    intervened = sum(1 for scene in scenes for beat in scene.beats if beat.intervened)
     similarities = [item.max_self_similarity for item in actor_metrics if item.turns > 1]
     echoes = [item.script_echo for item in scene_metrics if item.script_echo > 0]
 
@@ -128,10 +174,13 @@ def simulation_metrics(
         beats=beats,
         beats_achieved=achieved,
         beats_forced=forced,
+        beats_intervened=intervened,
         beat_completion_ratio=round(achieved / beats, 4) if beats else 0.0,
         turns_per_beat=round(len(all_turns) / beats, 2) if beats else 0.0,
         director_checks=sum(item.checks for item in scene_metrics),
         stage_events=sum(item.stage_events for item in scene_metrics),
+        reaction_turns=sum(item.reaction_turns for item in scene_metrics),
+        coda_turns=sum(item.coda_turns for item in scene_metrics),
         rejected_turns=sum(scene.rejected for scene in scenes),
         skipped_turns=sum(scene.skipped for scene in scenes),
         speech_words=sum(item.speech_words for item in actor_metrics),
@@ -139,15 +188,26 @@ def simulation_metrics(
         thought_words=sum(item.thought_words for item in actor_metrics),
         whispers=sum(item.whispers for item in actor_metrics),
         repetition_ratio=round(_repetition_ratio(scenes), 4),
+        action_repetition_ratio=round(_action_repetition_ratio(acted), 4),
+        first_person_actions=sum(1 for action in actions if is_first_person_action(action)),
+        thought_ratio=round(sum(1 for turn in acted if turn.thought) / len(acted), 4)
+        if acted
+        else 0.0,
+        long_speeches=sum(1 for turn in acted if len(turn.speech.split()) > MAX_SPEECH_WORDS),
+        yields=sum(1 for turn in acted if turn.tactic in YIELDING_TACTICS),
+        max_tactic_streak=_max_tactic_streak(scenes),
+        gates_known_by_discoverer=gates_known_by_discoverer(bible) if bible else 0,
         mean_self_similarity=round(sum(similarities) / len(similarities), 4)
         if similarities
         else 0.0,
         script_echo=round(sum(echoes) / len(echoes), 4) if echoes else 0.0,
-        unknown_mentions=_unknown_mentions(all_turns, memories, names),
+        unknown_mentions=_unknown_mentions(acted, memories, names),
         memory_records=sum(item.memory_records for item in actor_metrics),
         retrievals=sum(item.retrievals for item in actor_metrics),
         narration_source_fallbacks=narration_fallbacks,
-        narrated_words=len(story.split()),
+        narrated_words=narrated_words,
+        log_words=log_words,
+        compression_ratio=round(narrated_words / log_words, 4) if log_words else 0.0,
         dialogue_survival=round(_dialogue_survival(all_turns, story), 4),
         scene_metrics=scene_metrics,
         actor_metrics=actor_metrics,
@@ -165,8 +225,11 @@ def _scene_metrics(scene: ScenePerformance, scripted: list[str]) -> SceneMetrics
         beats=len(scene.beats),
         beats_achieved=sum(1 for beat in scene.beats if beat.achieved),
         beats_forced=sum(1 for beat in scene.beats if beat.forced),
+        beats_intervened=sum(1 for beat in scene.beats if beat.intervened),
         checks=sum(beat.checks for beat in scene.beats),
         stage_events=sum(len(beat.stage_events) for beat in scene.beats),
+        reaction_turns=sum(beat.reaction_turns for beat in scene.beats),
+        coda_turns=scene.coda_turns,
         rejected_turns=scene.rejected,
         skipped_turns=scene.skipped,
         script_echo=round(sum(echoes) / len(echoes), 4) if echoes else 0.0,
@@ -183,6 +246,8 @@ def _actor_metrics(
     tactics: dict[str, set[str]] = {}
     for scene in scenes:
         for turn in scene.turns:
+            if turn.kind == "world":
+                continue
             item = tallies.setdefault(turn.actor_id, ActorMetrics(character_id=turn.actor_id))
             item.turns += 1
             item.speech_words += len(turn.speech.split())
@@ -223,7 +288,7 @@ def _repetition_ratio(scenes: list[ScenePerformance]) -> float:
     repeats = total = 0
     for scene in scenes:
         for turn in scene.turns:
-            if not turn.speech:
+            if not turn.speech or turn.kind == "world":
                 continue
             total += 1
             earlier = spoken.setdefault(turn.actor_id, [])
@@ -231,6 +296,44 @@ def _repetition_ratio(scenes: list[ScenePerformance]) -> float:
                 repeats += 1
             earlier.append(turn.speech)
     return repeats / total if total else 0.0
+
+
+def _action_repetition_ratio(turns: list[StageTurn]) -> float:
+    """Return what fraction of actions replay a gesture the same actor already made.
+
+    Measured against every earlier action of the actor, not only the validator's recent window,
+    so a tic that comes back after a pause still counts. Containment rather than overlap, as in
+    the validator: the real repeats kept the whole gesture and added a clause.
+    """
+    earlier: dict[str, list[str]] = {}
+    repeats = total = 0
+    for turn in turns:
+        if not turn.action:
+            continue
+        total += 1
+        previous = earlier.setdefault(turn.actor_id, [])
+        if any(containment(item, turn.action) >= ACTION_CONTAINMENT for item in previous):
+            repeats += 1
+        previous.append(turn.action)
+    return repeats / total if total else 0.0
+
+
+def _max_tactic_streak(scenes: list[ScenePerformance]) -> int:
+    """Return the longest run of one actor repeating the same tactic within a scene.
+
+    The standoff indicator: "confront, confront, confront" is a table nobody is crossing.
+    """
+    longest = 0
+    for scene in scenes:
+        last: dict[str, tuple[str, int]] = {}
+        for turn in scene.turns:
+            if turn.kind == "world" or not turn.tactic:
+                continue
+            tactic, run = last.get(turn.actor_id, ("", 0))
+            run = run + 1 if turn.tactic == tactic else 1
+            last[turn.actor_id] = (turn.tactic, run)
+            longest = max(longest, run)
+    return longest
 
 
 def _unknown_mentions(

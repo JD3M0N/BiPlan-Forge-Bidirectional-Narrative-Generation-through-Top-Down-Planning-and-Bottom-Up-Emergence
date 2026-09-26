@@ -25,11 +25,35 @@ from .schemas import ActorTurnDraft
 REPETITION_THRESHOLD = 0.75
 # How many of the speaker's own previous turns a candidate is compared against.
 REPETITION_WINDOW = 3
+# A gesture is replayed when the new action contains this much of an earlier one. Containment,
+# not overlap: the real repeats kept the whole gesture and tacked a clause onto it.
+ACTION_CONTAINMENT = 0.8
+# A thought that says this much of what the speech already says is not subtext, only an echo.
+THOUGHT_ECHO = 0.5
+# The longest line that still reads as a turn rather than a speech. It lives here and never in a
+# prompt, like every other figure the stage measures.
+MAX_SPEECH_WORDS = 45
 
 _WHITESPACE = re.compile(r"\s+")
 _LEADING_DASHES = "—–-"
 # Internal identifiers look like event-3 or chapter_2; a reader must never see one.
 _INTERNAL_ID = re.compile(r"\b(?:event|chapter|scene|promise|beat)[-_]\d+\b", re.IGNORECASE)
+# First-person markers in a stage direction. Deliberately conservative: it catches "me
+# arrodillo" and "la palma de mi mano" and lets a bare first-person verb through, because
+# guessing Spanish conjugation from one word would reject honest third-person directions.
+_FIRST_PERSON = re.compile(r"^(?:me|yo)\b|\b(?:mi|mis|conmigo)\b", re.IGNORECASE)
+
+
+class TurnIssue(ValueError):
+    """A rejected turn, carrying the code the audit files it under.
+
+    Still a ValueError, so the message is what the actor's retry prompt receives verbatim.
+    """
+
+    def __init__(self, code: str, message: str) -> None:
+        """Store the rejection code next to the English message."""
+        super().__init__(message)
+        self.code = code
 
 
 def normalize_turn(
@@ -46,6 +70,10 @@ def normalize_turn(
         speech = stripped
     action = _strip_own_name(_unwrap(_clean(turn.action)), actor_name)
     thought = _unwrap(_clean(turn.thought))
+    # A thought that restates the line is not subtext. It has one correct fix - there is nothing
+    # left to record - so it is emptied rather than bounced back to the actor.
+    if thought and speech and similarity(thought, speech) >= THOUGHT_ECHO:
+        thought = ""
     # An actor cannot address someone who is not in the scene; dropping them is the only
     # correction that keeps the turn, and the cast is the script's, not the actor's, to change.
     addressed = [item for item in dict.fromkeys(turn.addressed_to) if item in set(on_stage)]
@@ -60,7 +88,6 @@ def normalize_turn(
             "thought": thought,
             "addressed_to": addressed,
             "visibility": visibility,
-            "tactic": _clean(turn.tactic),
         }
     )
 
@@ -69,12 +96,13 @@ def validate_turn(
     turn: ActorTurnDraft,
     *,
     previous_speech: list[str],
-    beat_count: int,
+    previous_actions: list[str] | None = None,
 ) -> None:
-    """Accept one normalized turn, or explain in English why the actor must try again."""
+    """Accept one normalized turn, or raise a TurnIssue saying in English what to fix."""
     if not turn.speech and not turn.action:
-        raise ValueError(
-            "the turn is empty: say something, or do something an audience can see, or both"
+        raise TurnIssue(
+            "EMPTY_TURN",
+            "the turn is empty: say something, or do something an audience can see, or both",
         )
     offenders = sorted(
         {
@@ -84,22 +112,64 @@ def validate_turn(
         }
     )
     if offenders:
-        raise ValueError(
+        raise TurnIssue(
+            "INTERNAL_IDENTIFIERS",
             f"the turn exposes internal identifiers ({', '.join(offenders)}); a character never "
-            "names a plan event or a chapter, only what is happening to them"
+            "names a plan event or a chapter, only what is happening to them",
         )
     if turn.speech.lstrip().startswith("#") or turn.action.lstrip().startswith("#"):
-        raise ValueError("the turn contains a Markdown heading; write only what is said and done")
-    if beat_count > 1:
-        raise ValueError(
-            "the turn carries more than one beat at once; play one move and let the others answer"
+        raise TurnIssue(
+            "INTERNAL_IDENTIFIERS",
+            "the turn contains a Markdown heading; write only what is said and done",
+        )
+    if len(turn.speech.split()) > MAX_SPEECH_WORDS:
+        raise TurnIssue(
+            "LONG_SPEECH",
+            "the line is a speech, not a turn: say the one thing that matters now and let the "
+            "others answer",
+        )
+    if turn.action and _FIRST_PERSON.search(turn.action):
+        raise TurnIssue(
+            "FIRST_PERSON_ACTION",
+            "the action is written in the first person; write it as a stage direction, in the "
+            "third person and without your own name",
         )
     repeated = _closest_repeat(turn.speech, previous_speech)
     if repeated is not None:
-        raise ValueError(
+        raise TurnIssue(
+            "REPEATED_LINE",
             f"this repeats what you already said ({repeated!r}); change tactic instead of "
-            "restating your position in new words"
+            "restating your position in new words",
         )
+    if _replays_gesture(turn.action, previous_actions or []):
+        raise TurnIssue(
+            "REPEATED_ACTION",
+            "you already made this gesture; do something new, or say something without it",
+        )
+
+
+def containment(earlier: str, later: str) -> float:
+    """Return how much of an earlier line survives inside a later one, from 0 to 1."""
+    first, second = set(tokens(earlier)), set(tokens(later))
+    if not first:
+        return 0.0
+    return len(first & second) / len(first)
+
+
+def is_first_person_action(action: str) -> bool:
+    """Say whether a stage direction carries the conservative first-person markers."""
+    return bool(action and _FIRST_PERSON.search(action))
+
+
+def _replays_gesture(action: str, previous: list[str]) -> bool:
+    """Say whether a new action replays one of the actor's own recent gestures."""
+    if not action:
+        return False
+    return any(
+        containment(earlier, action) >= ACTION_CONTAINMENT
+        for earlier in previous[-REPETITION_WINDOW:]
+        if earlier
+    )
 
 
 def similarity(left: str, right: str) -> float:

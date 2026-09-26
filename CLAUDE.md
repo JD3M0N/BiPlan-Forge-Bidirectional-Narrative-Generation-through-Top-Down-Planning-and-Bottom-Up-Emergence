@@ -342,6 +342,14 @@ el estado medido cambia sustancialmente.
 - `materialize_act` pone en el acto el título del **plan**, que está en inglés, no el localizado.
   Los títulos localizados viven en `script_presentation.json`. El formato simulado los lee de ahí;
   el formato guion todavía imprime los del plan, y es una ficha abierta del `TODO.md`.
+- **Quién lo sabe ya ≠ quién lo descubrirá.** En una compuerta de `cast_bible.json`, `known_by` es
+  quién sabe el hecho **antes de la primera escena**; quien lo deduce o descubre en escena va en
+  `revealed_by` con `how`, y **no** en `known_by`. El primer run real los confundió y le dio al
+  detective la solución de partida. `stage/casting.py` lo rechaza desde 7.1; no relajes esa
+  validación para que pase un casting.
+- En `simulation_metrics.json`, `repetition_ratio` solo mira el **habla** palabra a palabra (no ve
+  paráfrasis ni gestos: para eso está `action_repetition_ratio`), y `dialogue_survival` cerca de 1
+  significa que el narrador **transcribió**, no que fuera fiel. Las dos se leyeron al revés una vez.
 
 ## Documentos de referencia
 

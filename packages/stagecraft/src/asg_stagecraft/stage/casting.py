@@ -17,6 +17,14 @@ from __future__ import annotations
 
 from ..schemas import CharacterProfile, CharactersArtifact, StoryPlan
 from .schemas import ActorDossier, ActorRelationship, CastBible, CastBibleDraft, KnowledgeGate
+from .validation import similarity
+
+# How closely a character's starting knowledge may resemble a fact they are meant to work out
+# on stage before it counts as having been handed the answer. Lexical, like the rest of the
+# stage's deterministic checks.
+KNOWLEDGE_OVERLAP = 0.4
+# A holder cannot deduce or discover what they already hold.
+LEARNED_ON_STAGE = frozenset({"deduction", "discovery"})
 
 
 def materialize_bible(
@@ -38,6 +46,8 @@ def materialize_bible(
 
     gates = _normalize_gates(draft.knowledge_gates, known_characters)
     _validate_gate_anchors(gates, known_events)
+    _validate_gate_logic(gates, plan)
+    _validate_no_handed_answers(dossiers, gates)
 
     return CastBible(
         dossiers=dossiers,
@@ -80,6 +90,7 @@ def _dossier_from_profile(profile: CharacterProfile) -> ActorDossier:
     """Build the minimum playable dossier out of one character profile."""
     return ActorDossier(
         character_id=profile.id,
+        public_face=profile.role,
         want=profile.goal or profile.motivation or f"pursue what matters to {profile.name}",
         need=profile.arc,
         wound="",
@@ -118,12 +129,15 @@ def _validate_coverage(dossiers: list[ActorDossier], required: list[str]) -> Non
 def _validate_playable(dossiers: list[ActorDossier]) -> None:
     """Require every dossier to carry something an actor can actually play."""
     offenders = [
-        item.character_id for item in dossiers if not item.want.strip() or not item.voice.strip()
+        item.character_id
+        for item in dossiers
+        if not item.want.strip() or not item.voice.strip() or not item.public_face.strip()
     ]
     if offenders:
         raise ValueError(
-            f"the dossiers for {', '.join(sorted(offenders))} have no playable want or no voice; "
-            "a want is a concrete thing the character pursues and a voice says how they speak"
+            f"the dossiers for {', '.join(sorted(offenders))} lack a playable want, a voice or a "
+            "public_face; a want is a concrete thing the character pursues, a voice says how they "
+            "speak, and public_face is what anyone sees of them at a glance"
         )
 
 
@@ -154,7 +168,8 @@ def _normalize_gates(gates: list[KnowledgeGate], known: set[str]) -> list[Knowle
             continue
         seen.add(gate.id)
         holders = [item for item in dict.fromkeys(gate.known_by) if item in known]
-        kept.append(gate.model_copy(update={"known_by": holders}))
+        revealer = gate.revealed_by if gate.revealed_by in known else ""
+        kept.append(gate.model_copy(update={"known_by": holders, "revealed_by": revealer}))
     return kept
 
 
@@ -174,6 +189,65 @@ def _validate_gate_anchors(gates: list[KnowledgeGate], known_events: set[str]) -
             f"({', '.join(offenders)}); "
             f"use one of the plan's own event IDs or leave it empty: {allowed}"
         )
+
+
+def _validate_gate_logic(gates: list[KnowledgeGate], plan: StoryPlan) -> None:
+    """Keep "who already knows" apart from "who finds out", which the first real run confused.
+
+    That run gave the detective the solution as knowledge she held before the first scene, so
+    every deduction she then performed was a recitation. The three rules below make the
+    distinction checkable: whoever works a fact out cannot already hold it, whoever confesses
+    must, and a reveal has to tell somebody present something they did not know.
+    """
+    participants = {event.id: set(event.character_ids) for event in plan.events}
+    problems: list[str] = []
+    for gate in gates:
+        holders = set(gate.known_by)
+        if gate.how in LEARNED_ON_STAGE and gate.revealed_by in holders:
+            problems.append(
+                f"gate {gate.id}: {gate.revealed_by} {gate.how}s this fact on stage, so they "
+                "cannot already know it; remove them from known_by"
+            )
+        if gate.how == "confession" and gate.revealed_by not in holders:
+            problems.append(
+                f"gate {gate.id}: a confession needs a revealed_by who already knows the fact; "
+                "name the confessor and put them in known_by"
+            )
+        present = participants.get(gate.revealed_at_event_id, set())
+        if present and present <= holders:
+            problems.append(
+                f"gate {gate.id}: everyone present at {gate.revealed_at_event_id} already knows "
+                "this fact, so revealing it there tells nobody anything"
+            )
+    if problems:
+        raise ValueError("; ".join(problems))
+
+
+def _validate_no_handed_answers(dossiers: list[ActorDossier], gates: list[KnowledgeGate]) -> None:
+    """Refuse starting knowledge that repeats a fact the same character is meant to work out."""
+    by_id = {item.character_id: item for item in dossiers}
+    problems: list[str] = []
+    for gate in gates:
+        if gate.how not in LEARNED_ON_STAGE or gate.revealed_by not in by_id:
+            continue
+        for item in by_id[gate.revealed_by].initial_knowledge:
+            if similarity(item, gate.fact) >= KNOWLEDGE_OVERLAP:
+                problems.append(
+                    f"{gate.revealed_by} starts out knowing what gate {gate.id} says they "
+                    f"{gate.how} on stage; remove it from their initial_knowledge"
+                )
+                break
+    if problems:
+        raise ValueError("; ".join(problems))
+
+
+def gates_known_by_discoverer(bible: CastBible) -> int:
+    """Count gates whose own discoverer already held them: always 0 once a bible validates."""
+    return sum(
+        1
+        for gate in bible.knowledge_gates
+        if gate.how in LEARNED_ON_STAGE and gate.revealed_by in set(gate.known_by)
+    )
 
 
 def _observations(

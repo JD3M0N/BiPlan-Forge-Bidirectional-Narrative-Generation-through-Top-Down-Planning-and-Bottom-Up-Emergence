@@ -20,6 +20,7 @@ from .schemas import (
     CharacterState,
     MemoryRecord,
     SceneBrief,
+    SceneCastBrief,
     StageTurn,
 )
 from .validation import strip_internal_ids
@@ -64,7 +65,10 @@ def actor_system_prompt(
         lines.append(f"- What you hide: {dossier.secret}.{kept}")
     lines.append(f"- How you speak: {dossier.voice}")
     if dossier.mannerisms:
-        lines.append(f"- What your body does: {'; '.join(dossier.mannerisms)}")
+        lines.append(
+            "- Habits that surface under pressure (rarely, never twice in a row): "
+            f"{'; '.join(dossier.mannerisms)}"
+        )
     if dossier.tactics:
         lines.append(f"- How you get your way, in order: {'; '.join(dossier.tactics)}")
     if dossier.triggers:
@@ -88,15 +92,20 @@ def actor_system_prompt(
             "you never learned.",
             "- Play for what you want, using one tactic at a time. When a tactic fails, change "
             "it rather than repeating yourself in new words.",
-            "- One move per turn. Say or do one thing and let the others answer.",
+            "- One move per turn, in a short line, as people talk. Say or do one thing and let "
+            "the others answer; a speech is not a turn.",
             "- Speak only for yourself. Never describe what another character thinks or decides.",
-            "- Your action is only what an audience could see or hear. Your thought is private "
-            "and nobody else will ever perceive it.",
+            "- Your action is a stage direction: third person, without your own name, only what "
+            "an audience could see ('cruza los brazos', never 'cruzo los brazos'). Do not repeat "
+            "a gesture you have already made.",
+            "- Your thought is subtext: what you do not say. Leave it empty when it would only "
+            "repeat your words or your plan. Nobody else ever perceives it.",
             "- When you are given a note, play it without ever mentioning it or hinting that it "
             "exists.",
-            "- If your part is to obstruct, wound, refuse or betray, do it fully. Do not soften "
-            "into agreement, apology or compromise unless this character truly would; a scene "
-            "in which everyone accommodates everyone is a scene in which nothing happens.",
+            "- If your part is to obstruct, wound, refuse or betray, do it fully, without "
+            "softening into agreement or apology - until the scene gives your character a reason "
+            "they would accept. When a note tells you the ground has shifted, let it shift, in "
+            "your own way: a character who never moves is not strong, only stuck.",
             "- Never mention that any of this is a story, a scene or a script.",
         ]
     )
@@ -117,13 +126,11 @@ def actor_turn_context(
 ) -> str:
     """Build the variable block one actor reads before taking a turn."""
     blocks = [f"CIRCUNSTANCIAS DADAS:\n{strip_internal_ids(scene.setting)}"]
-    others = [
-        names.get(item.character_id, item.character_id)
-        for item in scene.cast
-        if item.character_id != character_id
-    ]
+    # Each person on stage comes with what anyone can see of them. With names alone, the first
+    # real run had a character call a woman "muchacho" eleven times.
+    others = [_presented(item, names) for item in scene.cast if item.character_id != character_id]
     if others:
-        blocks.append(f"CONTIGO EN ESCENA: {', '.join(others)}")
+        blocks.append("CONTIGO EN ESCENA:\n" + "\n".join(f"- {line}" for line in others))
     blocks.append(f"LO QUE QUIERES AQUI: {strip_internal_ids(objective)}")
     if state:
         blocks.append(f"COMO ESTAS: {_state_line(state, names)}")
@@ -145,7 +152,7 @@ def actor_turn_context(
     else:
         blocks.append("LA ESCENA ACABA DE EMPEZAR. Te toca abrirla.")
     if note:
-        blocks.append(f"NOTA DEL DIRECTOR (nunca la menciones):\n{note}")
+        blocks.append(f"NOTA DEL DIRECTOR (nunca la menciones):\n{strip_internal_ids(note)}")
     return "\n\n".join(blocks)
 
 
@@ -156,11 +163,17 @@ def director_beat_context(
     turns: list[StageTurn],
     names: dict[str, str],
     gates: list[str],
+    tactics: dict[str, list[str]] | None = None,
+    used_events: list[str] | None = None,
 ) -> str:
-    """Build the block the director reads to open or judge one beat."""
+    """Build the block the director reads to open or judge one beat.
+
+    Two deterministic signals ride along. The last tactics of each actor make a deadlock
+    visible ("confront, confront, confront"), and the world events already used in the play
+    stop the director from reaching for the same thunderclap twice.
+    """
     cast = "\n".join(
-        f"- {names.get(item.character_id, item.character_id)} ({item.character_id}) "
-        f"quiere: {item.objective}"
+        f"- {_presented(item, names)} ({item.character_id}) quiere: {item.objective}"
         for item in scene.cast
     )
     blocks = [
@@ -179,6 +192,19 @@ def director_beat_context(
         blocks.append(
             "QUIEN SABE QUE (no se lo digas a nadie que no lo sepa ya):\n"
             + "\n".join(f"- {item}" for item in gates)
+        )
+    if tactics:
+        blocks.append(
+            "ULTIMAS TACTICAS DE CADA UNO:\n"
+            + "\n".join(
+                f"- {names.get(key, key)}: {', '.join(value)}"
+                for key, value in sorted(tactics.items())
+                if value
+            )
+        )
+    if used_events:
+        blocks.append(
+            "EVENTOS DEL MUNDO YA USADOS:\n" + "\n".join(f"- {item}" for item in used_events)
         )
     blocks.append(transcript(turns, names) if turns else "LA ESCENA AUN NO HA EMPEZADO.")
     return "\n\n".join(blocks)
@@ -208,14 +234,28 @@ def transcript(turns: list[StageTurn], names: dict[str, str]) -> str:
     return "TRANSCRIPCION:\n" + "\n".join(lines)
 
 
-def scene_log(turns: list[StageTurn], names: dict[str, str], *, thoughts: bool) -> str:
-    """Render one scene's log for the narrator, with or without access to inner life."""
+def scene_log(
+    turns: list[StageTurn],
+    names: dict[str, str],
+    *,
+    thoughts: bool,
+    key_ids: frozenset[str] | set[str] = frozenset(),
+) -> str:
+    """Render one scene's log for the narrator, with or without access to inner life.
+
+    ``key_ids`` are the turns the director cited as evidence that a beat landed. They are marked
+    so the narrator knows which moments the chapter turns on and can compress the rest: the
+    first real run expanded the log instead of curating it, because every turn looked equal.
+    """
     lines = []
     for turn in turns:
+        mark = "[clave] " if turn.id in key_ids else ""
         if turn.kind == "world":
-            lines.append(f"({turn.action})")
+            lines.append(f"{mark}({turn.action})")
             continue
         speaker = names.get(turn.actor_id, turn.actor_id)
+        if mark:
+            lines.append(mark.strip())
         if turn.action:
             lines.append(f"({speaker} {turn.action})")
         if turn.speech:
@@ -227,6 +267,12 @@ def scene_log(turns: list[StageTurn], names: dict[str, str], *, thoughts: bool) 
         if thoughts and turn.thought:
             lines.append(f"[{speaker} piensa: {turn.thought}]")
     return "\n".join(lines)
+
+
+def _presented(member: SceneCastBrief, names: dict[str, str]) -> str:
+    """Name one character on stage together with what anyone can see of them."""
+    name = names.get(member.character_id, member.character_id)
+    return f"{name}, {member.public_face}" if member.public_face else name
 
 
 def _state_line(state: CharacterState, names: dict[str, str]) -> str:

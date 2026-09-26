@@ -5,6 +5,10 @@ studied long after the code that wrote it has moved on. The axes it groups by ar
 thesis turns - the narrative voice, the actor memory model, the narrative profile and the
 generator version - and the figures it reports are the ones a reader of the run could recompute
 by hand from performance.json.
+
+A figure a run never recorded is reported as not measured, never as zero. The 7.1 measurements
+(gesture repetition, first-person actions, compression...) do not exist in a 7.0 run, and
+reading them as 0 would make the older corpus look spotless on exactly the problems it had.
 """
 
 from __future__ import annotations
@@ -26,9 +30,12 @@ SIMULATION_FIELDS: tuple[str, ...] = (
     "beats",
     "beat_completion_ratio",
     "beats_forced",
+    "beats_intervened",
     "turns_per_beat",
     "director_checks",
     "stage_events",
+    "reaction_turns",
+    "coda_turns",
     "rejected_turns",
     "skipped_turns",
     "speech_words",
@@ -36,6 +43,13 @@ SIMULATION_FIELDS: tuple[str, ...] = (
     "thought_words",
     "whispers",
     "repetition_ratio",
+    "action_repetition_ratio",
+    "first_person_actions",
+    "thought_ratio",
+    "long_speeches",
+    "yields",
+    "max_tactic_streak",
+    "gates_known_by_discoverer",
     "mean_self_similarity",
     "script_echo",
     "unknown_mentions",
@@ -43,6 +57,7 @@ SIMULATION_FIELDS: tuple[str, ...] = (
     "retrievals",
     "narration_source_fallbacks",
     "narrated_words",
+    "compression_ratio",
     "dialogue_survival",
 )
 
@@ -60,7 +75,7 @@ class SimulationRecord:
     generator_version: str
     status: str
     warnings: int
-    values: dict[str, float] = field(default_factory=dict)
+    values: dict[str, float | None] = field(default_factory=dict)
 
 
 @dataclass
@@ -69,7 +84,7 @@ class SimulationSummary:
 
     label: str
     runs: int
-    values: dict[str, tuple[float, float]] = field(default_factory=dict)
+    values: dict[str, tuple[float | None, float | None]] = field(default_factory=dict)
 
 
 SIMULATION_GROUPINGS: dict[str, Callable[[SimulationRecord], str]] = {
@@ -125,7 +140,7 @@ def summarize_simulations(
     records: Iterable[SimulationRecord],
     key: Callable[[SimulationRecord], str],
 ) -> list[SimulationSummary]:
-    """Group performances and report the mean and median of every field."""
+    """Group performances and report the mean and median of every field that was measured."""
     grouped: dict[str, list[SimulationRecord]] = {}
     for record in records:
         grouped.setdefault(key(record) or UNKNOWN, []).append(record)
@@ -134,8 +149,10 @@ def summarize_simulations(
         group = grouped[label]
         values = {}
         for name in SIMULATION_FIELDS:
-            numbers = [record.values[name] for record in group]
-            values[name] = (sum(numbers) / len(numbers), median(numbers)) if numbers else (0.0, 0.0)
+            numbers = [value for record in group if (value := record.values[name]) is not None]
+            values[name] = (
+                (sum(numbers) / len(numbers), median(numbers)) if numbers else (None, None)
+            )
         summaries.append(SimulationSummary(label=label, runs=len(group), values=values))
     return summaries
 
@@ -151,7 +168,7 @@ def simulation_row(record: SimulationRecord) -> list[object]:
         record.generator_version,
         record.status,
         record.warnings,
-        *(record.values[name] for name in SIMULATION_FIELDS),
+        *("" if record.values[name] is None else record.values[name] for name in SIMULATION_FIELDS),
     ]
 
 
@@ -183,7 +200,9 @@ def _text(document: dict, field_name: str) -> str:
     return value if isinstance(value, str) and value.strip() else UNKNOWN
 
 
-def _number(document: dict, field_name: str) -> float:
-    """Read one numeric field, treating anything unreadable as zero."""
+def _number(document: dict, field_name: str) -> float | None:
+    """Read one numeric field, or None when the run never measured it."""
     value = document.get(field_name)
-    return float(value) if isinstance(value, (int, float)) else 0.0
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)

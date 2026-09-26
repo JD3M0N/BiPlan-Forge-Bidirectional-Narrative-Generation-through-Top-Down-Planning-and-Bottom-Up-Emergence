@@ -116,3 +116,27 @@ def test_the_cli_says_so_when_nothing_has_been_performed(tmp_path, capsys) -> No
 def test_the_parser_offers_every_grouping(tmp_path) -> None:
     args = parser().parse_args(["--group", "voice-memory"])
     assert args.group == "voice-memory"
+
+
+def test_a_figure_a_run_never_recorded_is_not_measured_rather_than_zero(tmp_path) -> None:
+    """A 7.0 run has no compression_ratio; reading it as 0 would flatter the older corpus."""
+    root = tmp_path / "Stories" / "Stagecraft"
+    write_run(root, "old")
+    write_run(root, "new", compression_ratio=0.8)
+    records = {record.run_id: record for record in collect_simulations(tmp_path / "Stories")}
+    assert records["old"].values["compression_ratio"] is None
+    summary = summarize_simulations(records.values(), SIMULATION_GROUPINGS["memory"])[0]
+    assert summary.values["compression_ratio"] == (0.8, 0.8)
+    alone = summarize_simulations([records["old"]], SIMULATION_GROUPINGS["memory"])[0]
+    assert alone.values["compression_ratio"] == (None, None)
+
+
+def test_an_unmeasured_figure_is_an_empty_csv_cell(tmp_path) -> None:
+    root = tmp_path / "Stories" / "Stagecraft"
+    write_run(root, "old")
+    destination = tmp_path / "simulations.csv"
+    assert main(["--stories", str(tmp_path / "Stories"), "--csv", str(destination)]) == 0
+    header, row = destination.read_text(encoding="utf-8").splitlines()
+    cells = dict(zip(header.split(","), row.split(","), strict=True))
+    assert cells["compression_ratio"] == ""
+    assert cells["beats_forced"] == "2.0"

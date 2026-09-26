@@ -12,6 +12,7 @@ self._call_agent, self._promise_brief, self._publish), the same way pipeline.py'
 from __future__ import annotations
 
 import json
+import re
 
 from ..agents import ActorAgent, CastingDirectorAgent, NarratorAgent, StageManagerAgent
 from ..planning.promise_brief import chapter_brief
@@ -32,7 +33,7 @@ from ..writing.assembly import assemble_story
 from ..writing.audit import story_metrics, word_count
 from . import fallback, voices
 from .casting import dossier_index, fallback_bible, gates_for, materialize_bible
-from .engine import PerformanceEngine
+from .engine import CODA_TURNS, REACTION_TURNS, PerformanceEngine
 from .memory import RECENCY_DECAY, RETRIEVED_RECORDS
 from .metrics import simulation_metrics
 from .policy import CHECK_EVERY
@@ -49,6 +50,9 @@ from .schemas import (
     ScenePerformance,
 )
 from .validation import REPETITION_THRESHOLD
+
+# "Acto I:", "Act 2 -", "ACTO III." at the head of a title: a script's label, not a chapter's.
+_ACT_LABEL = re.compile("^\\s*(?:acto|act)\\s+(?:[ivxlc]+|\\d+)\\s*[:.\\-–—]\\s*", re.IGNORECASE)
 
 CASTING_ATTEMPTS = 2
 NARRATION_ATTEMPTS = 2
@@ -75,7 +79,7 @@ class SimulationStagesMixin:
             request, characters, plan, play, performance, ledger
         )
         self._finalize_simulation(
-            request, plan, performance, narration, engine, briefs, story, fallbacks
+            request, plan, bible, performance, narration, engine, briefs, story, fallbacks
         )
 
     # -- casting -------------------------------------------------------------------------
@@ -191,8 +195,8 @@ class SimulationStagesMixin:
             open_beat=lambda context: self._call_agent(
                 "stage_manager", lambda: director.open_beat(context, request.language)
             ),
-            check_beat=lambda context, stalled: self._call_agent(
-                "stage_manager", lambda: director.check(context, request.language, stalled=stalled)
+            check_beat=lambda context, mode: self._call_agent(
+                "stage_manager", lambda: director.check(context, request.language, mode=mode)
             ),
             reflect=lambda system, log: self._call_agent(
                 "actor", lambda: actor.reflect(system, log, request.language)
@@ -205,6 +209,8 @@ class SimulationStagesMixin:
             language=request.language,
             actor_memory=self.actor_memory,
             turns_per_beat=self.turns_per_beat,
+            reaction_turns=REACTION_TURNS,
+            coda_turns=CODA_TURNS,
             on_event=lambda kind, message: self._emit(kind, message, stage="performance"),
         )
 
@@ -221,6 +227,9 @@ class SimulationStagesMixin:
             self.repository.save_json(f"stage/{brief.scene_id}/brief.json", brief)
             engine.on_rejection = lambda rejection, scene_id=brief.scene_id: (
                 self.repository.append_jsonl(f"stage/{scene_id}/rejected.jsonl", rejection)
+            )
+            engine.on_direction = lambda entry, scene_id=brief.scene_id: (
+                self.repository.append_jsonl(f"stage/{scene_id}/director.jsonl", entry)
             )
             engine.on_turn = lambda turn, context, scene_id=brief.scene_id: (
                 self.repository.append_jsonl(f"stage/{scene_id}/turns.jsonl", turn),
@@ -253,6 +262,8 @@ class SimulationStagesMixin:
                 actor_memory=self.actor_memory,
                 turns_per_beat=self.turns_per_beat,
                 check_every=CHECK_EVERY,
+                reaction_turns=REACTION_TURNS,
+                coda_turns=CODA_TURNS,
                 retrieved_records=RETRIEVED_RECORDS,
                 recency_decay=RECENCY_DECAY,
                 repetition_threshold=REPETITION_THRESHOLD,
@@ -285,6 +296,7 @@ class SimulationStagesMixin:
         """Turn the validated script into one brief per scene, in performance order."""
         events = {event.id: event for event in plan.events}
         chapters = {chapter.id: chapter for chapter in plan.chapters}
+        faces = {item.character_id: item.public_face for item in bible.dossiers}
         briefs: list[SceneBrief] = []
         for act in play.acts:
             chapter = chapters[act.chapter_id]
@@ -316,19 +328,21 @@ class SimulationStagesMixin:
                                 character_id=member.character_id,
                                 name=names.get(member.character_id, member.character_id),
                                 objective=member.objective,
+                                public_face=faces.get(member.character_id, ""),
                             )
                             for member in scene.cast
                         ],
                         beats=beats,
-                        gate_facts=[
-                            f"{gate.fact} (lo saben: {_holders(gate.known_by, names)})"
-                            for gate in bible.knowledge_gates
-                        ],
+                        gate_facts=[_gate_line(gate, names) for gate in bible.knowledge_gates],
                         scripted_lines=[
                             line.text for line in scene.lines if line.kind == "dialogue"
                         ],
                     )
                 )
+        # The last scene carries the ending, so it is the one that earns a coda: without it the
+        # first real runs stopped on whatever line happened to land the final beat.
+        if briefs:
+            briefs[-1] = briefs[-1].model_copy(update={"closes_play": True})
         return briefs
 
     # -- narration -----------------------------------------------------------------------
@@ -375,7 +389,8 @@ class SimulationStagesMixin:
                 for turn in voices.visible_turns(voice, scene, narrator=narrator)
             ]
             available = sum(len(scene.turns) for scene in scenes)
-            log = scene_log(visible, names, thoughts=True)
+            key_ids = {item for scene in scenes for beat in scene.beats for item in beat.evidence}
+            log = scene_log(visible, names, thoughts=True, key_ids=key_ids)
             body, attempts, source = self._narrate_chapter(
                 agent,
                 request,
@@ -480,7 +495,7 @@ class SimulationStagesMixin:
     # -- finishing -----------------------------------------------------------------------
 
     def _finalize_simulation(
-        self, request, plan, performance, narration, engine, briefs, story, fallbacks
+        self, request, plan, bible, performance, narration, engine, briefs, story, fallbacks
     ) -> None:
         """Persist the measured performance and publish the narrated story."""
         assert self.repository is not None
@@ -492,6 +507,7 @@ class SimulationStagesMixin:
             names=engine.names,
             story=story,
             narration_fallbacks=fallbacks,
+            bible=bible,
         )
         metrics = metrics.model_copy(update={"narrative_voice": narration.narrative_voice})
         self.repository.save_json("simulation_metrics.json", metrics)
@@ -503,7 +519,8 @@ class SimulationStagesMixin:
 
         materialize_act mints an act's title from the frozen plan, which is written in English,
         so the acts themselves cannot supply them. script_presentation.json can, and falling
-        back to the act title keeps a run readable if that artifact is ever missing.
+        back to the act title keeps a run readable if that artifact is ever missing. An act label
+        ("Acto I:") belongs to the script; the story is prose, so it is dropped.
         """
         assert self.repository is not None
         path = self.repository.run_dir / "script_presentation.json"
@@ -515,7 +532,7 @@ class SimulationStagesMixin:
         for chapter in document.get("chapters") or []:
             if isinstance(chapter, dict) and chapter.get("chapter_id") and chapter.get("title"):
                 titles[chapter["chapter_id"]] = chapter["title"]
-        return titles
+        return {key: _without_act_label(value) for key, value in titles.items()}
 
     def _presentation_from(self, play: PlayScript, plan: StoryPlan) -> StoryPresentation:
         """Rebuild the localized presentation the assembler needs for the narrated story."""
@@ -542,3 +559,16 @@ def _protagonist(characters: CharactersArtifact) -> str:
 def _holders(known_by: list[str], names: dict[str, str]) -> str:
     """Name who holds one fact, for the director's eyes only."""
     return ", ".join(names.get(item, item) for item in known_by) or "nadie"
+
+
+def _gate_line(gate, names: dict[str, str]) -> str:
+    """Describe one gate for the director: who holds it and who is meant to bring it out."""
+    holders = _holders(gate.known_by, names)
+    revealer = names.get(gate.revealed_by, gate.revealed_by) if gate.revealed_by else "el mundo"
+    return f"{gate.fact} (lo saben: {holders}; lo saca a la luz {revealer} por {gate.how})"
+
+
+def _without_act_label(title: str) -> str:
+    """Drop a leading act label from a title, keeping it whole when nothing else is left."""
+    stripped = _ACT_LABEL.sub("", title).strip()
+    return stripped or title

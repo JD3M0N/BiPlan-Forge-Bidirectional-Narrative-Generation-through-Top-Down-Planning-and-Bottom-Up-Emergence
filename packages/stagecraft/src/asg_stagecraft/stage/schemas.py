@@ -18,6 +18,39 @@ from ..schemas import ID_PATTERN
 # What a character contributes in one turn, and who is allowed to perceive it.
 TurnVisibility = Literal["public", "whisper"]
 
+# How a gated fact comes to light on stage. "deduction" and "discovery" mean the one who brings
+# it out did not know it before; "confession" means they did.
+GateReveal = Literal["confession", "deduction", "discovery", "told", "overheard"]
+
+# The closed vocabulary of moves an actor may declare. Closed on purpose: free text made the
+# tactic metric meaningless in the first real run, and a fixed set lets the director see a
+# stalemate ("confront, confront, confront") and the metrics count who ever gave ground.
+Tactic = Literal[
+    "confront",
+    "accuse",
+    "demand",
+    "deflect",
+    "deny",
+    "lie",
+    "stall",
+    "plead",
+    "charm",
+    "comfort",
+    "threaten",
+    "mock",
+    "command",
+    "test",
+    "investigate",
+    "reveal",
+    "confess",
+    "concede",
+    "yield",
+    "withdraw",
+]
+
+# Tactics that give ground. A beat whose outcome needs someone to change can only land after one.
+YIELDING_TACTICS = frozenset({"reveal", "confess", "concede", "yield"})
+
 # Where one memory record came from. The distinction matters for the knowledge boundary:
 # "observed" is something the character saw someone else do, "own_turn" is what it did itself,
 # and "thought" never leaves the character who thought it.
@@ -30,6 +63,7 @@ class SceneCastBrief(BaseModel):
     character_id: str = Field(pattern=ID_PATTERN)
     name: str = Field(min_length=1)
     objective: str = Field(min_length=1)
+    public_face: str = ""
 
 
 class BeatBrief(BaseModel):
@@ -61,6 +95,7 @@ class SceneBrief(BaseModel):
     beats: list[BeatBrief] = Field(min_length=1)
     gate_facts: list[str] = Field(default_factory=list)
     scripted_lines: list[str] = Field(default_factory=list)
+    closes_play: bool = False
 
 
 # --------------------------------------------------------------------------------------
@@ -98,6 +133,14 @@ class ActorDossier(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     character_id: str = Field(description="Character ID from characters.json.")
+    public_face: str = Field(
+        default="",
+        description=(
+            "In the fiction language: what anyone who sees this character can tell at a glance - "
+            "apparent gender and age, their trade if it is public, one visible trait. This is "
+            "the only thing the others know about them before they speak."
+        ),
+    )
     want: str = Field(
         min_length=1,
         description=(
@@ -136,7 +179,10 @@ class ActorDossier(BaseModel):
     )
     mannerisms: list[str] = Field(
         default_factory=list,
-        description="In English: physical habits an audience can see. At most three.",
+        description=(
+            "In English: physical habits that surface under pressure. At most three, and an "
+            "actor uses them rarely, never twice in a row."
+        ),
     )
     tactics: list[str] = Field(
         default_factory=list,
@@ -158,8 +204,9 @@ class ActorDossier(BaseModel):
     initial_knowledge: list[str] = Field(
         default_factory=list,
         description=(
-            "In English: what this character already knows when the curtain rises. This is their "
-            "knowledge boundary at the start: anything absent here they must learn on stage."
+            "In the fiction language: what this character already knows when the curtain rises. "
+            "This is their knowledge boundary at the start: anything absent here they must learn "
+            "on stage. Never include what they will deduce or discover during the story."
         ),
     )
     relationships: list[ActorRelationship] = Field(default_factory=list)
@@ -184,10 +231,30 @@ class KnowledgeGate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(pattern=ID_PATTERN)
-    fact: str = Field(min_length=1, description="In English: the fact itself, stated plainly.")
+    fact: str = Field(
+        min_length=1,
+        description="In the fiction language: the fact itself, stated plainly.",
+    )
     known_by: list[str] = Field(
         default_factory=list,
-        description="Character IDs who already know this fact when the story opens.",
+        description=(
+            "Character IDs who already know this fact BEFORE the first scene. Never the character "
+            "who deduces or discovers it on stage: the culprit knows what they did, the detective "
+            "does not know the answer."
+        ),
+    )
+    revealed_by: str = Field(
+        default="",
+        description=(
+            "Character ID of whoever brings this fact to light, or empty when the world or a "
+            "piece of evidence reveals it."
+        ),
+    )
+    how: GateReveal = Field(
+        description=(
+            "How it comes out: 'confession' (a holder admits it), 'deduction' or 'discovery' "
+            "(someone who did not know works it out or finds it), 'told' or 'overheard'."
+        ),
     )
     revealed_at_event_id: str = Field(
         default="",
@@ -225,22 +292,25 @@ class ActorTurnDraft(BaseModel):
     thought: str = Field(
         default="",
         description=(
-            "In the fiction language: what the character thinks and does not say. Nobody else "
-            "ever perceives this. Leave empty when they are not thinking anything worth recording."
+            "In the fiction language, first person: the subtext - what the character thinks and "
+            "does NOT say, such as a doubt, a lie they are telling, a fear. Nobody else ever "
+            "perceives it. Leave it empty unless it differs from what they say and do."
         ),
     )
     action: str = Field(
         default="",
         description=(
-            "In the fiction language: what the character visibly does, as an audience would see "
-            "it. No thoughts, no backstory. Empty when they only speak."
+            "In the fiction language, third person present and without the character's own name, "
+            "as a stage direction: 'cruza los brazos', never 'cruzo los brazos'. Only what an "
+            "audience would see; no thoughts, no backstory. Empty when they only speak."
         ),
     )
     speech: str = Field(
         default="",
         description=(
             "In the fiction language: exactly the words the character says, with no quotation "
-            "marks and no name prefix. Empty when they only act."
+            "marks and no name prefix. Short, as people talk: one thing, said now. Empty when "
+            "they only act."
         ),
     )
     addressed_to: list[str] = Field(
@@ -256,12 +326,7 @@ class ActorTurnDraft(BaseModel):
             "A whisper needs addressed_to."
         ),
     )
-    tactic: str = Field(
-        default="",
-        description=(
-            "In English: the one-word or two-word move being tried, such as 'bluff' or 'plead'."
-        ),
-    )
+    tactic: Tactic = Field(description="The move this turn tries, from the fixed list.")
 
 
 class StageTurn(ActorTurnDraft):
@@ -278,6 +343,8 @@ class StageTurn(ActorTurnDraft):
     # "world" marks what the stage itself does when the director unsticks a scene. It carries an
     # actor_id only so the cast it was witnessed by stays derivable; nobody performed it.
     kind: Literal["actor", "world"] = "actor"
+    # Widened back to a plain string: a world event tries no tactic, and 7.0 logs used free text.
+    tactic: str = ""
     beat_index: int = Field(ge=0)
     beat_event_id: str = ""
     witnesses: list[str] = Field(default_factory=list)
@@ -295,8 +362,10 @@ class TurnRejection(BaseModel):
     code: Literal[
         "EMPTY_TURN",
         "INTERNAL_IDENTIFIERS",
-        "MULTIPLE_BEATS",
+        "LONG_SPEECH",
+        "FIRST_PERSON_ACTION",
         "REPEATED_LINE",
+        "REPEATED_ACTION",
         "ACTOR_CALL_FAILED",
     ]
     issue: str
@@ -319,40 +388,78 @@ class BeatDirection(BaseModel):
     )
 
 
-class BeatCheckDraft(BaseModel):
-    """The director's verdict on whether a beat has been reached, as proposed."""
+class OutcomePart(BaseModel):
+    """One clause of a beat's outcome, and whether the performance has shown it."""
 
     model_config = ConfigDict(extra="forbid")
 
-    achieved: bool = Field(
-        description="True only when the beat's outcome has actually happened on stage."
-    )
+    part: str = Field(min_length=1, description="In English: one clause of the outcome.")
+    shown: bool = Field(description="True only if an audience would have seen this happen.")
     evidence: list[str] = Field(
         default_factory=list,
-        description=(
-            "Turn IDs from the transcript that show it happened. Required when achieved is true."
-        ),
+        description="Turn IDs from the transcript that show it. Required when shown is true.",
     )
-    missing: str = Field(
-        default="",
-        description="In English: what still has to happen. Required when achieved is false.",
+
+
+class BeatCheckDraft(BaseModel):
+    """The director's reading of a beat, as proposed. Whether it landed is derived, not declared.
+
+    The director breaks the outcome into its clauses and says which the performance has shown;
+    the engine decides the beat is reached only when every clause is shown with a turn to prove
+    it. The first real run showed why: a model asked for one yes-or-no was literal in one scene
+    and lenient in another, and one lenient yes closed a mystery without its motive.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    parts: list[OutcomePart] = Field(
+        min_length=1,
+        description="Every clause of the outcome, each judged separately.",
     )
     next_actor_id: str = Field(
         default="",
         description="Character ID who should move next, or empty to let the scene decide.",
     )
+    turning_actor_id: str = Field(
+        default="",
+        description=(
+            "Character ID of the one whose change the missing clause needs: who has to give "
+            "ground, confess, discover or decide for it to happen. Required when told to name one."
+        ),
+    )
     notes: list[str] = Field(
         default_factory=list,
         max_length=2,
-        description="In English: at most two playable notes, as in BeatDirection.",
+        description=(
+            "In English: at most two playable notes, as in BeatDirection. When a turning actor is "
+            "named, one note is theirs and gives them a reason to change now."
+        ),
     )
     stage_event: str = Field(
         default="",
         description=(
-            "In the fiction language: something the world itself does that an audience can see or "
-            "hear, used only when the scene has stalled. Empty otherwise."
+            "In the fiction language: something the world itself does that everyone present sees "
+            "or hears. Empty unless you are asked for one."
         ),
     )
+
+
+class DirectorEntry(BaseModel):
+    """One call to the director, with what the engine made of it: a line of director.jsonl."""
+
+    scene_id: str = Field(pattern=ID_PATTERN)
+    beat_event_id: str
+    beat_index: int = Field(ge=0)
+    mode: Literal["open", "check", "turn", "stall", "final"]
+    after_turn: int = Field(ge=0)
+    draft: dict | None = None
+    achieved: bool | None = None
+    evidence: list[str] = Field(default_factory=list)
+    missing: list[str] = Field(default_factory=list)
+    turning_actor_id: str = ""
+    turning_fallback: bool = False
+    stage_event: str = ""
+    failed: bool = False
 
 
 class BeatRecord(BaseModel):
@@ -365,9 +472,13 @@ class BeatRecord(BaseModel):
     checks: int = Field(default=0, ge=0)
     turns: int = Field(default=0, ge=0)
     achieved: bool = False
+    # Reached only after the world stepped in: honest about how, without calling it forced.
+    intervened: bool = False
     forced: bool = False
     evidence: list[str] = Field(default_factory=list)
     stage_events: list[str] = Field(default_factory=list)
+    turning_actor_id: str = ""
+    reaction_turns: int = Field(default=0, ge=0)
 
 
 class RelationshipState(BaseModel):
@@ -475,6 +586,7 @@ class ScenePerformance(BaseModel):
     beats: list[BeatRecord] = Field(default_factory=list)
     rejected: int = Field(default=0, ge=0)
     skipped: int = Field(default=0, ge=0)
+    coda_turns: int = Field(default=0, ge=0)
 
 
 class PerformanceSettings(BaseModel):
@@ -483,6 +595,8 @@ class PerformanceSettings(BaseModel):
     actor_memory: ActorMemory
     turns_per_beat: int = Field(ge=2)
     check_every: int = Field(ge=1)
+    reaction_turns: int = Field(default=2, ge=0)
+    coda_turns: int = Field(default=2, ge=0)
     retrieved_records: int = Field(ge=1)
     recency_decay: float = Field(ge=0.0)
     repetition_threshold: float = Field(ge=0.0, le=1.0)
@@ -495,7 +609,9 @@ class PerformanceArtifact(BaseModel):
     so an analysis script never has to import this package to study a run.
     """
 
-    contract_version: str = "1"
+    # 2: achieved is derived from the director's clauses, gates say how they come out, and
+    # every director call is logged. A 7.0 run still reads as contract 1.
+    contract_version: str = "2"
     language: str
     settings: PerformanceSettings
     scenes: list[ScenePerformance] = Field(default_factory=list)

@@ -27,6 +27,37 @@ _DIRECTION_RULES = (
 )
 
 
+# What each rung of the escalation ladder asks for, on top of reading the clauses. The ladder
+# exists because the first real runs deadlocked: the notes set one character pressing and
+# another resisting, nobody ever had a reason to cross, and four beats in twelve were closed
+# by a thunderclap that resolved nothing - one of them the ending of a mystery.
+_MODE_CLAUSES: dict[str, str] = {
+    "check": (
+        " If a clause is missing, give at most two notes that move the scene towards it, and "
+        "name who should move next. Leave turning_actor_id and stage_event empty."
+    ),
+    "turn": (
+        " The characters are holding their positions and the missing clause will not happen "
+        "on its own. Name turning_actor_id: the one character whose change it needs - who has "
+        "to give ground, confess, discover or decide. Give that character one of your notes, "
+        "and make it a reason true to them to change now, in their own way. Your other note, "
+        "if any, must not block that change. Leave stage_event empty."
+    ),
+    "stall": (
+        " The scene has used its time. Supply a stage_event in {language}: something the world "
+        "itself does, which everyone present sees or hears, that makes the missing clause "
+        "happen or impossible to deny - a piece of evidence surfaces, someone arrives, a door "
+        "gives way. It must deliver the missing clause, not set a mood: never weather, light or "
+        "a sound that changes nothing, and never a device listed under EVENTOS DEL MUNDO YA "
+        "USADOS. Still name turning_actor_id and give them a note: they react first."
+    ),
+    "final": (
+        " The world has already stepped in. Only read the clauses; leave the notes, "
+        "turning_actor_id and stage_event empty."
+    ),
+}
+
+
 class StageManagerAgent(Agent[BeatDirection]):
     """Open each beat, judge whether it has landed, and unstick a scene that has stalled."""
 
@@ -48,24 +79,23 @@ class StageManagerAgent(Agent[BeatDirection]):
             profile="review",
         )
 
-    def check(self, context: str, language: str, *, stalled: bool = False) -> BeatCheckDraft:
-        """Judge whether the beat has actually happened, and say what to do about it."""
-        stall_clause = (
-            " This scene has run long without reaching its beat. Supply a stage_event: something "
-            "the world itself does that everyone present can see or hear, written in "
-            f"{language}, which forces the situation to move. Not a character's action, and not "
-            "narration: a knock, a light failing, someone arriving, a sound from the next room."
-            if stalled
-            else " Leave stage_event empty unless the scene has genuinely stopped moving."
-        )
+    def check(self, context: str, language: str, *, mode: str = "check") -> BeatCheckDraft:
+        """Read the beat clause by clause, and escalate as far as the mode allows.
+
+        The modes are the rungs of the engine's escalation ladder. "check" only reads and nudges;
+        "turn" must also name who has to change and give them a reason; "stall" must also make
+        the world deliver the missing clause; "final" only reads. Whether the beat landed is
+        never asked for: the engine derives it from the clauses.
+        """
         return self.provider.generate_structured(
             system_instruction=(
-                "You are the Stage Manager. Read what the actors have performed and decide "
-                "whether the beat below has actually happened on stage. Judge what was played, "
-                "not what was intended: a beat is reached only when an audience watching this "
-                "scene would have seen it happen. If it has, cite the turn IDs that show it. If "
-                "it has not, say in one line what still has to occur, and name who should move "
-                f"next. {_DIRECTION_RULES}{stall_clause}"
+                "You are the Stage Manager. Read what the actors have performed against the beat "
+                "below. Break the beat's outcome into its clauses and judge each one on its own: "
+                "shown only if an audience watching this scene would have seen it happen, and "
+                "then cite the turn IDs that show it. Judge what was played, not what was meant. "
+                "A clause that describes a situation rather than an action is shown as soon as "
+                f"the situation is established on stage. {_DIRECTION_RULES}"
+                f"{_MODE_CLAUSES[mode].format(language=language)}"
             ),
             prompt=context,
             schema=BeatCheckDraft,

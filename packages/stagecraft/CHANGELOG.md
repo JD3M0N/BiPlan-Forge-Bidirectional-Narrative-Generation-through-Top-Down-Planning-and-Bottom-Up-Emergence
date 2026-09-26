@@ -1,5 +1,48 @@
 # Historial de cambios
 
+## 7.1.0
+
+Arregla lo que destapó el primer run real del formato simulado (dos historias del prompt 03,
+perfil Esencial). Los formatos narrativo y guion no cambian: sus 77 artefactos de prueba siguen
+idénticos byte a byte.
+
+- **La frontera de conocimiento.** `KnowledgeGate` gana `revealed_by` y `how` (`confession`,
+  `deduction`, `discovery`, `told`, `overheard`), y `stage/casting.py` rechaza que quien deduce o
+  descubre un hecho lo sepa ya, que alguien confiese lo que no sabe, una revelación que no le cuenta
+  nada a nadie y un `initial_knowledge` que regala una deducción. En 7.0 la detective conocía la
+  solución antes de empezar. Nueva métrica `gates_known_by_discoverer`, 0 por construcción.
+- **`public_face`** en cada dossier: lo que cualquiera ve de un personaje. El actor ve a cada
+  persona en escena con esa línea; con solo el nombre, en 7.0 una mujer fue «muchacho» once veces.
+- **`achieved` se deriva.** `BeatCheckDraft` pierde `achieved` y gana `parts`: el director juzga
+  cada cláusula del resultado con los turnos que la prueban, y el motor da el beat por alcanzado
+  solo si todas están vistas con un turno que existe.
+- **Escalera de escalada** en `stage/engine.py`: lectura (`check`), giro con `turning_actor_id` y
+  su nota (`turn`), evento del mundo que entrega la cláusula que falta (`stall`), dos turnos de
+  reacción y una lectura final. Un beat alcanzado así queda `intervened`; solo si ni eso basta,
+  `forced`. El director ve las últimas tácticas de cada actor y los eventos del mundo ya usados.
+- **Coda** de dos turnos tras el último beat de la obra.
+- **Tácticas en vocabulario cerrado** (20 valores, impuesto por esquema).
+- **Validación de turnos**: `LONG_SPEECH` (más de 45 palabras), `FIRST_PERSON_ACTION` (detector
+  conservador, con su punto ciego documentado) y `REPEATED_ACTION` (contención ≥ 0,8 contra las 3
+  últimas acciones propias). Un pensamiento que solo repite el habla se vacía. Se retira
+  `MULTIPLE_BEATS`, que nunca se disparaba. `validate_turn` lanza `TurnIssue`, un `ValueError`
+  con código.
+- **`stage/<escena>/director.jsonl`**: una línea por llamada al director, con el borrador, las
+  cláusulas, el veredicto derivado y el turno tras el que ocurrió.
+- **El narrador cura**: los turnos que prueban un beat le llegan marcados `[clave]`, y su prompt
+  pide comprimir tablas y tics, no pegar un pensamiento a cada réplica y contar lo que hace el
+  mundo en el tiempo de la narración. Los títulos pierden el rótulo «Acto I:».
+- **Medición honesta**: `action_repetition_ratio`, `first_person_actions`, `thought_ratio`,
+  `long_speeches`, `yields`, `max_tactic_streak`, `compression_ratio`, `log_words`,
+  `beats_intervened`, `reaction_turns` y `coda_turns`. Los eventos del mundo ya no cuentan como
+  turnos de un actor. `report-simulations` las agrega e informa como «no medida» (celda vacía) la
+  cifra que un run no registró, en vez de leerla como 0.
+- **`audit-stage-run`**, contrato 2: una mentira deliberada ya no es una fuga de conocimiento, lo
+  que el juez archive con otro tipo va a `set_aside` sin puntuar, y un informe anterior nunca se
+  sobrescribe.
+- `performance.json` pasa a `contract_version` "2"; `PIPELINE_VERSION` 7.1, con 7.0 todavía
+  soportada.
+
 ## 7.0.0
 
 - **El paquete pasa a llamarse Stagecraft.** `packages/top_down` es ahora `packages/stagecraft`,

@@ -204,6 +204,71 @@ def test_a_beat_that_never_lands_is_forced_and_warned(tmp_path) -> None:
     assert metrics["beat_completion_ratio"] < 1.0
 
 
+def test_a_beat_the_world_resolves_is_counted_as_reached_with_help(tmp_path) -> None:
+    provider = StageFakeProvider(story_review=major_story_review(), beat_needs_world=True)
+    run, _ = generate(tmp_path, provider, turns_per_beat=2)
+    metrics = read_json(run, "simulation_metrics.json")
+    assert metrics["beats_intervened"] >= 1
+    assert metrics["beats_forced"] == 0
+    assert metrics["reaction_turns"] == 2 * metrics["beats_intervened"]
+    assert metrics["stage_events"] >= metrics["beats_intervened"]
+    assert "final" in provider.check_modes
+
+
+def test_every_director_call_lands_in_director_jsonl(tmp_path) -> None:
+    provider = StageFakeProvider(story_review=major_story_review(), beat_never_achieved=True)
+    run, _ = generate(tmp_path, provider, turns_per_beat=2)
+    entries = [
+        json.loads(line)
+        for path in sorted(run.run_dir.glob("stage/*/director.jsonl"))
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line
+    ]
+    calls = [
+        name
+        for name, _, _ in provider.structured_calls
+        if name in {"BeatDirection", "BeatCheckDraft"}
+    ]
+    assert len(entries) == len(calls)
+    assert {entry["mode"] for entry in entries} == {"open", "stall", "final"}
+    assert all(entry["achieved"] is False for entry in entries if entry["mode"] == "final")
+
+
+def test_the_last_scene_of_the_play_ends_in_a_coda(tmp_path) -> None:
+    run, _ = generate(tmp_path)
+    performance = PerformanceArtifact.model_validate(read_json(run, "performance.json"))
+    assert performance.contract_version == "2"
+    assert performance.scenes[-1].coda_turns > 0
+    assert all(scene.coda_turns == 0 for scene in performance.scenes[:-1])
+    assert read_json(run, "simulation_metrics.json")["coda_turns"] == (
+        performance.scenes[-1].coda_turns
+    )
+
+
+def test_the_narrator_is_told_which_moments_the_chapter_turns_on(tmp_path) -> None:
+    provider = StageFakeProvider(story_review=major_story_review())
+    generate(tmp_path, provider)
+    assert any("[clave]" in prompt for prompt in provider.narrator_prompts)
+
+
+def test_the_new_measurements_are_recorded(tmp_path) -> None:
+    run, _ = generate(tmp_path)
+    metrics = read_json(run, "simulation_metrics.json")
+    for key in (
+        "action_repetition_ratio",
+        "first_person_actions",
+        "thought_ratio",
+        "long_speeches",
+        "yields",
+        "max_tactic_streak",
+        "compression_ratio",
+        "log_words",
+    ):
+        assert key in metrics, key
+    assert metrics["gates_known_by_discoverer"] == 0
+    assert metrics["log_words"] > 0
+
+
 def test_the_narrator_falls_back_without_losing_the_run(tmp_path) -> None:
     provider = StageFakeProvider(
         story_review=major_story_review(), fail_narrator_call={1, 2, 3, 4, 5, 6}
@@ -242,6 +307,10 @@ def test_no_measurement_ever_reaches_a_stage_prompt(tmp_path) -> None:
         "script_echo",
         "repetition_ratio",
         "dialogue_ratio",
+        "compression_ratio",
+        "action_repetition_ratio",
+        "max_tactic_streak",
+        "thought_ratio",
         "importance:",
         "word budget",
     ):

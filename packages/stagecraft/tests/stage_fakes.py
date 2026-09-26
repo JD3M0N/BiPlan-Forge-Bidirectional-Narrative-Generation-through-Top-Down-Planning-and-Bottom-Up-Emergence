@@ -19,6 +19,7 @@ from asg_stagecraft.stage.schemas import (
     BeatDirection,
     CastBibleDraft,
     KnowledgeGate,
+    OutcomePart,
     ReflectionDraft,
     RelationshipState,
 )
@@ -31,7 +32,7 @@ _SCRIPTED_MOVES = [
         "El expediente salio de aqui anoche y quiero saber quien lo movio.",
         "cierra la puerta con el pie",
         "Si miente lo voy a notar en las manos.",
-        "press",
+        "confront",
     ),
     (
         "Nadie toco nada. Estuve sola toda la tarde revisando cajas.",
@@ -43,7 +44,7 @@ _SCRIPTED_MOVES = [
         "Entonces explicame por que faltan tres carpetas del estante bajo.",
         "senala el hueco en la balda",
         "Le tiembla la voz cuando habla del estante.",
-        "corner",
+        "investigate",
     ),
     (
         "Puede que alguien de mantenimiento las bajara al sotano sin avisar.",
@@ -84,6 +85,7 @@ class StageFakeProvider(FakeProvider):
         empty_turn_once=False,
         repeat_turn_once=False,
         beat_never_achieved=False,
+        beat_needs_world=False,
         **kwargs,
     ) -> None:
         """Configure the stage responses and the failures a test wants to force."""
@@ -96,6 +98,8 @@ class StageFakeProvider(FakeProvider):
         self.empty_turn_once = empty_turn_once
         self.repeat_turn_once = repeat_turn_once
         self.beat_never_achieved = beat_never_achieved
+        self.beat_needs_world = beat_needs_world
+        self.check_modes: list[str] = []
         self.casting_number = 0
         self.actor_number = 0
         self.director_number = 0
@@ -118,7 +122,7 @@ class StageFakeProvider(FakeProvider):
             return self._direction(prompt)
         if schema is BeatCheckDraft:
             self.structured_calls.append((schema.__name__, system_instruction, prompt))
-            return self._check(prompt)
+            return self._check(system_instruction, prompt)
         if schema is ReflectionDraft:
             self.structured_calls.append((schema.__name__, system_instruction, prompt))
             return self._reflection(prompt)
@@ -166,12 +170,13 @@ class StageFakeProvider(FakeProvider):
                 moral_line="will not hand anyone over",
                 secret=f"{character_id} took the file" if character_id == ids[0] else "",
                 secret_from=ids[1:2] if character_id == ids[0] else [],
+                public_face="una archivera de mediana edad, con gafas y la voz baja",
                 voice="clipped, concrete, never raises her voice",
                 mannerisms=["taps the folder"],
                 tactics=["reason", "press", "threaten"],
                 triggers=["When cornered, they go quiet."],
                 behavior_rules=["Never explain twice."],
-                initial_knowledge=[f"{character_id} knows the archive closes at eight."],
+                initial_knowledge=["El archivo cierra a las ocho."],
                 relationships=[
                     ActorRelationship(
                         character_id=other,
@@ -193,6 +198,8 @@ class StageFakeProvider(FakeProvider):
                 id="gate-1",
                 fact="El archivo tiene una copia fuera del edificio.",
                 known_by=ids[:1],
+                revealed_by=ids[0],
+                how="confession",
             )
         ]
         return CastBibleDraft(dossiers=dossiers, knowledge_gates=gates)
@@ -209,11 +216,11 @@ class StageFakeProvider(FakeProvider):
         speaker = system_instruction.split(".", 1)[0].replace("You are ", "").strip()
         if self.empty_turn_once and self.actor_number == 1:
             self.empty_turn_once = False
-            return ActorTurnDraft(thought="", action="", speech="")
+            return ActorTurnDraft(thought="", action="", speech="", tactic="stall")
         if self.repeat_turn_once and speaker in self._last_speech:
             repeated = self._last_speech[speaker]
             self.repeat_turn_once = False
-            return ActorTurnDraft(speech=repeated, action="", thought="")
+            return ActorTurnDraft(speech=repeated, action="", thought="", tactic="deny")
         # Every line is lexically distinct on purpose. A double that restated itself would be
         # rejected by the repetition rule, which is correct behaviour but would leave the happy
         # path untested: scenes would end after a single accepted turn.
@@ -232,17 +239,38 @@ class StageFakeProvider(FakeProvider):
         opening = match.group(1) if match else "ana"
         return BeatDirection(opening_actor_id=opening, notes=[f"{opening}: empuja hasta que ceda"])
 
-    def _check(self, prompt: str) -> BeatCheckDraft:
-        """Declare a beat reached as soon as the transcript holds a turn, unless told otherwise."""
+    def _check(self, system_instruction: str, prompt: str) -> BeatCheckDraft:
+        """Show the beat's one clause as soon as the transcript holds a turn, unless told not to.
+
+        ``beat_never_achieved`` keeps the clause unshown on every rung, so the beat climbs the
+        whole ladder and is forced; ``beat_needs_world`` shows it only on the final reading,
+        after the world has stepped in, so the beat lands as intervened.
+        """
         self.director_number += 1
         if self.quota_error_at_stage == "director":
             raise GeminiDailyQuotaError("daily quota exhausted")
         if self.fail_director:
             raise RuntimeError("stage manager unavailable")
+        mode = _mode_of(system_instruction)
+        self.check_modes.append(mode)
         turn_ids = _TURN_IDS.findall(prompt)
-        if self.beat_never_achieved:
-            return BeatCheckDraft(achieved=False, missing="todavia no ha pasado")
-        return BeatCheckDraft(achieved=bool(turn_ids), evidence=turn_ids[-1:])
+        held_back = self.beat_never_achieved or (self.beat_needs_world and mode != "final")
+        if held_back or not turn_ids:
+            cast = _OPENING_CAST.findall(prompt)
+            turning = cast[-1] if cast and mode in {"turn", "stall"} else ""
+            return BeatCheckDraft(
+                parts=[OutcomePart(part="the file is handed over", shown=False)],
+                turning_actor_id=turning,
+                notes=[f"{turning}: ya no tiene sentido seguir negandolo"] if turning else [],
+                stage_event=(
+                    "Se abre la puerta y la directora deja la carpeta perdida sobre la mesa."
+                    if mode == "stall"
+                    else ""
+                ),
+            )
+        return BeatCheckDraft(
+            parts=[OutcomePart(part="the file is handed over", shown=True, evidence=turn_ids[-1:])]
+        )
 
     def _reflection(self, prompt: str) -> ReflectionDraft:
         """Close a scene with a first-person summary and one consolidated stance."""
@@ -256,3 +284,14 @@ class StageFakeProvider(FakeProvider):
             goal="averiguar quien mas lo sabe",
             importance=0.7,
         )
+
+
+def _mode_of(system_instruction: str) -> str:
+    """Tell which rung of the escalation ladder a director call was made on."""
+    if "The world has already stepped in" in system_instruction:
+        return "final"
+    if "The scene has used its time" in system_instruction:
+        return "stall"
+    if "Name turning_actor_id" in system_instruction:
+        return "turn"
+    return "check"

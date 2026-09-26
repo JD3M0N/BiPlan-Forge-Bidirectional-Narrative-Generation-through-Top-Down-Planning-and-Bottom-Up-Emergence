@@ -1,11 +1,12 @@
 # Hoja de ruta
 
-**Estado medido el 2026-09-26 sobre la función simulada, con `asg-stagecraft` 7.0.0.** El paquete
+**Estado medido el 2026-09-26 sobre la función simulada, con `asg-stagecraft` 7.1.0.** El paquete
 `top_down` pasa a llamarse `stagecraft` y gana un tercer formato, `simulated`, en el que los
 personajes representan el guion con memoria propia y la historia se narra del log de esa función
-(ver [docs/simulacion_escenica.md](docs/simulacion_escenica.md)). Los runs nuevos van a
-`Stories/Stagecraft/`; los 160 anteriores se quedan en `Stories/Top-Down/` y se siguen leyendo.
-Puerta de calidad limpia: `ruff check .`, `ruff format --check .`, 470 pruebas pasan y 2 se omiten,
+(ver [docs/simulacion_escenica.md](docs/simulacion_escenica.md)); 7.1.0 corrige lo que destaparon
+sus dos primeros runs reales. Los runs nuevos van a `Stories/Stagecraft/`; los 160 anteriores se
+quedan en `Stories/Top-Down/` y se siguen leyendo.
+Puerta de calidad limpia: `ruff check .`, `ruff format --check .`, 542 pruebas pasan y 2 se omiten,
 `pip check` sin requisitos rotos, y `tests/test_sync_railway_stories.ps1` pasa. Las cinco corren en
 `.github/workflows/quality.yml` en cada push y pull request, y en local con `.\quality.ps1` (o
 `make test`). Las mediciones que cita este documento salen del corpus de `Stories/`, hoy **160
@@ -36,19 +37,43 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 
 ## Lo siguiente
 
+### El desenlace simulado se da por resuelto sin la solución
+
+- **Síntoma.** En los dos runs de validación de 7.1 (`Stories/Stagecraft/20260926-070539-*` y
+  `20260926-072847-*`) el último beat se dio por alcanzado sin que nadie dijera en escena la
+  solución del caso. En el primero, la compuerta que decía que la detective deduciría la huida en
+  ese beat nunca se pronunció, y el director aceptó un resultado vago («el caso queda resuelto de
+  forma analítica») con la confesión del motivo. En el segundo, el director juzgó «método, motivo
+  y consecuencias» como **una sola** cláusula y el narrador inventó la solución para tapar el
+  hueco (la auditoría lo marcó con severidad 4). Nada comprueba que una compuerta con
+  `revealed_at_event_id` se revele de verdad en su beat. Medido en
+  [docs/simulacion_escenica.md](docs/simulacion_escenica.md), «Validación de 7.1».
+- **Qué hacer.** Convertir cada compuerta que se revela en un beat en una cláusula obligatoria,
+  derivada y no elegida por el modelo: el contexto del director la lista aparte («este beat tiene
+  que sacar a la luz…») y `BeatCheckDraft` la juzga por separado, con sus turnos de prueba; el
+  motor solo da el beat por alcanzado si además se ven todas esas revelaciones. Como el
+  `achieved` de 7.1: se deriva, no se declara. Reforzar en el narrador que una pregunta que el log
+  deja abierta se queda abierta.
+- **Ojo al medir.** El juez de narración solo ve el log y marca como inventado lo que viene de la
+  petición (la tormenta, la isla). Pasarle la premisa antes de leer su cifra.
+- **Hecho cuando.** En un par nuevo de runs, cada compuerta revelada en el último beat aparece en
+  un turno citado como prueba, y la auditoría no encuentra ninguna revelación inventada.
+
 ### Medir la historia simulada contra la narrativa
 
-- **Síntoma.** 7.0.0 añadió el formato `simulated` y toda su instrumentación, pero **no existe
-  todavía ningún run real**: los 470 tests corren con proveedores falsos. No se sabe si una
-  historia narrada desde una función es mejor, peor o simplemente distinta de una escrita
-  directamente, ni cuánto cuesta de verdad.
+- **Síntoma.** 7.0.0 añadió el formato `simulated`. Los dos primeros runs reales (prompt 03,
+  Esencial, 2026-09-26) destaparon fallos de fondo —el detective conocía la solución, el clímax
+  se forzó, el narrador transcribió— que 7.1.0 corrige; ver «Lo que destapó el primer run real»
+  en `docs/simulacion_escenica.md`. Sigue sin saberse si una historia narrada desde una función es
+  mejor, peor o simplemente distinta de una escrita directamente.
 - **Qué hacer.** Una matriz pequeña con los mismos prompts canónicos en `narrative` y en
   `simulated`, con el mismo perfil. Comparar a ciegas con `compare-story-runs`, leer
   `report-story-craft --format prose --group format` para la artesanía y `report-simulations`
   para la función. Mirar en particular `script_echo` (si sale alto, los actores recitaron y la
   simulación no aporta), `beat_completion_ratio` y el coste en `llm_usage.json`.
-- **Ojo al medir.** Un run simulado gasta entre 150 y 220 llamadas frente a las ~25 de uno
-  narrativo, así que la matriz hay que dimensionarla contra la cuota diaria.
+- **Ojo al medir.** Un run simulado real gastó 100 y 119 llamadas (251k y 337k tokens) frente a
+  las ~25 de uno narrativo, así que la matriz hay que dimensionarla contra la cuota diaria. Los
+  21 y 31 minutos que tardaron son sobre todo timeouts de actor: ver la ficha de `failed_calls`.
 - **Hecho cuando.** Hay una decisión escrita, con cifras, en `docs/simulacion_escenica.md`, con el
   mismo cuidado de ruido que el resto del corpus: una diferencia de medianas menor de unos cinco
   puntos, con n=9, no se puede interpretar.
@@ -61,6 +86,11 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 - **Qué hacer.** Dos matrices idénticas salvo en `--actor-memory`, sobre los mismos prompts. El
   proxy determinista es `unknown_mentions` en `simulation_metrics.json`; la medición seria la da
   `audit-stage-run`, que juzga escena a escena si alguien habló de algo que no podía saber.
+- **Ojo al medir.** El juez por defecto (`gemini-3.5-flash-lite`) marcó como fuga un hecho que
+  estaba literalmente en la memoria inicial del personaje (reauditoría del run
+  `20260926-023354-*`, contrato 2). Antes de apoyar la ablación en `knowledge_leaks`, comprobar
+  el juez: repetir la auditoría con un modelo más fuerte (`--model`) sobre los mismos runs y ver si
+  las fugas se sostienen.
 - **Hecho cuando.** Hay una cifra de fuga de frontera de conocimiento para cada brazo, y una
   comparación a ciegas de las historias que salieron de cada uno.
 
@@ -109,7 +139,10 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 - **Ojo al medir.** El ledger de promesas de 6.8.0 ataca el mismo síntoma por otra vía: obliga a
   que la promesa primaria pague en el último capítulo y le da al Drafter una obligación concreta
   que dramatizar ahí. Una matriz nueva medirá las dos intervenciones a la vez salvo que se separen
-  con `ASG_PROMISE_LEDGER`. Ver [docs/promesas_ppp.md](docs/promesas_ppp.md).
+  con `ASG_PROMISE_LEDGER`. Ver [docs/promesas_ppp.md](docs/promesas_ppp.md). El formato
+  simulado lo ataca por una tercera vía desde 7.1.0: una **coda** de dos turnos tras el último
+  beat de la obra, para que la función acabe en escena (`coda_turns` en
+  `simulation_metrics.json`). Esa coda no toca el formato narrativo.
 - **Hecho cuando.** El último capítulo deja de ser el más mudo en la mayoría de las historias de una
   matriz nueva. La mediana sola no sirve de criterio: la réplica midió hasta 16 puntos de diferencia
   entre dos corridas del mismo prompt y la misma versión.
@@ -140,6 +173,20 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
 
 ## Pendiente
 
+### La función casi no tiene subtexto, ni susurros, ni variedad de mundo
+
+- **Síntoma.** En los cuatro runs simulados completos (7.0 y 7.1), entre el 94 % y el 98 % de los
+  turnos traen pensamiento, y hay **cero** susurros: la memoria propia nunca se pone a prueba con
+  un secreto dicho en voz baja. Vaciar el pensamiento que repite el habla (7.1) no bastó: los que
+  quedan repiten la intención («debo…»), no la réplica. Y los tres eventos del mundo que llegaron
+  a ocurrir en 7.1 fueron ráfagas de viento, pese a la lista de recursos ya usados.
+- **Qué hacer.** Probar en el contrato del actor un pensamiento que solo aparezca cuando
+  contradice lo que dice, y darle al director la opción de pedir un aparte en voz baja como nota.
+  Para los eventos, pasar al director el tipo de recurso usado (clima, llegada, objeto, sonido),
+  no solo el texto, y rechazar un segundo del mismo tipo.
+- **Hecho cuando.** Un par de runs baja `thought_ratio` claramente de 0,9, tiene al menos un
+  susurro que la ablación pueda medir, y no repite tipo de evento del mundo.
+
 ### `failed_calls` y `duration_seconds` miden otra cosa de la que dicen
 
 - **Síntoma.** `_record_failure`, en `runtime/provider.py`, emite un registro por **cada intento** fallido,
@@ -147,8 +194,14 @@ citan rutas de archivo, no números de línea: las líneas se mueven y el docume
   intentos y no llamadas perdidas. Y `started` no se reinicia entre intentos, de modo que
   `duration_seconds` incluye los intentos fallidos y las esperas de cuota: no es latencia. Un run
   del corpus aparenta 17 fallos sobre 32 llamadas sin haber perdido necesariamente ninguna.
+- **En el formato simulado cuesta tiempo de verdad.** Los dos primeros runs reales
+  (`Stories/Stagecraft/20260926-*`) perdieron unos 14 y 20 de sus 21 y 31 minutos en llamadas de
+  actor que agotaron el timeout de 120 s: 5 errores 504 y 2 `ReadTimeout` en el primero, 10
+  `ReadTimeout` en el segundo, cada uno de ~120 s (los que aparecen con ~245 s son segundos
+  intentos que arrastran el `started` del primero). Una llamada de actor normal tarda segundos.
 - **Qué hacer.** Separar intentos de llamadas en el artefacto de uso, y medir la latencia del
-  intento que tuvo éxito.
+  intento que tuvo éxito. Para el simulado, probar un timeout propio y corto para las llamadas de
+  actor en vez del `GEMINI_REQUEST_TIMEOUT_MS` global, que también cubre la prosa larga.
 - **Hecho cuando.** Las dos cifras significan lo que su nombre dice, y ningún resultado de la tesis
   las cita mal.
 

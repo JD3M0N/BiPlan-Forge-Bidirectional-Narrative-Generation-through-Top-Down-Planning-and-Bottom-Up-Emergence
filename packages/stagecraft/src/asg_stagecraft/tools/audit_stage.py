@@ -14,6 +14,12 @@ Two judgements, from two different literatures:
 - **Narration fidelity**, one call per chapter. The judge compares the prose against the log it
   was written from and flags invented events, contradictions and dropped beats, scored with
   CoSER's penalty scheme (100 - 5 x sum of severities).
+
+Report contract 2 fixed the knowledge judge. Contract 1 filed a character's deliberate lie as a
+"contradiction" and scored it as a breach, so a well-played liar lowered the knowledge score. A
+lie is a tactic, not a leak: the judge is now told so, and anything it still files under another
+kind is kept in the report as ``set_aside`` and never scored. Reports are never overwritten: an
+earlier one is moved aside under its own timestamp, so a re-audit keeps the baseline.
 """
 
 from __future__ import annotations
@@ -21,6 +27,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -35,6 +42,8 @@ from ..runtime.provider import provider_from_settings
 # CoSER scores a simulation by subtracting five points per severity point of every flaw found,
 # which keeps one severe breach from hiding behind many clean scenes.
 PENALTY_PER_SEVERITY = 5
+# 2: deliberate lies are no longer leaks, and the scene audit scores knowledge leaks only.
+REPORT_CONTRACT = "2"
 
 
 class AuditFinding(BaseModel):
@@ -75,7 +84,10 @@ def audit_knowledge(provider, scene: dict, memories: str, transcript: str) -> Sc
             "their own memory does not contain and the scene has not yet shown them. Judge only "
             "what a character could know, never whether the scene is good. A character may guess, "
             "be wrong, or infer from what is in front of them: that is not a violation. Stating a "
-            "fact they were never told is. Return an empty list when the scene is clean."
+            "fact they were never told is. A character who says something false on purpose - a "
+            "lie, a denial, a cover story, a bluff - is playing a tactic, not leaking knowledge: "
+            "never flag it, and never file it as a contradiction. Every finding you return is a "
+            "knowledge_leak. Return an empty list when the scene is clean."
         ),
         prompt=(
             f"SCENE:\n{json.dumps(scene, ensure_ascii=False, indent=2)}"
@@ -159,11 +171,17 @@ def audit_run(run_dir: Path, provider, *, scenes_only: bool = False) -> dict:
             _memories_at(run_dir, character_ids, scene.get("number", 1)),
             _transcript(run_dir, scene["scene_id"]),
         )
+        leaks = [item for item in verdict.findings if item.kind == "knowledge_leak"]
         scene_reports.append(
             {
                 "scene_id": scene["scene_id"],
-                "score": score(verdict.findings),
-                "findings": [item.model_dump(mode="json") for item in verdict.findings],
+                "score": score(leaks),
+                "findings": [item.model_dump(mode="json") for item in leaks],
+                "set_aside": [
+                    item.model_dump(mode="json")
+                    for item in verdict.findings
+                    if item.kind != "knowledge_leak"
+                ],
             }
         )
 
@@ -198,7 +216,7 @@ def audit_run(run_dir: Path, provider, *, scenes_only: bool = False) -> dict:
         if finding["kind"] == "knowledge_leak"
     ]
     return {
-        "contract_version": "1",
+        "contract_version": REPORT_CONTRACT,
         "audited_at": datetime.now(UTC).isoformat(),
         "model": provider.model_name,
         "source_manifest_sha256": manifest_hash(run_dir),
@@ -218,6 +236,24 @@ def audit_run(run_dir: Path, provider, *, scenes_only: bool = False) -> dict:
         "scenes": scene_reports,
         "chapters": chapter_reports,
     }
+
+
+def keep_previous(destination: Path) -> Path | None:
+    """Move an earlier report aside under its own timestamp instead of overwriting it."""
+    if not destination.is_file():
+        return None
+    try:
+        stamp = str(json.loads(destination.read_text(encoding="utf-8")).get("audited_at", ""))
+    except (OSError, json.JSONDecodeError, AttributeError):
+        stamp = ""
+    tag = re.sub(r"\D", "", stamp)[:14] or "anterior"
+    target = destination.with_name(f"audit-{tag}.json")
+    suffix = 1
+    while target.exists():
+        target = destination.with_name(f"audit-{tag}-{suffix}.json")
+        suffix += 1
+    destination.replace(target)
+    return target
 
 
 def parser() -> argparse.ArgumentParser:
@@ -265,6 +301,9 @@ def main(argv: list[str] | None = None) -> int:
 
     destination = run_dir / "audit" / "audit.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
+    kept = keep_previous(destination)
+    if kept is not None:
+        print(f"El informe anterior se conserva en {kept.name}")
     destination.write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )

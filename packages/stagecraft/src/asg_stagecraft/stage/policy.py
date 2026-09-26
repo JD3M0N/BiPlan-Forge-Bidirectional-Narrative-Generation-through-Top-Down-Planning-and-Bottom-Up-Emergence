@@ -27,14 +27,16 @@ def next_actor(
     """Name the character who moves next in this scene."""
     if not on_stage:
         raise ValueError("a scene cannot run without a cast")
-    last = turns[-1].actor_id if turns else ""
+    # A world event carries a placeholder actor, so it must not count as anyone having moved.
+    moved = [turn for turn in turns if turn.kind == "actor"]
+    last = moved[-1].actor_id if moved else ""
     candidates = [item for item in on_stage if item != last] or list(on_stage)
     if requested in set(candidates):
         return requested
-    answered = _addressed_and_silent(turns, candidates)
+    answered = _addressed_and_silent(moved, candidates)
     if answered:
         return answered
-    return min(candidates, key=lambda item: (_last_spoke(turns, item), on_stage.index(item)))
+    return min(candidates, key=lambda item: (_last_spoke(moved, item), on_stage.index(item)))
 
 
 def should_check(turns_in_beat: int, *, check_every: int = CHECK_EVERY) -> bool:

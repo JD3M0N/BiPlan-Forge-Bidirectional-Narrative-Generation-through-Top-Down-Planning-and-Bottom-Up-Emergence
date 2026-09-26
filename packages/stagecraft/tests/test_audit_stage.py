@@ -5,6 +5,7 @@ from asg_stagecraft.tools.audit_stage import (
     ChapterAudit,
     SceneAudit,
     audit_run,
+    keep_previous,
     main,
     manifest_hash,
     parser,
@@ -155,3 +156,46 @@ def test_the_parser_accepts_its_flags() -> None:
     args = parser().parse_args(["some-run", "--scenes-only", "--model", "x"])
     assert args.scenes_only is True
     assert args.model == "x"
+
+
+def test_a_deliberate_lie_filed_as_a_contradiction_is_set_aside_not_scored(tmp_path) -> None:
+    """Contract 1 scored a well-played liar as a breach; a lie is a tactic, not a leak."""
+    lie = AuditFinding(
+        kind="contradiction",
+        severity=4,
+        character_id="elena",
+        evidence="Elena: Nunca entre en la torre.",
+        explanation="Elena says the opposite of what she did.",
+    )
+    run = build_run(tmp_path)
+    report = audit_run(run, JudgeProvider(scene_findings=[lie, leak()]))
+    assert report["contract_version"] == "2"
+    assert report["knowledge_leaks"] == 1
+    assert report["knowledge_score"] == 85.0
+    assert report["scenes"][0]["set_aside"][0]["kind"] == "contradiction"
+
+
+def test_the_knowledge_judge_is_told_a_lie_is_not_a_leak(tmp_path) -> None:
+    run = build_run(tmp_path)
+    instructions = []
+
+    class Recording(JudgeProvider):
+        def generate_structured(self, *, system_instruction, prompt, schema, profile):
+            instructions.append((schema.__name__, system_instruction))
+            return super().generate_structured(
+                system_instruction=system_instruction, prompt=prompt, schema=schema, profile=profile
+            )
+
+    audit_run(run, Recording())
+    knowledge = next(text for name, text in instructions if name == "SceneAudit")
+    assert "playing a tactic, not leaking knowledge" in knowledge
+
+
+def test_an_earlier_report_is_kept_rather_than_overwritten(tmp_path) -> None:
+    destination = tmp_path / "audit" / "audit.json"
+    destination.parent.mkdir()
+    destination.write_text('{"audited_at": "2026-09-26T04:10:00+00:00"}', encoding="utf-8")
+    kept = keep_previous(destination)
+    assert kept is not None and kept.name == "audit-20260926041000.json"
+    assert not destination.exists()
+    assert keep_previous(destination) is None

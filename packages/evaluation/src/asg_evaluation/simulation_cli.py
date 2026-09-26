@@ -29,8 +29,11 @@ RATIO_FIELDS = frozenset(
     {
         "beat_completion_ratio",
         "repetition_ratio",
+        "action_repetition_ratio",
+        "thought_ratio",
         "mean_self_similarity",
         "script_echo",
+        "compression_ratio",
         "dialogue_survival",
     }
 )
