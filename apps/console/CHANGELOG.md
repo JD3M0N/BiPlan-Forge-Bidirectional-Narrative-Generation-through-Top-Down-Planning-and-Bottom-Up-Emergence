@@ -1,5 +1,16 @@
 # Historial de cambios
 
+## [3.0.0] - 2026-09-26
+
+- Retirado el menú Bottom-Up junto con el paquete `asg-escape-room`: la consola queda con
+  Stagecraft y la evaluación humana.
+- Eliminadas de la API pública `ConsoleRenderer`, `EscapeRoomVisualizer` y `VisualOutcome`, y el
+  parámetro `bottom_up` de `ConsoleApp`.
+- Retirado el caso que aceptaba una ruta como resultado de `generate()`: siempre devuelve un
+  `StoryRun`.
+- La salida se configura en UTF-8 con `asg_core.use_utf8_output`, así que los acentos del menú
+  llegan intactos también a una tubería o a una consola heredada de Windows.
+
 ## 2.0.0
 
 - Adoptada la API Top-Down 6.0 basada en perfiles narrativos y eliminada la

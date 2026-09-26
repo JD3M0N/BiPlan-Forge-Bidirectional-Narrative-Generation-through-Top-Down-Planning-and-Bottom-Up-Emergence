@@ -23,20 +23,20 @@ def input_sequence(values):
     return lambda prompt="": next(iterator)
 
 
-def test_main_menu_navigates_both_models_and_rejects_bad_input() -> None:
-    top = MenuSpy()
-    bottom = MenuSpy()
+def test_main_menu_navigates_both_menus_and_rejects_bad_input() -> None:
+    stagecraft = MenuSpy()
+    evaluation = MenuSpy()
     messages = []
     application = ConsoleApp(
-        input_fn=input_sequence(["1", "2", "x", "0"]),
+        input_fn=input_sequence(["1", "2", "3", "x", "0"]),
         output=messages.append,
-        stagecraft=top,
-        bottom_up=bottom,
+        stagecraft=stagecraft,
+        evaluation=evaluation,
     )
     assert application.run() == 0
-    assert top.calls == 1
-    assert bottom.calls == 1
-    assert "Opción inválida." in messages
+    assert stagecraft.calls == 1
+    assert evaluation.calls == 1
+    assert messages.count("Opción inválida.") == 2
 
 
 def test_stagecraft_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None:
@@ -182,7 +182,6 @@ def test_console_evaluates_story_and_retries_invalid_values(tmp_path, monkeypatc
         ),
         output=messages.append,
         stagecraft=MenuSpy(),
-        bottom_up=MenuSpy(),
     )
     application._evaluate_story()
     document = json.loads((story / "evaluation.json").read_text(encoding="utf-8"))

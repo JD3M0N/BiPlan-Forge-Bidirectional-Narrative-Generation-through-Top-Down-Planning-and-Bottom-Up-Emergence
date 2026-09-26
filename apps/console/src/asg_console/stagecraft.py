@@ -71,18 +71,17 @@ class StagecraftMenu:
             """Write one structured pipeline event to the console."""
             self.output(event.message)
 
-        output = generator.generate(
+        output_dir = generator.generate(
             prompt,
             on_progress=report_progress,
             on_event=report_event,
-        )
-        output_dir = output.run_dir if hasattr(output, "run_dir") else output
+        ).run_dir
         if choice.story_format is StoryFormat.SCRIPT:
             self.output(f"Guion terminado: {output_dir / 'story.md'}")
             self.output(f"Guion estructurado: {output_dir / 'script.json'}")
         elif choice.story_format is StoryFormat.SIMULATED:
             self.output(f"Historia simulada terminada: {output_dir / 'story.md'}")
-            self.output(f"Funcion representada: {output_dir / 'performance.md'}")
+            self.output(f"Función representada: {output_dir / 'performance.md'}")
         else:
             self.output(f"Historia terminada: {output_dir / 'story.md'}")
         audio_path = output_dir / "story.mp3"

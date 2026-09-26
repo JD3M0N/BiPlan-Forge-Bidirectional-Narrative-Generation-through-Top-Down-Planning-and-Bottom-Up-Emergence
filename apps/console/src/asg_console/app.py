@@ -4,38 +4,34 @@ from __future__ import annotations
 
 import argparse
 
-from .bottom_up import BottomUpMenu
+from asg_core import use_utf8_output
+
 from .evaluation import EvaluationMenu
 from .stagecraft import StagecraftMenu
 from .types import InputFn, OutputFn
 
 
 class ConsoleApp:
-    """Coordinate navigation among model and evaluation menus."""
+    """Coordinate navigation between story generation and evaluation."""
 
     def __init__(
         self,
         input_fn: InputFn = input,
         output: OutputFn = print,
         stagecraft: StagecraftMenu | None = None,
-        bottom_up: BottomUpMenu | None = None,
         evaluation: EvaluationMenu | None = None,
     ) -> None:
         """Configure console I/O and injectable menu collaborators."""
         self.input = input_fn
         self.output = output
         self.stagecraft = stagecraft or StagecraftMenu(input_fn, output)
-        self.bottom_up = bottom_up or BottomUpMenu(input_fn, output)
         self.evaluation = evaluation or EvaluationMenu(input_fn, output)
 
     def run(self) -> int:
         """Display the main menu until exit or input cancellation."""
         self.output("Automatic Story Generation — Consola unificada")
         while True:
-            self.output(
-                "\nMenú principal\n  1. Stagecraft\n  2. Bottom-Up\n"
-                "  3. Evaluar historia\n  0. Salir"
-            )
+            self.output("\nMenú principal\n  1. Stagecraft\n  2. Evaluar historia\n  0. Salir")
             try:
                 choice = self.input("> ").strip()
                 if choice == "0":
@@ -43,8 +39,7 @@ class ConsoleApp:
                     return 0
                 actions = {
                     "1": self.stagecraft.run,
-                    "2": self.bottom_up.run,
-                    "3": self._evaluate_story,
+                    "2": self._evaluate_story,
                 }
                 action = actions.get(choice)
                 if action:
@@ -69,6 +64,7 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     """Run the console application and return its process status."""
+    use_utf8_output()
     parser().parse_args(argv)
     return ConsoleApp().run()
 

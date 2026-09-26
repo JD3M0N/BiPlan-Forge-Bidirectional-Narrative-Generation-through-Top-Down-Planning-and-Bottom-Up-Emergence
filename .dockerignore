@@ -19,7 +19,6 @@ dist/
 
 Stories/
 docs/
-packages/escape_room/
 apps/console/
 **/tests/
 
