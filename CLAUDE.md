@@ -168,7 +168,7 @@ este pipeline distinto de «pedirle una historia al modelo»:
 `ASG_STORY_FORMAT=script` (o `--format script`) pide un guion por escenas en vez de prosa;
 `narrative` sigue siendo el defecto. Hay dos métodos, seleccionables con `ASG_SCRIPT_METHOD`
 (`native` por defecto o `adapted`), implementados los dos para compararlos a ciegas y quedarse
-con uno. Es ítem abierto en `TODO.md`.
+con uno. Es la ficha EXP-3 del `TODO.md`.
 
 - **Nativo**: tras `promises`, `PlaywrightAgent` escribe cada capítulo del plan directamente
   como un acto de escenas estructurado, con el mismo bucle de reparación que `graph.py`. Lo
@@ -355,11 +355,21 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
 - Las tareas van en tres secciones según lo que hace falta para moverlas: **Lo siguiente**,
   **Pendiente** e **Ideas**. Dentro de cada una, el orden de la lista es el orden sugerido. No
   hay etiquetas de prioridad.
-- Cada tarea tiene el mismo esqueleto: **Síntoma**, **Qué hacer** y **Hecho cuando**.
+- Cada ficha tiene un **ID estable** por área: `MED`, `SIM`, `TD`, `EXP`, `ING` y `OPS`.
+  - Citarlo en commits y docs, por ejemplo «cierra SIM-3».
+  - Un ID no se reutiliza. Las ideas no llevan ID hasta que suben de sección.
+- Debajo del título, una línea de metadatos: área, cuota que cuesta validarla («sin cuota» o
+  «~N llamadas») y de qué fichas depende.
+- Cada tarea tiene el mismo esqueleto: **Síntoma** (con ruta y cifra), **Qué hacer**, **Hecho
+  cuando** y, solo si hace falta, **Ojo**.
+- Dos secciones fijas antes de las fichas:
+  - **Ruta crítica**: el orden en que las fichas desbloquean la tesis.
+  - **Protocolo de medición**: presupuesto de cuota, emparejamiento, ruido y cómo leer a los
+    jueces LLM. Una ficha `EXP` no repite esas reglas: las cumple.
 - Si la tarea de la sesión coincide con un ítem, trabajar contra su «Hecho cuando» y borrar el
   ítem al cerrarlo: el historial vive en git, no en el roadmap.
-- La cabecera lleva una línea «Estado medido el <fecha>…». Actualizarla si el estado medido
-  cambia sustancialmente.
+- La cabecera lleva una línea «Estado medido el <fecha>…» con los recuentos del corpus y la puerta
+  de calidad. Actualizarla si el estado medido cambia sustancialmente.
 
 ## Trampas conocidas
 
@@ -368,21 +378,21 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
     hace que no vea ningún archivo y pase en silencio.
   - Su marcador `"configuraci?n"` está corrupto y nunca puede coincidir. No lo uses como
     referencia de qué detecta el filtro.
-  - Tiene ficha en el `TODO.md`.
+  - Es la ficha ING-1 del `TODO.md`.
 - **`ruff format` también formatea los bloques de Python dentro del Markdown.** Un ejemplo mal
   formateado en un README de paquete hace fallar `ruff format --check`. `docs/` y `Stories/`
   están excluidos en `pyproject.toml`.
 - **`README.md` está vacío (0 bytes) a propósito.** Se redacta al cerrar el proyecto, cuando los
   contratos públicos ya no se muevan. No lo rellenes antes aunque parezca una mejora barata;
   cuando llegue el momento, guárdalo en UTF-8.
-- **`.gitignore` ignora `docs/*` salvo cinco archivos en lista blanca.** Si creas un doc nuevo en
+- **`.gitignore` ignora `docs/*` salvo siete archivos en lista blanca.** Si creas un doc nuevo en
   `docs/` y quieres que se versione, añádelo también a esa lista.
 - **`.cache/` contiene sqlite y cachés de pytest de experimentos previos**
   (`pytest-top-down-*`, `pytest-profile-*`…). Son artefactos de ejecución: no razonar sobre el
   estado del proyecto a partir de sus nombres.
 - **`pipeline.py` (1197 líneas) y `skeletons.py` (1485) siguen siendo grandes.** La
   reorganización 7.0.0 sacó de `pipeline.py` los prompts de reparación, el ensamblado y las
-  reglas de aceptación; lo que queda está en «Pendiente» del `TODO.md`. No lo hagas de paso
+  reglas de aceptación; lo que queda es la ficha ING-3 del `TODO.md`. No lo hagas de paso
   dentro de otro cambio.
 - **Dos serializadores de JSON distintos a propósito.**
   - `agents/base.json_text` serializa lo que viaja al **prompt**: convierte modelos Pydantic y no
@@ -391,8 +401,13 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
   - No unificarlos: cambiaría cada prompt, y hay tests que fijan su texto literal.
 - **`materialize_act` pone en el acto el título del plan, que está en inglés**, no el
   localizado. Los títulos localizados viven en `script_presentation.json`. El formato simulado
-  los lee de ahí (`_localized_titles`); el formato guion todavía imprime los del plan, y es una
-  ficha abierta del `TODO.md`.
+  los lee de ahí (`_localized_titles`); el formato guion todavía imprime los del plan. Está
+  dentro de la ficha TD-2 del `TODO.md`.
+- **Un `GEMINI_BILLING_LIMIT_EXHAUSTED` del corpus no es facturación.** Los tres que hay son la
+  cuota diaria gratuita: su `error_report.json` trae
+  `quota_id: GenerateRequestsPerDayPerProjectPerModel-FreeTier`. El proveedor clasifica mal
+  porque el 429 de Gemini contiene la palabra «billing». Lee `quota_id`, no el código. Es la
+  ficha MED-1 del `TODO.md`.
 - **Quién lo sabe ya ≠ quién lo descubrirá.** En una compuerta de `cast_bible.json`, `known_by`
   es quién sabe el hecho **antes de la primera escena**. Quien lo deduce o descubre en escena va
   en `revealed_by`, con `how`, y **no** en `known_by`. El primer run real los confundió y le dio
@@ -402,6 +417,13 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
   - `repetition_ratio` solo mira el **habla**, palabra a palabra. No ve paráfrasis ni gestos;
     para eso está `action_repetition_ratio`.
   - `dialogue_survival` cerca de 1 significa que el narrador **transcribió**, no que fuera fiel.
+- **`CharacterMemory.recall` no aplica su tope** (SIM-9). Devuelve toda la memoria de escenas
+  anteriores, no los 6 recuerdos más 2 reflexiones del diseño. Hasta cerrar la ficha, no leas
+  `retrievals.json` ni los pesos de `stage/memory.py` como si filtraran, ni compares funciones de
+  antes y después del arreglo como si tuvieran la misma memoria.
+- **El actor nunca ve los ids de personaje**, y el esquema le pide `addressed_to` por id. Lo que no
+  coincide con un id se descarta sin aviso en `normalize_turn`: por eso casi no hay destinatarios
+  ni susurros (SIM-10).
 
 ## Documentos de referencia
 
@@ -410,6 +432,11 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
   punto de vista modular, los artefactos y qué se mide.
 - [docs/estado_del_arte_simulacion.md](docs/estado_del_arte_simulacion.md): las cuarenta
   referencias que sostienen ese diseño, con qué se tomó y qué se descartó de cada una.
+- [docs/marco_hibrido.md](docs/marco_hibrido.md): el marco teórico de la tesis. La paradoja
+  narrativa, la tradición híbrida (Façade, Thespian, Virtual Storyteller, Sabre), su versión con
+  LLM, por qué memoria propia, y qué afirma la tesis y cómo se mide.
+- [docs/mejoras_simulacion.md](docs/mejoras_simulacion.md): el diagnóstico de la actuación en los
+  runs 7.1 y las mejoras propuestas, cada una con su respaldo y su ficha del `TODO.md`.
 - [docs/guion_teatral.md](docs/guion_teatral.md): el formato guion. Los dos métodos, el contrato
   de `script.json`, qué valida `script/validation.py` y qué solo corrige, y cómo comparar los
   métodos.

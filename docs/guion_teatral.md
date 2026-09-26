@@ -6,8 +6,8 @@ personajes en el formato `simulated` (ver [simulacion_escenica.md](simulacion_es
 que el guion tiene que ser legible por máquina, no solo por una persona.
 
 No sabíamos qué método daría un mejor guion, así que se implementaron **los dos**, con el mismo
-contrato de salida, para poder compararlos a ciegas y quedarse con uno. Ese es justamente el
-ítem abierto en `TODO.md`: **medir y borrar el que pierda**.
+contrato de salida, para poder compararlos a ciegas y quedarse con uno. Esa es la ficha EXP-3
+del `TODO.md`: **medir y borrar el que pierda**.
 
 ## Cómo se elige
 
@@ -128,6 +128,6 @@ nativo, en cambio, el `PlaywrightAgent` y el `ScriptCriticAgent` sí reciben y j
 obligaciones de promesa directamente sobre el guion.
 
 Como con cualquier medición de este repositorio, un n pequeño no basta: la variación de plan a
-plan es la confusión principal entre correr el mismo prompt dos veces. La idea pendiente en
+plan es la confusión principal entre correr el mismo prompt dos veces. La ficha MED-5 del
 `TODO.md` es forzar los dos métodos a partir de un único plan congelado para poder comparar solo
 la escritura, no la planificación.

@@ -61,6 +61,13 @@ emparejador de esqueletos); `compañía` favorece los recuerdos que implican a q
 Viajan los **6** mejores registros más las **2** últimas reflexiones, pasen lo que pasen. La escena
 en curso viaja entera aparte, como memoria de trabajo, y por eso se excluye de la recuperación.
 
+> **Esto todavía no se cumple (7.1.1).** `CharacterMemory.recall` no aplica el tope y devuelve toda
+> la memoria de escenas anteriores. Las cinco funciones representadas (7.0 y 7.1) recibieron por
+> turno una mediana de 18 a 29 recuerdos, con máximos de 52 a 72, y los pesos solo ordenaban. La
+> frontera de conocimiento no se ve afectada, porque lo no presenciado sigue sin estar; la
+> selección, sí. Es la ficha SIM-9 del `TODO.md`, y el análisis está en
+> [mejoras_simulacion.md](mejoras_simulacion.md).
+
 Cada recuperación se guarda con su desglose en `memory/<id>/retrievals.json`.
 
 **Consolidación, no acumulación.** La postura de un personaje hacia otro se **sustituye** en cada
@@ -163,8 +170,8 @@ de actor.
 
 **La coda.** Cuando se cierra el último beat de la última escena, los dos personajes más
 implicados tienen un turno más cada uno para jugar lo que el desenlace les cuesta. Es la respuesta
-de la función a la ficha «El desenlace sigue resumiendo» del `TODO.md`: la historia acaba en una
-escena, no en mitad de un análisis.
+de la función al desenlace que resumía en vez de dramatizar (se sigue vigilando en la ficha EXP-1
+del `TODO.md`): la historia acaba en una escena, no en mitad de un análisis.
 
 **Las tácticas son un vocabulario cerrado**: `confront`, `accuse`, `demand`, `deflect`, `deny`,
 `lie`, `stall`, `plead`, `charm`, `comfort`, `threaten`, `mock`, `command`, `test`,
@@ -354,8 +361,8 @@ un run narrativo. La estimación anterior (150–220 llamadas, 11–16 minutos) 
 fallaba en las dos direcciones: menos llamadas, pero más lentas. Y la lentitud no era del
 modelo: unos **14 y 20 minutos** se fueron esperando a llamadas de actor que agotaron el timeout de
 120 s (`GEMINI_REQUEST_TIMEOUT_MS`): 5 errores 504 y 2 `ReadTimeout` en el primero, 10
-`ReadTimeout` en el segundo. Sin ellos, cada run habría durado unos 7 a 10 minutos. Está en la
-ficha de `failed_calls` del `TODO.md`.
+`ReadTimeout` en el segundo. Sin ellos, cada run habría durado unos 7 a 10 minutos. Están en las
+fichas MED-2 (qué miden esas cifras) y SIM-4 (el timeout del actor) del `TODO.md`.
 
 La escalera de 7.1 añade como mucho una lectura del director y 2 turnos por beat que llega al
 tope, y la coda 2 turnos por obra; si los beats caen antes, el coste baja. Los mandos son
@@ -453,7 +460,10 @@ dejó de tener los tics de 7.0.
   consecuencias» como una sola cláusula y la dio por vista con una réplica que solo probaba la
   falsificación; el narrador **inventó** la solución para tapar el hueco, y la auditoría lo
   marcó con severidad 4. La causa común: nada comprueba que una compuerta con
-  `revealed_at_event_id` se revele de verdad en su beat. Ficha en el `TODO.md`.
+  `revealed_at_event_id` se revele de verdad en su beat. Un análisis posterior encontró dos
+  causas más: la solución estaba literal en las `scripted_lines` del clímax, que solo alimentan
+  `script_echo` y nunca llegan al director, y el narrador recibe las obligaciones de promesa,
+  que es de donde sacó la solución que inventó. Ficha SIM-1 del `TODO.md`.
 - **La fidelidad de la narración bajó.** Una parte es el precio de curar: el juez cuenta como
   «beat eliminado» una réplica comprimida. Otra parte son falsos positivos: marca como inventada
   la tormenta de la isla, que está en la petición pero no en el log, y el juez solo ve el log.
@@ -466,6 +476,14 @@ dejó de tener los tics de 7.0.
   entiende «un recurso ya usado» de forma literal.
 - **Los timeouts de actor siguen ahí**: 3 errores 504 en el primero, 2 `ReadTimeout` y 2 504 en el
   segundo, a unos 2 minutos cada uno.
+- **Nadie se dirige a nadie, y las notas se repiten.** Una relectura posterior de los logs encontró
+  dos causas más:
+  - `addressed_to` va vacío en 79 de 80 turnos, porque el esquema pide ids de personaje que el actor
+    nunca ve. Por eso no hay susurros.
+  - La nota del director se re-entrega al mismo actor hasta la siguiente lectura (5 de 54 turnos con
+    nota), y de ahí salen confesiones dobles.
+
+  Es la ficha SIM-10 del `TODO.md`. La memoria sin tope (SIM-9) es la otra causa de la repetición.
 
 ## De dónde sale cada decisión
 
@@ -474,7 +492,7 @@ El recorrido completo, con unas cuarenta referencias, está en
 
 - **Director que motiva, no dicta**, y comprobación con tope: IBSEN (ACL 2024).
 - **Role-play y después reescritura desde el log**: Yu et al. (In2Writing 2025).
-- **Memoria acotada a la perspectiva**: ReverieMem (2026), TimeChara (ACL 2024).
+- **Memoria acotada a la perspectiva**: ReverieMem (2026), TimeChara (Findings ACL 2024).
 - **Recencia, importancia y relevancia**: Generative Agents (UIST 2023), Open-Theatre (EMNLP 2025).
 - **Habla, acción y pensamiento privado**: CoSER (ICML 2025).
 - **Consolidar en vez de acumular**: EvoSpark (ACL 2026).
@@ -482,3 +500,7 @@ El recorrido completo, con unas cuarenta referencias, está en
 - **Curación: la simulación sola no hace historia**: Tale-Spin (1977), Ryan (2018).
 - **La focalización es del discurso, no de la historia**: Curveship (Montfort).
 - **Cada componente debe ganarse su complejidad**: WSE-bench (2026).
+
+El argumento general de la tesis, por qué mezclar Top-Down y Bottom-Up, está en
+[marco_hibrido.md](marco_hibrido.md). El diagnóstico de la actuación y las mejoras propuestas, cada
+una con su respaldo y su ficha, están en [mejoras_simulacion.md](mejoras_simulacion.md).

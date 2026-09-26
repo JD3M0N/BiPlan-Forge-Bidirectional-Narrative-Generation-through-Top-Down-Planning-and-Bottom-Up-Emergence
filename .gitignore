@@ -13,6 +13,8 @@ Stories/
 docs/*
 !docs/estado_del_arte_simulacion.md
 !docs/guion_teatral.md
+!docs/marco_hibrido.md
+!docs/mejoras_simulacion.md
 !docs/promesas_ppp.md
 !docs/prompts_top_down.md
 !docs/simulacion_escenica.md

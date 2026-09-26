@@ -4,6 +4,16 @@ Revisión que sostiene el diseño de [simulacion_escenica.md](simulacion_escenic
 dice qué aporta el trabajo y **qué se tomó o se descartó de él**, que es lo que hace útil una
 revisión dentro de un repositorio de código.
 
+Dos documentos la completan:
+
+- el argumento general de la tesis, por qué mezclar Top-Down y Bottom-Up, está en
+  [marco_hibrido.md](marco_hibrido.md);
+- lo que se propone para mejorar la actuación, con su respaldo, está en
+  [mejoras_simulacion.md](mejoras_simulacion.md).
+
+Revisada el 2026-09-26: todas las URL existen, y se corrigieron los autores, títulos y cifras que no
+coincidían con la fuente.
+
 ---
 
 ## 1. El antecedente directo: simular y después reescribir
@@ -95,7 +105,7 @@ arquitectura no es más control; cada componente debe ganarse su complejidad»*.
 decisión de no añadir un modelo de mundo estructurado encima del plan validado, que ya hace ese
 trabajo.
 
-### Zong, Guo, Yang, Guo y Song — *EvoSpark* (ACL 2026)
+### He, Kuang, Wang, Hu y Gu — *EvoSpark* (ACL 2026)
 <https://arxiv.org/abs/2604.12776>
 
 Nombra dos patologías de horizonte largo. El **apilamiento de memoria social**: en una arquitectura
@@ -118,7 +128,9 @@ ubicación y reparto y `script/validation.py` ya los valida.
 El flujo de memoria y su recuperación por **recencia** (decaimiento exponencial, factor 0,995 por
 hora), **importancia** (1 a 10, asignada por el modelo al escribir) y **relevancia** (similitud de
 embeddings). Reflexión cuando la importancia acumulada cruza un umbral (~150). Su ablación muestra
-que quitar cualquiera de los tres componentes degrada la credibilidad.
+que observación, planificación y reflexión contribuyen, cada una, de forma crítica a la
+credibilidad. Lo que se ablaciona son esos componentes de la arquitectura, no los términos de la
+puntuación.
 
 **Tomado**: los tres términos de la puntuación y la reflexión periódica.
 **Adaptado**: la recencia va por **escenas**, no por horas, porque la unidad de tiempo aquí es
@@ -126,7 +138,7 @@ dramática; la reflexión se dispara al cerrar escena, que es un límite natural
 acumulado; y la relevancia es léxica, no por embeddings, para que la recuperación sea determinista
 y no dependa de un servicio externo.
 
-### Wu, Wu, Xu, Zhang y Zhao — *Open-Theatre* (EMNLP 2025)
+### Xu, Wu, Wu y Zhao — *Open-Theatre* (EMNLP 2025, demo)
 <https://arxiv.org/abs/2509.16713>
 
 Memoria jerárquica con cuatro almacenes (global, eventos, resúmenes, archivo) y una fórmula
@@ -175,7 +187,7 @@ por construcción en vez de por consulta.
 **Su limitación es nuestra oportunidad**: ReverieMem reconoce que *«no provee un mecanismo dedicado
 para orquestar interacciones multi-personaje»*. Este pipeline es exactamente eso.
 
-### Ahn, Kim, Kim et al. — *TimeChara* (Findings ACL 2024)
+### Ahn et al. — *TimeChara* (Findings ACL 2024)
 <https://arxiv.org/abs/2405.18027>
 
 10.895 casos sobre 14 personajes de cuatro sagas. Un personaje debe reflejar su frontera de
@@ -185,13 +197,19 @@ GPT-4o queda por debajo del 51% en las preguntas sobre el futuro.
 **Tomado**: la frontera temporal como cosa que se mide, no que se asume. Aquí es estructural: en la
 escena *n* la memoria solo contiene escenas ≤ *n*.
 
-### *CHARM: Character Hallucination for Multicultural Role Play* (2026)
+### Han, Park, Seo, Yoon y Bak — *CHARM: Character Hallucination for Multicultural Role Play Benchmark* (2026)
 <https://arxiv.org/abs/2609.01352>
 
-Distingue frontera **temporal** de frontera **de universo**, y observa que interpretar bien exige
-*suprimir* conocimiento fuera de personaje, no solo recordar el de dentro.
+Usa cuarenta personajes de cinco regiones culturales y lingüísticas, y separa dos fallos:
+**reconocer** que una pregunta excede al personaje y **abstenerse** de responderla. Su hallazgo
+central es que la alucinación de personaje es sobre todo un fallo de obediencia: el modelo reconoce
+que su personaje no debería saberlo y responde igual. Interpretar bien exige *suprimir* el
+conocimiento de fuera del personaje, no solo recordar el de dentro.
 
-### Wang, Qiu, Yang et al. — *CoSER* (ICML 2025)
+**Refuerza** la decisión central: no basta con pedirle al modelo que no sepa algo; hay que no darle
+el dato.
+
+### Wang, Wang, Zhang et al. — *CoSER* (ICML 2025)
 <https://arxiv.org/abs/2502.09082>
 
 17.966 personajes de 771 libros. Define **given-circumstance acting**: el LLM interpreta por turnos
@@ -232,13 +250,18 @@ condicional.
 
 Las **pautas de conducta rinden más que los retratos descriptivos**.
 
+**Pendiente de verificar**: es una cita indirecta, y en la revisión del 2026-09-26 no se localizó la
+fuente primaria. No citarla en la tesis hasta encontrarla.
+
 **Tomado**: es la regla de redacción del dossier. «Siempre responde a una pregunta con otra» es
 jugable; «es evasivo» no lo es.
 
-### Li, Kenneth et al. — *Measuring and Controlling Persona Drift* (2024)
+### Li, Liu, Bashkansky et al. — *Measuring and Controlling Instruction (In)Stability in Language Model Dialogs* (COLM 2024)
 <https://arxiv.org/abs/2402.10962>
 
-La persona se degrada más de un 30% entre los turnos 8 y 12, por decaimiento de la atención.
+Se publicó primero como *Measuring and Controlling Persona Drift*. Encuentra una deriva significativa
+respecto de la instrucción de sistema en ocho rondas de conversación, y la relaciona con el
+decaimiento de la atención a medida que el diálogo se alarga.
 
 **Tomado**: el dossier completo se reinyecta en **cada** llamada del actor, en vez de establecerse
 una vez. Es la defensa más barata contra la deriva.
@@ -357,7 +380,7 @@ factual y lo temporal, **hacia la mitad** del relato, en segmentos de mayor entr
 
 **Tomado**: la taxonomía para la auditoría de fidelidad de la narración.
 
-### Fein, Russo, Xiang et al. — *LitBench* (2026)
+### Fein, Russo, Xiang et al. — *LitBench* (2025)
 <https://arxiv.org/abs/2507.00769>
 
 2.480 comparaciones por pares. Los jueces pequeños y abiertos **no** evalúan bien escritura
