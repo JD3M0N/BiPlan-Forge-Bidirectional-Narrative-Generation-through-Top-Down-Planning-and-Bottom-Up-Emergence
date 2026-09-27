@@ -42,7 +42,8 @@ tests usan proveedores falsos.
 
 Comandos (opciones completas en [commands.md](commands.md)):
 
-- `generate-story`, `compare-story-runs`, `recover-story-runs`, `audit-stage-run` (Stagecraft).
+- `generate-story`, `compare-story-runs`, `recover-story-runs`, `audit-stage-run`,
+  `recompute-simulation-metrics` (Stagecraft).
 - `report-evaluations`, `report-story-craft`, `report-simulations` (evaluation).
 - `asg-console`, `asg-telegram`, `asg-telegram-run` (apps).
 
@@ -58,7 +59,8 @@ Comandos (opciones completas en [commands.md](commands.md)):
 - `.github/workflows/quality.yml` corre las mismas cinco comprobaciones en `windows-latest` con
   Python 3.12, en cada push a `main` y en cada pull request. Un status check `quality` en rojo
   bloquea el merge.
-- Si lanzas `pytest` a mano, hazlo **desde la raíz** (ver «Trampas conocidas»).
+- Si lanzas `pytest` a mano, hazlo **desde la raíz**: es donde `pyproject.toml` fija `testpaths`
+  y el resto de la configuración de pytest.
 
 ### Iterar rápido
 
@@ -99,7 +101,7 @@ Dentro de `stagecraft`, los módulos van por subpaquete:
 | `writing/` | auditoría, evidencia de artesanía, ensamblado, aceptación |
 | `script/` | validación, render y etapas del guion |
 | `stage/` | la función simulada |
-| `tools/` | los comandos: `generate`, `compare`, `recovery`, `audit_stage` |
+| `tools/` | los comandos: `generate`, `compare`, `recovery`, `audit_stage`, `recompute` |
 
 En la raíz quedan la fachada y el contrato: `__init__`, `version`, `formats`, `schemas`,
 `generator`, `pipeline` y `agents/`.
@@ -218,7 +220,7 @@ A esa lista, el guion y el simulado añaden los suyos.
   `report-story-craft` las recalcula desde `story.md`, así que también mide los runs anteriores
   a 6.5.0, que no las traen.
 
-`version.py` fija `PIPELINE_VERSION` (7.1) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.1).
+`version.py` fija `PIPELINE_VERSION` (7.2) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.2).
 `StoryRun` se niega a abrir un run incompleto o de una versión no soportada. Si cambias el
 conjunto de artefactos o su significado, sube la versión en vez de romper los runs ya generados:
 son datos de la tesis. Una limpieza que no toca artefactos sube solo el parche de
@@ -373,12 +375,10 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
 
 ## Trampas conocidas
 
-- **`tests/test_source_documentation.py` puede pasar en vacío.**
-  - Su glob `*/src/**` es relativo al directorio de trabajo: ejecutar pytest desde otro sitio
-    hace que no vea ningún archivo y pase en silencio.
-  - Su marcador `"configuraci?n"` está corrupto y nunca puede coincidir. No lo uses como
-    referencia de qué detecta el filtro.
-  - Es la ficha ING-1 del `TODO.md`.
+- **`tests/test_source_documentation.py` solo exige que haya texto en inglés.** Desde 7.2.0
+  resuelve sus rutas desde el propio archivo y falla si no encuentra módulos, así que ya no pasa
+  en vacío desde otro directorio. Pero acepta docstrings plantilla («Represent X data and
+  behavior.»): eso queda en la ficha ING-1 del `TODO.md`.
 - **`ruff format` también formatea los bloques de Python dentro del Markdown.** Un ejemplo mal
   formateado en un README de paquete hace fallar `ruff format --check`. `docs/` y `Stories/`
   están excluidos en `pyproject.toml`.
@@ -399,15 +399,15 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
     añade salto de línea final.
   - `asg_core.artifact_json` serializa lo que va a **disco**.
   - No unificarlos: cambiaría cada prompt, y hay tests que fijan su texto literal.
-- **`materialize_act` pone en el acto el título del plan, que está en inglés**, no el
-  localizado. Los títulos localizados viven en `script_presentation.json`. El formato simulado
-  los lee de ahí (`_localized_titles`); el formato guion todavía imprime los del plan. Está
-  dentro de la ficha TD-2 del `TODO.md`.
+- **`materialize_act` pone en el acto el título del plan, que está en inglés.** Desde 7.2.0
+  `assemble_play` lo sustituye por el título localizado de la presentación antes de renderizar, y
+  el formato simulado sigue leyéndolos de `script_presentation.json` (`_localized_titles`). Si
+  añades otro camino que construya un `PlayScript`, hazlo pasar por `assemble_play`.
 - **Un `GEMINI_BILLING_LIMIT_EXHAUSTED` del corpus no es facturación.** Los tres que hay son la
   cuota diaria gratuita: su `error_report.json` trae
-  `quota_id: GenerateRequestsPerDayPerProjectPerModel-FreeTier`. El proveedor clasifica mal
-  porque el 429 de Gemini contiene la palabra «billing». Lee `quota_id`, no el código. Es la
-  ficha MED-1 del `TODO.md`.
+  `quota_id: GenerateRequestsPerDayPerProjectPerModel-FreeTier`. El proveedor los clasificó mal
+  porque el 429 estándar de Gemini contiene la palabra «billing»; desde 7.2.0 manda `quota_id`.
+  En un run anterior, lee `quota_id`, no el código.
 - **Quién lo sabe ya ≠ quién lo descubrirá.** En una compuerta de `cast_bible.json`, `known_by`
   es quién sabe el hecho **antes de la primera escena**. Quien lo deduce o descubre en escena va
   en `revealed_by`, con `how`, y **no** en `known_by`. El primer run real los confundió y le dio
@@ -417,13 +417,18 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
   - `repetition_ratio` solo mira el **habla**, palabra a palabra. No ve paráfrasis ni gestos;
     para eso está `action_repetition_ratio`.
   - `dialogue_survival` cerca de 1 significa que el narrador **transcribió**, no que fuera fiel.
-- **`CharacterMemory.recall` no aplica su tope** (SIM-9). Devuelve toda la memoria de escenas
-  anteriores, no los 6 recuerdos más 2 reflexiones del diseño. Hasta cerrar la ficha, no leas
-  `retrievals.json` ni los pesos de `stage/memory.py` como si filtraran, ni compares funciones de
-  antes y después del arreglo como si tuvieran la misma memoria.
-- **El actor nunca ve los ids de personaje**, y el esquema le pide `addressed_to` por id. Lo que no
-  coincide con un id se descarta sin aviso en `normalize_turn`: por eso casi no hay destinatarios
-  ni susurros (SIM-10).
+- **Las funciones 7.0 y 7.1 no son comparables sin más con las de 7.2.**
+  - Hasta 7.1.1 `CharacterMemory.recall` no aplicaba su tope: cada actor leía toda su memoria
+    anterior, y su `retrievals.json` no filtra nada.
+  - El esquema pedía `addressed_to` por ids que el actor nunca veía, así que casi no hay
+    destinatarios ni susurros.
+  - La nota del director se repetía hasta la siguiente lectura.
+
+  Los tres están arreglados en 7.2.0 (SIM-9 y SIM-10). Al comparar versiones, sepáralas por
+  `pipeline_version`.
+- **Un actor escribe destinatarios por nombre; el log guarda ids.** `normalize_turn` resuelve el
+  nombre (completo, de pila o una palabra que identifique a un solo personaje presente) y descarta
+  lo ambiguo. Los ids nunca entran en el contexto del actor: no los añadas para «ayudar».
 
 ## Documentos de referencia
 

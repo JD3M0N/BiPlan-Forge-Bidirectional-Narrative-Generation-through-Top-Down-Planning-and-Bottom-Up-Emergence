@@ -179,6 +179,56 @@ def test_the_turning_actor_moves_next_and_gets_the_note() -> None:
     assert "ya no tiene sentido negarlo" in stage.moves[6][1]
 
 
+def test_a_note_reaches_its_actor_once_per_beat() -> None:
+    """Found in 7.1: a note resent on every turn made two characters confess the same twice."""
+
+    def judge(mode, context):
+        if mode == "check":
+            return BeatCheckDraft(
+                parts=[OutcomePart(part="hands it over", shown=False)],
+                notes=["bruno: suelta la carpeta ya"],
+            )
+        return shown(context)
+
+    stage = Stage(judge)
+    stage.engine().perform_scene(scene())
+    delivered = [context for _, context in stage.moves if "suelta la carpeta ya" in context]
+    assert len(delivered) == 1
+
+
+def test_a_world_event_reaches_the_turn_log() -> None:
+    """Found in 7.1: turns.jsonl skipped the world's turn, one line short of the performance."""
+    logged = []
+    stage = Stage(lambda mode, context: unshown("bruno", stage_event=EVENT))
+    engine = stage.engine()
+    engine.on_turn = lambda turn, context: logged.append(turn)
+    performed = engine.perform_scene(scene())
+    assert [turn.id for turn in logged] == [turn.id for turn in performed.turns]
+    assert any(turn.kind == "world" for turn in logged)
+
+
+def test_a_line_repeated_in_a_later_scene_is_rejected() -> None:
+    """Found in 7.1: Julian said a whole turn again, word for word, one scene later."""
+    rejections = []
+    stage = Stage(lambda mode, context: shown(context))
+
+    def take_turn(system: str, context: str, feedback: str) -> ActorTurnDraft:
+        stage.moves.append((system, context))
+        if system == "bruno":
+            return ActorTurnDraft(speech="La carpeta no la tengo yo, pregunta abajo", tactic="deny")
+        number = len(stage.moves)
+        return ActorTurnDraft(speech=f"pista{number} nueva{number} dato{number}", tactic="test")
+
+    engine = stage.engine()
+    engine.take_turn = take_turn
+    engine.on_rejection = rejections.append
+    engine.perform_scene(scene())
+    engine.perform_scene(scene().model_copy(update={"scene_id": "chapter-1-scene-2", "number": 2}))
+    assert rejections, "the repeated line was accepted"
+    assert {item.code for item in rejections} == {"REPEATED_LINE"}
+    assert {item.scene_id for item in rejections} == {"chapter-1-scene-2"}
+
+
 def test_a_clause_is_shown_only_with_a_turn_that_exists() -> None:
     def judge(mode, context):
         return BeatCheckDraft(

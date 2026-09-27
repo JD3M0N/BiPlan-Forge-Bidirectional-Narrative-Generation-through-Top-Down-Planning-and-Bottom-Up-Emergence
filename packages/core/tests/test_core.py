@@ -78,6 +78,11 @@ def test_slugify_uses_ascii_and_fallback():
     assert slugify("***", fallback="story") == "story"
 
 
+def test_a_truncated_slug_never_ends_in_a_dash():
+    """Cutting to the maximum after removing dashes could leave one at the end."""
+    assert slugify("a" * 59 + " bc") == "a" * 59
+
+
 def test_atomic_writers_replace_complete_files(tmp_path):
     """Persist text and JSON without leaving temporary files behind."""
     text_path = atomic_write_text(tmp_path / "note.txt", "hello")

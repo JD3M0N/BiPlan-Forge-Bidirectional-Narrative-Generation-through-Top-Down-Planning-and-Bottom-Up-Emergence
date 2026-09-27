@@ -1,5 +1,12 @@
 # Historial de cambios
 
+## [2.0.2] - 2026-09-26
+
+- El proveedor que comparten los trabajos vacía sus registros de uso al terminar cada uno: en un
+  bot de larga vida crecían sin límite, y cada run ya tiene los suyos en disco.
+- Cotas internas al mínimo real: `asg-stagecraft` 7.2.0, `asg-evaluation` 0.6.0 y `asg-core`
+  0.5.1. Pedía `asg-stagecraft>=6.0.0` aunque importa API 7.x.
+
 ## [2.0.1] - 2026-09-26
 
 - Corregida la línea de consumo de Gemini del resumen: leía `llm_usage_summary.json`, que el

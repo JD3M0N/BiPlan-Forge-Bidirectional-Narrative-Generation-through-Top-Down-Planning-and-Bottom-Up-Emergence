@@ -1,8 +1,10 @@
 import json
 import re
+from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
-from asg_core import AudioGenerationError
+from asg_core import AudioGenerationError, slugify
 from asg_stagecraft import NarrativeProfile, StoryGenerator
 from asg_stagecraft import pipeline as pipeline_module
 from asg_stagecraft import version as version_module
@@ -13,6 +15,7 @@ from asg_stagecraft.planning.profiles import profile_event_floor, promise_band
 from asg_stagecraft.planning.repair import repair_guidance
 from asg_stagecraft.runtime import storage as storage_module
 from asg_stagecraft.runtime.errors import GeminiDailyQuotaError, PlotValidationError
+from asg_stagecraft.runtime.provider import current_call_context
 from asg_stagecraft.schemas import (
     ActScriptDraft,
     CastNote,
@@ -21,6 +24,7 @@ from asg_stagecraft.schemas import (
     CharacterProfile,
     CharactersArtifact,
     EventDependency,
+    LLMUsageRecord,
     Location,
     NarrativeBlueprintDraft,
     PlanReview,
@@ -907,23 +911,97 @@ def test_a_failure_in_the_first_call_still_records_an_error_report(tmp_path) -> 
                 system_instruction=system_instruction, prompt=prompt, schema=schema, profile=profile
             )
 
-    generator = StoryGenerator(BrokenAnalystProvider(), tmp_path)
+    generator = StoryGenerator(
+        BrokenAnalystProvider(), tmp_path, narrative_profile=NarrativeProfile.ESSENTIAL
+    )
     with pytest.raises(RuntimeError):
         generator.generate("Escribe una historia sobre el mar")
 
     run_dirs = list(tmp_path.iterdir())
     assert len(run_dirs) == 1
     run_dir = run_dirs[0]
-    assert run_dir.name.endswith("-escribe-una-historia-sobre-el-mar")
+    # MED-4: the folder was named after the raw prompt, cut mid-word, and the prompt was lost.
+    assert run_dir.name.endswith(f"-{slugify(pipeline_module.UNANALYZED_TITLE)}")
+    submitted = json.loads((run_dir / "submitted_request.json").read_text(encoding="utf-8"))
+    assert submitted["prompt"] == "Escribe una historia sobre el mar"
+    assert submitted["narrative_profile"] == "essential"
 
     metadata = json.loads((run_dir / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["status"] == "failed"
     assert metadata["error_stage"] == "analysis"
+    assert metadata["narrative_profile"] == "essential"
 
     error_report = json.loads((run_dir / "error_report.json").read_text(encoding="utf-8"))
     assert error_report["stage"] == "analysis"
     assert error_report["code"] == "UNEXPECTED_ERROR"
     assert (run_dir / "llm_usage.json").is_file()
+
+
+def test_a_provider_error_is_filed_under_the_stage_it_stopped(tmp_path) -> None:
+    """MED-4: every provider failure said stage "provider", never where the run died."""
+    provider = FakeProvider(story_review=major_story_review(), quota_error_at="plan_critic")
+    with pytest.raises(GeminiDailyQuotaError):
+        StoryGenerator(provider, tmp_path).generate(make_request())
+    run_dir = next(iter(tmp_path.iterdir()))
+    metadata = json.loads((run_dir / "metadata.json").read_text(encoding="utf-8"))
+    report = json.loads((run_dir / "error_report.json").read_text(encoding="utf-8"))
+    assert metadata["error_stage"] == report["stage"] == "plan_review"
+    assert report["details"]["component"] == "provider"
+
+
+def test_the_requested_profile_is_in_the_metadata(tmp_path) -> None:
+    """MED-4: the profile lived only in request.json, so a failed run read as profileless."""
+    run = StoryGenerator(FakeProvider(), tmp_path).generate(make_request())
+    metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["narrative_profile"] == make_request().narrative_profile
+
+
+def test_every_model_call_is_tagged_with_its_stage_and_agent(tmp_path) -> None:
+    """MED-2: without the tag, llm_calls.jsonl could not split a run's cost by agent."""
+    contexts: list[tuple[str, str]] = []
+
+    class TaggingProvider(FakeProvider):
+        def generate_structured(self, **kwargs):
+            contexts.append(current_call_context())
+            return super().generate_structured(**kwargs)
+
+        def generate_text(self, **kwargs):
+            contexts.append(current_call_context())
+            return super().generate_text(**kwargs)
+
+    StoryGenerator(TaggingProvider(), tmp_path).generate(make_request())
+    assert contexts
+    assert all(stage and agent for stage, agent in contexts), contexts
+
+
+def test_usage_counts_logical_calls_not_attempts(tmp_path) -> None:
+    """MED-2: failed_calls counted attempts, and calls counted the token-count preflights."""
+
+    def record(call_id: str, status: str, operation: str = "structured:WorldArtifact"):
+        return LLMUsageRecord(
+            call_id=call_id,
+            operation=operation,
+            stage="world",
+            agent="world",
+            attempt=1,
+            status=status,
+            model="fake-model",
+            timestamp=datetime.now(UTC),
+        )
+
+    pipeline = StoryPipeline(None, tmp_path)
+    pipeline.provider = SimpleNamespace(
+        usage_records=[
+            record("a", "failed"),
+            record("a", "succeeded"),
+            record("b", "failed"),
+            record("b", "failed"),
+            record("c", "succeeded", operation="count_tokens"),
+        ]
+    )
+    usage = pipeline._usage_artifact()
+    assert (usage.calls, usage.failed_calls) == (2, 1)
+    assert (usage.attempts, usage.failed_attempts, usage.auxiliary_calls) == (4, 3, 1)
 
 
 def test_invalid_initial_plan_is_replaced_once(tmp_path) -> None:

@@ -45,7 +45,7 @@ def _patch_facade(
 
     facade = create_autospec(StoryGenerator, spec_set=True)
     facade.side_effect = build
-    provider = object()
+    provider = SimpleNamespace(usage_records=[])
     settings = SimpleNamespace(
         output_root=tmp_path,
         narrative_guidance=narrative_guidance,
@@ -128,6 +128,15 @@ def test_adapter_only_calls_methods_the_real_facade_defines(tmp_path, monkeypatc
     with pytest.raises(GenerationFailure) as unknown_format:
         generators_module.StagecraftGenerator().generate("Una historia", story_format="stage-play")
     assert unknown_format.value.code == "UNKNOWN_STORY_FORMAT"
+
+
+def test_the_shared_provider_forgets_each_finished_job(tmp_path, monkeypatch):
+    """MED-2: jobs share one provider, and its usage records grew for as long as the bot ran."""
+    captured: dict = {}
+    provider = _patch_facade(monkeypatch, tmp_path, captured)
+    provider.usage_records.append("a record the previous run already wrote to disk")
+    generators_module.StagecraftGenerator().generate("Una historia")
+    assert provider.usage_records == []
 
 
 def test_adapter_translates_pipeline_errors_into_application_failures(tmp_path, monkeypatch):

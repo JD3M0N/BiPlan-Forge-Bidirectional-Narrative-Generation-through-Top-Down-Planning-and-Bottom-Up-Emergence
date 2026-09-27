@@ -6,7 +6,7 @@ from asg_stagecraft.schemas import (
     ScriptPresentation,
 )
 from asg_stagecraft.script.render import render_script, roman, staging_index
-from asg_stagecraft.script.validation import assemble_play, materialize_act
+from asg_stagecraft.script.validation import assemble_play, materialize_act, normalized_frame
 from asg_stagecraft.writing.audit import script_metrics
 from test_generator_v5 import make_request
 from test_script import context, make_characters, make_plan, valid_draft
@@ -63,6 +63,45 @@ def test_cast_list_falls_back_to_name_only_without_description() -> None:
     assert luis.description == ""
     rendered = render_script(play)
     assert "- LUIS." in rendered
+
+
+def test_an_act_takes_the_localized_chapter_title() -> None:
+    """TD-2: two of three native scripts printed "Acto I. The Mechanical Anomaly"."""
+    presentation = make_presentation().model_copy(
+        update={"chapters": [ChapterPresentation(chapter_id="chapter-1", title="El legajo")]}
+    )
+    act = materialize_act(valid_draft(), **context())
+    play = assemble_play(
+        presentation, make_characters(), [act], language="Spanish", method=ScriptMethod.NATIVE
+    )
+    assert play.acts[0].title == "El legajo"
+    assert "## Acto I. El legajo" in render_script(play)
+
+
+def test_a_cast_description_that_ends_its_sentence_gets_no_second_period() -> None:
+    """TD-6: every cast entry of the 25-09 scripts ended in "..", a period always added."""
+    frame = make_presentation().frame.model_copy(
+        update={"cast": [CastNote(character_id="ana", description="archivista del faro.")]}
+    )
+    presentation = make_presentation().model_copy(update={"frame": frame})
+    act = materialize_act(valid_draft(), **context())
+    play = assemble_play(
+        presentation, make_characters(), [act], language="Spanish", method=ScriptMethod.NATIVE
+    )
+    rendered = render_script(play)
+    assert "- ANA, archivista del faro." in rendered
+    assert ".." not in rendered
+
+
+def test_a_spanish_script_always_heads_its_cast_the_same_way() -> None:
+    """TD-6: the cast heading alternated between "Reparto" and "Personajes" from run to run."""
+    frame = ScriptFrame(cast_heading="Reparto", act_label="Acto", scene_label="Escena", cast=[])
+    assert normalized_frame(frame, make_characters(), language="Spanish").cast_heading == (
+        "Personajes"
+    )
+    assert normalized_frame(frame, make_characters(), language="English").cast_heading == (
+        "Reparto"
+    )
 
 
 def test_roman_numerals() -> None:

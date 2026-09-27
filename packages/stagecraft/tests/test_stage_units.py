@@ -16,7 +16,7 @@ from asg_stagecraft.stage.casting import (
     materialize_bible,
 )
 from asg_stagecraft.stage.fallback import narrate
-from asg_stagecraft.stage.memory import CharacterMemory
+from asg_stagecraft.stage.memory import RECENT_REFLECTIONS, RETRIEVED_RECORDS, CharacterMemory
 from asg_stagecraft.stage.metrics import simulation_metrics
 from asg_stagecraft.stage.perception import visible_text, witnesses
 from asg_stagecraft.stage.render import actor_turn_context, scene_log
@@ -159,6 +159,30 @@ def test_reflections_always_travel_however_they_score() -> None:
     assert any(item.kind == "reflection" for item in recalled)
 
 
+def test_recall_never_returns_more_than_the_limit_plus_the_recent_reflections() -> None:
+    """Found reading the 7.1 logs: the cap never applied and actors read up to 70 memories."""
+    memory = CharacterMemory("ana")
+    for index in range(20):
+        memory.remember(
+            kind="observed", text=f"Bruno movio la caja {index} del archivo", scene_number=1
+        )
+    for index in range(3):
+        memory.remember(kind="reflection", text=f"aprendi la leccion {index}", scene_number=1)
+    recalled = memory.recall("la caja del archivo", scene_number=2, turn_number=1, present=[])
+    assert len(recalled) == RETRIEVED_RECORDS + RECENT_REFLECTIONS
+    assert len(memory.retrievals) == RETRIEVED_RECORDS
+
+
+def test_a_character_never_recalls_its_own_lines_or_thoughts() -> None:
+    """A verbatim own line in the context is how an actor ends up repeating itself."""
+    memory = CharacterMemory("ana")
+    memory.remember(kind="own_turn", text="Ana: nadie sale de aqui", scene_number=1)
+    memory.remember(kind="thought", text="(pense) nadie sale de aqui sin hablar", scene_number=1)
+    memory.remember(kind="observed", text="Bruno: nadie sale de aqui", scene_number=1)
+    recalled = memory.recall("nadie sale de aqui", scene_number=2, turn_number=1, present=[])
+    assert [item.kind for item in recalled] == ["observed"]
+
+
 # -- validation --------------------------------------------------------------------------
 
 
@@ -212,6 +236,37 @@ def test_a_whisper_with_nobody_to_hear_it_becomes_public() -> None:
     draft = act(speech="Algo.", visibility="whisper", addressed_to=["fantasma"])
     clean = normalize_turn(draft, on_stage=["ana"])
     assert clean.visibility == "public"
+
+
+def test_an_actor_can_address_someone_by_the_name_it_sees() -> None:
+    """Found in 7.1: the schema asked for IDs the actor never sees, so 79 of 80 turns had none."""
+    names = {"hija_farero": "Elisa Morant", "medica": "Dra. Sola", "ana": "Ana"}
+    on_stage = ["ana", "hija_farero", "medica"]
+    for written, expected in [
+        ("Elisa Morant", ["hija_farero"]),
+        ("elisa", ["hija_farero"]),
+        ("Sola", ["medica"]),
+        ("hija_farero", ["hija_farero"]),
+        ("Nadie", []),
+    ]:
+        clean = normalize_turn(
+            act(speech="Algo.", addressed_to=[written]), on_stage=on_stage, names=names
+        )
+        assert clean.addressed_to == expected, written
+
+
+def test_a_name_two_characters_share_addresses_nobody() -> None:
+    names = {"elena_vance": "Elena Vance", "elena_ruiz": "Elena Ruiz"}
+    draft = act(speech="Algo.", addressed_to=["Elena"])
+    clean = normalize_turn(draft, on_stage=list(names), names=names)
+    assert clean.addressed_to == []
+
+
+def test_a_whisper_by_name_stays_a_whisper() -> None:
+    draft = act(speech="No se lo digas.", visibility="whisper", addressed_to=["Bruno"])
+    clean = normalize_turn(draft, on_stage=["ana", "bruno"], names=NAMES)
+    assert clean.visibility == "whisper"
+    assert clean.addressed_to == ["bruno"]
 
 
 def test_an_empty_turn_is_rejected_in_english_ascii() -> None:
@@ -711,6 +766,49 @@ def test_an_actor_sees_who_is_in_front_of_them() -> None:
     )
     assert "CONTIGO EN ESCENA:\n- Ana, inspectora de unos cuarenta anos, abrigo gris" in context
     assert "farero viejo" not in context
+
+
+def _context_for(character_id: str, witnessed: list[StageTurn]) -> str:
+    """Build one actor's context over a scene with Ana and Bruno."""
+    return actor_turn_context(
+        scene=brief_with_two(),
+        objective="lo que quiera",
+        state=None,
+        note="",
+        gate_facts=[],
+        memories=[],
+        witnessed=witnessed,
+        character_id=character_id,
+        names=NAMES,
+    )
+
+
+def test_an_actor_is_shown_the_line_just_addressed_to_them() -> None:
+    """The 7.1 scenes were rounds of monologues: nobody answered what was said to them."""
+    spoken = [turn("ana", speech="Bruno, quien subio anoche?", addressed=["bruno"])]
+    assert "TE ACABAN DE DECIR:\nAna: Bruno, quien subio anoche?" in _context_for("bruno", spoken)
+    assert "TE ACABAN DE DECIR" not in _context_for("ana", spoken)
+
+
+def test_a_line_already_answered_is_not_shown_again() -> None:
+    spoken = [
+        turn("ana", speech="Bruno, quien subio anoche?", addressed=["bruno"]),
+        turn("bruno", speech="Nadie.", number=2),
+    ]
+    assert "TE ACABAN DE DECIR" not in _context_for("bruno", spoken)
+
+
+def test_an_action_written_as_a_sentence_reads_on_after_the_name() -> None:
+    """Found in 7.1: "(Mara Vela Pasa una pagina...)" in every transcript."""
+    capital = turn("ana", action="Pasa una pagina del cuaderno", speech="Bien.")
+    assert "(Ana pasa una pagina del cuaderno)" in scene_log([capital], NAMES, thoughts=False)
+    assert "(Ana pasa una pagina del cuaderno)" in visible_text(capital, "bruno", NAMES)
+    assert narrate([capital], NAMES).startswith("Ana pasa una pagina del cuaderno.")
+
+
+def test_an_action_that_opens_with_a_name_keeps_its_capital() -> None:
+    naming = turn("ana", action="Bruno recibe el papel de sus manos", speech="Toma.")
+    assert "(Ana Bruno recibe el papel" in scene_log([naming], NAMES, thoughts=False)
 
 
 def test_the_narrator_log_marks_the_turns_the_beat_turned_on() -> None:

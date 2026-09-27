@@ -193,6 +193,21 @@ def test_nested_story_directories_keep_a_unique_relative_key(corpus):
     assert len(everything) == 6
 
 
+def test_failed_calls_read_as_not_measured_before_pipeline_7_2(corpus):
+    """Before 7.2 failed_calls counted failed attempts, not failed calls."""
+    older = records_by_story(corpus, minimum_version="6")["Top-Down/run-new"]
+    assert older.counts.llm_calls == 15
+    assert older.counts.llm_failed_calls is None
+    newer = make_run(
+        corpus,
+        "Stagecraft/run-logical",
+        metadata=completed(),
+        generator_version={"generator_version": "7.2.0", "pipeline_version": "7.2"},
+        llm_usage={"calls": 9, "failed_calls": 2, "total_tokens": 1, "total_wait_seconds": 0.0},
+    )
+    assert read_story_craft(newer, corpus).counts.llm_failed_calls == 2
+
+
 def test_the_pipeline_version_fallback_places_a_run_on_the_version_axis(corpus):
     """Fall back to the pipeline contract when no generator version was written."""
     legacy = records_by_story(corpus, minimum_version="5")["Top-Down/run-legacy"]

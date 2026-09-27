@@ -61,12 +61,15 @@ emparejador de esqueletos); `compañía` favorece los recuerdos que implican a q
 Viajan los **6** mejores registros más las **2** últimas reflexiones, pasen lo que pasen. La escena
 en curso viaja entera aparte, como memoria de trabajo, y por eso se excluye de la recuperación.
 
-> **Esto todavía no se cumple (7.1.1).** `CharacterMemory.recall` no aplica el tope y devuelve toda
-> la memoria de escenas anteriores. Las cinco funciones representadas (7.0 y 7.1) recibieron por
-> turno una mediana de 18 a 29 recuerdos, con máximos de 52 a 72, y los pesos solo ordenaban. La
-> frontera de conocimiento no se ve afectada, porque lo no presenciado sigue sin estar; la
-> selección, sí. Es la ficha SIM-9 del `TODO.md`, y el análisis está en
-> [mejoras_simulacion.md](mejoras_simulacion.md).
+Lo que el propio personaje dijo, hizo o pensó en escenas anteriores **no se recupera**
+(`NOT_RECALLED`): sus reflexiones ya lo llevan en primera persona, y un actor que relee su propia
+réplica literal la repite. Sigue en `memory/<id>/records.json` para la auditoría.
+
+> **Hasta 7.1.1 el tope no se aplicaba.** `CharacterMemory.recall` devolvía toda la memoria de
+> escenas anteriores: las cinco funciones 7.0 y 7.1 recibieron por turno una mediana de 18 a 29
+> recuerdos, con máximos de 52 a 72, y los pesos solo ordenaban. La frontera de conocimiento no
+> se vio afectada, porque lo no presenciado seguía sin estar; la selección, sí. Arreglado en
+> 7.2.0 (SIM-9): no comparar esas funciones con las nuevas como si tuvieran la misma memoria.
 
 Cada recuperación se guarda con su desglose en `memory/<id>/retrievals.json`.
 
@@ -163,6 +166,17 @@ El actor tiene el contrapeso en su instrucción: la obstrucción se juega a fond
 escena le dé una razón que ese personaje aceptaría**; cuando una nota dice que el suelo se ha
 movido, se deja mover. «Un personaje que nunca se mueve no es fuerte, está atascado.»
 
+**Una nota se entrega una vez.** Llega al actor al que va en su siguiente turno y caduca
+(`engine._consume`). Hasta 7.1.1 seguía viva hasta la siguiente lectura del director, se le
+repetía al mismo actor y producía confesiones dobles.
+
+**Hablarle a alguien.** El actor nombra a quien se dirige como lo ve en «CONTIGO EN ESCENA», y
+`normalize_turn` lo traduce a su id. Con ese dato la política de turnos le da la palabra al
+interpelado, y su contexto marca la réplica que aún no ha contestado («TE ACABAN DE DECIR»); su
+instrucción le pide responderla antes de seguir con lo suyo, lo que no es ceder. Hasta 7.1.1 el
+esquema pedía ids que el actor nunca veía: 79 de 80 turnos 7.1 no llevaban destinatario, la escena
+se volvía una ronda de monólogos y ningún susurro podía existir.
+
 Un evento del mundo entra en el log como un turno más, marcado `kind: world`, y lo presencian
 todos. Así el log sigue siendo la única fuente de la historia, y una intervención se representó en
 vez de afirmarse. No cuenta como turno de nadie: ni para el orden de palabra ni para las métricas
@@ -184,10 +198,12 @@ Como en `script/validation.py`: se normaliza lo que tiene una sola lectura posib
 corrompería el log. Los mensajes van en **inglés ASCII** porque se reinyectan literales.
 
 - **Se normaliza**: comillas y rayas envolventes (en bucle, porque el modelo suele poner las dos),
-  paréntesis en acción y pensamiento, el nombre propio del actor al principio de su acción,
-  destinatarios que no están en escena, un susurro sin destinatario (pasa a público) y un
-  **pensamiento que solo repite el habla** (similitud ≥ 0,5), que se vacía: tiene una sola
-  corrección posible, no hay nada que registrar.
+  paréntesis en acción y pensamiento, el nombre propio del actor al principio de su acción, los
+  destinatarios escritos por nombre (nombre completo, de pila o cualquier palabra que identifique
+  a un solo personaje presente, que pasan a su id), los que no están en escena o son ambiguos (se
+  quitan), un susurro sin destinatario (pasa a público) y un **pensamiento que solo repite el
+  habla** (similitud ≥ 0,5), que se vacía: tiene una sola corrección posible, no hay nada que
+  registrar.
 - **Se rechaza**, con su código en `rejected.jsonl`:
 
 | Código | Cuándo |
@@ -196,8 +212,11 @@ corrompería el log. Los mensajes van en **inglés ASCII** porque se reinyectan 
 | `INTERNAL_IDENTIFIERS` | Un id del plan o un encabezado Markdown |
 | `LONG_SPEECH` | Más de 45 palabras de habla: es un discurso, no un turno |
 | `FIRST_PERSON_ACTION` | Una acotación en primera persona |
-| `REPEATED_LINE` | Solapamiento ≥ 0,75 con una de las 3 últimas réplicas propias |
-| `REPEATED_ACTION` | La acción **contiene** ≥ 80 % de una de las 3 últimas acciones propias |
+| `REPEATED_LINE` | Solapamiento ≥ 0,75 con cualquier réplica propia anterior de la obra |
+| `REPEATED_ACTION` | La acción **contiene** ≥ 80 % de una de las 3 últimas acciones propias, también de escenas anteriores |
+
+Hasta 7.1.1 las dos reglas miraban solo la escena en curso, y un actor repitió palabra por palabra
+en `072847` un turno entero de la escena anterior.
 
 El umbral de repetición del habla es deliberadamente más estricto que el 0,4 que IBSEN usó y aun
 así encontró insuficiente. La repetición de acciones se mide por **contención** y no por
@@ -273,8 +292,8 @@ Además de todo lo Top-Down (plan, promesas, etapas del guion):
 | `cast_bible.json` | Dossiers y compuertas de conocimiento, con `fallback: true` si se derivó |
 | `stage/actors/<id>.json` | La instrucción de sistema exacta y el dossier que recibió cada actor |
 | `stage/<escena>/brief.json` | Beats, reparto, lugar, compuertas y réplicas de referencia |
-| `stage/<escena>/turns.jsonl` | Cada turno aceptado, con testigos, nota y memorias recuperadas |
-| `stage/<escena>/contexts.jsonl` | El bloque de prompt variable exacto de cada turno |
+| `stage/<escena>/turns.jsonl` | Cada turno aceptado, también los del mundo desde 7.2, con testigos, nota y memorias recuperadas |
+| `stage/<escena>/contexts.jsonl` | El bloque de prompt variable exacto de cada turno de actor |
 | `stage/<escena>/rejected.jsonl` | Cada intento rechazado, con su código y su motivo |
 | `stage/<escena>/director.jsonl` | Cada llamada al director: modo, borrador completo, cláusulas, `achieved` derivado, `turning_actor_id`, evento y tras qué turno |
 | `stage/<escena>/transcript.md` | La escena legible, con acciones y pensamientos |
@@ -283,8 +302,10 @@ Además de todo lo Top-Down (plan, promesas, etapas del guion):
 | `performance.json` | La función entera más los ajustes con los que corrió |
 | `performance.md` | El transcript legible de toda la función |
 | `narration/chapter-NNN.md` (+intentos) | La prosa por capítulo |
+| `narration/chapter-NNN-attempt-NNN-error.json` | La excepción de un intento de narración que falló (desde 7.2) |
 | `narration.json` | La voz, el narrador y cuántos turnos vio cada capítulo |
 | `simulation_metrics.json` | Todas las cifras observadas |
+| `simulation_metrics.recomputed.json` | Las mismas cifras medidas de nuevo con el código actual, si se lanzó `recompute-simulation-metrics` |
 | `story.md`, `story_metrics.json` | La historia final, medible contra cualquier run narrativo |
 
 `performance.json` guarda `settings` con los pesos, el k, el decaimiento, el umbral, los turnos de
@@ -310,7 +331,9 @@ Ninguna de estas cifras viaja a un prompt; hay un test que lo comprueba.
   y `first_person_actions`.
 - **Improvisación**: `script_echo`.
 - **Frontera de conocimiento**: `unknown_mentions` y `gates_known_by_discoverer`.
-- **Memoria**: `memory_records`, `retrievals`.
+- **Memoria**: `memory_records`, `retrievals` (antes de 7.2 contaba toda la memoria en cada turno,
+  porque el tope no se aplicaba), y `emotions`, la emoción con la que cada actor salió de cada
+  escena según su reflexión.
 - **Narración**: `compression_ratio` (palabras de la historia / palabras del log), `dialogue_survival`,
   `narration_source_fallbacks`, `narrated_words`, `log_words`.
 
@@ -327,7 +350,9 @@ Al presentar el primer run real se leyeron como buenas dos cifras que no lo eran
 
 `report-simulations` informa como «no medida» (celda vacía en CSV) toda cifra que un run no
 registró. Leer como 0 las métricas de 7.1 en un run 7.0 haría que el corpus anterior pareciera
-impecable justo en los problemas que tenía.
+impecable justo en los problemas que tenía. Para medir un run antiguo con el código actual está
+`recompute-simulation-metrics <run>`, que escribe `simulation_metrics.recomputed.json` sin tocar
+el original; las cuatro funciones completas 7.0 y 7.1 ya lo tienen.
 
 ### La auditoría con LLM
 
@@ -483,7 +508,8 @@ dejó de tener los tics de 7.0.
   - La nota del director se re-entrega al mismo actor hasta la siguiente lectura (5 de 54 turnos con
     nota), y de ahí salen confesiones dobles.
 
-  Es la ficha SIM-10 del `TODO.md`. La memoria sin tope (SIM-9) es la otra causa de la repetición.
+  Las dos causas, y la memoria sin tope (SIM-9), que era la otra fuente de repetición, están
+  arregladas en 7.2.0. Falta verlo en runs reales: el par de validación de SIM-1.
 
 ## De dónde sale cada decisión
 

@@ -142,6 +142,7 @@ def simulation_metrics(
     story: str,
     narration_fallbacks: int,
     bible: CastBible | None = None,
+    emotions: dict[str, list[str]] | None = None,
 ) -> SimulationMetrics:
     """Measure one finished performance and the prose narrated from it."""
     scenes = performance.scenes
@@ -156,7 +157,7 @@ def simulation_metrics(
     scene_metrics = [
         _scene_metrics(scene, scripted_by_scene.get(scene.scene_id, [])) for scene in scenes
     ]
-    actor_metrics = _actor_metrics(scenes, memories)
+    actor_metrics = _actor_metrics(scenes, memories, emotions or {})
 
     beats = sum(len(scene.beats) for scene in scenes)
     achieved = sum(1 for scene in scenes for beat in scene.beats if beat.achieved)
@@ -237,7 +238,9 @@ def _scene_metrics(scene: ScenePerformance, scripted: list[str]) -> SceneMetrics
 
 
 def _actor_metrics(
-    scenes: list[ScenePerformance], memories: dict[str, CharacterMemory]
+    scenes: list[ScenePerformance],
+    memories: dict[str, CharacterMemory],
+    emotions: dict[str, list[str]],
 ) -> list[ActorMetrics]:
     """Tally what each character contributed, in stable character order."""
     tallies: dict[str, ActorMetrics] = {}
@@ -270,6 +273,7 @@ def _actor_metrics(
         if memory is not None:
             item.memory_records = len(memory.records)
             item.retrievals = len(memory.retrievals)
+        item.emotions = list(emotions.get(character_id, []))
     return [tallies[key] for key in sorted(tallies)]
 
 

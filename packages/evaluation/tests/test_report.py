@@ -85,6 +85,17 @@ def test_collecting_keeps_unevaluated_stories_and_their_axes(corpus):
     assert records["Bottom-Up/Escape-Room/run-d"].narrative_profile is None
 
 
+def test_a_run_without_request_takes_its_profile_from_the_metadata(tmp_path):
+    """MED-4: a run that failed in analysis has no request.json, and read as profileless."""
+    stories = tmp_path / "Stories"
+    directory = make_story(stories, "Stagecraft/run-failed")
+    (directory / "metadata.json").write_text(
+        json.dumps({"status": "failed", "narrative_profile": "essential"}), encoding="utf-8"
+    )
+    (record,) = collect_evaluations(stories)
+    assert record.narrative_profile == "essential"
+
+
 def test_variance_is_undefined_for_a_single_evaluation(corpus):
     by_story = summarize(collect_evaluations(corpus), key=GROUPINGS["story"])
     single = by_story["Top-Down/run-b"].metrics["coherence"]

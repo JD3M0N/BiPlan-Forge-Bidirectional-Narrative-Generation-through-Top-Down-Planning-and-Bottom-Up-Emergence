@@ -11,6 +11,7 @@ sentences, thoughts become reported interiority, and that is all.
 
 from __future__ import annotations
 
+from .perception import stage_direction
 from .schemas import StageTurn
 
 
@@ -23,7 +24,7 @@ def narrate(turns: list[StageTurn], names: dict[str, str]) -> str:
             continue
         speaker = names.get(turn.actor_id, turn.actor_id)
         if turn.action:
-            paragraphs.append(_sentence(f"{speaker} {turn.action}"))
+            paragraphs.append(_sentence(stage_direction(speaker, turn.action, names)))
         if turn.speech:
             aside = ""
             if turn.visibility == "whisper":

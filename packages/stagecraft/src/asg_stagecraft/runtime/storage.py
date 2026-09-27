@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -56,6 +57,8 @@ class ArtifactRepository:
             "completed_stages": [],
             "artifacts": {},
         }
+        # The sha256 state and size of every line-delimited artifact this process appends to.
+        self._running_hashes: dict[str, list] = {}
         self._write_metadata()
         self._write_manifest()
         self.save_json("generator_version.json", GeneratorVersionArtifact())
@@ -108,31 +111,40 @@ class ArtifactRepository:
             self.on_artifact(normalized, True)
 
     def append_llm_call(self, record: LLMUsageRecord) -> None:
-        """Append llm call."""
-        path = self.run_dir / "llm_calls.jsonl"
-        created = not path.exists()
-        existing = path.read_text(encoding="utf-8") if not created else ""
-        line = json.dumps(record.model_dump(mode="json"), ensure_ascii=False) + "\n"
-        atomic_write_text(path, existing + line)
-        self._record("llm_calls.jsonl", existing + line)
-        if self.on_artifact:
-            self.on_artifact("llm_calls.jsonl", created)
+        """Append one model call to llm_calls.jsonl, keeping it manifest-tracked."""
+        self.append_jsonl("llm_calls.jsonl", record)
 
     def append_jsonl(self, filename: str, value: BaseModel | dict) -> None:
         """Append one JSON record to a line-delimited artifact, keeping it manifest-tracked.
 
-        Used by the performance stage, which writes turn by turn: rewriting the whole file for
-        every turn would be quadratic in the length of a scene.
+        Written turn by turn by the performance and call by call by the provider, so the line is
+        appended and folded into a running hash for the manifest; the file is read at most once,
+        when this process first touches it. Before 7.2 every line reread and rewrote the whole
+        file, quadratic in the length of the run.
         """
         path = self.run_dir / filename
+        normalized = filename.replace("\\", "/")
         created = not path.exists()
-        existing = path.read_text(encoding="utf-8") if not created else ""
         data = value.model_dump(mode="json") if isinstance(value, BaseModel) else value
-        content = existing + json.dumps(data, ensure_ascii=False) + "\n"
-        atomic_write_text(path, content)
-        self._record(filename, content)
+        encoded = (json.dumps(data, ensure_ascii=False) + "\n").encode("utf-8")
+        running = self._running_hashes.get(normalized)
+        if running is None:
+            existing = b"" if created else path.read_bytes()
+            running = self._running_hashes[normalized] = [hashlib.sha256(existing), len(existing)]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("ab") as stream:
+            stream.write(encoded)
+            stream.flush()
+            os.fsync(stream.fileno())
+        running[0].update(encoded)
+        running[1] += len(encoded)
+        self.manifest["artifacts"][normalized] = {
+            "sha256": running[0].hexdigest(),
+            "bytes": running[1],
+        }
+        self._write_manifest()
         if self.on_artifact:
-            self.on_artifact(filename.replace("\\", "/"), created)
+            self.on_artifact(normalized, created)
 
     def complete_stage(self, stage: str) -> None:
         """Mark stage."""
@@ -158,18 +170,27 @@ class ArtifactRepository:
         self._write_metadata()
 
     def fail(self, error: Exception, *, stage: str | None = None) -> None:
-        """Record a failed run, keeping the stage the caller observed."""
+        """Record a failed run under the pipeline stage the caller observed.
+
+        An error's own stage names the component that raised it - "provider" for every Gemini
+        failure - so it is kept in details.component, and the report says where the run died.
+        Before 7.2 the component won, and every quota failure read as stage "provider".
+        """
         if isinstance(error, ASGError):
             error.run_id = self.metadata.run_id
+            failed_stage = stage or error.stage
+            details = dict(error.details)
+            if error.stage != failed_stage:
+                details.setdefault("component", error.stage)
             self.metadata.error = error.summary
             self.metadata.error_code = error.code
-            self.metadata.error_stage = error.stage
+            self.metadata.error_stage = failed_stage
             report = ErrorReport(
                 code=error.code,
-                stage=error.stage,
+                stage=failed_stage,
                 run_id=self.metadata.run_id,
                 summary=error.summary,
-                details=error.details,
+                details=details,
                 recommendations=error.recommendations,
             )
         else:

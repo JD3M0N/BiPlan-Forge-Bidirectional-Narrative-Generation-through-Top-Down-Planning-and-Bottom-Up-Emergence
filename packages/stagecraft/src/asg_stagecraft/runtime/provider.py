@@ -4,7 +4,9 @@ import json
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Protocol, TypeVar
 
@@ -47,6 +49,29 @@ _DEFAULT_GENERATION_PROFILES: dict[str, float] = {
     "prose": 0.9,
     "rewrite": 0.35,
 }
+
+# The token-count preflight a TPM limit needs. It is recorded, but it is not a call.
+COUNT_TOKENS_OPERATION = "count_tokens"
+
+# Where in the pipeline a model call is made: the pipeline sets it around every agent call and
+# the provider reads it when recording, so the cost of a run can be split by stage and agent
+# without the provider knowing either. Unset, records fall back to the operation, as before 7.2.
+_CALL_CONTEXT: ContextVar[tuple[str, str]] = ContextVar("llm_call_context", default=("", ""))
+
+
+@contextmanager
+def call_context(stage: str, agent: str) -> Iterator[None]:
+    """Tag every model call made inside the block with its pipeline stage and agent."""
+    token = _CALL_CONTEXT.set((stage, agent))
+    try:
+        yield
+    finally:
+        _CALL_CONTEXT.reset(token)
+
+
+def current_call_context() -> tuple[str, str]:
+    """Return the (stage, agent) the pipeline declared for the call being made now."""
+    return _CALL_CONTEXT.get()
 
 
 def _gemini_response_schema(schema: type[BaseModel]) -> dict:
@@ -112,6 +137,27 @@ def _safe_provider_error(exc: Exception) -> ProviderError:
         },
         recommendations=[recommendation],
     )
+
+
+def _quota_error_type(exc: Exception, details: dict) -> type[ProviderError]:
+    """Name the quota a 429 exhausted, trusting what Gemini declares over what its text says.
+
+    The standard free-tier 429 asks to "check your plan and billing details", so reading the
+    text first filed every exhausted daily quota as a billing limit: the three such failures in
+    the corpus all carry quota_id GenerateRequestsPerDayPerProjectPerModel-FreeTier. The text is
+    now the last resort, used only when neither the quota ID nor the metric says anything.
+    """
+    quota_id = str(details.get("quota_id") or "").casefold()
+    metric = str(details.get("metric") or "").casefold()
+    declared = f"{quota_id} {metric}"
+    if "day" in quota_id or "daily" in declared:
+        return GeminiDailyQuotaError
+    if "billing" in declared or "spend" in declared:
+        return GeminiBillingQuotaError
+    text = str(exc).casefold()
+    if not quota_id and not metric and ("billing" in text or "spend" in text):
+        return GeminiBillingQuotaError
+    return GeminiTPMError if "token" in metric else GeminiRPMError
 
 
 def _is_transient_transport_error(exc: Exception) -> bool:
@@ -227,9 +273,9 @@ class GeminiProvider:
                 model=self.model_name,
                 contents=f"{system_instruction}\n\n{prompt}",
             )
-            self._record_auxiliary("count_tokens", started, "succeeded")
+            self._record_auxiliary(COUNT_TOKENS_OPERATION, started, "succeeded")
         except Exception as exc:
-            self._record_auxiliary("count_tokens", started, "failed", type(exc).__name__)
+            self._record_auxiliary(COUNT_TOKENS_OPERATION, started, "failed", type(exc).__name__)
             raise
         tokens = int(getattr(response, "total_tokens", 0) or 0)
         self._token_limiter.acquire(tokens, self.wait_callback)
@@ -246,12 +292,14 @@ class GeminiProvider:
     def _record_auxiliary(
         self, operation: str, started: float, status: str, error_code: str | None = None
     ) -> None:
-        """Handle the record auxiliary operation for GeminiProvider."""
+        """Record one auxiliary request, such as a token count, which is never a call."""
+        stage, agent = current_call_context()
         self._emit_record(
             LLMUsageRecord(
                 call_id=uuid.uuid4().hex,
                 operation=operation,
-                stage=operation,
+                stage=stage or operation,
+                agent=agent,
                 attempt=1,
                 status=status,
                 error_code=error_code,
@@ -262,57 +310,79 @@ class GeminiProvider:
         )
 
     def _record(
-        self, response, operation: str, started: float, retries: int, waited: float
+        self,
+        response,
+        operation: str,
+        call_id: str,
+        attempt: int,
+        duration: float,
+        waited: float,
     ) -> None:
-        """Handle the record operation for GeminiProvider."""
+        """Record the attempt that succeeded, with its own latency and the wait before it."""
         usage = getattr(response, "usage_metadata", None)
 
         def value(name: str) -> int:
             """Read one token counter from optional Gemini usage metadata."""
             return int(getattr(usage, name, 0) or 0) if usage else 0
 
+        stage, agent = current_call_context()
         record = LLMUsageRecord(
-            call_id=uuid.uuid4().hex,
+            call_id=call_id,
             operation=operation,
-            stage=operation,
-            attempt=retries + 1,
+            stage=stage or operation,
+            agent=agent,
+            attempt=attempt + 1,
             status="succeeded",
             model=self.model_name,
             timestamp=datetime.now(UTC),
-            duration_seconds=time.monotonic() - started,
+            duration_seconds=duration,
             prompt_tokens=value("prompt_token_count"),
             candidate_tokens=value("candidates_token_count"),
             thoughts_tokens=value("thoughts_token_count"),
             cached_tokens=value("cached_content_token_count"),
             total_tokens=value("total_token_count"),
-            retries=retries,
+            retries=attempt,
             wait_seconds=waited,
         )
         self._emit_record(record)
 
     def _record_failure(
-        self, operation: str, started: float, attempt: int, waited: float, error_code: str
+        self,
+        operation: str,
+        call_id: str,
+        attempt: int,
+        duration: float,
+        waited: float,
+        error_code: str,
     ) -> None:
-        """Handle the record failure operation for GeminiProvider."""
+        """Record one failed attempt, with its own latency and the wait before it."""
+        stage, agent = current_call_context()
         self._emit_record(
             LLMUsageRecord(
-                call_id=uuid.uuid4().hex,
+                call_id=call_id,
                 operation=operation,
-                stage=operation,
+                stage=stage or operation,
+                agent=agent,
                 attempt=attempt + 1,
                 status="failed",
                 error_code=error_code,
                 model=self.model_name,
                 timestamp=datetime.now(UTC),
-                duration_seconds=time.monotonic() - started,
+                duration_seconds=duration,
                 wait_seconds=waited,
                 retries=attempt,
             )
         )
 
     def _generate(self, operation: str, invoke):
-        """Generate the requested value."""
-        started, waited = time.monotonic(), 0.0
+        """Call the model, retrying what is transient, and record every attempt.
+
+        All attempts share one call_id, so a retried call regroups as one. Each record carries
+        its own attempt's latency and the waiting just before it, never the sum of earlier
+        attempts: 7.1 logged one actor turn as 120, 244, 370 and 382 seconds.
+        """
+        call_id = uuid.uuid4().hex
+        pending_wait = 0.0
         max_retries = getattr(self, "max_retries", 1)
         limiter = getattr(self, "_limiter", None)
         callback = getattr(self, "wait_callback", None)
@@ -320,17 +390,27 @@ class GeminiProvider:
             self.usage_records = []
         # GEMINI_MAX_RETRIES describes retries after the initial request.
         for attempt in range(max_retries + 1):
+            waited, pending_wait = pending_wait, 0.0
             if limiter:
                 waited += limiter.acquire(callback)
+            started = time.monotonic()
             try:
                 response = invoke()
-                self._record(response, operation, started, attempt, waited)
+                self._record(
+                    response, operation, call_id, attempt, time.monotonic() - started, waited
+                )
                 return response
             except Exception as exc:
+                elapsed = time.monotonic() - started
                 details = retry_details(exc)
                 status = details.get("status")
                 self._record_failure(
-                    operation, started, attempt, waited, str(status or type(exc).__name__)
+                    operation,
+                    call_id,
+                    attempt,
+                    elapsed,
+                    waited,
+                    str(status or type(exc).__name__),
                 )
                 quota_id = str(details.get("quota_id") or "").casefold()
                 metric = str(details.get("metric") or "").casefold()
@@ -345,15 +425,7 @@ class GeminiProvider:
                 )
                 if permanent_quota or not transient or attempt >= max_retries:
                     if status == 429:
-                        metric = str(details.get("metric") or "")
-                        quota_id = str(details.get("quota_id") or "")
-                        error_type = (
-                            GeminiTPMError if "token" in metric.casefold() else GeminiRPMError
-                        )
-                        if "day" in quota_id.casefold() or "daily" in metric.casefold():
-                            error_type = GeminiDailyQuotaError
-                        if "spend" in str(exc).casefold() or "billing" in str(exc).casefold():
-                            error_type = GeminiBillingQuotaError
+                        error_type = _quota_error_type(exc, details)
                         raise error_type(
                             f"Gemini agotó la cuota para {self.model_name}.",
                             details={
@@ -376,7 +448,7 @@ class GeminiProvider:
                         recommendations=["Reanuda el trabajo cuando se restablezca la cuota."],
                     ) from exc
                 countdown_wait(delay, "reintento solicitado por Gemini", callback)
-                waited += delay
+                pending_wait = delay
 
     def generate_structured(
         self, *, system_instruction: str, prompt: str, schema: type[T], profile: str

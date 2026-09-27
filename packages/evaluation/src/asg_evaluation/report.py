@@ -81,6 +81,10 @@ def _describe(
     collection = relative.parts[0] if relative.parts else UNKNOWN
     approach = _approach(directory, collection)
     profile = _json_field(directory / "request.json", "narrative_profile")
+    if profile is None:
+        # Since 7.2 metadata.json also carries the profile, so a run that failed before its
+        # request was analyzed still lands on the profile axis.
+        profile = _json_field(directory / "metadata.json", "narrative_profile")
     generator = _json_field(directory / "generator_version.json", "generator_version")
     pipeline = _json_field(directory / "generator_version.json", "pipeline_version")
     if pipeline is None:

@@ -13,7 +13,7 @@ foreshadowing a scene it has not lived yet.
 
 from __future__ import annotations
 
-from .perception import visible_text
+from .perception import stage_direction, visible_text
 from .schemas import (
     ActorDossier,
     BeatBrief,
@@ -89,6 +89,10 @@ def actor_system_prompt(
             "it rather than repeating yourself in new words.",
             "- One move per turn, in a short line, as people talk. Say or do one thing and let "
             "the others answer; a speech is not a turn.",
+            "- When someone has just spoken to you, answer that first - take it up, contradict "
+            "it or dodge it - and only then push for what you want. Answering is not giving in.",
+            "- When you speak to someone in particular, put their name in addressed_to as it "
+            "appears under CONTIGO EN ESCENA. To be heard by them alone, whisper.",
             "- Speak only for yourself. Never describe what another character thinks or decides.",
             "- Your action is a stage direction: third person, without your own name, only what "
             "an audience could see ('cruza los brazos', never 'cruzo los brazos'). Do not repeat "
@@ -146,9 +150,28 @@ def actor_turn_context(
         )
     else:
         blocks.append("LA ESCENA ACABA DE EMPEZAR. Te toca abrirla.")
+    addressed = _unanswered_line(witnessed, character_id, names)
+    if addressed:
+        blocks.append(f"TE ACABAN DE DECIR:\n{addressed}")
     if note:
         blocks.append(f"NOTA DEL DIRECTOR (nunca la menciones):\n{strip_internal_ids(note)}")
     return "\n\n".join(blocks)
+
+
+def _unanswered_line(turns: list[StageTurn], character_id: str, names: dict[str, str]) -> str:
+    """Return the last line spoken to this character that it has not answered yet.
+
+    Derived from addressed_to, so it needs no model call. The 7.1 scenes were rounds of
+    monologues: each character pressed its own agenda and nobody took up what was said to them.
+    """
+    for turn in reversed(turns):
+        if turn.kind != "actor":
+            continue
+        if turn.actor_id == character_id:
+            return ""
+        if character_id in turn.addressed_to and turn.speech:
+            return visible_text(turn, character_id, names)
+    return ""
 
 
 def director_beat_context(
@@ -215,7 +238,7 @@ def transcript(turns: list[StageTurn], names: dict[str, str]) -> str:
         speaker = names.get(turn.actor_id, turn.actor_id)
         pieces = []
         if turn.action:
-            pieces.append(f"({speaker} {turn.action})")
+            pieces.append(f"({stage_direction(speaker, turn.action, names)})")
         if turn.speech:
             aside = ""
             if turn.visibility == "whisper":
@@ -252,7 +275,7 @@ def scene_log(
         if mark:
             lines.append(mark.strip())
         if turn.action:
-            lines.append(f"({speaker} {turn.action})")
+            lines.append(f"({stage_direction(speaker, turn.action, names)})")
         if turn.speech:
             aside = ""
             if turn.visibility == "whisper":

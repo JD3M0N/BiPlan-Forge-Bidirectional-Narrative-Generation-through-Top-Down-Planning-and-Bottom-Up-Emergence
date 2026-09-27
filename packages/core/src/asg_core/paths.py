@@ -54,5 +54,6 @@ def slugify(value: str, *, fallback: str = "item", max_length: int = 60) -> str:
     """Convert text into a short ASCII slug suitable for directory names."""
     normalized = unicodedata.normalize("NFKD", value)
     ascii_value = normalized.encode("ascii", "ignore").decode("ascii").lower()
-    slug = re.sub(r"[^a-z0-9]+", "-", ascii_value).strip("-")[:max_length]
+    # Stripped again after the cut: truncating can land right after a separator.
+    slug = re.sub(r"[^a-z0-9]+", "-", ascii_value).strip("-")[:max_length].rstrip("-")
     return slug or fallback

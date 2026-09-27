@@ -16,7 +16,7 @@ import re
 
 from ..agents import ActorAgent, CastingDirectorAgent, NarratorAgent, StageManagerAgent
 from ..planning.promise_brief import chapter_brief
-from ..runtime.errors import NON_DEGRADABLE_ERRORS
+from ..runtime.errors import NON_DEGRADABLE_ERRORS, ASGError
 from ..schemas import (
     ChapterPresentation,
     CharactersArtifact,
@@ -231,14 +231,13 @@ class SimulationStagesMixin:
             engine.on_direction = lambda entry, scene_id=brief.scene_id: (
                 self.repository.append_jsonl(f"stage/{scene_id}/director.jsonl", entry)
             )
-            engine.on_turn = lambda turn, context, scene_id=brief.scene_id: (
-                self.repository.append_jsonl(f"stage/{scene_id}/turns.jsonl", turn),
-                self.repository.append_jsonl(
-                    f"stage/{scene_id}/contexts.jsonl",
-                    {"turn_id": turn.id, "actor_id": turn.actor_id, "context": context},
-                ),
-            )
-            scene = engine.perform_scene(brief)
+            engine.on_turn = self._turn_logger(brief.scene_id)
+            try:
+                scene = engine.perform_scene(brief)
+            except ASGError as error:
+                # A performance is a hundred calls long: say which scene it died in.
+                error.details.setdefault("scene_id", brief.scene_id)
+                raise
             scenes.append(scene)
             self.repository.save_text(
                 f"stage/{brief.scene_id}/transcript.md", transcript(scene.turns, names)
@@ -284,6 +283,23 @@ class SimulationStagesMixin:
             self.repository.add_warning(warning)
         self.repository.complete_stage("performance")
         return performance, engine, briefs
+
+    def _turn_logger(self, scene_id: str):
+        """Build the callback that logs each performed turn of one scene as it happens."""
+        assert self.repository is not None
+        repository = self.repository
+
+        def log_turn(turn, context: str) -> None:
+            """Log one turn, and the prompt block that produced it when there was one."""
+            repository.append_jsonl(f"stage/{scene_id}/turns.jsonl", turn)
+            # A world event has no prompt behind it; an empty context would claim one.
+            if context:
+                repository.append_jsonl(
+                    f"stage/{scene_id}/contexts.jsonl",
+                    {"turn_id": turn.id, "actor_id": turn.actor_id, "context": context},
+                )
+
+        return log_turn
 
     def _scene_briefs(
         self,
@@ -468,10 +484,15 @@ class SimulationStagesMixin:
                 candidate = self._call_agent("narrator", narrate_once).strip()
             except NON_DEGRADABLE_ERRORS:
                 raise
-            except Exception:
+            except Exception as exc:
+                # Left on disk like a failed Writer rewrite, so a fallback chapter says why.
+                self.repository.save_data(
+                    f"narration/chapter-{index:03d}-attempt-{attempt:03d}-error.json",
+                    {"attempt": attempt, "status": "failed", "exception_type": type(exc).__name__},
+                )
                 feedback = (
-                    "\n\nRETRY CORRECTION:\nThe previous attempt could not be completed. "
-                    "Return the complete chapter."
+                    "\n\nRETRY CORRECTION:\nThe previous attempt could not be completed "
+                    f"({type(exc).__name__}). Return the complete chapter."
                 )
                 continue
             self.repository.save_text(
@@ -508,6 +529,7 @@ class SimulationStagesMixin:
             story=story,
             narration_fallbacks=fallbacks,
             bible=bible,
+            emotions=engine.emotions,
         )
         metrics = metrics.model_copy(update={"narrative_voice": narration.narrative_voice})
         self.repository.save_json("simulation_metrics.json", metrics)

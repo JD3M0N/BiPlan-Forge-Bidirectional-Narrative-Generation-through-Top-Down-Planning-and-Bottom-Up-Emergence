@@ -66,6 +66,12 @@ _SCRIPTED_MOVES = [
     ),
 ]
 
+
+def _lap_words(stem: str, lap: int, count: int) -> str:
+    """Return words no other round of the scripted moves shares."""
+    return " ".join(f"{stem}{lap}{chr(97 + index)}" for index in range(count))
+
+
 _CAST_IDS = re.compile(r"WRITE ONE DOSSIER FOR EACH OF THESE IDS: (.+)")
 _OPENING_CAST = re.compile(r"^- .+ \((\S+)\) quiere:", re.MULTILINE)
 _TURN_IDS = re.compile(r"^(\S+-scene-\d+-t\d+)", re.MULTILINE)
@@ -225,6 +231,14 @@ class StageFakeProvider(FakeProvider):
         # rejected by the repetition rule, which is correct behaviour but would leave the happy
         # path untested: scenes would end after a single accepted turn.
         speech, action, thought, tactic = _SCRIPTED_MOVES[self.actor_number % len(_SCRIPTED_MOVES)]
+        # The engine compares a line against everything its speaker said in the whole play, so a
+        # scripted move that comes round again carries words of its own round: the happy path
+        # must not trip a rule it is not testing. Gestures always carry them, because the
+        # gesture rule measures containment and an added clause alone would not change it.
+        lap = self.actor_number // len(_SCRIPTED_MOVES)
+        if lap:
+            speech = f"{speech} {_lap_words('ronda', lap, 6)}"
+        action = f"{action} {_lap_words('paso', lap, 2)}"
         self._last_speech[speaker] = speech
         return ActorTurnDraft(thought=thought, action=action, speech=speech, tactic=tactic)
 

@@ -110,6 +110,10 @@ class StagecraftGenerator:
             ).run_dir
         except ASGError as error:
             raise _as_failure(error) from error
+        finally:
+            # Jobs run one after another on this one provider, and each run has already written
+            # its own usage to disk: keeping the records only grew the bot's memory without end.
+            self._provider.usage_records.clear()
 
     def summarize(self, run_dir: Path) -> RunSummary:
         """Read a finished run and describe it for the chat."""

@@ -56,7 +56,12 @@ def _render_cast(play: PlayScript) -> str:
     lines = [f"## {play.cast_heading}"]
     for member in play.cast:
         entry = f"- {member.name.upper()}"
-        lines.append(f"{entry}, {member.description}." if member.description else f"{entry}.")
+        description = member.description.strip()
+        # A description that already ends its sentence keeps its own stop; the 25-09 scripts
+        # printed ".." on every entry because a period was always added.
+        if description and description[-1] not in ".!?…":
+            description = f"{description}."
+        lines.append(f"{entry}, {description}" if description else f"{entry}.")
     return "\n".join(lines)
 
 

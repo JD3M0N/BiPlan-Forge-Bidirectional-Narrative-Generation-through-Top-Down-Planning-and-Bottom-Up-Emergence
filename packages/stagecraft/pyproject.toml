@@ -9,8 +9,8 @@ description = "Hybrid automatic story generation: top-down planning, bottom-up p
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-  "asg-core>=0.5.0",
-  "asg-evaluation>=0.2.0",
+  "asg-core>=0.5.1",
+  "asg-evaluation>=0.6.0",
   "google-genai>=1.0,<2",
   "pydantic>=2.7,<3",
   "python-dotenv>=1.0,<2",
@@ -21,6 +21,7 @@ generate-story = "asg_stagecraft.tools.generate:main"
 compare-story-runs = "asg_stagecraft.tools.compare:main"
 recover-story-runs = "asg_stagecraft.tools.recovery:main"
 audit-stage-run = "asg_stagecraft.tools.audit_stage:main"
+recompute-simulation-metrics = "asg_stagecraft.tools.recompute:main"
 
 [tool.hatch.version]
 path = "src/asg_stagecraft/version.py"

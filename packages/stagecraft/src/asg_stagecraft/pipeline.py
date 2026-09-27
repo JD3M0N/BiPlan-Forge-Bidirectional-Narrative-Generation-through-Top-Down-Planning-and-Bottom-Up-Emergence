@@ -35,6 +35,7 @@ from .planning.promises import materialize_ledger
 from .planning.repair import repair_guidance
 from .runtime.errors import NON_DEGRADABLE_ERRORS, PlotValidationError, RunInterruptedError
 from .runtime.progress import PipelineEvent, PipelineEventCallback, ProgressCallback, ProgressUpdate
+from .runtime.provider import COUNT_TOKENS_OPERATION, call_context
 from .runtime.storage import ArtifactRepository
 from .schemas import (
     ChapterPlan,
@@ -97,6 +98,10 @@ CHECKPOINT_STAGES = (
 # progress range and the performance and narration own the rest.
 PRE_PERFORMANCE_CEILING = 48
 PRE_PERFORMANCE_STAGES = frozenset(CHECKPOINT_STAGES[: CHECKPOINT_STAGES.index("casting")])
+
+# The folder name of a run whose request could not be analyzed; the prompt goes to
+# submitted_request.json instead of into the name.
+UNANALYZED_TITLE = "peticion sin analizar"
 
 # Planning attempts allowed per narrative profile. Expansive carries the strictest structural
 # contract (a causal branch followed by a causal join), so it gets one extra repair attempt.
@@ -186,6 +191,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
             request = self._analyze_request(submitted)
         except Exception as exc:
             self.repository = self._create_repository(self._fallback_title(submitted))
+            self._save_submitted_request(submitted)
             self._record_failure(exc)
             raise
         self.repository = self._create_repository(request.title)
@@ -262,8 +268,29 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
 
     @staticmethod
     def _fallback_title(request: StoryRequest | str) -> str:
-        """Name a run whose analysis failed, so its failure still lands somewhere readable."""
-        return request.title if isinstance(request, StoryRequest) else request
+        """Name a run whose analysis failed, so its failure still lands somewhere readable.
+
+        A raw prompt made a poor name - 060405 was called after the first sixty characters of
+        its prompt, cut mid-word - so an unanalyzed request gets a neutral one, and the prompt
+        itself is kept in submitted_request.json.
+        """
+        return request.title if isinstance(request, StoryRequest) else UNANALYZED_TITLE
+
+    def _save_submitted_request(self, request: StoryRequest | str) -> None:
+        """Keep what was asked for when analysis failed, so the run can be understood."""
+        assert self.repository is not None
+        prompt = request.original_prompt if isinstance(request, StoryRequest) else request
+        profile = self.narrative_profile
+        self.repository.save_data(
+            "submitted_request.json",
+            {
+                "prompt": prompt,
+                "narrative_profile": profile.value if profile else None,
+                "story_format": self.story_format.value,
+            },
+        )
+        if profile:
+            self.repository.metadata.narrative_profile = profile
 
     def _create_repository(self, title: str) -> ArtifactRepository:
         """Create the run repository and attach artifact event reporting."""
@@ -321,12 +348,21 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
         self._save_usage()
 
     def _usage_artifact(self) -> LLMUsageArtifact:
-        """Aggregate provider usage produced by the current run."""
+        """Aggregate this run's provider usage into logical calls, attempts and auxiliaries.
+
+        A call is every attempt sharing one call_id, and it failed when its last attempt did.
+        Before 7.2 each failed attempt counted as a failed call and token counts as calls.
+        """
         records = list(getattr(self.provider, "usage_records", []))[self.usage_start :]
+        requests = [item for item in records if item.operation != COUNT_TOKENS_OPERATION]
+        last_attempt = {item.call_id: item for item in requests}
         return LLMUsageArtifact(
             records=records,
-            calls=len(records),
-            failed_calls=sum(item.status == "failed" for item in records),
+            calls=len(last_attempt),
+            failed_calls=sum(item.status == "failed" for item in last_attempt.values()),
+            attempts=len(requests),
+            failed_attempts=sum(item.status == "failed" for item in requests),
+            auxiliary_calls=len(records) - len(requests),
             total_tokens=sum(item.total_tokens for item in records),
             total_wait_seconds=sum(item.wait_seconds for item in records),
         )
@@ -340,6 +376,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
         """Persist the analyzed request and complete the analysis stage."""
         assert self.repository is not None
         self.repository.save_json("request.json", request)
+        self.repository.metadata.narrative_profile = request.narrative_profile
         self.repository.complete_stage("analysis")
 
     def _build_blueprint(self, request: StoryRequest) -> NarrativeBlueprint | None:
@@ -1120,9 +1157,13 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
             pass
 
     def _record_failure(self, error: Exception) -> None:
-        """Persist a failed pipeline outcome before re-raising the error."""
+        """Persist a failed pipeline outcome before re-raising the error.
+
+        The stage recorded is the pipeline's, where the run stopped; the error's own stage is
+        the component that raised it and travels in the report's details.
+        """
         assert self.repository is not None
-        stage = getattr(error, "stage", self.progress["stage"])
+        stage = self.progress["stage"]
         summary = getattr(error, "summary", type(error).__name__)
         self._emit("pipeline_failed", f"fallo la etapa {stage}: {summary}", stage=stage)
         self._save_usage()
@@ -1143,9 +1184,10 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
         self.repository.fail(interrupted, stage=stage)
 
     def _call_agent(self, name: str, function: Callable[[], T]) -> T:
-        """Emit an agent event and execute the supplied agent operation."""
+        """Emit an agent event and run the agent, tagging its model calls with stage and agent."""
         self._emit("agent_called", f"se llamo al agente {name}", stage=self.progress["stage"])
-        return function()
+        with call_context(self.progress["stage"], name):
+            return function()
 
     def _notify(
         self,

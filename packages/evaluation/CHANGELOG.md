@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0] - 2026-09-26
+
+- `report-story-craft` reads `failed_calls` as not measured for runs before pipeline 7.2, where
+  it counted failed attempts rather than failed calls.
+- The reports take a run's narrative profile from `metadata.json` when `request.json` is
+  missing, so a run that failed in analysis still lands on the profile axis.
+
 ## [0.5.0] - 2026-09-26
 
 - Added the internal `artifacts` module with the tolerant readers the three reports copied:

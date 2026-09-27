@@ -266,10 +266,12 @@ Stagecraft lleva esos resultados a su conclusión:
 
 Es SimToM y PercepToM por construcción.
 
-**Una advertencia medida.** En 7.1.1 la recuperación de `stage/memory.py` todavía no aplica su
-tope, y cada actor lee toda su memoria anterior: entre 52 y 72 recuerdos por turno como máximo en
-las cinco funciones representadas (SIM-9). La frontera de conocimiento se mantiene, porque lo que un personaje
-no presenció sigue sin estar. Lo que no se cumple es que solo viajen los recuerdos más relevantes.
+**Una advertencia medida.** Hasta 7.1.1 la recuperación de `stage/memory.py` no aplicaba su tope,
+y cada actor leía toda su memoria anterior: entre 52 y 72 recuerdos por turno como máximo en las
+cinco funciones representadas (SIM-9, arreglado en 7.2.0). La frontera de conocimiento se mantuvo,
+porque lo que un personaje no presenció seguía sin estar. Lo que no se cumplía es que solo
+viajaran los recuerdos más relevantes, así que esas funciones no se comparan con las nuevas como
+si tuvieran la misma memoria.
 
 ## 8. Curar el log: el narrador como discurso
 

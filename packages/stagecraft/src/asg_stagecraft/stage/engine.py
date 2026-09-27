@@ -33,7 +33,7 @@ from ..formats import ActorMemory
 from ..runtime.errors import NON_DEGRADABLE_ERRORS, StagePerformanceError
 from . import policy
 from .memory import CharacterMemory
-from .perception import witnesses
+from .perception import stage_direction, witnesses
 from .render import actor_turn_context, director_beat_context, scene_log
 from .schemas import (
     ActorDossier,
@@ -156,6 +156,12 @@ class PerformanceEngine:
         # World events already used anywhere in the play, so the director never reaches for the
         # same device twice: the first real run used three thunderclaps and a power cut.
         self.used_events: list[str] = []
+        # Everything each actor has said and done in the play, across scenes, so a line repeated
+        # a scene later is caught like one repeated a turn later. 7.1 let one through verbatim.
+        self._spoken: dict[str, list[str]] = {}
+        self._gestures: dict[str, list[str]] = {}
+        # How each character left every scene, in order: the emotion its reflection named.
+        self.emotions: dict[str, list[str]] = {}
         self._failures = 0
         self._seed_initial_knowledge()
 
@@ -202,7 +208,8 @@ class PerformanceEngine:
         turns_in_beat = checks = 0
 
         while True:
-            self._advance(run, index, beat, requested, notes)
+            moved = self._advance(run, index, beat, requested, notes)
+            notes = self._consume(notes, moved)
             requested = ""
             turns_in_beat += 1
             record.turns += 1
@@ -239,9 +246,15 @@ class PerformanceEngine:
             event_turn = self._stage_event_turn(run, index, beat, verdict.stage_event)
             run.turns.append(event_turn)
             self._record_turn(event_turn, run.brief.number)
+            # The world's turn belongs in the turn log like any other: 7.1 wrote one turn fewer
+            # to turns.jsonl than the performance counted, for every event the world supplied.
+            if self.on_turn:
+                self.on_turn(event_turn, "")
         first = verdict.turning_actor_id if verdict.turning_actor_id in run.on_stage else ""
+        notes = list(verdict.notes)
         for position in range(self.reaction_turns):
-            self._advance(run, index, beat, first if position == 0 else "", verdict.notes)
+            moved = self._advance(run, index, beat, first if position == 0 else "", notes)
+            notes = self._consume(notes, moved)
             record.reaction_turns += 1
             record.turns += 1
         final = self._check(run, index, beat, "final")
@@ -283,7 +296,8 @@ class PerformanceEngine:
         notes = [f"{actor}: {CODA_NOTE}" for actor in chosen]
         played = 0
         for actor in chosen:
-            self._advance(run, index, beat, actor, notes)
+            moved = self._advance(run, index, beat, actor, notes)
+            notes = self._consume(notes, moved)
             played += 1
         return played
 
@@ -296,8 +310,11 @@ class PerformanceEngine:
         beat: BeatBrief,
         requested: str,
         notes: list[str],
-    ) -> None:
-        """Play the next turn of the scene, recording it or counting it as skipped."""
+    ) -> str:
+        """Play the next turn of the scene, recording it or counting it as skipped.
+
+        Returns who was given the turn, so the caller can retire the note that actor just got.
+        """
         actor_id = policy.next_actor(on_stage=run.on_stage, turns=run.turns, requested=requested)
         turn, failures = self._play_turn(
             scene=run.brief,
@@ -317,9 +334,27 @@ class PerformanceEngine:
                 f"[STAGE_TURN_SKIPPED] {run.brief.scene_id}: "
                 f"{self.names.get(actor_id, actor_id)} no produjo un turno valido."
             )
-            return
+            return actor_id
         run.turns.append(turn)
         self._record_turn(turn, run.brief.number)
+        if turn.speech:
+            self._spoken.setdefault(actor_id, []).append(turn.speech)
+        if turn.action:
+            self._gestures.setdefault(actor_id, []).append(turn.action)
+        return actor_id
+
+    @staticmethod
+    def _consume(notes: list[str], actor_id: str) -> list[str]:
+        """Retire the note an actor has just been given, so it is delivered once, not every turn.
+
+        In 7.1 a note stayed live until the director's next reading, and two characters
+        confessed the same thing twice because they were told to twice.
+        """
+        for position, note in enumerate(notes):
+            head, _, body = note.partition(":")
+            if head.strip().casefold() == actor_id.casefold() and body.strip():
+                return [*notes[:position], *notes[position + 1 :]]
+        return notes
 
     def _play_turn(
         self,
@@ -354,9 +389,8 @@ class PerformanceEngine:
             character_id=actor_id,
             names=self.names,
         )
-        own = [turn for turn in turns if turn.actor_id == actor_id and turn.kind == "actor"]
-        previous_speech = [turn.speech for turn in own if turn.speech]
-        previous_actions = [turn.action for turn in own if turn.action]
+        previous_speech = self._spoken.get(actor_id, [])
+        previous_actions = self._gestures.get(actor_id, [])
         feedback = ""
         rejections = 0
         for attempt in range(1, TURN_ATTEMPTS + 1):
@@ -377,7 +411,10 @@ class PerformanceEngine:
                 continue
             self._failures = 0
             candidate = normalize_turn(
-                draft, on_stage=on_stage, actor_name=self.names.get(actor_id, "")
+                draft,
+                on_stage=on_stage,
+                actor_name=self.names.get(actor_id, ""),
+                names=self.names,
             )
             try:
                 validate_turn(
@@ -598,7 +635,7 @@ class PerformanceEngine:
             visible = " ".join(
                 piece
                 for piece in (
-                    f"({speaker} {turn.action})" if turn.action else "",
+                    f"({stage_direction(speaker, turn.action, self.names)})" if turn.action else "",
                     f"{speaker}: {turn.speech}" if turn.speech else "",
                 )
                 if piece
@@ -666,6 +703,8 @@ class PerformanceEngine:
                     importance=min(1.0, reflection.importance + 0.1),
                 )
             self.states[character_id] = self._consolidate(character_id, scene.number, reflection)
+            if reflection.emotion:
+                self.emotions.setdefault(character_id, []).append(reflection.emotion)
 
     def _consolidate(
         self, character_id: str, scene_number: int, reflection: ReflectionDraft

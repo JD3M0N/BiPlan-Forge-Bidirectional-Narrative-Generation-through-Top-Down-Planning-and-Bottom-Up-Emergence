@@ -5,7 +5,9 @@ from asg_stagecraft import StoryGenerator
 from asg_stagecraft import pipeline as pipeline_module
 from asg_stagecraft.formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
 from asg_stagecraft.runtime.errors import GeminiDailyQuotaError
+from asg_stagecraft.runtime.provider import current_call_context
 from asg_stagecraft.stage.schemas import NarrationArtifact, PerformanceArtifact
+from asg_stagecraft.tools import recompute
 from stage_fakes import StageFakeProvider
 from test_generator_v5 import major_story_review, make_request
 
@@ -281,12 +283,91 @@ def test_the_narrator_falls_back_without_losing_the_run(tmp_path) -> None:
     assert read_json(run, "simulation_metrics.json")["narration_source_fallbacks"] >= 1
 
 
+def test_a_narrator_failure_leaves_its_exception_on_disk(tmp_path) -> None:
+    """Found in 7.1: a failed narration was swallowed without saying why, unlike the Writer."""
+    provider = StageFakeProvider(story_review=major_story_review(), fail_narrator_call={1})
+    run, _ = generate(tmp_path, provider)
+    error = read_json(run, "narration/chapter-001-attempt-001-error.json")
+    assert error["exception_type"] == "RuntimeError"
+    assert (run.run_dir / "narration" / "chapter-001.md").is_file()
+
+
+def test_the_turn_log_holds_every_turn_the_performance_counted(tmp_path) -> None:
+    """Found in 7.1: turns.jsonl skipped the world's turns, one line short per event."""
+    provider = StageFakeProvider(story_review=major_story_review(), beat_needs_world=True)
+    run, _ = generate(tmp_path, provider, turns_per_beat=2)
+    logged = [
+        json.loads(line)
+        for path in sorted(run.run_dir.glob("stage/*/turns.jsonl"))
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line
+    ]
+    contexts = [
+        line
+        for path in sorted(run.run_dir.glob("stage/*/contexts.jsonl"))
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line
+    ]
+    metrics = read_json(run, "simulation_metrics.json")
+    assert len(logged) == metrics["turns"]
+    assert any(item["kind"] == "world" for item in logged)
+    assert len(contexts) == sum(1 for item in logged if item["kind"] == "actor")
+
+
+def test_the_measurements_can_be_recomputed_from_the_logs_alone(tmp_path) -> None:
+    """The 7.0 runs lacked every figure 7.1 added, and the doc quoted them recomputed by hand."""
+    run, _ = generate(tmp_path)
+    original = (run.run_dir / "simulation_metrics.json").read_bytes()
+    assert recompute.main([str(run.run_dir)]) == 0
+    assert read_json(run, recompute.OUTPUT_NAME) == read_json(run, "simulation_metrics.json")
+    assert (run.run_dir / "simulation_metrics.json").read_bytes() == original
+
+
+def test_every_stage_call_is_tagged_with_its_agent(tmp_path) -> None:
+    """MED-2: the stage field repeated the schema, so actor, director and narrator were guesses."""
+    contexts: list[tuple[str, str]] = []
+
+    class TaggingProvider(StageFakeProvider):
+        def generate_structured(self, **kwargs):
+            contexts.append(current_call_context())
+            return super().generate_structured(**kwargs)
+
+        def generate_text(self, **kwargs):
+            contexts.append(current_call_context())
+            return super().generate_text(**kwargs)
+
+    generate(tmp_path, TaggingProvider(story_review=major_story_review()))
+    assert all(stage and agent for stage, agent in contexts), contexts
+    assert {("performance", "actor"), ("performance", "stage_manager")} <= set(contexts)
+    assert ("narration", "narrator") in set(contexts)
+
+
+def test_each_actor_records_how_it_left_every_scene(tmp_path) -> None:
+    """emotions was always []: nothing filled it, although every reflection names one."""
+    run, _ = generate(tmp_path)
+    actors = read_json(run, "simulation_metrics.json")["actor_metrics"]
+    assert actors and all(item["emotions"] for item in actors)
+    assert {emotion for item in actors for emotion in item["emotions"]} == {"inquieta"}
+
+
 def test_the_director_failing_does_not_stop_the_performance(tmp_path) -> None:
     provider = StageFakeProvider(story_review=major_story_review(), fail_director=True)
     run, _ = generate(tmp_path, provider, turns_per_beat=2)
     assert run.story_path.is_file()
     metadata = read_json(run, "metadata.json")
     assert any("BEAT_CHECK_FALLBACK" in warning for warning in metadata["warnings"])
+
+
+def test_a_failure_in_the_performance_names_its_scene(tmp_path) -> None:
+    """MED-4: 054422 died in the performance and its report said only "provider"."""
+    provider = StageFakeProvider(story_review=major_story_review(), quota_error_at_stage="actor")
+    with pytest.raises(GeminiDailyQuotaError):
+        generate(tmp_path, provider)
+    run_dir = next(iter(tmp_path.iterdir()))
+    report = json.loads((run_dir / "error_report.json").read_text(encoding="utf-8"))
+    assert report["stage"] == "performance"
+    assert report["details"]["component"] == "provider"
+    assert report["details"]["scene_id"].endswith("scene-1")
 
 
 @pytest.mark.parametrize("role", ["casting", "actor", "director", "narrator"])

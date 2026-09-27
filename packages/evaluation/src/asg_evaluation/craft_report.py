@@ -169,6 +169,10 @@ def _integer(document: dict, field: str) -> int | None:
     return int(value) if isinstance(value, int) and not isinstance(value, bool) else None
 
 
+# The first pipeline whose llm_usage.json counts logical calls rather than attempts.
+LOGICAL_CALLS_SINCE = (7, 2)
+
+
 def _wall_duration(metadata: dict) -> float | None:
     """Measure the wall-clock seconds between the first and the last metadata write."""
     started, ended = text_field(metadata, "created_at"), text_field(metadata, "updated_at")
@@ -181,8 +185,14 @@ def _wall_duration(metadata: dict) -> float | None:
     return round(elapsed.total_seconds(), 3)
 
 
-def _run_counts(directory: Path, on_error: ErrorHandler | None) -> RunCounts:
-    """Collect the countable sidecar artifacts of one run."""
+def _run_counts(
+    directory: Path, on_error: ErrorHandler | None, pipeline: str | None = None
+) -> RunCounts:
+    """Collect the countable sidecar artifacts of one run.
+
+    Before pipeline 7.2 failed_calls counted every failed attempt as a failed call, so for an
+    older run the figure is not the one the column names and reads as not measured.
+    """
     plan = load_json_object(directory / "story_plan.json", on_error)
     characters = load_json_object(directory / "characters.json", on_error)
     world = load_json_object(directory / "world.json", on_error)
@@ -198,7 +208,11 @@ def _run_counts(directory: Path, on_error: ErrorHandler | None) -> RunCounts:
         review_strengths=_length(review, "strengths"),
         constraint_checks=_length(review, "constraint_checks"),
         llm_calls=_integer(usage, "calls"),
-        llm_failed_calls=_integer(usage, "failed_calls"),
+        llm_failed_calls=(
+            _integer(usage, "failed_calls")
+            if version_key(pipeline) >= LOGICAL_CALLS_SINCE
+            else None
+        ),
         llm_total_tokens=_integer(usage, "total_tokens"),
         llm_total_wait_seconds=number_field(usage, "total_wait_seconds"),
     )
@@ -232,7 +246,7 @@ def read_story_craft(
         duration_seconds=_wall_duration(metadata),
         craft=craft_metrics(_read_story(run_dir, on_error)),
         recorded=load_json_object(run_dir / METRICS_FILENAME, on_error),
-        counts=_run_counts(run_dir, on_error),
+        counts=_run_counts(run_dir, on_error, pipeline),
         blueprint_macroplot=text_field(blueprint, "macroplot_id"),
         story_format=story_format,
         script_method=script_method,

@@ -316,14 +316,15 @@ class ActorTurnDraft(BaseModel):
     addressed_to: list[str] = Field(
         default_factory=list,
         description=(
-            "Character IDs this turn is directed at. Empty when addressed to everyone present."
+            "The names of the characters this turn is directed at, as listed under CONTIGO EN "
+            "ESCENA. Empty only when addressed to everyone present."
         ),
     )
     visibility: TurnVisibility = Field(
         default="public",
         description=(
             "'public' when everyone on stage perceives it, 'whisper' when only addressed_to do. "
-            "A whisper needs addressed_to."
+            "A whisper needs the name of whoever it is for in addressed_to."
         ),
     )
     tactic: Tactic = Field(description="The move this turn tries, from the fixed list.")
@@ -336,6 +337,8 @@ class StageTurn(ActorTurnDraft):
     ActorTurnDraft and the engine mints the rest once the turn holds.
     """
 
+    # From here on addressed_to holds character IDs: normalize_turn resolves the names the actor
+    # wrote, so the log never depends on how a model spelled someone.
     id: str
     scene_id: str = Field(pattern=ID_PATTERN)
     number: int = Field(ge=1)

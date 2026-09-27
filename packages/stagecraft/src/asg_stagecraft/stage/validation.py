@@ -18,13 +18,18 @@ from __future__ import annotations
 
 import re
 
+from ..planning.skeleton_match import normalize
 from .memory import tokens
 from .schemas import ActorTurnDraft
 
-# A candidate is a repeat when it overlaps this much with one of the speaker's own recent turns.
+# A candidate is a repeat when it overlaps this much with one of the speaker's own earlier lines.
+# Speech is compared against everything the speaker has said in the play: a near-verbatim line is
+# a repeat however long ago it was said, and 7.1 had one said again a whole scene later.
 REPETITION_THRESHOLD = 0.75
-# How many of the speaker's own previous turns a candidate is compared against.
+# How many of the speaker's own previous gestures a new action is compared against.
 REPETITION_WINDOW = 3
+# A word of a name shorter than this says too little to pick one character out of a cast.
+_MIN_NAME_WORD = 3
 # A gesture is replayed when the new action contains this much of an earlier one. Containment,
 # not overlap: the real repeats kept the whole gesture and tacked a clause onto it.
 ACTION_CONTAINMENT = 0.8
@@ -57,7 +62,11 @@ class TurnIssue(ValueError):
 
 
 def normalize_turn(
-    turn: ActorTurnDraft, *, on_stage: list[str], actor_name: str = ""
+    turn: ActorTurnDraft,
+    *,
+    on_stage: list[str],
+    actor_name: str = "",
+    names: dict[str, str] | None = None,
 ) -> ActorTurnDraft:
     """Clean cosmetic drift and fix the forms that have exactly one correct reading."""
     # Quotes and a dialogue dash both get stripped, and a model that adds one often adds the
@@ -76,7 +85,7 @@ def normalize_turn(
         thought = ""
     # An actor cannot address someone who is not in the scene; dropping them is the only
     # correction that keeps the turn, and the cast is the script's, not the actor's, to change.
-    addressed = [item for item in dict.fromkeys(turn.addressed_to) if item in set(on_stage)]
+    addressed = _addressees(turn.addressed_to, on_stage, names or {})
     visibility = turn.visibility
     # A whisper with nobody to whisper to is a public line that mislabelled itself.
     if visibility == "whisper" and not addressed:
@@ -186,13 +195,39 @@ def echo_of(line: str, candidates: list[str]) -> float:
 
 
 def _closest_repeat(speech: str, previous: list[str]) -> str | None:
-    """Return the recent line a candidate repeats, or None when it says something new."""
+    """Return the earlier line a candidate repeats, or None when it says something new."""
     if not speech:
         return None
-    for earlier in reversed(previous[-REPETITION_WINDOW:]):
+    for earlier in reversed(previous):
         if similarity(speech, earlier) >= REPETITION_THRESHOLD:
             return earlier[:80]
     return None
+
+
+def _addressees(requested: list[str], on_stage: list[str], names: dict[str, str]) -> list[str]:
+    """Map what an actor wrote as recipients onto the IDs of the characters on stage.
+
+    Actors are shown names and never IDs, so a recipient arrives as "Mara Vela", "Mara" or
+    "Vela". Each one is resolved when it can only mean one character present - by ID, full name
+    or a single word of the name - and dropped otherwise. In 7.1 the schema asked for IDs the
+    actor had never seen, and 79 turns of 80 reached the log addressed to nobody.
+    """
+    keys: dict[str, set[str]] = {}
+    for character_id in on_stage:
+        name = normalize(names.get(character_id, ""))
+        candidates = {normalize(character_id), name}
+        candidates.update(word for word in name.split() if len(word) >= _MIN_NAME_WORD)
+        for key in candidates:
+            if key:
+                keys.setdefault(key, set()).add(character_id)
+    resolved: list[str] = []
+    for item in requested:
+        matches = keys.get(normalize(item), set())
+        if len(matches) == 1:
+            (character_id,) = matches
+            if character_id not in resolved:
+                resolved.append(character_id)
+    return resolved
 
 
 def _strip_own_name(action: str, actor_name: str) -> str:

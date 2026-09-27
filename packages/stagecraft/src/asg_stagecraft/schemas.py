@@ -782,11 +782,18 @@ class GeneratorVersionArtifact(BaseModel):
 
 
 class LLMUsageRecord(BaseModel):
-    """Represent LLMUsageRecord data and behavior."""
+    """One attempt at one model call, and where in the pipeline it was made.
+
+    Since 7.2 every attempt of a logical call shares its call_id, duration_seconds is that
+    attempt's own latency and wait_seconds the waiting that preceded it, so nothing adds up
+    earlier attempts; stage is the pipeline stage and agent the one that asked. Before 7.2 each
+    attempt had its own call_id, durations accumulated retries and stage repeated operation.
+    """
 
     call_id: str
     operation: str
     stage: str
+    agent: str = ""
     attempt: int
     status: Literal["succeeded", "failed"]
     model: str
@@ -803,11 +810,19 @@ class LLMUsageRecord(BaseModel):
 
 
 class LLMUsageArtifact(BaseModel):
-    """Represent LLMUsageArtifact data and behavior."""
+    """A run's model usage: logical calls, the attempts they took, and auxiliary requests.
+
+    calls and failed_calls count logical calls (one call_id each; failed when its last attempt
+    failed), attempts and failed_attempts count requests, and auxiliary_calls the count_tokens
+    preflights, which are never calls. Before 7.2 calls mixed all three.
+    """
 
     records: list[LLMUsageRecord] = Field(default_factory=list)
     calls: int = 0
     failed_calls: int = 0
+    attempts: int = 0
+    failed_attempts: int = 0
+    auxiliary_calls: int = 0
     total_tokens: int = 0
     total_wait_seconds: float = 0
 
@@ -832,3 +847,6 @@ class RunMetadata(BaseModel):
     # byte-identical to the one the same pipeline wrote before the hybrid stages existed.
     narrative_voice: NarrativeVoice | None = None
     actor_memory: ActorMemory | None = None
+    # The profile the run was generated with, so a run that failed before request.json existed
+    # still says what it was asked for (7.2).
+    narrative_profile: NarrativeProfile | None = None

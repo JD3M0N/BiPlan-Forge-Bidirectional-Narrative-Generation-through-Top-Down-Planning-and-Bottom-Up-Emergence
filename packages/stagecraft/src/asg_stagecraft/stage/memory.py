@@ -44,6 +44,11 @@ RETRIEVED_RECORDS = 6
 # whatever they score.
 RECENT_REFLECTIONS = 2
 
+# What a character did and thought itself is never recalled verbatim. Its reflections already
+# carry those scenes forward in the first person, and an actor that rereads its own old line
+# repeats it: the 7.1 runs had one say a whole turn again, word for word, a scene later.
+NOT_RECALLED = frozenset({"own_turn", "thought"})
+
 _MIN_TOKEN_LENGTH = 3
 # Spanish joins the English set the skeleton catalog already carries: the performance runs in the
 # fiction language, so both show up in the same stream.
@@ -206,8 +211,14 @@ class CharacterMemory:
 
         The current scene is excluded on purpose: it already travels whole as working memory,
         and letting it compete here would crowd out everything a character knew beforehand.
+        At most ``limit`` records are chosen by score, on top of the last reflections that
+        always travel; the character's own lines and thoughts never compete (NOT_RECALLED).
         """
-        candidates = [record for record in self.records if record.scene_number < scene_number]
+        candidates = [
+            record
+            for record in self.records
+            if record.scene_number < scene_number and record.kind not in NOT_RECALLED
+        ]
         if not candidates:
             return []
         scored = [
@@ -221,13 +232,15 @@ class CharacterMemory:
             if record.kind == "reflection" and len(seen) < RECENT_REFLECTIONS:
                 chosen.append(record)
                 seen.add(record.id)
+        picked = 0
         for breakdown, record in scored:
-            if len(chosen) >= limit + len(seen):
+            if picked >= limit:
                 break
             if record.id in seen:
                 continue
             chosen.append(record)
             seen.add(record.id)
+            picked += 1
             self.retrievals.append(
                 MemoryRetrieval(
                     character_id=self.character_id,

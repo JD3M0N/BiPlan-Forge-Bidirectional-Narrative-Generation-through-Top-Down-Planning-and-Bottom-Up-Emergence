@@ -51,7 +51,7 @@ resto del documento, y la que MED-7 convierte en cifras:
 | Problema | Qué se ve | Causa en el código | Sección | Ficha |
 |---|---|---|---|---|
 | La memoria no tiene tope | de 20 a 70 recuerdos por turno; el diseño son 8 | `CharacterMemory.recall` | 2 | SIM-9 |
-| El actor se copia entre escenas | Julian repite literal su turno 6 de una escena en otra | su réplica estaba literal en su memoria | 2 | SIM-9, SIM-3 |
+| El actor se copia entre escenas | Julian repite literal su turno 6 de una escena en otra | su réplica estaba literal en su memoria, y la validación solo miraba la escena en curso | 2 | SIM-9 |
 | Nadie se dirige a nadie | destinatario en 1 de 80 turnos; 0 susurros | el esquema pide ids que el actor nunca ve | 3 | SIM-10 |
 | Las notas se repiten | 5 de 54 turnos con nota la reciben otra vez; confesiones dobles | `engine._advance` re-entrega las notas | 3 | SIM-10 |
 | El pensamiento es un plan | 35 % y 62 % empiezan por «debo», «tengo que», «exijo» | instrucción del campo y nota en inglés | 4 | SIM-6, SIM-2 |
@@ -66,6 +66,9 @@ resto del documento, y la que MED-7 convierte en cifras:
 ---
 
 ## 2. La memoria que llega al actor
+
+**Estado:** arreglado en 7.2.0, con tests; falta verlo en runs reales (el par de validación de
+SIM-1). Lo que sigue describe el fallo tal como se midió en 7.1.
 
 **Qué se ve.**
 
@@ -85,8 +88,8 @@ resto del documento, y la que MED-7 convierte en cifras:
 - **El actor se relee y se copia.** Sus réplicas vuelven literales y en tercera persona («(Julian
   Kessler mira fijamente el barógrafo…) Julian Kessler: …»). El turno 6 de Julian en
   `chapter_3-scene-2` repite palabra por palabra, pensamiento incluido, su turno 6 de
-  `chapter_2-scene-2`. De ahí sale el `max_self_similarity` de 1,0 que SIM-3 atribuye a que la
-  validación solo mira la escena en curso.
+  `chapter_2-scene-2`. De ahí sale el `max_self_similarity` de 1,0: la validación de repetición
+  solo miraba la escena en curso, y el turno anterior estaba literal en su contexto.
 - **Ningún test lo cubre.** `test_reflections_always_travel_however_they_score` pasa devolviendo los
   9 registros que siembra.
 
@@ -132,6 +135,9 @@ Queda en Ideas del `TODO.md`.
 **Ficha:** SIM-9.
 
 ## 3. Escuchar y responder
+
+**Estado:** arreglado en 7.2.0, con tests: destinatario por nombre, nota consumible, «TE ACABAN DE
+DECIR» y la instrucción de responder. Falta verlo en runs reales (el par de validación de SIM-1).
 
 **Qué se ve.**
 

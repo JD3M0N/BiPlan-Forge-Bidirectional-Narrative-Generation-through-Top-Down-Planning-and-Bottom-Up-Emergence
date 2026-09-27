@@ -101,7 +101,9 @@ class ScriptStagesMixin:
         presentation = self._call_agent("playwright", create_presentation)
         self._validate_presentation(plan, presentation)
         presentation = presentation.model_copy(
-            update={"frame": normalized_frame(presentation.frame, characters)}
+            update={
+                "frame": normalized_frame(presentation.frame, characters, language=request.language)
+            }
         )
         self.repository.save_json("script_presentation.json", presentation)
         event_by_id = {event.id: event for event in plan.events}
@@ -530,7 +532,7 @@ class ScriptStagesMixin:
             return ScriptFrame(
                 cast_heading="Personajes", act_label="Acto", scene_label="Escena", cast=[]
             )
-        return normalized_frame(frame, characters)
+        return normalized_frame(frame, characters, language=request.language)
 
     def _adapt_story(
         self,

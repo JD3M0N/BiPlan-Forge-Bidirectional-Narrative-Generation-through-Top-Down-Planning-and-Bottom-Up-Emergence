@@ -5,9 +5,13 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-PRODUCTION_ROOTS = (Path("packages"), Path("apps"))
+# Resolved from this file, not the working directory: a relative glob run from anywhere but the
+# repository root found no module at all, and the gate passed on nothing.
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+PRODUCTION_ROOTS = (REPOSITORY_ROOT / "packages", REPOSITORY_ROOT / "apps")
+# Words that give away a Spanish docstring written in ASCII. A non-ASCII one is caught anyway.
 SPANISH_MARKERS = {
-    "configuraci?n",
+    "configuracion",
     "configura ",
     "devuelve ",
     "ejecuta ",
@@ -28,10 +32,20 @@ def _documented_nodes(tree: ast.AST) -> list[ast.AST]:
     return [node for node in ast.walk(tree) if isinstance(node, documented_types)]
 
 
+def test_the_gate_finds_the_same_modules_from_any_directory(tmp_path, monkeypatch) -> None:
+    """ING-1: launched from packages/, the gate saw zero files and passed."""
+    from_root = _production_files()
+    monkeypatch.chdir(tmp_path)
+    assert from_root
+    assert _production_files() == from_root
+
+
 def test_production_callables_have_english_docstrings() -> None:
     """Require an English docstring on every production module and callable."""
+    files = _production_files()
+    assert files, "no production module found: the gate would pass on nothing"
     failures: list[str] = []
-    for path in _production_files():
+    for path in files:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in _documented_nodes(tree):
             docstring = ast.get_docstring(node)

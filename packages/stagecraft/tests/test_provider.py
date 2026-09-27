@@ -5,12 +5,22 @@ import asg_stagecraft.runtime.provider as provider_module
 import pytest
 from asg_stagecraft.runtime.errors import (
     EmptyResponseError,
+    GeminiBillingQuotaError,
     GeminiDailyQuotaError,
     ProviderError,
     StructuredResponseError,
 )
 from asg_stagecraft.runtime.provider import GeminiProvider, _gemini_response_schema
 from asg_stagecraft.schemas import StoryRequest
+
+# The 429 body Gemini returned in the three corpus runs filed as billing limits: its text asks
+# to check "plan and billing details", but its quota ID is the free tier's daily request cap.
+FREE_TIER_DAILY_429 = (
+    "429 RESOURCE_EXHAUSTED. You exceeded your current quota, please check your plan and "
+    "billing details. Quota exceeded for metric: "
+    "generativelanguage.googleapis.com/generate_content_free_tier_requests, "
+    "'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier'"
+)
 
 
 class FakeModels:
@@ -206,6 +216,56 @@ def test_non_retryable_errors_fail_immediately(error_text, expected_exception, c
     with pytest.raises(expected_exception):
         call(provider)
     assert len(provider._client.models.generate_calls) == 1
+
+
+def test_the_free_tier_daily_quota_is_not_mistaken_for_billing() -> None:
+    """MED-1: reading the text before the quota ID turned three daily quotas into billing."""
+    provider = provider_with(error=Exception(FREE_TIER_DAILY_429))
+    with pytest.raises(GeminiDailyQuotaError) as raised:
+        provider._generate("text", provider._client.models.generate_content)
+    assert raised.value.details["quota_id"] == "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+
+
+def test_the_attempts_of_one_call_share_its_id_and_keep_their_own_latency(monkeypatch) -> None:
+    """MED-2: every attempt had its own call_id and a duration that added up the earlier ones."""
+
+    class FlakyModels(FakeModels):
+        def generate_content(self, **kwargs):
+            self.generate_calls.append(kwargs)
+            if len(self.generate_calls) == 1:
+                raise type("ConnectError", (Exception,), {})("getaddrinfo failed")
+            return SimpleNamespace(text="respuesta", usage_metadata=None)
+
+    clock = iter([0.0, 3.0, 100.0, 104.0])
+    provider = provider_with()
+    provider.max_retries = 3
+    provider._client.models = FlakyModels()
+    monkeypatch.setattr(provider_module, "time", SimpleNamespace(monotonic=lambda: next(clock)))
+    monkeypatch.setattr(provider_module, "retry_delay", lambda attempt, details: 5)
+    monkeypatch.setattr(provider_module, "countdown_wait", lambda *args: None)
+    provider._generate("text", provider._client.models.generate_content)
+    records = provider.usage_records
+    assert len({item.call_id for item in records}) == 1
+    assert [item.attempt for item in records] == [1, 2]
+    assert [item.duration_seconds for item in records] == [3.0, 4.0]
+    assert [item.wait_seconds for item in records] == [0.0, 5]
+
+
+def test_a_call_is_tagged_with_the_stage_and_agent_that_made_it() -> None:
+    """MED-2: the stage field repeated the operation, so cost could not be split by agent."""
+    provider = provider_with(response=SimpleNamespace(text="ok", usage_metadata=None))
+    with provider_module.call_context("performance", "actor"):
+        provider._generate("text", provider._client.models.generate_content)
+    provider._generate("text", provider._client.models.generate_content)
+    tagged, untagged = provider.usage_records
+    assert (tagged.stage, tagged.agent) == ("performance", "actor")
+    assert (untagged.stage, untagged.agent) == ("text", "")
+
+
+def test_a_billing_limit_named_only_in_the_text_is_still_billing() -> None:
+    provider = provider_with(error=Exception("429 Your spend cap was reached, check billing."))
+    with pytest.raises(GeminiBillingQuotaError):
+        provider._generate("text", provider._client.models.generate_content)
 
 
 def test_connect_error_is_retried_then_succeeds(monkeypatch) -> None:

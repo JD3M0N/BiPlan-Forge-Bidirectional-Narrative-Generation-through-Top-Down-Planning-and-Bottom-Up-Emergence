@@ -41,6 +41,20 @@ def perceives(character_id: str, turn: StageTurn) -> bool:
     return character_id in set(turn.witnesses)
 
 
+def stage_direction(speaker: str, action: str, names: dict[str, str]) -> str:
+    """Join a performer's name and their action into one stage direction.
+
+    Actors are told to leave their own name out, so an action often arrives capitalized as a
+    sentence of its own, and after the name it read "Mara Vela Pasa una pagina" in every 7.1
+    transcript. The capital is dropped unless the action opens with someone's name.
+    """
+    proper = {word.strip(",.;:") for name in names.values() for word in name.split()}
+    first = action.split()[0].strip(",.;:") if action.split() else ""
+    if action[:1].isupper() and first not in proper:
+        action = action[0].lower() + action[1:]
+    return f"{speaker} {action}"
+
+
 def visible_text(turn: StageTurn, character_id: str, names: dict[str, str]) -> str:
     """Render one turn as a given character perceived it, hiding what they could not know.
 
@@ -54,7 +68,7 @@ def visible_text(turn: StageTurn, character_id: str, names: dict[str, str]) -> s
     if turn.actor_id == character_id and turn.thought:
         pieces.append(f"[pienso: {turn.thought}]")
     if turn.action:
-        pieces.append(f"({speaker} {turn.action})")
+        pieces.append(f"({stage_direction(speaker, turn.action, names)})")
     if turn.speech:
         target = ""
         if turn.visibility == "whisper":

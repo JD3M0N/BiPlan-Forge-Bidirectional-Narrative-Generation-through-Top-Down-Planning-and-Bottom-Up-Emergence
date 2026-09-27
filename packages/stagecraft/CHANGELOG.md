@@ -1,5 +1,47 @@
 # Historial de cambios
 
+## 7.2.0
+
+Arregla los bugs que destapó la lectura de los logs 7.1 y los de los instrumentos. Cambia lo que
+registran `turns.jsonl`, `llm_calls.jsonl`, `llm_usage.json`, `metadata.json` y
+`error_report.json`, así que `PIPELINE_VERSION` pasa a 7.2; los runs 5.0 a 7.1 se siguen abriendo.
+
+- **La memoria del actor tiene tope (SIM-9).** `CharacterMemory.recall` devolvía toda la memoria
+  de escenas anteriores (medianas de 18 a 29 recuerdos por turno, máximos de 52 a 72) porque su
+  condición de corte no podía cumplirse. Ahora son los 6 mejores más las 2 últimas reflexiones, y
+  las réplicas y pensamientos propios no se recuperan (`NOT_RECALLED`): releerlos literales
+  llevaba a repetirlos.
+- **Los personajes se dirigen unos a otros (SIM-10).** `addressed_to` se escribe con los nombres
+  de «CONTIGO EN ESCENA», y `normalize_turn` los resuelve a ids: nombre completo, nombre de pila o
+  cualquier palabra del nombre que identifique a un solo personaje presente. El esquema pedía ids
+  que el actor nunca veía, y el resto se descartaba en silencio. La nota del director se entrega
+  una vez y caduca (`engine._consume`); el contexto del actor marca la última réplica que se le
+  dirigió («TE ACABAN DE DECIR»), y su instrucción pide responderla antes de seguir con lo suyo.
+- **El log es completo (SIM-3).** Los turnos del mundo entran en `turns.jsonl`, y
+  `contexts.jsonl` solo registra turnos con prompt. El habla se compara con todo lo que el actor
+  dijo en la obra, no solo en la escena, y los gestos con sus tres últimos de toda la obra. La
+  acción no arrastra la mayúscula tras el nombre (`perception.stage_direction`). `emotions` se
+  rellena con la emoción de cada reflexión. Un fallo del narrador deja
+  `narration/chapter-NNN-attempt-NNN-error.json` con su excepción.
+- **Nuevo comando `recompute-simulation-metrics <run>`.** Recalcula las métricas de una función
+  desde sus logs en `simulation_metrics.recomputed.json`, sin tocar el original.
+- **La cuota diaria ya no es «facturación» (MED-1).** Una cuota agotada se clasifica por
+  `quota_id` y `metric`; el texto solo cuenta si no dicen nada.
+- **Telemetría honesta (MED-2).** En `llm_calls.jsonl` los intentos de una llamada comparten
+  `call_id`, cada uno lleva su propia latencia y la espera que lo precedió, `stage` es la etapa
+  del pipeline y el campo nuevo `agent` el agente (`call_context`, que fija `_call_agent`). En
+  `llm_usage.json`, `calls` y `failed_calls` cuentan llamadas lógicas, con `attempts`,
+  `failed_attempts` y `auxiliary_calls` aparte.
+- **Un run fallido dice dónde murió (MED-4).** `error_stage` es la etapa del pipeline; el
+  componente que falló va a `details.component`, y un fallo en la función añade
+  `details.scene_id`. Si falla el análisis, la carpeta se llama `peticion-sin-analizar` y el
+  prompt queda en `submitted_request.json`. `metadata.json` guarda el perfil narrativo.
+- **Guion (TD-6, TD-2).** El reparto no duplica el punto final, un guion en español siempre
+  titula «Personajes» y cada acto toma el título localizado de la presentación.
+- **Escritura incremental (ING-4).** `append_jsonl` anexa de verdad y mantiene un hash
+  incremental para el manifiesto: escribir un turno ya no relee ni reescribe el archivo.
+- Exige `asg-core` 0.5.1 y `asg-evaluation` 0.6.0.
+
 ## 7.1.1
 
 Limpieza sin cambio de contrato: `PIPELINE_VERSION` sigue en 7.1 y los artefactos son los mismos.

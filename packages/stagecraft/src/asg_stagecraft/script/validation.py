@@ -45,6 +45,10 @@ from ..schemas import (
 _LEADING_DASHES = "—–-"
 _WHITESPACE = re.compile(r"\s+")
 
+# The printed cast heading of every Spanish script, the one the fallback frame already used.
+SPANISH_CAST_HEADING = "Personajes"
+_SPANISH = frozenset({"spanish", "español", "espanol", "castellano", "es"})
+
 
 def materialize_act(
     draft: ActScriptDraft,
@@ -118,8 +122,14 @@ def act_anchor_index(
     return "\n".join(lines)
 
 
-def normalized_frame(frame: ScriptFrame, characters: CharactersArtifact) -> ScriptFrame:
-    """Drop cast notes for unknown characters and deduplicate the rest, keeping the first."""
+def normalized_frame(
+    frame: ScriptFrame, characters: CharactersArtifact, *, language: str = ""
+) -> ScriptFrame:
+    """Drop cast notes for unknown characters, deduplicate the rest, and fix a Spanish heading.
+
+    The model chose between "Reparto" and "Personajes" from one run to the next; a Spanish
+    script always gets the heading the fallback frame already used, so two scripts read alike.
+    """
     known = {character.id for character in characters.characters}
     seen: set[str] = set()
     cast: list[CastNote] = []
@@ -128,7 +138,10 @@ def normalized_frame(frame: ScriptFrame, characters: CharactersArtifact) -> Scri
             continue
         seen.add(note.character_id)
         cast.append(note)
-    return frame.model_copy(update={"cast": cast})
+    update: dict = {"cast": cast}
+    if language.strip().casefold() in _SPANISH:
+        update["cast_heading"] = SPANISH_CAST_HEADING
+    return frame.model_copy(update=update)
 
 
 def assemble_play(
@@ -158,6 +171,12 @@ def assemble_play(
         )
         for character_id in on_stage
     ]
+    # materialize_act titles an act from the frozen plan, which is written in English; the
+    # printed act takes the localized chapter title the presentation already carries.
+    titles = {chapter.chapter_id: chapter.title for chapter in presentation.chapters}
+    localized = [
+        act.model_copy(update={"title": titles.get(act.chapter_id, act.title)}) for act in acts
+    ]
     return PlayScript(
         title=presentation.title,
         language=language,
@@ -166,7 +185,7 @@ def assemble_play(
         act_label=presentation.frame.act_label,
         scene_label=presentation.frame.scene_label,
         cast=cast,
-        acts=acts,
+        acts=localized,
     )
 
 

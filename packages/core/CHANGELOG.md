@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.5.1] - 2026-09-26
+
+- `slugify` strips the trailing dash a truncation can leave, so a run folder never ends in one.
+
 ## [0.5.0] - 2026-09-26
 
 - Added `artifact_json`, the repository JSON format on its own, for writers that must hash the
