@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>StageCraft</title>
+    <link rel="icon" type="image/svg+xml" href="img/logo.svg" />
+    <link rel="stylesheet" href="css/stagecraft.css" />
+    <script type="module" src="js/main.js"></script>
+  </head>
+  <body>
+    <div class="spotlight" aria-hidden="true"></div>
+    <header class="topbar">
+      <a class="brand" href="#/crear" aria-label="StageCraft, inicio">
+        <img class="brand-mark" src="img/logo.svg" alt="" width="28" height="28" />
+        <span class="brand-word">Stage<span class="brand-accent">Craft</span></span>
+      </a>
+      <nav class="tabs" aria-label="Vistas">
+        <a class="tab" href="#/crear" data-view="crear">Crear</a>
+        <a class="tab" href="#/funciones" data-view="funciones">Funciones</a>
+        <a class="tab" href="#/comparar" data-view="comparar">Comparar</a>
+      </nav>
+      <div class="status" id="status" role="status" aria-live="polite">
+        <span class="status-dot"></span><span class="status-text">Conectando…</span>
+      </div>
+    </header>
+    <main id="view" class="view" tabindex="-1"></main>
+    <div id="drawer-root"></div>
+    <div id="toasts" class="toasts" aria-live="polite"></div>
+    <noscript>StageCraft necesita JavaScript para funcionar.</noscript>
+  </body>
+</html>

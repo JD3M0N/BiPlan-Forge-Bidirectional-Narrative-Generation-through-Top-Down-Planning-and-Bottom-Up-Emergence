@@ -636,14 +636,24 @@ class ChapterNarration(BaseModel):
     turns_available: int = Field(ge=0)
     turns_visible: int = Field(ge=0)
     words: int = Field(ge=0)
-    attempts: int = Field(ge=1)
-    source: Literal["narrator", "fallback"]
+    # Zero for a chapter left out: "absent" means this point of view saw nothing to narrate
+    # there, so no call was made and the chapter is not in story.md (7.3).
+    attempts: int = Field(ge=0)
+    source: Literal["narrator", "fallback", "absent"]
 
 
 class NarrationArtifact(BaseModel):
-    """How the prose was narrated from the log: the voice, the narrator, and every chapter."""
+    """How the prose was narrated from the log: the voice, the narrator, and every chapter.
 
-    contract_version: str = "1"
+    Contract 2 (7.3) adds who was asked to narrate, how the narrator was finally chosen, the
+    tone the author asked for, and chapters recorded as absent. A contract 1 file still loads.
+    """
+
+    contract_version: str = "2"
     narrative_voice: NarrativeVoice
     narrator_character_id: str = ""
+    # The name as the person typed it, before it was resolved against the cast.
+    requested_narrator: str = ""
+    narrator_source: Literal["", "none", "requested", "protagonist", "most_turns"] = ""
+    narration_tone: str = ""
     chapters: list[ChapterNarration] = Field(default_factory=list)

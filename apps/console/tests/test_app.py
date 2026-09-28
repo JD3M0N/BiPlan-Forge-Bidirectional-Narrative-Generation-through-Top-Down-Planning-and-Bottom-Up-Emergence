@@ -5,7 +5,7 @@ from unittest.mock import create_autospec
 from asg_console import evaluation as evaluation_module
 from asg_console import stagecraft as stagecraft_module
 from asg_console.app import ConsoleApp, StagecraftMenu
-from asg_stagecraft import StoryGenerator
+from asg_stagecraft import GenerationOptions, StoryGenerator
 from asg_stagecraft.formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
 from asg_stagecraft.runtime import provider as stagecraft_provider_module
 
@@ -47,8 +47,8 @@ def test_stagecraft_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None
             self.model_name = model
             captured["provider_options"] = kwargs
 
-    def build_generator(provider, output_root, **kwargs):
-        captured["generator_options"] = kwargs
+    def build_generator(provider, output_root, options):
+        captured["generator_options"] = options
         instance = create_autospec(StoryGenerator, spec_set=True, instance=True)
 
         def generate(request, on_progress=None, on_run_created=None, on_event=None):
@@ -59,7 +59,7 @@ def test_stagecraft_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None
         return instance
 
     Orchestrator = create_autospec(StoryGenerator, spec_set=True)
-    Orchestrator.side_effect = build_generator
+    Orchestrator.from_options.side_effect = build_generator
 
     settings = type(
         "Settings",
@@ -93,15 +93,8 @@ def test_stagecraft_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None
     menu.run()
     assert captured["prompt"] == "Una historia"
     assert captured["provider_options"]["max_retries"] == 4
-    assert captured["generator_options"] == {
-        "narrative_guidance": True,
-        "promise_ledger": True,
-        "story_format": StoryFormat.NARRATIVE,
-        "script_method": ScriptMethod.NATIVE,
-        "narrative_voice": NarrativeVoice.OMNISCIENT,
-        "actor_memory": ActorMemory.OWN,
-        "turns_per_beat": 8,
-    }
+    # The fake settings hold every default, so the options must be the defaults exactly.
+    assert captured["generator_options"] == GenerationOptions()
 
 
 def test_stagecraft_accepts_a_script_output_choice(tmp_path, monkeypatch) -> None:
@@ -111,8 +104,8 @@ def test_stagecraft_accepts_a_script_output_choice(tmp_path, monkeypatch) -> Non
         def __init__(self, api_key, model, **kwargs):
             self.model_name = model
 
-    def build_generator(provider, output_root, **kwargs):
-        captured["generator_options"] = kwargs
+    def build_generator(provider, output_root, options):
+        captured["generator_options"] = options
         instance = create_autospec(StoryGenerator, spec_set=True, instance=True)
 
         def generate(request, on_progress=None, on_run_created=None, on_event=None):
@@ -122,7 +115,7 @@ def test_stagecraft_accepts_a_script_output_choice(tmp_path, monkeypatch) -> Non
         return instance
 
     Orchestrator = create_autospec(StoryGenerator, spec_set=True)
-    Orchestrator.side_effect = build_generator
+    Orchestrator.from_options.side_effect = build_generator
 
     settings = type(
         "Settings",
@@ -154,8 +147,8 @@ def test_stagecraft_accepts_a_script_output_choice(tmp_path, monkeypatch) -> Non
         output=lambda message: None,
     )
     menu.run()
-    assert captured["generator_options"]["story_format"] is StoryFormat.SCRIPT
-    assert captured["generator_options"]["script_method"] is ScriptMethod.ADAPTED
+    assert captured["generator_options"].story_format is StoryFormat.SCRIPT
+    assert captured["generator_options"].script_method is ScriptMethod.ADAPTED
 
 
 def test_console_evaluates_story_and_retries_invalid_values(tmp_path, monkeypatch) -> None:
@@ -197,3 +190,55 @@ def test_console_evaluates_story_and_retries_invalid_values(tmp_path, monkeypatc
     assert "Selección inválida." in messages
     assert "El usuario no puede estar vacío." in messages
     assert "Introduce un entero entre 1 y 10." in messages
+
+
+def test_stagecraft_asks_who_a_limited_voice_follows(tmp_path, monkeypatch) -> None:
+    captured = {}
+
+    class Provider:
+        def __init__(self, api_key, model, **kwargs):
+            self.model_name = model
+
+    def build_generator(provider, output_root, options):
+        captured["generator_options"] = options
+        instance = create_autospec(StoryGenerator, spec_set=True, instance=True)
+
+        def generate(request, on_progress=None, on_run_created=None, on_event=None):
+            return SimpleNamespace(run_dir=tmp_path)
+
+        instance.generate.side_effect = generate
+        return instance
+
+    Orchestrator = create_autospec(StoryGenerator, spec_set=True)
+    Orchestrator.from_options.side_effect = build_generator
+    settings = SimpleNamespace(
+        api_key="test",
+        model="fake",
+        output_root=tmp_path,
+        rpm_limit=10,
+        rpm_reserve=2,
+        tpm_limit=3000,
+        max_retries=4,
+        max_retry_delay=30,
+        request_timeout_ms=45000,
+        narrative_guidance=True,
+        promise_ledger=True,
+        story_format=StoryFormat.NARRATIVE,
+        script_method=ScriptMethod.NATIVE,
+        narrative_voice=NarrativeVoice.OMNISCIENT,
+        actor_memory=ActorMemory.OWN,
+        turns_per_beat=8,
+    )
+    monkeypatch.setattr(stagecraft_module, "load_stagecraft_settings", lambda: settings)
+    monkeypatch.setattr(stagecraft_provider_module, "GeminiProvider", Provider)
+    monkeypatch.setattr(stagecraft_module, "StoryGenerator", Orchestrator)
+    # Output 4 is the simulated story, and voice 3 the third person limited to one character.
+    menu = StagecraftMenu(
+        input_fn=input_sequence(["1", "Una historia", "4", "3", "Ana", "0"]),
+        output=lambda message: None,
+    )
+    menu.run()
+    options = captured["generator_options"]
+    assert options.story_format is StoryFormat.SIMULATED
+    assert options.narrative_voice is NarrativeVoice.LIMITED
+    assert options.narrator == "Ana"

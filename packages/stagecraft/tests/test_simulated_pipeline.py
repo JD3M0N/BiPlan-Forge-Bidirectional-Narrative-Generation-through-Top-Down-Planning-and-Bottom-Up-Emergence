@@ -3,7 +3,13 @@ import json
 import pytest
 from asg_stagecraft import StoryGenerator
 from asg_stagecraft import pipeline as pipeline_module
-from asg_stagecraft.formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
+from asg_stagecraft.formats import (
+    ActorMemory,
+    NarrativeVoice,
+    ScriptMethod,
+    StoryFormat,
+    voice_choice,
+)
 from asg_stagecraft.runtime.errors import GeminiDailyQuotaError
 from asg_stagecraft.runtime.provider import current_call_context
 from asg_stagecraft.stage.schemas import NarrationArtifact, PerformanceArtifact
@@ -126,30 +132,74 @@ def test_shared_memory_widens_the_witness_set(tmp_path) -> None:
     assert shared_witnesses >= own_witnesses
 
 
-@pytest.mark.parametrize(
-    "voice",
-    [NarrativeVoice.OMNISCIENT, NarrativeVoice.FOCALIZED, NarrativeVoice.FIRST_PERSON],
-)
+@pytest.mark.parametrize("voice", list(NarrativeVoice))
 def test_every_voice_produces_a_story_and_records_itself(tmp_path, voice) -> None:
     run, _ = generate(tmp_path, narrative_voice=voice)
     narration = NarrationArtifact.model_validate(read_json(run, "narration.json"))
     assert narration.narrative_voice is voice
+    assert narration.contract_version == "2"
     assert run.story_path.read_text(encoding="utf-8").strip()
-    if voice is NarrativeVoice.FIRST_PERSON:
+    if voice_choice(voice).takes_character:
         assert narration.narrator_character_id
         for chapter in narration.chapters:
             assert chapter.turns_visible <= chapter.turns_available
     else:
         assert not narration.narrator_character_id
+        assert narration.narrator_source == "none"
+
+
+def upstream_calls(provider):
+    """Every model call made before the narrator's first one, in order."""
+    structured = [(name, system, prompt) for name, system, prompt in provider.structured_calls]
+    text = [
+        (system, prompt)
+        for system, prompt in provider.text_calls
+        if "You are the Narrator" not in system
+    ]
+    return structured, text
 
 
 def test_the_voice_only_changes_the_narration(tmp_path) -> None:
-    omniscient, _ = generate(tmp_path, narrative_voice=NarrativeVoice.OMNISCIENT)
-    focalized, _ = generate(tmp_path, narrative_voice=NarrativeVoice.FOCALIZED)
-    for name in ("story_plan.json", "script.json"):
+    """Voice, narrator and tone must leave every artifact and prompt before narration alike."""
+    first = StageFakeProvider(story_review=major_story_review())
+    second = StageFakeProvider(story_review=major_story_review())
+    omniscient, _ = generate(tmp_path, first, narrative_voice=NarrativeVoice.OMNISCIENT)
+    limited, _ = generate(
+        tmp_path,
+        second,
+        narrative_voice=NarrativeVoice.LIMITED,
+        narrator="Ana",
+        narration_tone="como un guerrero samurai, con tono medieval",
+    )
+    for name in ("story_plan.json", "script.json", "cast_bible.json", "performance.json"):
         assert (omniscient.run_dir / name).read_text(encoding="utf-8") == (
-            focalized.run_dir / name
+            limited.run_dir / name
         ).read_text(encoding="utf-8"), name
+    assert upstream_calls(first) == upstream_calls(second)
+    narrator_systems = [system for system, _ in second.text_calls if "Narrator" in system]
+    assert narrator_systems
+    assert all("The point-of-view character is Ana." in item for item in narrator_systems)
+    assert all("guerrero samurai" in item for item in narrator_systems)
+    assert not any("guerrero" in system for system, _ in first.text_calls)
+
+
+def test_the_chosen_character_is_recorded_as_requested(tmp_path) -> None:
+    run, _ = generate(tmp_path, narrative_voice=NarrativeVoice.FIRST_PERSON, narrator="ana")
+    narration = NarrationArtifact.model_validate(read_json(run, "narration.json"))
+    assert narration.requested_narrator == "ana"
+    assert narration.narrator_character_id == "ana"
+    assert narration.narrator_source == "requested"
+    assert read_json(run, "metadata.json")["warnings"] == []
+
+
+def test_an_unknown_narrator_falls_back_and_warns(tmp_path) -> None:
+    run, events = generate(tmp_path, narrative_voice=NarrativeVoice.LIMITED, narrator="Zoe")
+    narration = NarrationArtifact.model_validate(read_json(run, "narration.json"))
+    assert narration.narrator_character_id == "ana"
+    assert narration.narrator_source == "most_turns"
+    warnings = read_json(run, "metadata.json")["warnings"]
+    assert any(item.startswith("[NARRATOR_FALLBACK]") and "Zoe" in item for item in warnings)
+    assert any(event.kind == "narrator_fallback" for event in events)
 
 
 def test_two_identical_runs_produce_identical_logs(tmp_path) -> None:

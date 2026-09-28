@@ -1,5 +1,11 @@
 # Historial de cambios
 
+## [3.1.0] - 2026-09-27
+
+- Construye las opciones con `GenerationOptions` y usa las etiquetas de voz de
+  `formats.VOICE_CHOICES`, que incluyen la tercera persona limitada. Con una visión atada a un
+  personaje, pregunta cuál (Enter deja al protagonista).
+
 ## [3.0.1] - 2026-09-26
 
 - Cotas internas al mínimo real: `asg-stagecraft` 7.2.0, `asg-evaluation` 0.6.0 y `asg-core`

@@ -36,6 +36,8 @@ class NarrativeVoice(StrEnum):
     OMNISCIENT = "omniscient"
     FOCALIZED = "focalized"
     FIRST_PERSON = "first_person"
+    # Third person held to one character: the first-person filter, told as "she", not "I" (7.3).
+    LIMITED = "limited"
 
 
 class ActorMemory(StrEnum):
@@ -105,3 +107,76 @@ def output_choice_for(key: str) -> OutputChoice:
             return choice
     allowed = ", ".join(item.key for item in OUTPUT_CHOICES)
     raise ValueError(f"unknown output choice {key!r}; allowed values: {allowed}")
+
+
+@dataclass(frozen=True)
+class VoiceChoice:
+    """One point of view as every surface presents it.
+
+    takes_character says the voice is told from one character the caller may name; the stage
+    strategy for the voice agrees with it, and a test holds the two together.
+    """
+
+    voice: NarrativeVoice
+    label: str
+    description: str
+    takes_character: bool
+
+
+VOICE_CHOICES: tuple[VoiceChoice, ...] = (
+    VoiceChoice(
+        NarrativeVoice.OMNISCIENT,
+        "Tercera persona omnisciente",
+        "El narrador entra en la cabeza de todos: cuenta cada turno y cada pensamiento.",
+        False,
+    ),
+    VoiceChoice(
+        NarrativeVoice.FOCALIZED,
+        "Tercera persona focalizada por escena",
+        "Todo lo público y la vida interior de un personaje por escena: el que más actúa en ella.",
+        False,
+    ),
+    VoiceChoice(
+        NarrativeVoice.LIMITED,
+        "Tercera persona limitada a un personaje",
+        "Solo lo que ese personaje presenció, y solo sus pensamientos, contado en tercera persona.",
+        True,
+    ),
+    VoiceChoice(
+        NarrativeVoice.FIRST_PERSON,
+        "Primera persona de un personaje",
+        "Ese personaje cuenta lo que vivió: solo lo que presenció y lo que pensó.",
+        True,
+    ),
+)
+
+
+def voice_choice(voice: NarrativeVoice) -> VoiceChoice:
+    """Return how a point of view is presented, for any voice the pipeline knows."""
+    for choice in VOICE_CHOICES:
+        if choice.voice is voice:
+            return choice
+    raise ValueError(f"no presentation for voice {voice.value!r}")
+
+
+@dataclass(frozen=True)
+class MemoryChoice:
+    """One actor memory model as every surface presents it."""
+
+    memory: ActorMemory
+    label: str
+    description: str
+
+
+MEMORY_CHOICES: tuple[MemoryChoice, ...] = (
+    MemoryChoice(
+        ActorMemory.OWN,
+        "Memoria propia",
+        "Cada personaje recuerda solo lo que presenció. Es la afirmación de la tesis.",
+    ),
+    MemoryChoice(
+        ActorMemory.SHARED,
+        "Memoria compartida",
+        "Todo lo público llega a todo el reparto. Es el brazo de control de la ablación.",
+    ),
+)

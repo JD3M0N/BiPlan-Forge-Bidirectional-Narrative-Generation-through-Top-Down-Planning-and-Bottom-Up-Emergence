@@ -20,6 +20,7 @@ dist/
 Stories/
 docs/
 apps/console/
+apps/studio/
 **/tests/
 
 commands.md

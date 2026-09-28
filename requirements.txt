@@ -3,3 +3,4 @@
 -e ./packages/stagecraft
 -e ./apps/console
 -e ./apps/telegram
+-e ./apps/studio

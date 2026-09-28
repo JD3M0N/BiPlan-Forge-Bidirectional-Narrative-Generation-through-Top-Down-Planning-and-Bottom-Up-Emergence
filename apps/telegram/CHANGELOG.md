@@ -1,5 +1,10 @@
 # Historial de cambios
 
+## [2.0.3] - 2026-09-27
+
+- Construye las opciones con `GenerationOptions.from_settings` y la fachada con
+  `StoryGenerator.from_options`; requiere `asg-stagecraft` 7.3.0.
+
 ## [2.0.2] - 2026-09-26
 
 - El proveedor que comparten los trabajos vacía sus registros de uso al terminar cada uno: en un

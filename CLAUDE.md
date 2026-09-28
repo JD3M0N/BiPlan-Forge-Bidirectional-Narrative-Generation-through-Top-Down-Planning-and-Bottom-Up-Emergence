@@ -24,6 +24,7 @@ El resto del monorepo:
 - `packages/core` guarda las utilidades compartidas.
 - `apps/console` es la interfaz de terminal.
 - `apps/telegram` expone el generador como bot.
+- `apps/studio` es **StageCraft**, la interfaz gráfica local (web, FastAPI y JS sin build).
 
 Hubo un tercer enfoque, **Bottom-Up**: una simulación multiagente determinista de una sala de
 escape (`packages/escape_room`). Se retiró en 7.1.1 porque el formato simulado lo sustituye. Sus 6
@@ -45,7 +46,7 @@ Comandos (opciones completas en [commands.md](commands.md)):
 - `generate-story`, `compare-story-runs`, `recover-story-runs`, `audit-stage-run`,
   `recompute-simulation-metrics` (Stagecraft).
 - `report-evaluations`, `report-story-craft`, `report-simulations` (evaluation).
-- `asg-console`, `asg-telegram`, `asg-telegram-run` (apps).
+- `asg-console`, `asg-telegram`, `asg-telegram-run`, `asg-studio` (apps).
 
 ### Calidad: ejecutar siempre antes de dar por terminado un cambio
 
@@ -83,7 +84,7 @@ python -m pytest packages/stagecraft/tests/test_generator_v5.py -q -k revision
 ### Dependencias entre paquetes
 
 ```text
-core  ←  evaluation  ←  stagecraft  ←  console, telegram
+core  ←  evaluation  ←  stagecraft  ←  console, telegram, studio
 ```
 
 - `core` no depende de nada del repo.
@@ -103,8 +104,25 @@ Dentro de `stagecraft`, los módulos van por subpaquete:
 | `stage/` | la función simulada |
 | `tools/` | los comandos: `generate`, `compare`, `recovery`, `audit_stage`, `recompute` |
 
-En la raíz quedan la fachada y el contrato: `__init__`, `version`, `formats`, `schemas`,
-`generator`, `pipeline` y `agents/`.
+En la raíz quedan la fachada y el contrato: `__init__`, `version`, `formats`, `options`,
+`brief`, `schemas`, `generator`, `pipeline` y `agents/`.
+
+### Las opciones de un run son un solo objeto
+
+- `GenerationOptions` (`options.py`) es la única definición de lo que se elige por run: formato,
+  perfil, ledger, guía, audio y su voz, visión, personaje de la visión (`narrator`), tono,
+  memoria y turnos por beat. Se valida una vez y cada run la guarda en
+  `generation_options.json`.
+- `StoryGenerator` conserva kwargs explícitos, uno por campo: la consola y Telegram prueban la
+  fachada con `create_autospec(spec_set=True)`, y `test_generation_options.py` falla si un
+  campo y un kwarg dejan de coincidir. Las superficies usan `GenerationOptions.from_settings` y
+  `StoryGenerator.from_options`; `StoryPipeline` recibe solo `options=`.
+- Añadir una opción: campo en `GenerationOptions`, kwarg en la fachada, consumirlo donde vive el
+  mecanismo (sin tocar los prompts cuando está apagada) y, si la interfaz la muestra, su
+  entrada en `apps/studio/src/asg_studio/catalog.py`.
+- `StoryBrief` (`brief.py`) es la obra estructurada: trama y reparto se componen en un prompt
+  determinista que el analista lee como cualquier otro, así que `StoryRequest` y el esquema que
+  va a Gemini no cambian. El run guarda `brief.json`.
 
 ### Top-Down: el plan es un DAG validado, no texto
 
@@ -220,7 +238,7 @@ A esa lista, el guion y el simulado añaden los suyos.
   `report-story-craft` las recalcula desde `story.md`, así que también mide los runs anteriores
   a 6.5.0, que no las traen.
 
-`version.py` fija `PIPELINE_VERSION` (7.2) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.2).
+`version.py` fija `PIPELINE_VERSION` (7.3) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.3).
 `StoryRun` se niega a abrir un run incompleto o de una versión no soportada. Si cambias el
 conjunto de artefactos o su significado, sube la versión en vez de romper los runs ya generados:
 son datos de la tesis. Una limpieza que no toca artefactos sube solo el parche de
@@ -280,6 +298,17 @@ que saber antes de tocar `stage/`:
 - **El punto de vista es modular.** `stage/voices.py` tiene una estrategia por voz, cada una con
   su filtro determinista sobre el log. Añadir un punto de vista es añadir una estrategia, nunca
   una rama en el prompt del narrador. El defecto es `omniscient`.
+- **Las visiones `limited` y `first_person` se cuentan desde un personaje.** `narrator` lo
+  nombra como lo escribió la persona; `stage/names.py` lo resuelve contra el reparto y, si no
+  existe o no presenció nada, narra el de siempre con `[NARRATOR_FALLBACK]`. Solo ven turnos de
+  escenas en las que el personaje estaba, también con memoria compartida: así la ablación de
+  memoria no se mezcla con la narración.
+- **Un capítulo sin turnos visibles no se narra**, con ninguna voz: el modelo tendría que
+  inventarlo. Queda como `absent` en `narration.json` y fuera de `story.md`, y `story_metrics`
+  recibe el plan recortado por `writing/assembly.narrated_plan`.
+- **La visión, el personaje y el tono solo llegan a la narración.** Un test compara plan, guion,
+  casting, función y todos los prompts anteriores al narrador entre dos runs que solo difieren
+  en ellos.
 - **El narrador cura, no transcribe.** Puede cortar, fundir y reordenar dentro de un capítulo,
   pero no puede inventar un beat. Donde el plan y el log no coincidan, manda el log.
 - **El respaldo es contrato.** Si el casting o la narración no pueden correr, `stage/casting.py`
@@ -314,6 +343,24 @@ que saber antes de tocar `stage/`:
   esquema y cancelación, y `generation.py` la coordina con la entrega.
 - Cualquier fallo que escape de un adaptador sin ser `GenerationFailure` se considera un defecto
   interno y se reporta como error inesperado.
+
+### StageCraft: la interfaz gráfica
+
+- `asg-studio` sirve en `127.0.0.1:8765` una app FastAPI y una página en HTML, CSS y módulos ES
+  sin paso de build. Detalle en [apps/studio/README.md](apps/studio/README.md).
+- **Las opciones se pintan desde `catalog.py`.** Las etiquetas vienen del generador
+  (`formats.py`, perfiles, voces de `asg_core`); las opciones **pendientes** (inventario y
+  otras del roadmap) viven solo ahí, con su ficha. Un test cruza cada `kind` del catálogo con su
+  renderizador en `static/js/ui.js`.
+- **La cola tiene un solo hilo** (`jobs.py`) y un generador nuevo por trabajo. Se cancela con
+  `should_cancel`.
+- **Nunca escribe ni borra en `Stories/`.** La biblioteca y la comparación leen con los lectores
+  tolerantes de evaluation (`pairing.py`).
+- **Seguridad local:** toda escritura exige la cabecera `X-StageCraft: 1`, el `Host` debe ser
+  local y la CSP solo permite los archivos propios. El texto del modelo se pinta con
+  `textContent`.
+- Los tests usan un generador falso y una carpeta temporal (`tests/studio_fakes.py`); nunca
+  Gemini.
 
 ### Consola
 
@@ -429,6 +476,15 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
 - **Un actor escribe destinatarios por nombre; el log guarda ids.** `normalize_turn` resuelve el
   nombre (completo, de pila o una palabra que identifique a un solo personaje presente) y descarta
   lo ambiguo. Los ids nunca entran en el contexto del actor: no los añadas para «ayudar».
+- **Un run se cancela con `should_cancel`, nunca lanzando desde un callback.** El callback de
+  progreso también corre dentro del bucle de reintentos del proveedor, que convierte cualquier
+  excepción en un `ProviderError` degradable, y `_record_failure` vuelve a emitir eventos. El
+  pipeline consulta `should_cancel` al entrar en `_call_agent` y lanza `RunCancelledError`, que
+  está en `NON_DEGRADABLE_ERRORS`. Telegram aún cancela desde el callback (OPS-3).
+- **Los dobles de audio de los tests reciben solo `story_path`.** Por eso el pipeline pasa
+  `voice=` a `create_story_audio_sync` solo cuando hay una voz elegida.
+- **Windows puede servir `.js` como `text/plain`**, y el navegador no ejecuta así un módulo ES:
+  la página saldría en blanco. `asg_studio/app.py` registra el tipo al importarse.
 
 ## Documentos de referencia
 

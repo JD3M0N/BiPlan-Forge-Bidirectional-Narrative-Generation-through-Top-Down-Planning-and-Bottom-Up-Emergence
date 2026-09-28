@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from asg_stagecraft import StoryGenerator
+from asg_stagecraft import GenerationOptions, StoryGenerator
 from asg_stagecraft.formats import (
     OUTPUT_CHOICES,
-    NarrativeVoice,
+    VOICE_CHOICES,
     StoryFormat,
     output_choice,
+    voice_choice,
 )
 from asg_stagecraft.runtime.config import load_settings as load_stagecraft_settings
 from asg_stagecraft.runtime.progress import format_progress
@@ -45,23 +46,20 @@ class StagecraftMenu:
         settings = load_stagecraft_settings()
         provider = provider_from_settings(settings)
         choice = self._choose_output(settings)
-        voice = (
-            self._choose_voice(settings)
-            if choice.story_format is StoryFormat.SIMULATED
-            else settings.narrative_voice
-        )
+        voice, narrator = settings.narrative_voice, ""
+        if choice.story_format is StoryFormat.SIMULATED:
+            voice = self._choose_voice(settings)
+            if voice_choice(voice).takes_character:
+                narrator = self.input("Personaje de la visión [el protagonista]: ").strip()
         self.output(f"Generando con {settings.model}...")
-        generator = StoryGenerator(
-            provider,
-            settings.output_root,
-            narrative_guidance=settings.narrative_guidance,
-            promise_ledger=settings.promise_ledger,
+        options = GenerationOptions.from_settings(
+            settings,
             story_format=choice.story_format,
             script_method=choice.script_method,
             narrative_voice=voice,
-            actor_memory=settings.actor_memory,
-            turns_per_beat=settings.turns_per_beat,
+            narrator=narrator or None,
         )
+        generator = StoryGenerator.from_options(provider, settings.output_root, options)
 
         def report_progress(update) -> None:
             """Write one formatted pipeline progress update to the console."""
@@ -108,13 +106,10 @@ class StagecraftMenu:
 
     def _choose_voice(self, settings):
         """Prompt for the point of view a simulated run narrates from."""
-        options = list(NarrativeVoice)
-        labels = {
-            NarrativeVoice.OMNISCIENT: "Tercera persona omnisciente",
-            NarrativeVoice.FOCALIZED: "Tercera persona focalizada por escena",
-            NarrativeVoice.FIRST_PERSON: "Primera persona del protagonista",
-        }
-        listing = "\n".join(f"  {index}. {labels[item]}" for index, item in enumerate(options, 1))
+        options = [item.voice for item in VOICE_CHOICES]
+        listing = "\n".join(
+            f"  {index}. {item.label}" for index, item in enumerate(VOICE_CHOICES, 1)
+        )
         default_index = options.index(settings.narrative_voice) + 1
         while True:
             self.output(f"\nPunto de vista:\n{listing}")

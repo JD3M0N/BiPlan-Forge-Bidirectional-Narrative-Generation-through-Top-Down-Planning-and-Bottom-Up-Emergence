@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="StageCraft">
+  <defs>
+    <linearGradient id="beam" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF7A1A" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#FF7A1A" stop-opacity="0.05"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#141416"/>
+  <path d="M27 13h10l14 40H13z" fill="url(#beam)"/>
+  <rect x="24" y="8" width="16" height="7" rx="3.5" fill="#FF7A1A"/>
+  <rect x="12" y="52" width="40" height="3" rx="1.5" fill="#EDEDED" opacity="0.85"/>
+</svg>

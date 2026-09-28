@@ -64,12 +64,16 @@ def _choice(name: str, enum_cls, default):
         raise ConfigurationError(f"{name} debe ser uno de: {allowed}.") from exc
 
 
-def load_settings(start: Path | None = None) -> Settings:
-    """Load settings."""
+def load_settings(start: Path | None = None, *, require_api_key: bool = True) -> Settings:
+    """Load settings from the environment and the root .env file.
+
+    A surface that only shows options, such as StageCraft before its first run, passes
+    require_api_key=False and gets an empty key instead of an error; generating still needs it.
+    """
     root = find_project_root(start)
     load_dotenv(root / ".env")
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not api_key:
+    if not api_key and require_api_key:
         raise ConfigurationError("Falta GEMINI_API_KEY. Añádela al archivo .env de la raíz.")
     return Settings(
         api_key=api_key,

@@ -25,6 +25,76 @@ DetectorFactory.seed = 0
 DEFAULT_RETRY_DELAYS = (1.0, 2.0)
 DEFAULT_FALLBACK_VOICE = "en-US-EmmaMultilingualNeural"
 _VOICE_MANAGER: VoicesManager | None = None
+# Read by the voice-sample helper: a line that lets a listener judge a voice as a narrator.
+DEFAULT_SAMPLE_TEXT = (
+    "Había una vez un teatro donde cada personaje recordaba solo lo que había visto, "
+    "y nadie sabía del todo cómo iba a terminar la función."
+)
+
+
+@dataclass(frozen=True)
+class NarrationVoice:
+    """One edge-tts voice a surface may offer for the story audio."""
+
+    name: str
+    display_name: str
+    country: str
+    gender: str
+
+
+# The 45 Spanish voices edge-tts listed on 2026-09-27, as surfaces offer them: Spain first
+# because it is the automatic choice, then by country name.
+NARRATION_VOICES: tuple[NarrationVoice, ...] = tuple(
+    NarrationVoice(name, display, country, gender)
+    for name, display, country, gender in (
+        ("es-ES-AlvaroNeural", "Álvaro", "España", "hombre"),
+        ("es-ES-ElviraNeural", "Elvira", "España", "mujer"),
+        ("es-ES-XimenaNeural", "Ximena", "España", "mujer"),
+        ("es-AR-ElenaNeural", "Elena", "Argentina", "mujer"),
+        ("es-AR-TomasNeural", "Tomás", "Argentina", "hombre"),
+        ("es-BO-MarceloNeural", "Marcelo", "Bolivia", "hombre"),
+        ("es-BO-SofiaNeural", "Sofía", "Bolivia", "mujer"),
+        ("es-CL-CatalinaNeural", "Catalina", "Chile", "mujer"),
+        ("es-CL-LorenzoNeural", "Lorenzo", "Chile", "hombre"),
+        ("es-CO-GonzaloNeural", "Gonzalo", "Colombia", "hombre"),
+        ("es-CO-SalomeNeural", "Salomé", "Colombia", "mujer"),
+        ("es-CR-JuanNeural", "Juan", "Costa Rica", "hombre"),
+        ("es-CR-MariaNeural", "María", "Costa Rica", "mujer"),
+        ("es-CU-BelkysNeural", "Belkys", "Cuba", "mujer"),
+        ("es-CU-ManuelNeural", "Manuel", "Cuba", "hombre"),
+        ("es-EC-AndreaNeural", "Andrea", "Ecuador", "mujer"),
+        ("es-EC-LuisNeural", "Luis", "Ecuador", "hombre"),
+        ("es-SV-LorenaNeural", "Lorena", "El Salvador", "mujer"),
+        ("es-SV-RodrigoNeural", "Rodrigo", "El Salvador", "hombre"),
+        ("es-US-AlonsoNeural", "Alonso", "Estados Unidos", "hombre"),
+        ("es-US-PalomaNeural", "Paloma", "Estados Unidos", "mujer"),
+        ("es-GT-AndresNeural", "Andrés", "Guatemala", "hombre"),
+        ("es-GT-MartaNeural", "Marta", "Guatemala", "mujer"),
+        ("es-GQ-JavierNeural", "Javier", "Guinea Ecuatorial", "hombre"),
+        ("es-GQ-TeresaNeural", "Teresa", "Guinea Ecuatorial", "mujer"),
+        ("es-HN-CarlosNeural", "Carlos", "Honduras", "hombre"),
+        ("es-HN-KarlaNeural", "Karla", "Honduras", "mujer"),
+        ("es-MX-DaliaNeural", "Dalia", "México", "mujer"),
+        ("es-MX-JorgeNeural", "Jorge", "México", "hombre"),
+        ("es-NI-FedericoNeural", "Federico", "Nicaragua", "hombre"),
+        ("es-NI-YolandaNeural", "Yolanda", "Nicaragua", "mujer"),
+        ("es-PA-MargaritaNeural", "Margarita", "Panamá", "mujer"),
+        ("es-PA-RobertoNeural", "Roberto", "Panamá", "hombre"),
+        ("es-PY-MarioNeural", "Mario", "Paraguay", "hombre"),
+        ("es-PY-TaniaNeural", "Tania", "Paraguay", "mujer"),
+        ("es-PE-AlexNeural", "Alex", "Perú", "hombre"),
+        ("es-PE-CamilaNeural", "Camila", "Perú", "mujer"),
+        ("es-PR-KarinaNeural", "Karina", "Puerto Rico", "mujer"),
+        ("es-PR-VictorNeural", "Víctor", "Puerto Rico", "hombre"),
+        ("es-DO-EmilioNeural", "Emilio", "República Dominicana", "hombre"),
+        ("es-DO-RamonaNeural", "Ramona", "República Dominicana", "mujer"),
+        ("es-UY-MateoNeural", "Mateo", "Uruguay", "hombre"),
+        ("es-UY-ValentinaNeural", "Valentina", "Uruguay", "mujer"),
+        ("es-VE-PaolaNeural", "Paola", "Venezuela", "mujer"),
+        ("es-VE-SebastianNeural", "Sebastián", "Venezuela", "hombre"),
+    )
+)
+NARRATION_VOICE_NAMES = frozenset(voice.name for voice in NARRATION_VOICES)
 
 
 @dataclass(frozen=True)
@@ -196,18 +266,24 @@ async def create_story_audio(
     retry_delays: tuple[float, ...] = DEFAULT_RETRY_DELAYS,
     force: bool = False,
     voice_manager: VoicesManager | None = None,
+    voice: str | None = None,
 ) -> AudioArtifact:
-    """Create or reuse an MP3 narration for one generated Markdown story."""
+    """Create or reuse an MP3 narration for one generated Markdown story.
+
+    voice, when given, is the edge-tts voice to read with; otherwise the voice follows the
+    detected language. A completed file is only reused when it was read with that same voice.
+    """
+    requested = voice
     source = Path(story_path)
     destination = Path(output_path) if output_path is not None else source.with_suffix(".mp3")
     if not force:
         existing = _read_completed_artifact(source, destination)
-        if existing is not None:
+        if existing is not None and requested in {None, existing.voice}:
             return existing
 
     fallback = _fallback_voice()
     language = "und"
-    voice = fallback
+    voice = requested or fallback
     try:
         if not source.is_file():
             raise FileNotFoundError(f"Story file does not exist: {source}")
@@ -216,7 +292,7 @@ async def create_story_audio(
         if not text:
             raise ValueError("Story text is empty after Markdown normalization")
         language = await asyncio.to_thread(_detect_language, text)
-        voice = await _voice_for_language(language, fallback, voice_manager)
+        voice = requested or await _voice_for_language(language, fallback, voice_manager)
         destination.parent.mkdir(parents=True, exist_ok=True)
         await _synthesize_with_retries(text, voice, destination, retry_delays)
         artifact = AudioArtifact(destination, language, voice)
@@ -249,6 +325,7 @@ def create_story_audio_sync(
     *,
     retry_delays: tuple[float, ...] = DEFAULT_RETRY_DELAYS,
     force: bool = False,
+    voice: str | None = None,
 ) -> AudioArtifact:
     """Synchronously create story audio, including from an active event loop."""
 
@@ -260,9 +337,50 @@ def create_story_audio_sync(
                 output_path,
                 retry_delays=retry_delays,
                 force=force,
+                voice=voice,
             )
         )
 
+    return _run_to_completion(run)
+
+
+async def create_voice_sample(
+    voice: str,
+    output_path: str | Path,
+    *,
+    text: str = DEFAULT_SAMPLE_TEXT,
+    retry_delays: tuple[float, ...] = DEFAULT_RETRY_DELAYS,
+) -> Path:
+    """Read one short line with a voice, so a person can hear it before choosing it."""
+    destination = Path(output_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        await _synthesize_with_retries(text, voice, destination, retry_delays)
+    except Exception as exc:
+        raise AudioGenerationError(f"Could not read a sample with {voice}") from exc
+    return destination
+
+
+def create_voice_sample_sync(
+    voice: str,
+    output_path: str | Path,
+    *,
+    text: str = DEFAULT_SAMPLE_TEXT,
+    retry_delays: tuple[float, ...] = DEFAULT_RETRY_DELAYS,
+) -> Path:
+    """Synchronously read a voice sample, including from an active event loop."""
+
+    def run() -> Path:
+        """Run the sample synthesis to completion in a fresh event loop."""
+        return asyncio.run(
+            create_voice_sample(voice, output_path, text=text, retry_delays=retry_delays)
+        )
+
+    return _run_to_completion(run)
+
+
+def _run_to_completion(run):
+    """Run a coroutine wrapper here, or on a worker thread when a loop is already running."""
     try:
         asyncio.get_running_loop()
     except RuntimeError:

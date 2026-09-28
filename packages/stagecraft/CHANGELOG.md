@@ -1,5 +1,41 @@
 # Historial de cambios
 
+## 7.3.0
+
+Hace modulares las opciones de un run y añade lo que necesita StageCraft, la interfaz gráfica.
+Cambia el conjunto de artefactos (`generation_options.json`, `brief.json`, `narration.json`
+contrato 2), así que `PIPELINE_VERSION` pasa a 7.3; los runs 5.0 a 7.2 se siguen abriendo.
+
+- **Un solo objeto de opciones.** `GenerationOptions` (`options.py`) reúne cada elección por run y
+  se valida una vez. La fachada conserva sus kwargs explícitos (un test los obliga a coincidir
+  con los campos) y gana `StoryGenerator.from_options`; `StoryPipeline` recibe solo `options=`.
+  La CLI, la consola y Telegram construyen las opciones con `GenerationOptions.from_settings`.
+  `load_settings(require_api_key=False)` lee la configuración sin exigir la clave.
+- **Cada run registra sus opciones** en `generation_options.json`, también el ledger, la guía y
+  el audio, que antes no quedaban en ningún artefacto.
+- **Cancelar un run.** `generate(..., should_cancel=...)`: el pipeline lo consulta antes de cada
+  llamada a un agente y lanza `RunCancelledError` (`RUN_CANCELLED`), que ninguna etapa degradable
+  traga. Nunca se cancela lanzando desde un callback: el de progreso corre dentro del bucle de
+  reintentos del proveedor.
+- **Elegir desde quién se narra.** Nueva visión `limited` (tercera persona limitada a un
+  personaje) y opción `narrator`: el personaje por su nombre, resuelto contra el reparto
+  (`stage/names.py`). Si no existe o no presenció nada, narra el de siempre y el run lo avisa
+  (`[NARRATOR_FALLBACK]`). En `limited` y `first_person` solo se ve lo que ocurrió en escenas
+  donde el personaje estaba, también con memoria compartida.
+- **Nunca se narra desde un log vacío.** Un capítulo sin turnos visibles no se manda al modelo:
+  queda en `narration.json` como `absent`, con `[NARRATOR_ABSENT]`, y se omite de `story.md`;
+  `story_metrics` recibe el plan recortado (`writing/assembly.narrated_plan`).
+- **Tono del narrador.** `narration_tone`, texto libre que solo lee la narración simulada.
+- **Obra estructurada.** `StoryBrief` y `CastMember` (`brief.py`): la trama y el reparto se
+  componen en un prompt determinista que el analista lee como cualquier otro; el run guarda
+  `brief.json`. Si falta un personaje declarado, el diseñador de personajes tiene un reintento
+  y después avisa (`[BRIEF_CAST_MISSING]`).
+- **Voz del audio.** `audio_voice`, una de las voces de `asg_core.NARRATION_VOICES`.
+- **Etiquetas compartidas.** `formats.VOICE_CHOICES` y `MEMORY_CHOICES`; la consola ya no tiene
+  las suyas cableadas (primera mitad de OPS-2).
+- `generate-story` gana `--brief`, `--options` (el `generation_options.json` de otro run),
+  `--narrator`, `--tone`, `--turns-per-beat`, `--audio-voice` y `--voice limited`.
+
 ## 7.2.0
 
 Arregla los bugs que destapó la lectura de los logs 7.1 y los de los instrumentos. Cambia lo que

@@ -1,6 +1,8 @@
 """Stagecraft public API."""
 
+from .brief import CastMember, StoryBrief
 from .generator import StoryGenerator, StoryRun
+from .options import GenerationOptions
 from .planning.profiles import NarrativeProfile
 from .runtime.progress import (
     PipelineEvent,
@@ -32,6 +34,7 @@ from .schemas import (
 from .version import __version__
 
 __all__ = [
+    "CastMember",
     "ChapterMetrics",
     "ChapterPlan",
     "ChapterPresentation",
@@ -39,6 +42,7 @@ __all__ = [
     "ChapterRevisionResult",
     "CharactersArtifact",
     "EventDependency",
+    "GenerationOptions",
     "GeneratorVersionArtifact",
     "NarrativeProfile",
     "PlanReview",
@@ -48,6 +52,7 @@ __all__ = [
     "ProgressCallback",
     "ProgressUpdate",
     "RevisionReport",
+    "StoryBrief",
     "StoryGenerator",
     "StoryMetrics",
     "StoryPlan",

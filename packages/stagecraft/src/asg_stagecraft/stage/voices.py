@@ -58,6 +58,9 @@ VOICES: dict[NarrativeVoice, VoiceStrategy] = {
     NarrativeVoice.OMNISCIENT: VoiceStrategy(NarrativeVoice.OMNISCIENT, False, _omniscient),
     NarrativeVoice.FOCALIZED: VoiceStrategy(NarrativeVoice.FOCALIZED, False, _focalized),
     NarrativeVoice.FIRST_PERSON: VoiceStrategy(NarrativeVoice.FIRST_PERSON, True, _first_person),
+    # Third person limited sees exactly what first person sees; only the grammatical person the
+    # narrator is told to write in differs, and that lives in the narrator's clause.
+    NarrativeVoice.LIMITED: VoiceStrategy(NarrativeVoice.LIMITED, True, _first_person),
 }
 
 
@@ -65,15 +68,19 @@ def narrator_character(
     voice: NarrativeVoice,
     scenes: list[ScenePerformance],
     *,
+    requested: str = "",
     protagonist: str = "",
 ) -> str:
     """Name the character who narrates, or an empty string when nobody does.
 
-    The declared protagonist wins; without one, the character who took the most turns does,
-    which is the only measure available that does not require reading the story.
+    A character the caller asked for wins, then the declared protagonist; without either, the
+    character who took the most turns does, which is the only measure available that does not
+    require reading the story.
     """
     if not VOICES[voice].needs_narrator:
         return ""
+    if requested:
+        return requested
     if protagonist:
         return protagonist
     tally: Counter[str] = Counter()
@@ -94,6 +101,16 @@ def visible_turns(
     scene: ScenePerformance,
     *,
     narrator: str = "",
+    present: frozenset[str] | None = None,
 ) -> list[StageTurn]:
-    """Return the turns of one scene as the configured point of view is able to see them."""
-    return VOICES[voice].visible(scene.turns, narrator, focal_character(scene))
+    """Return the turns of one scene as the configured point of view is able to see them.
+
+    present is the scene's cast when the caller knows it. A voice told from one character sees
+    nothing of a scene that character was not in, whatever the witness lists say: under shared
+    memory every public turn lists the whole cast, and the narrator would otherwise report
+    scenes they never stood in, mixing the memory ablation into the narration.
+    """
+    strategy = VOICES[voice]
+    if strategy.needs_narrator and present is not None and narrator not in present:
+        return []
+    return strategy.visible(scene.turns, narrator, focal_character(scene))

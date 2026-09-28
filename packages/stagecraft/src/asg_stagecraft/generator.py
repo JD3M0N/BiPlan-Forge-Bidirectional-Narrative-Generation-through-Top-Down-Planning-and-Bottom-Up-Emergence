@@ -6,7 +6,9 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
+from .brief import StoryBrief
 from .formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
+from .options import GenerationOptions
 from .pipeline import StoryPipeline
 from .planning.profiles import NarrativeProfile
 from .runtime.errors import RunArtifactError
@@ -70,13 +72,28 @@ class StoryRun:
         """Return the narration record path, populated only for simulated runs."""
         return self.run_dir / "narration.json"
 
+    @property
+    def options_path(self) -> Path:
+        """Return the recorded run options, written by every run since 7.3."""
+        return self.run_dir / "generation_options.json"
+
+    @property
+    def brief_path(self) -> Path:
+        """Return the structured brief a run was asked with, present only for brief runs."""
+        return self.run_dir / "brief.json"
+
     def __fspath__(self) -> str:
         """Expose the run directory through the filesystem path protocol."""
         return str(self.run_dir)
 
 
 class StoryGenerator:
-    """Provide the stable public API for Stagecraft generation."""
+    """Provide the stable public API for Stagecraft generation.
+
+    The keywords mirror GenerationOptions field for field, and a test holds them in step: the
+    console and the bot build this facade through `create_autospec(spec_set=True)`, so an
+    explicit signature is what lets their tests reject an option the facade does not declare.
+    """
 
     def __init__(
         self,
@@ -86,48 +103,66 @@ class StoryGenerator:
         narrative_guidance: bool = True,
         narrative_profile: NarrativeProfile | None = None,
         audio: bool = True,
+        audio_voice: str = "",
         promise_ledger: bool = True,
         story_format: StoryFormat = StoryFormat.NARRATIVE,
         script_method: ScriptMethod = ScriptMethod.NATIVE,
         narrative_voice: NarrativeVoice = NarrativeVoice.OMNISCIENT,
+        narrator: str = "",
+        narration_tone: str = "",
         actor_memory: ActorMemory = ActorMemory.OWN,
         turns_per_beat: int = 8,
     ) -> None:
-        """Configure a generator with its provider and output directory."""
+        """Configure a generator with its provider, output directory and run options."""
         self.provider = provider
         self.output_root = Path(output_root)
-        self.narrative_guidance = narrative_guidance
-        self.promise_ledger = promise_ledger
-        self.narrative_profile = narrative_profile
-        self.audio = audio
-        self.story_format = story_format
-        self.script_method = script_method
-        self.narrative_voice = narrative_voice
-        self.actor_memory = actor_memory
-        self.turns_per_beat = turns_per_beat
+        self.options = GenerationOptions(
+            narrative_guidance=narrative_guidance,
+            narrative_profile=narrative_profile,
+            audio=audio,
+            audio_voice=audio_voice,
+            promise_ledger=promise_ledger,
+            story_format=story_format,
+            script_method=script_method,
+            narrative_voice=narrative_voice,
+            narrator=narrator,
+            narration_tone=narration_tone,
+            actor_memory=actor_memory,
+            turns_per_beat=turns_per_beat,
+        )
+
+    @classmethod
+    def from_options(
+        cls,
+        provider,
+        output_root: Path,
+        options: GenerationOptions,
+    ) -> StoryGenerator:
+        """Build a generator from options a surface has already validated."""
+        return cls(provider, output_root, **dict(options))
 
     def generate(
         self,
-        request: StoryRequest | str,
+        request: StoryRequest | str | StoryBrief,
         on_progress: ProgressCallback | None = None,
         on_run_created: Callable[[Path], None] | None = None,
         on_event: PipelineEventCallback | None = None,
+        *,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> StoryRun:
-        """Generate one complete story and return its run handle."""
+        """Generate one complete story and return its run handle.
+
+        should_cancel is polled before every agent call; once it answers True the run stops
+        with RunCancelledError (RUN_CANCELLED) and its artifacts record where it stopped. A
+        surface must stop a run this way, never by raising from a callback.
+        """
         pipeline = StoryPipeline(
             self.provider,
             self.output_root,
+            options=self.options,
             on_progress=on_progress,
             on_run_created=on_run_created,
             on_event=on_event,
-            narrative_guidance=self.narrative_guidance,
-            promise_ledger=self.promise_ledger,
-            narrative_profile=self.narrative_profile,
-            audio=self.audio,
-            story_format=self.story_format,
-            script_method=self.script_method,
-            narrative_voice=self.narrative_voice,
-            actor_memory=self.actor_memory,
-            turns_per_beat=self.turns_per_beat,
+            should_cancel=should_cancel,
         )
         return StoryRun(pipeline.execute(request))

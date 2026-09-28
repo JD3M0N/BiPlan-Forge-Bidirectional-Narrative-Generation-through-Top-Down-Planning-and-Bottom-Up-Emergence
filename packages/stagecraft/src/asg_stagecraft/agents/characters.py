@@ -15,8 +15,9 @@ class CharacterDesignerAgent(Agent[CharactersArtifact]):
         request: StoryRequest,
         world: WorldArtifact,
         blueprint: NarrativeBlueprint | None = None,
+        feedback: str = "",
     ) -> CharactersArtifact:
-        """Run the CharacterDesignerAgent workflow."""
+        """Design the cast; feedback, only on a repair, names what the last cast left out."""
         role_labels = ""
         if blueprint is not None:
             vocabulary = ", ".join(functional_role_vocabulary())
@@ -40,6 +41,7 @@ class CharacterDesignerAgent(Agent[CharactersArtifact]):
             ),
             prompt=(
                 f"{story_specification_header(request, blueprint)}\n\nWORLD:\n{json_text(world)}"
+                f"{feedback}"
             ),
             schema=CharactersArtifact,
             profile="planning",

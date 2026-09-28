@@ -29,13 +29,20 @@ from ..schemas import (
 )
 from ..script.render import staging_index
 from ..writing.acceptance import writer_candidate_issue
-from ..writing.assembly import assemble_story
+from ..writing.assembly import assemble_story, narrated_plan
 from ..writing.audit import story_metrics, word_count
-from . import fallback, voices
+from . import fallback
 from .casting import dossier_index, fallback_bible, gates_for, materialize_bible
 from .engine import CODA_TURNS, REACTION_TURNS, PerformanceEngine
 from .memory import RECENCY_DECAY, RETRIEVED_RECORDS
 from .metrics import simulation_metrics
+from .narration import (
+    ChapterView,
+    chapter_views,
+    choose_narrator,
+    narrated_chapter_ids,
+    scene_presence,
+)
 from .policy import CHECK_EVERY
 from .render import actor_system_prompt, scene_log, transcript
 from .schemas import (
@@ -75,11 +82,11 @@ class SimulationStagesMixin:
         performance, engine, briefs = self._perform_play(
             request, characters, plan, play, bible, ledger
         )
-        story, narration, fallbacks = self._narrate(
+        story, narration, fallbacks, narrated = self._narrate(
             request, characters, plan, play, performance, ledger
         )
         self._finalize_simulation(
-            request, plan, bible, performance, narration, engine, briefs, story, fallbacks
+            request, narrated, bible, performance, narration, engine, briefs, story, fallbacks
         )
 
     # -- casting -------------------------------------------------------------------------
@@ -371,42 +378,53 @@ class SimulationStagesMixin:
         play: PlayScript,
         performance: PerformanceArtifact,
         ledger: PromiseLedger | None,
-    ) -> tuple[str, NarrationArtifact, int]:
-        """Write the story from the performance log, through the configured point of view."""
+    ) -> tuple[str, NarrationArtifact, int, StoryPlan]:
+        """Write the story from the performance log, through the configured point of view.
+
+        Also returns the plan cut to the chapters actually narrated: story_metrics has to walk
+        the same chapters the story holds.
+        """
         assert self.repository is not None
         self._notify(84, "narration", "Escribiendo la historia desde la funcion")
         voice = self.narrative_voice
-        narrator = voices.narrator_character(
-            voice, performance.scenes, protagonist=_protagonist(characters)
-        )
         names = {member.character_id: member.name for member in play.cast}
+        presence = scene_presence(play)
+        choice = choose_narrator(
+            voice,
+            performance.scenes,
+            requested=self.options.narrator,
+            names=names,
+            protagonist=_protagonist(characters),
+            presence=presence,
+        )
+        if choice.warning:
+            self.repository.add_warning(choice.warning)
+            self._emit("narrator_fallback", choice.warning, stage="narration")
+        narrator = choice.character_id
         titles = self._localized_titles(play)
-
-        by_chapter: dict[str, list[ScenePerformance]] = {}
-        for scene in performance.scenes:
-            by_chapter.setdefault(scene.chapter_id, []).append(scene)
+        views = chapter_views(voice, plan, performance.scenes, narrator=narrator, presence=presence)
 
         agent = NarratorAgent(self.provider)
         bodies: list[str] = []
         records: list[ChapterNarration] = []
         fallbacks = 0
-        for index, chapter in enumerate(plan.chapters, 1):
+        for view in views:
+            index, chapter, total = view.index, view.chapter, len(plan.chapters)
             self._notify(
-                84 + (index - 1) * 10 // len(plan.chapters),
+                84 + (index - 1) * 10 // total,
                 "narration",
-                f"Narrando el capitulo {index} de {len(plan.chapters)}",
+                f"Narrando el capitulo {index} de {total}",
                 index,
-                len(plan.chapters),
+                total,
             )
-            scenes = by_chapter.get(chapter.id, [])
-            visible = [
-                turn
-                for scene in scenes
-                for turn in voices.visible_turns(voice, scene, narrator=narrator)
-            ]
-            available = sum(len(scene.turns) for scene in scenes)
-            key_ids = {item for scene in scenes for beat in scene.beats for item in beat.evidence}
-            log = scene_log(visible, names, thoughts=True, key_ids=key_ids)
+            if not view.visible:
+                self._skip_unseen_chapter(index, narrator, names)
+                records.append(_chapter_record(view, words=0, attempts=0, source="absent"))
+                continue
+            key_ids = {
+                item for scene in view.scenes for beat in scene.beats for item in beat.evidence
+            }
+            log = scene_log(view.visible, names, thoughts=True, key_ids=key_ids)
             body, attempts, source = self._narrate_chapter(
                 agent,
                 request,
@@ -418,33 +436,40 @@ class SimulationStagesMixin:
                 narrator,
                 names,
                 self._promise_brief(ledger, chapter.id),
-                visible,
+                view.visible,
                 index,
             )
             fallbacks += int(source == "fallback")
             bodies.append(body)
             records.append(
-                ChapterNarration(
-                    chapter_id=chapter.id,
-                    chapter_index=index,
-                    scene_ids=[scene.scene_id for scene in scenes],
-                    turns_available=available,
-                    turns_visible=len(visible),
-                    words=word_count(body),
-                    attempts=attempts,
-                    source=source,
-                )
+                _chapter_record(view, words=word_count(body), attempts=attempts, source=source)
             )
 
         narration = NarrationArtifact(
             narrative_voice=voice,
             narrator_character_id=narrator,
+            requested_narrator=self.options.narrator,
+            narrator_source=choice.source,
+            narration_tone=self.options.narration_tone,
             chapters=records,
         )
         self.repository.save_json("narration.json", narration)
-        story = assemble_story(plan, self._presentation_from(play, plan), bodies)
+        narrated = narrated_plan(plan, narrated_chapter_ids(views))
+        story = assemble_story(narrated, self._presentation_from(play, plan), bodies)
         self.repository.complete_stage("narration")
-        return story, narration, fallbacks
+        return story, narration, fallbacks, narrated
+
+    def _skip_unseen_chapter(self, index: int, narrator: str, names: dict[str, str]) -> None:
+        """Report a chapter left out because this point of view saw nothing of it."""
+        assert self.repository is not None
+        reason = (
+            f"{names.get(narrator, narrator)} no presencio ninguna de sus escenas"
+            if narrator
+            else "no tiene ningun turno representado"
+        )
+        warning = f"[NARRATOR_ABSENT] Capitulo {index}: {reason}; se omite de la historia."
+        self.repository.add_warning(warning)
+        self._emit("narrator_absent", warning, stage="narration")
 
     def _narrate_chapter(
         self,
@@ -478,6 +503,7 @@ class SimulationStagesMixin:
                     narrator_name=names.get(narrator, ""),
                     promise_brief=promise_brief,
                     retry_feedback=feedback_snapshot,
+                    tone=self.options.narration_tone,
                 )
 
             try:
@@ -568,6 +594,20 @@ class SimulationStagesMixin:
                 for chapter in plan.chapters
             ],
         )
+
+
+def _chapter_record(view: ChapterView, *, words: int, attempts: int, source: str):
+    """Describe one chapter of the narration from what its point of view could see."""
+    return ChapterNarration(
+        chapter_id=view.chapter.id,
+        chapter_index=view.index,
+        scene_ids=[scene.scene_id for scene in view.scenes],
+        turns_available=view.available,
+        turns_visible=len(view.visible),
+        words=words,
+        attempts=attempts,
+        source=source,
+    )
 
 
 def _protagonist(characters: CharactersArtifact) -> str:

@@ -2,7 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import create_autospec
 
 import pytest
-from asg_stagecraft import StoryGenerator
+from asg_stagecraft import GenerationOptions, StoryGenerator
 from asg_stagecraft.formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
 from asg_stagecraft.planning.profiles import NarrativeProfile
 from asg_stagecraft.runtime.errors import PlotValidationError
@@ -25,10 +25,10 @@ def _patch_facade(
     story_format=StoryFormat.NARRATIVE,
     script_method=ScriptMethod.NATIVE,
 ):
-    def build(provider, output_root, **kwargs):
+    def build(provider, output_root, options):
         captured["provider"] = provider
         captured["output_root"] = output_root
-        captured["options"] = kwargs
+        captured["options"] = options
         instance = create_autospec(StoryGenerator, spec_set=True, instance=True)
 
         def generate(request, on_progress=None, on_run_created=None, on_event=None):
@@ -44,7 +44,7 @@ def _patch_facade(
         return instance
 
     facade = create_autospec(StoryGenerator, spec_set=True)
-    facade.side_effect = build
+    facade.from_options.side_effect = build
     provider = SimpleNamespace(usage_records=[])
     settings = SimpleNamespace(
         output_root=tmp_path,
@@ -82,48 +82,39 @@ def test_adapter_only_calls_methods_the_real_facade_defines(tmp_path, monkeypatc
     assert captured["prompt"] == "Una historia sobre un faro"
     assert captured["provider"] is provider
     assert captured["output_root"] == tmp_path
-    assert captured["options"] == {
-        "narrative_guidance": True,
-        "promise_ledger": True,
-        "narrative_profile": None,
-        "story_format": StoryFormat.NARRATIVE,
-        "script_method": ScriptMethod.NATIVE,
-        "narrative_voice": NarrativeVoice.OMNISCIENT,
-        "actor_memory": ActorMemory.OWN,
-        "turns_per_beat": 8,
-    }
+    assert captured["options"] == GenerationOptions(
+        narrative_guidance=True,
+        promise_ledger=True,
+        narrative_profile=None,
+        story_format=StoryFormat.NARRATIVE,
+        script_method=ScriptMethod.NATIVE,
+        narrative_voice=NarrativeVoice.OMNISCIENT,
+        actor_memory=ActorMemory.OWN,
+        turns_per_beat=8,
+    )
     assert captured["on_run_created"] is run_created
     assert progress == [GenerationProgress(40, "writing", "Escribiendo el capítulo 2")]
     assert events == [GenerationEvent("Reintento 1", "writing")]
 
     # A chosen profile arrives as the pipeline's own enum, not as the string the bot holds.
     generators_module.StagecraftGenerator().generate("Una historia", narrative_profile="essential")
-    assert captured["options"]["narrative_profile"] is NarrativeProfile.ESSENTIAL
+    assert captured["options"].narrative_profile is NarrativeProfile.ESSENTIAL
 
     # The guidance setting is forwarded, not hardcoded.
     _patch_facade(monkeypatch, tmp_path, captured, narrative_guidance=False)
     generators_module.StagecraftGenerator().generate("Otra historia")
-    assert captured["options"] == {
-        "narrative_guidance": False,
-        "promise_ledger": True,
-        "narrative_profile": None,
-        "story_format": StoryFormat.NARRATIVE,
-        "script_method": ScriptMethod.NATIVE,
-        "narrative_voice": NarrativeVoice.OMNISCIENT,
-        "actor_memory": ActorMemory.OWN,
-        "turns_per_beat": 8,
-    }
+    assert captured["options"] == GenerationOptions(narrative_guidance=False)
 
     # So is the promise ledger, which is the ablation arm of the measurement.
     _patch_facade(monkeypatch, tmp_path, captured, promise_ledger=False)
     generators_module.StagecraftGenerator().generate("Una tercera historia")
-    assert captured["options"]["promise_ledger"] is False
+    assert captured["options"].promise_ledger is False
 
     # And so is the output format, chosen per job in the conversation.
     _patch_facade(monkeypatch, tmp_path, captured)
     generators_module.StagecraftGenerator().generate("Una historia", story_format="script-adapted")
-    assert captured["options"]["story_format"] is StoryFormat.SCRIPT
-    assert captured["options"]["script_method"] is ScriptMethod.ADAPTED
+    assert captured["options"].story_format is StoryFormat.SCRIPT
+    assert captured["options"].script_method is ScriptMethod.ADAPTED
 
     with pytest.raises(GenerationFailure) as unknown_format:
         generators_module.StagecraftGenerator().generate("Una historia", story_format="stage-play")
@@ -151,7 +142,7 @@ def test_adapter_translates_pipeline_errors_into_application_failures(tmp_path, 
     monkeypatch.setattr(
         generators_module,
         "StoryGenerator",
-        lambda *args, **kwargs: SimpleNamespace(generate=explode),
+        SimpleNamespace(from_options=lambda *args, **kwargs: SimpleNamespace(generate=explode)),
     )
 
     with pytest.raises(GenerationFailure) as raised:

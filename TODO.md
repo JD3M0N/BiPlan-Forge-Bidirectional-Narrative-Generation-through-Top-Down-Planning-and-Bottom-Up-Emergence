@@ -1,20 +1,19 @@
 # Hoja de ruta
 
-**Estado medido el 2026-09-26 con `asg-stagecraft` 7.1.1; el código va por 7.2.0 (pipeline 7.2),
-que aún no ha generado ningún run real.** Un solo generador, Stagecraft, con tres formatos:
-`narrative`, `script` y `simulated` (ver
-[docs/simulacion_escenica.md](docs/simulacion_escenica.md)).
+**Estado medido el 2026-09-27 con `asg-stagecraft` 7.3.0 (pipeline 7.3; el corpus llega a 7.2,
+validado en dos runs reales).** La interfaz gráfica StageCraft (`asg-studio`) ya existe. Un solo generador, Stagecraft, con tres formatos: `narrative`, `script` y `simulated`
+(ver [docs/simulacion_escenica.md](docs/simulacion_escenica.md)).
 
 | Corpus | Runs | Completados | Fallidos | Qué es |
 |---|---|---|---|---|
-| `Stories/Stagecraft/` | 7 | 5 | 2 | 7.0–7.1: seis simulados del prompt 03 Esencial y una corrida narrativa de control |
+| `Stories/Stagecraft/` | 10 | 7 | 3 | 7.0–7.2: ocho simulados y una corrida narrativa de control |
 | `Stories/Top-Down/` | 176 | 135 | 41 | 4.0–6.2, anteriores al renombrado; 18 sin versión |
 | `Stories/Bottom-Up/` | 6 | — | — | el escape room retirado en 7.1.1, más tres lotes de CSV |
 
 - **Evaluación humana: casi inexistente.** De 146 `evaluation.json`, uno solo tiene puntuaciones
   reales (`Top-Down/20260831-223547-el-rescate-de-luminaria`). Todo lo demás que se sabe de la
   calidad sale de métricas automáticas o de jueces LLM, y esos jueces aprueban casi todo (TD-1).
-- **Puerta de calidad limpia.** `ruff check`, `ruff format --check` (154 archivos), 561 pruebas
+- **Puerta de calidad limpia.** `ruff check`, `ruff format --check` (184 archivos), 662 pruebas
   pasan y 2 se omiten, `pip check` y `tests/test_sync_railway_stories.ps1`. Corren en
   `.github/workflows/quality.yml` en cada push y pull request, y en local con `.\quality.ps1`.
 - **La corrida de control** (`Stories/Stagecraft/20260926-094204-el-secreto-del-faro-de-san-telmo`,
@@ -43,7 +42,18 @@ que aún no ha generado ningún run real.** Un solo generador, Stagecraft, con t
   - los títulos de acto en inglés (TD-2, en parte);
   - las cotas internas (ING-5, en parte).
 
-  Lo de SIM-9 y SIM-10 falta verlo en runs reales, en el par de SIM-1.
+  **SIM-9 y SIM-10 están verificados en real** por el par de 7.2
+  (`Stagecraft/20260927-163733-*`, prompt 03, y `20260927-213245-*`, prompt 07): mediana y máximo
+  de 8 recuerdos por turno frente a los 20,5–29 de mediana y 57–70 de máximo de 7.1, cero material
+  propio recuperado, 38 de 43 y 47 de 51 turnos con destinatario frente a 1 de 80, cero notas
+  repetidas y el primer susurro del corpus. La tabla completa está en
+  [docs/simulacion_escenica.md](docs/simulacion_escenica.md), «Validación de 7.2».
+- **La frontera de conocimiento se sostiene en el dato.** Una auditoría determinista de los dos
+  runs sobre `contexts.jsonl`, `turns.jsonl` y `memory/*/records.json` no encontró ningún id ni
+  réplica del guion en un contexto de actor, ningún recuerdo de lo no presenciado, ningún
+  pensamiento ni susurro ajeno, y ninguna compuerta filtrada por el dossier, el objetivo, el
+  escenario o la nota. El juez LLM dio 95,83 y 100 de conocimiento, y 93,33 y 95,0 de fidelidad
+  de la narración, frente a 81,67 y 78,33 en 7.1.
 - **Las funciones 7.0 y 7.1 no se comparan sin más con las de 7.2.** Sus actores leían toda su
   memoria anterior (medianas de 18 a 29 recuerdos por turno, máximos de 52 a 72, frente a los 8
   del diseño) y casi nunca tenían destinatario. Sus métricas recalculadas con el código de 7.2
@@ -53,7 +63,7 @@ que aún no ha generado ningún run real.** Un solo generador, Stagecraft, con t
   - [docs/mejoras_simulacion.md](docs/mejoras_simulacion.md): diagnóstico de la actuación en los
     runs 7.1 y mejoras con su respaldo.
 
-  De ahí salen SIM-9 a SIM-13, MED-7 y EXP-5.
+  De ahí salieron SIM-9 a SIM-13, MED-7 y EXP-5; SIM-9 y SIM-10 están cerradas.
 
 ## Cómo leer esto
 
@@ -85,14 +95,14 @@ La tesis se cierra con experimentos medidos y evaluados por personas. Para llega
 1. **Instrumentos fiables**, con MED-1, MED-2 y MED-7. Sin ellos una matriz muere a medias, como
    murió `054422`, o mide cosas que no son lo que dicen. MED-7 fija además la línea base de la
    actuación antes de cambiarla.
-2. **Una función y unos jueces que no mientan**, con SIM-1, SIM-2, TD-1 y TD-2. Medir hoy mediría
-   los defectos, no los formatos. Su par de runs cierra de paso SIM-9 y SIM-10, que solo esperan
-   verse en real.
+2. **Una función y unos jueces que no mientan**, con SIM-1, SIM-2, SIM-14, SIM-15, TD-1 y TD-2.
+   Medir hoy mediría los defectos, no los formatos. SIM-9 y SIM-10 ya están cerradas con el par
+   de 7.2; SIM-14 y SIM-15 salieron de ese mismo par.
 3. **Matrices emparejadas**, con MED-3 y MED-5.
 4. **Los experimentos**: EXP-1, EXP-2, EXP-3 y EXP-5.
 5. **La evaluación humana** de esas historias, con EXP-4.
 
-ING-2 abarata todo lo que reescribe prompts (SIM-1, SIM-2, SIM-6, SIM-10, TD-2, TD-4), así que
+ING-2 abarata todo lo que reescribe prompts (SIM-1, SIM-2, SIM-6, SIM-15, TD-2, TD-4), así que
 conviene hacerlo antes o a la vez. El resto de ING y OPS puede avanzar en paralelo y sin cuota.
 
 El porqué de esta ruta, con sus fuentes, está en [docs/marco_hibrido.md](docs/marco_hibrido.md); el
@@ -110,7 +120,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   | Narrativa (corrida de control) | 17 | 97k |
   | Guion nativo | 15 | ~75k |
   | Guion adaptado | 20 | ~93k |
-  | Simulado | 98–119 | 250k–337k |
+  | Simulado | 98–126 | 250k–337k |
 
   El tope gratuito es diario y por modelo (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`).
   Por el run que lo agotó ronda las 500 peticiones al día, cifra inferida, no confirmada. Una
@@ -180,10 +190,13 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   - Un informe en `evaluation`, que solo lee disco, que reparta llamadas, tokens y latencia por
     agente y etapa desde `llm_calls.jsonl`.
   - Comprobarlo en el par de SIM-1.
-- **Hecho cuando.** En un run 7.2:
-  - `failed_calls` cuenta llamadas perdidas;
-  - la suma de latencias no supera el reloj;
-  - el informe reparte tokens y tiempo por agente.
+- **Medido en 7.2.** Las tres comprobaciones del «Hecho cuando» pasan ya en los dos runs, leídas
+  a mano de `llm_calls.jsonl`: `failed_calls` es 0 con 2 intentos 504 en cada uno, la suma de
+  latencias (726 y 572 s) cabe en el reloj (951 y 825 s), y el reparto por agente sale del propio
+  archivo (el actor se lleva 71 de 110 llamadas y 123k de 260k tokens en `163733`). Lo que falta es
+  el **informe** en `evaluation`, que nadie ha escrito.
+- **Hecho cuando.** El informe de `evaluation` reparte llamadas, tokens y latencia por agente y
+  etapa, y lee como «no medido» lo que un run anterior no registró.
 
 ### MED-7 · Métricas de actuación leídas del log
 
@@ -195,7 +208,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   - las notas que se repiten al mismo actor (5 de 54 turnos con nota);
   - los pensamientos que son un plan (35 % y 62 %) o que repiten la nota;
   - las mentiras (0 de 80) y la variedad de tácticas por actor;
-  - cuánta memoria recibe cada turno (SIM-9);
+  - cuánta memoria recibe cada turno (medido a mano en el par de 7.2: mediana y máximo de 8);
   - si las voces se distinguen;
   - si el narrador cuenta un pensamiento con una compuerta antes de su evento (SIM-13).
 - **Qué hacer.** Calcularlas en `report-simulations`, que solo lee disco, desde `turns.jsonl`,
@@ -249,6 +262,13 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   3. Quitar `PROMISE OBLIGATIONS` del narrador. En su prompt, fijar que una pregunta que el log
      deja abierta se queda abierta.
   4. En el formato simulado, auditar las promesas contra `story.md`.
+- **Medido en 7.2.** El par de 7.2 mejora esto sin cerrarlo. Las tres compuertas del prompt 03
+  **sí** se dijeron en escena (la solución, en `chap_3-scene-2-t004`: «Fui yo quien ajustó el
+  pasador desde fuera con esa pieza»), y el narrador no inventó ninguna: 93,33 y 95,0 de fidelidad
+  frente a 81,67 y 78,33. Lo que sigue sin ocurrir es lo que pide el primer «Hecho cuando»:
+  **ninguna** compuerta aparece citada como prueba en `director.jsonl`, porque las cláusulas
+  siguen saliendo del `outcome` del evento y no de la compuerta. Y la solución llegó por confesión
+  de la hija, no por la deducción que decía su `how` (ver TD-4 y SIM-11).
 - **Hecho cuando.** En un par nuevo de runs:
   - cada compuerta que se revela en el último beat aparece en un turno citado como prueba en
     `director.jsonl`;
@@ -291,49 +311,83 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   - Escribir en el idioma de la ficción las notas, la coda, y la emoción y la meta de la reflexión.
   - Rechazar un `stage_event` que revele una compuerta cuyo evento no ha llegado.
   - Que el casting no programe como confesión una compuerta que la petición exige deducir.
+- **Medido en 7.2.** Nada de esto se ha arreglado, y el par de 7.2 lo confirma con sus cifras:
+  14 de 33 y 14 de 39 notas en inglés, 5 estados de actor mezclando idiomas en `213245`, cláusulas
+  rehechas en 2 y 4 beats, y una compuerta revelada por el mundo antes de su evento (esa parte
+  tiene ya su propia ficha con la evidencia, SIM-15). `thought_ratio` bajó a 0,91 y 0,92, y los
+  pensamientos de plan siguen en el 44 % y el 64 %.
 - **Hecho cuando.** En el par de SIM-1:
   - las cláusulas de cada beat son las mismas en todas sus lecturas;
   - ninguna nota ni ningún estado de actor está en inglés;
   - ninguna compuerta se revela antes de su evento;
   - `thought_ratio` se ha vuelto a medir, sin exigirle todavía un valor (eso es SIM-6).
 
-### SIM-9 · Ver la memoria acotada en un run real
+### SIM-14 · Un actor se sale de la ficción y el log lo acepta
 
-*Área:* función simulada · *Cuota:* se valida con el par de SIM-1 · *Depende de:* MED-7
+*Área:* función simulada · *Cuota:* sin cuota · *Depende de:* —
 
-- **Síntoma.** El bug está arreglado en 7.2.0, con tests: `CharacterMemory.recall` aplica su tope
-  (6 recuerdos más las 2 últimas reflexiones) y las réplicas y pensamientos propios ya no se
-  recuperan. Falta comprobarlo en una función real: en 7.1 los actores recibían una mediana de 18
-  a 29 recuerdos por turno, con máximos de 52 a 72, y uno repitió un turno entero una escena
-  después.
-- **Qué hacer.** Leer los `contexts.jsonl` del par de runs de SIM-1 y contar recuerdos por turno,
-  caracteres por contexto y réplicas repetidas entre escenas (las cifras de MED-7).
-- **Hecho cuando.** En ese par, ningún contexto de actor supera los recuerdos del diseño y no hay
-  ninguna réplica copiada entre escenas.
-- **Ojo.**
-  - Las funciones 7.0 y 7.1 se representaron con memoria completa: son un brazo involuntario de
-    «memoria entera» que no se mezcla con las nuevas en EXP-1 ni en EXP-2. Sus cifras
-    recalculadas con el código de 7.2 están en `simulation_metrics.recomputed.json`.
-  - Si con el tope una obra Expansiva pierde el hilo, subirlo es una decisión que se mide (ver
-    Ideas), no un parche.
-  - El porqué, en `docs/mejoras_simulacion.md` §2.
+- **Síntoma.** En `Stagecraft/20260927-163733-*`, turno `chap_2-scene-1-t005`, Mara dijo «I am
+  checking the import paths for `Model` in the Superset models structure» y su acción fue
+  «Examine the imports in `superset/models/core.py`».
+  - El turno pasó los seis rechazos de `stage/validation.py`: no está vacío, no lleva un id del
+    plan, no pasa de 45 palabras, no está en primera persona y no repite nada.
+  - Entró en `turns.jsonl`, en `transcript.md`, en `performance.json` y en la memoria de tres
+    personajes, de donde se pudo recuperar en turnos posteriores.
+  - Fue el segundo intento del turno: el primero se rechazó por `REPEATED_ACTION`.
+  - El juez de la auditoría lo marcó con severidad 5 y es la **única** fuga de los dos runs 7.2.
+  - Se salvó por el narrador, que lo omitió: no llegó a `story.md`.
+- **Qué hacer.** Un rechazo determinista de lo que no pertenece a la ficción, en el idioma ASCII
+  inglés de los demás, con la reinyección de siempre. Señales barajables sin tocar el plan: habla o
+  acción cuyo idioma no es el de la ficción, y vocabulario de código (rutas con `/` y extensión,
+  identificadores con guion bajo, comillas invertidas).
+- **Hecho cuando.** Hay un test con un turno de ese tipo que se rechaza y se reintenta, y ningún
+  run nuevo trae en su log una línea ajena al mundo de la ficción.
+- **Ojo.** El detector va en `stage/validation.py`, donde ninguna cifra viaja al prompt. Vigilar el
+  falso positivo: una réplica corta con un nombre propio extranjero no es un turno roto.
 
-### SIM-10 · Ver a los personajes escucharse en un run real
+### SIM-15 · El mundo entrega la trama y adelanta las compuertas
 
-*Área:* función simulada · *Cuota:* se valida con el par de SIM-1 · *Depende de:* MED-7
+*Área:* función simulada · *Cuota:* se valida con el par siguiente · *Depende de:* SIM-2
 
-- **Síntoma.** Arreglado en 7.2.0, con tests: el actor nombra a su destinatario y `normalize_turn`
-  lo traduce al id, su contexto marca la réplica que no ha contestado («TE ACABAN DE DECIR») y una
-  nota se entrega una vez. Falta verlo en una función real: en 7.1 solo 1 de 80 turnos llevaba
-  destinatario, no hubo un susurro y 5 de 54 notas se repitieron.
-- **Qué hacer.** Leer el par de runs de SIM-1 con MED-7: turnos con destinatario, turnos
-  respondidos, notas repetidas y susurros.
-- **Hecho cuando.** En ese par:
-  - ninguna nota llega dos veces al mismo actor en un beat;
-  - al menos la mitad de los turnos llevan destinatario, y los turnos respondidos suben claramente
-    respecto de 7.1.
-- **Ojo.** La escalera de SIM-2 y la regla contra el suavizado siguen mandando, y el orden de
-  palabra sigue siendo determinista. El porqué, en `docs/mejoras_simulacion.md` §3.
+- **Síntoma.** Los `stage_event` de los dos runs 7.2 hacen más de lo que la escalera les pide.
+  - **Adelantan una compuerta.** En `163733`, el evento del capítulo 1 «hizo saltar el pestillo
+    oxidado de la puerta interior», que es la compuerta anclada en `event_5`. De paso destruyó la
+    prueba del cuarto cerrado: Mara dedujo después que «la ráfaga lo forzó desde fuera» y exculpó
+    al contrabandista, contra la solución real de la obra.
+  - **Entregan el caso.** En `213245`, un repartidor trajo un sobre «que detalla la quiebra
+    simulada por Víctor Cárdenas para vengarse de la casa de subastas»: el motivo del misterio,
+    por correo. El juez lo archivó como `invented_event` de severidad 4.
+  - **Repiten recurso.** En `163733` los dos eventos fueron ráfagas de viento, aunque el contexto
+    del director ya lleva los eventos ya usados.
+- **Qué hacer.**
+  - Rechazar el `stage_event` que revele una compuerta cuyo evento no ha llegado, con el mismo
+    mecanismo de reintento que el resto (es el tercer punto de SIM-2, aquí con su evidencia).
+  - Fijar en el contrato del `stage_event` que el mundo entrega **una** cláusula que falta, nunca
+    un motivo, una identidad ni una confesión ajena: lo que se sabe se sigue jugando en escena.
+  - Pasar al director el tipo de recurso usado y rechazar un segundo del mismo tipo (lo que ya
+    pide SIM-6).
+- **Hecho cuando.** En un par nuevo, ningún evento del mundo revela una compuerta antes de su
+  evento ni aporta un hecho que no sea la cláusula que faltaba, y no se repite tipo de recurso.
+
+### SIM-16 · `REPEATED_ACTION` se ha vuelto el rechazo dominante
+
+*Área:* función simulada · *Cuota:* sin cuota para medir · *Depende de:* —
+
+- **Síntoma.** En los dos runs 7.2 es el **único** motivo de rechazo: 7 turnos en `163733` (5 de
+  ellos en la primera escena) y 10 en `213245`, y provocó los 2 turnos saltados y sus dos avisos
+  `[STAGE_TURN_SKIPPED]`. En 7.1 los rechazos eran uno por run, y de otro tipo.
+  - La regla mide **contención** contra **todas** las acciones anteriores del actor en la obra,
+    no solo la ventana de 3 del validador, desde que 7.2 amplió su alcance.
+  - Un turno rechazado dos veces se salta, y un salto costó en `163733` el beat forzado del
+    capítulo 1.
+  - El segundo intento del turno que se saltó de la ficción (SIM-14) salió justo de uno de estos
+    rechazos.
+- **Qué hacer.** Medir primero, con los logs que ya hay, cuántos de esos rechazos son un tic real
+  y cuántos son un gesto honesto que comparte un verbo. Según eso, decidir entre volver a la
+  ventana corta para la contención, exigir un solapamiento mayor, o dejarlo como está y dar al
+  actor la lista de sus propios gestos recientes para que no los proponga.
+- **Hecho cuando.** Hay una decisión escrita con las cifras de los cuatro runs, y en un par nuevo
+  ningún turno se salta por este motivo.
 
 ### TD-1 · Los jueces del pipeline aprueban casi todo
 
@@ -398,6 +452,10 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
     ficción y con su género.
   - Sacar el slug del título localizado.
   - Que el crítico no levante notas sobre lo que el Writer no controla.
+- **Medido en 7.2.** En el formato simulado esto sale ya bien: los dos runs tienen slug, títulos
+  de capítulo, roles y `public_face` en español, y el género coincide con la petición (la médica
+  del prompt 03 es «Mujer de unos cincuenta años»). Lo que queda en inglés es lo que no ve el
+  lector y lo del director (SIM-2). Falta comprobarlo en `narrative` y en `script`.
 - **Hecho cuando.**
   - En runs nuevos de cada formato, el slug, los nombres y los roles están en español.
   - El género de cada personaje coincide con el de la petición.
@@ -473,9 +531,15 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   - Un presupuesto de pensamiento mínimo para el actor, medido con y sin él sobre el mismo plan
     (EXP-5). La literatura dice que razonar no mejora el role-play y puede empeorarlo
     (`docs/mejoras_simulacion.md` §10).
+- **Medido en 7.2.** Mucho menos grave que en 7.1, pero sigue ahí: 2 intentos 504 por run, y el
+  reloj (951 y 825 s) deja 100 y 49 s sin explicar sobre la suma de latencias más las esperas. Los
+  runs bajaron a 14–16 minutos, frente a los 17–31 de 7.0 y 7.1. Un `ConnectError` de red mató
+  además un run entero del prompt 07 (`20260927-170152-*`) tras 19 fallos seguidos: el aviso que
+  quedó, `ACTOR_CALL_FAILED | ProviderError`, no dice qué error fue, porque `_reject` guarda
+  `type(exc).__name__` y no el código que sí está en `llm_calls.jsonl`.
 - **Hecho cuando.** En un run simulado nuevo, con la telemetría de MED-2, el reloj se acerca a la
-  suma de latencias con éxito más las esperas de cuota, y ninguna llamada de actor pasa de su
-  timeout.
+  suma de latencias con éxito más las esperas de cuota, ninguna llamada de actor pasa de su
+  timeout, y un turno rechazado por el proveedor deja en `rejected.jsonl` el código del fallo.
 
 ### SIM-5 · El narrador desfigura el log
 
@@ -508,7 +572,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
 
 ### SIM-6 · La función casi no tiene subtexto, susurros ni variedad
 
-*Área:* función simulada · *Cuota:* ~220 llamadas · *Depende de:* SIM-2, SIM-10
+*Área:* función simulada · *Cuota:* ~220 llamadas · *Depende de:* SIM-2
 
 - **Síntoma.**
   - **Casi todo turno trae pensamiento, y casi siempre es un plan.** Entre el 94 y el 98 % de los
@@ -516,7 +580,8 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
     quedan repiten la intención o traducen la nota del director (SIM-2): entre el 35 % (`070539`) y
     el 62 % (`072847`) empiezan por «debo», «tengo que», «necesito» o «exijo».
   - **Cero susurros, y no por falta de ocasión.** Un susurro exige destinatario, y el actor no puede
-    nombrar a nadie: el esquema le pide ids que nunca ve (SIM-10).
+    nombrar a nadie: el esquema le pedía ids que nunca veía. Arreglado en 7.2.0, y el par de
+    7.2 dio el primer susurro del corpus: 1 en un run y 0 en el otro, así que sigue siendo raro.
   - **Una sola táctica domina.** `deflect` es el 38 % de los turnos: 30 de 80.
   - **El mundo solo sabe hacer viento.** Los cinco eventos del mundo que redactó el director en
     7.1 fueron viento. Uno abrió «la ventana» en un misterio de cuarto cerrado, contra la premisa.
@@ -527,9 +592,14 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
     (`THOUGHT_ECHO` en `normalize_turn`).
   - Dar al actor qué no presenció cada uno de los que tiene delante, derivado de los testigos de su
     memoria: terreno común explícito, sin tocar el plan.
-  - Dejar que el director pida un aparte; el destinatario lo trae SIM-10.
+  - Dejar que el director pida un aparte; el destinatario ya existe desde 7.2.0.
   - Pasar al director el tipo de recurso usado (clima, llegada, objeto, sonido) y rechazar un
     segundo evento del mismo tipo.
+- **Medido en 7.2.** `thought_ratio` bajó a 0,91 y 0,92 desde 0,94–0,98, pero los pensamientos de
+  plan subieron a 0,44 y 0,64. Hubo **1 susurro** en `163733` y ninguno en `213245`, así que el
+  canal ya existe pero casi no se usa. Las tácticas siguen concentradas: `deflect` 12 de 43 en uno
+  y `demand` 20 de 51 en el otro. Los eventos del mundo del prompt 03 fueron los dos viento; los
+  del 07, tres recursos distintos (ver SIM-15).
 - **Hecho cuando.** Un par de runs:
   - baja `thought_ratio` claramente de 0,9, y bajan los pensamientos de plan que mide MED-7;
   - tiene al menos un susurro que la ablación pueda medir;
@@ -570,8 +640,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
 
 ### SIM-11 · Los sospechosos no mienten
 
-*Área:* función simulada · *Cuota:* ~220 llamadas (un par de misterio) · *Depende de:* SIM-2,
-SIM-10
+*Área:* función simulada · *Cuota:* ~220 llamadas (un par de misterio) · *Depende de:* SIM-2
 
 - **Síntoma.**
   - **Nadie miente.** En los 80 turnos 7.1 no hay un solo `lie`, `test`, `charm`, `plead` ni
@@ -590,6 +659,10 @@ SIM-10
     versiones, tender una trampa, callar), como conductas y nunca como réplicas.
   - El actor ve sus últimas tácticas nombradas en español («has probado: desviar, desviar,
     desviar»), derivadas del log, para que la regla de cambiar de táctica tenga con qué operar.
+- **Medido en 7.2.** El par de 7.2 son justo los prompts 03 y 07, y el patrón se repite: ni un
+  solo turno `lie` en 94 turnos de actor, el contrabandista de `163733` jugó **una** táctica en
+  toda la obra (`deflect`) y `demand` fue 20 de 51 turnos en `213245`. La resolución del prompt 03
+  volvió a llegar por confesión, que su petición prohíbe.
 - **Hecho cuando.** En un par de misterio (prompts 03 y 07):
   - hay al menos una mentira sostenida y después descubierta;
   - hay más tácticas distintas por actor que en 7.1, leídas con MED-7.
@@ -706,9 +779,9 @@ SIM-10
 *Área:* top-down · *Cuota:* ~150 llamadas (matriz de los tres perfiles) · *Depende de:* —
 
 - **Síntoma.**
-  - **En 7.x, siempre.** En los 6 runs que llegaron a planificar, los cinco simulados y la
-    corrida de control, el primer plan se rechazó con «essential profile requires at least 2
-    events per chapter». En la de control fue por `capitulo_3`.
+  - **En 7.x, siempre.** En los 8 runs que llegaron a planificar, incluidos los dos de 7.2, el
+    primer plan se rechazó con «essential profile requires at least 2 events per chapter»: los dos
+    runs de 7.2 gastaron 2 llamadas de `plot_planner` cada uno, una de ellas tirada.
   - **En el corpus.** Hay 21 rechazos por el mínimo por capítulo y 20 por el suelo de eventos de
     Expansiva, que además causó 4 de los 5 `PLOT_VALIDATION_FAILED`. El 25-09 se rechazó el plan
     de 4 de 9 runs, siempre por el último capítulo.
@@ -763,7 +836,7 @@ SIM-10
 ### EXP-1 · Medir la historia simulada contra la narrativa
 
 *Área:* experimento · *Cuota:* ~1.150 llamadas para 3 prompts × 3 repeticiones, varios días de
-cuota gratuita · *Depende de:* SIM-1, SIM-2, SIM-9, SIM-10, MED-3; mejor con MED-5
+cuota gratuita · *Depende de:* SIM-1, SIM-2, SIM-14, MED-3; mejor con MED-5
 
 - **Síntoma.** El formato simulado existe desde 7.0, y sigue sin saberse si una historia narrada
   desde una función es mejor, peor o solo distinta de una escrita directamente.
@@ -790,7 +863,7 @@ cuota gratuita · *Depende de:* SIM-1, SIM-2, SIM-9, SIM-10, MED-3; mejor con ME
 ### EXP-2 · Medir la ablación de memoria propia contra memoria compartida
 
 *Área:* experimento · *Cuota:* ~2.000 llamadas para dos brazos de 9 runs, más la auditoría ·
-*Depende de:* SIM-1, SIM-9, MED-1, MED-3
+*Depende de:* SIM-1, MED-1, MED-3
 
 - **Síntoma.** `--actor-memory shared` existe como brazo de control y nadie lo ha corrido. Es la
   medición que sostiene la afirmación central de la tesis: que dar a cada personaje solo lo que
@@ -808,8 +881,9 @@ cuota gratuita · *Depende de:* SIM-1, SIM-2, SIM-9, SIM-10, MED-3; mejor con ME
 - **Hecho cuando.** Hay una cifra de fuga de frontera de conocimiento para cada brazo, medida con
   un juez calibrado, y una comparación a ciegas de las historias de cada uno.
 - **Ojo.**
-  - Las funciones 7.x recuperaban la memoria entera (SIM-9): cada actor leía todo lo que había
-    presenciado. La ablación tiene que correr después del arreglo, o medirá otra cosa que el diseño.
+  - Las funciones 7.0 y 7.1 recuperaban la memoria entera: cada actor leía todo lo que había
+    presenciado. La ablación corre ya sobre 7.2, que aplica el tope; no mezclar sus runs con los
+    anteriores.
   - El respaldo de la hipótesis, y lo que ya dice la literatura sobre filtrar lo que un personaje
     sabe, está en `docs/marco_hibrido.md` §7.
 
@@ -839,7 +913,7 @@ mejor con MED-5
 ### EXP-5 · Medir qué aporta cada mejora de la función
 
 *Área:* experimento · *Cuota:* ~900 llamadas (3 prompts × 3 versiones), varios días de cuota
-gratuita · *Depende de:* MED-5, MED-7, SIM-9, SIM-10
+gratuita · *Depende de:* MED-5, MED-7
 
 - **Síntoma.**
   - **No se sabe qué aporta cada cambio.** Cada ficha SIM se valida con un par de runs sobre un plan
@@ -848,8 +922,8 @@ gratuita · *Depende de:* MED-5, MED-7, SIM-9, SIM-10
   - **El criterio existe.** WSE-bench concluye que más arquitectura no es más control: cada
     componente debe ganarse su complejidad.
 - **Qué hacer.**
-  - Con `--plan-from` (MED-5), representar el mismo plan en tres versiones: 7.1.1, la que cierre
-    SIM-9 y SIM-10, y la que cierre SIM-6 y SIM-11.
+  - Con `--plan-from` (MED-5), representar el mismo plan en tres versiones: 7.1.1, 7.2.0 (que
+    cerró SIM-9 y SIM-10), y la que cierre SIM-6 y SIM-11.
   - Usar tres prompts de géneros distintos: 03 (misterio), 04 (drama) y 01 (fantasía).
   - Añadir como brazo el presupuesto de pensamiento del actor (SIM-4).
   - Leer MED-7, `report-simulations`, el coste por agente (MED-2) y la comparación a ciegas.
@@ -1037,16 +1111,28 @@ gratuita · *Depende de:* MED-5, MED-7, SIM-9, SIM-10
 
 - **Síntoma.**
   - **La voz no se puede elegir.** El bot ofrece los formatos, pero una historia simulada se
-    narra con la voz del despliegue: `generators.py` pasa `self._settings.narrative_voice`.
+    narra con la voz del despliegue: `generators.py` toma `narrative_voice` de los settings.
   - **No hay dónde guardarla.** No existe estado de conversación para elegirla, y la cola no
-    guarda la voz.
-  - **Las etiquetas viven en la consola.** Solo existen en `_choose_voice`
-    (`apps/console/src/asg_console/stagecraft.py`).
+    guarda la voz ni el personaje de la visión.
+  - Las etiquetas ya están en `formats.VOICE_CHOICES` (7.3.0), y la consola y StageCraft las usan.
 - **Qué hacer.**
-  - Mover las etiquetas de voz a `formats.py`, como `OUTPUT_CHOICES`.
-  - Añadir un paso de conversación, solo con formato simulado.
-  - Añadir una columna de voz a la cola, con su migración.
+  - Añadir un paso de conversación, solo con formato simulado, y otro para el personaje cuando la
+    visión se cuenta desde uno (`limited`, `first_person`).
+  - Añadir columnas de voz y personaje a la cola, con su migración.
 - **Hecho cuando.** Un usuario puede pedir una historia simulada en primera persona desde el chat.
+
+### OPS-3 · El bot cancela desde el callback de progreso
+
+*Área:* despliegue · *Cuota:* sin cuota · *Depende de:* —
+
+- **Síntoma.** `apps/telegram/src/asg_telegram/generation.py:204-205` lanza `GenerationCancelled`
+  desde el callback de progreso. Ese callback también corre dentro del bucle de reintentos del
+  proveedor (espera de cuota), que convierte la excepción en un `ProviderError` degradable: una
+  etapa que degrada la traga y el run sigue. El run cancelado además queda como fallo inesperado.
+- **Qué hacer.** Pasar `should_cancel` a `generate()`, como hace StageCraft, y traducir
+  `RunCancelledError` a `GenerationCancelled` en el adaptador.
+- **Hecho cuando.** Cancelar durante una espera de cuota detiene el run con `RUN_CANCELLED`, con
+  test.
 
 ### ING-8 · Documentar los contratos públicos y rellenar el README
 
@@ -1074,12 +1160,12 @@ Una función gasta en torno al 63 % de los tokens de un run simulado: los actore
 reflexiones el 11–12 % y las lecturas del director el 8–9 %. El actor lee unos 19 tokens por cada
 token que escribe, y su prefijo de sistema no cambia en toda la obra, pero `cached_tokens` es 0 en
 todos los runs. Medir cuánto ahorraría la caché de contexto de Gemini antes de comprometerse. Parte
-de esa proporción es la memoria sin tope (SIM-9): medir después del arreglo.
+de esa proporción era la memoria sin tope, ya acotada en 7.2.0: medir sobre un run 7.2.
 
 ### Memoria completa frente a memoria recuperada
 
-Las funciones 7.x recuperaban toda la memoria (SIM-9) y aun así repetían. Con el tope, una obra
-Expansiva podría perder el hilo. La literatura de contexto largo (*Lost in the Middle*, *Context
+Las funciones 7.0 y 7.1 recuperaban toda la memoria y aun así repetían. Con el tope de 7.2, los
+dos runs Esenciales no perdieron el hilo, pero una obra Expansiva podría. La literatura de contexto largo (*Lost in the Middle*, *Context
 Rot*) predice que la memoria entera empeora al crecer, pero en una obra de seis escenas puede no
 notarse. Medir las dos cosas sobre el mismo plan antes de fijar el tope para siempre.
 
@@ -1087,7 +1173,7 @@ notarse. Medir las dos cosas sobre el mismo plan antes de fijar el tope para sie
 
 Si MED-7 confirma que las voces se parecen, probar a dar a cada actor una o dos frases de muestra de
 su voz, ajenas a la trama, escritas por el casting. Riesgo: que el actor las repita, por el mismo
-autorrefuerzo que describe SIM-9.
+autorrefuerzo que obligó a dejar de recuperar el material propio del actor en 7.2.0.
 
 ### El estatus como eje del dossier
 
@@ -1142,6 +1228,19 @@ así que cargarlo desde JSON es casi mecánico.
 Comparar el modelo actual de `locations` y `location_id` con relaciones y transiciones
 explícitas. Documentar el efecto en errores de continuidad y en coste, y adoptarlo solo si mejora
 algo medible.
+
+### Inventario por personaje
+
+Quién tiene qué en la función: dar, tomar y esconder objetos, y que un objeto solo lo perciba
+quien lo ve. Los `StoryObject` del mundo ya existen y la función los ignora. Va de la mano del
+árbitro de acciones físicas: sin nadie que compruebe lo físico, un inventario es solo texto.
+StageCraft ya lo muestra como opción pendiente; la receta para activarlo está en
+`apps/studio/README.md`.
+
+### Ventana nativa para StageCraft
+
+Abrir StageCraft en una ventana propia con pywebview en vez del navegador. Solo compensa si se
+reparte a gente que no debería ver una URL local; en Windows depende de WebView2.
 
 ### Audio a varias voces
 

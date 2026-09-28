@@ -22,7 +22,9 @@ from .agents import (
     WorldBuilderAgent,
     WriterAgent,
 )
+from .brief import StoryBrief, cast_repair_feedback, missing_cast
 from .formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
+from .options import GenerationOptions
 from .planning.graph import (
     materialize_plan,
     relevant_prior_events,
@@ -33,7 +35,12 @@ from .planning.profiles import NarrativeProfile
 from .planning.promise_brief import critic_obligations, event_index, rendered_ledger
 from .planning.promises import materialize_ledger
 from .planning.repair import repair_guidance
-from .runtime.errors import NON_DEGRADABLE_ERRORS, PlotValidationError, RunInterruptedError
+from .runtime.errors import (
+    NON_DEGRADABLE_ERRORS,
+    PlotValidationError,
+    RunCancelledError,
+    RunInterruptedError,
+)
 from .runtime.progress import PipelineEvent, PipelineEventCallback, ProgressCallback, ProgressUpdate
 from .runtime.provider import COUNT_TOKENS_OPERATION, call_context
 from .runtime.storage import ArtifactRepository
@@ -124,37 +131,76 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
         provider,
         output_root: Path,
         *,
+        options: GenerationOptions | None = None,
         on_progress: ProgressCallback | None = None,
         on_run_created: Callable[[Path], None] | None = None,
         on_event: PipelineEventCallback | None = None,
-        narrative_guidance: bool = True,
-        narrative_profile: NarrativeProfile | None = None,
-        audio: bool = True,
-        promise_ledger: bool = True,
-        story_format: StoryFormat = StoryFormat.NARRATIVE,
-        script_method: ScriptMethod = ScriptMethod.NATIVE,
-        narrative_voice: NarrativeVoice = NarrativeVoice.OMNISCIENT,
-        actor_memory: ActorMemory = ActorMemory.OWN,
-        turns_per_beat: int = 8,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> None:
-        """Store pipeline dependencies and optional lifecycle callbacks."""
+        """Store pipeline dependencies, the run's options and optional lifecycle callbacks."""
         self.provider = provider
         self.output_root = Path(output_root)
-        self.narrative_guidance = narrative_guidance
-        self.promise_ledger = promise_ledger
-        self.narrative_profile = narrative_profile
-        self.audio = audio
-        self.story_format = story_format
-        self.script_method = script_method
-        self.narrative_voice = narrative_voice
-        self.actor_memory = actor_memory
-        self.turns_per_beat = turns_per_beat
+        self.options = options or GenerationOptions()
         self.on_progress = on_progress
         self.on_run_created = on_run_created
         self.on_event = on_event
+        self.should_cancel = should_cancel
+        # Set once the story is being published: a cancel that arrives then would discard a
+        # finished story to save the audio step, so it is ignored.
+        self._finishing = False
+        # The structured brief a run was asked with, when it was asked with one.
+        self.brief: StoryBrief | None = None
         self.progress = {"percent": 0, "stage": "analysis"}
         self.usage_start = 0
         self.repository: ArtifactRepository | None = None
+
+    # The stages read their options under the names they had before GenerationOptions existed,
+    # so the script and simulation mixins did not have to change when the options were gathered.
+
+    @property
+    def narrative_guidance(self) -> bool:
+        """Say whether the plot-skeleton blueprint guides this run."""
+        return self.options.narrative_guidance
+
+    @property
+    def promise_ledger(self) -> bool:
+        """Say whether this run traces a promise ledger over its frozen plan."""
+        return self.options.promise_ledger
+
+    @property
+    def narrative_profile(self) -> NarrativeProfile | None:
+        """Return the profile the caller forced, or None to keep the analyst's inference."""
+        return self.options.narrative_profile
+
+    @property
+    def audio(self) -> bool:
+        """Say whether this run ends by narrating its story as audio."""
+        return self.options.audio
+
+    @property
+    def story_format(self) -> StoryFormat:
+        """Return the shape of the artifact this run delivers."""
+        return self.options.story_format
+
+    @property
+    def script_method(self) -> ScriptMethod:
+        """Return how a script run turns the plan into scenes."""
+        return self.options.script_method
+
+    @property
+    def narrative_voice(self) -> NarrativeVoice:
+        """Return the point of view a simulated run is narrated from."""
+        return self.options.narrative_voice
+
+    @property
+    def actor_memory(self) -> ActorMemory:
+        """Return whether each actor remembers only what it witnessed or everything public."""
+        return self.options.actor_memory
+
+    @property
+    def turns_per_beat(self) -> int:
+        """Return how many turns a beat may take before the world closes it."""
+        return self.options.turns_per_beat
 
     @property
     def _simulated(self) -> bool:
@@ -181,8 +227,15 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
             return ScriptMethod.NATIVE
         return None
 
-    def execute(self, request: StoryRequest | str) -> Path:
-        """Run all story stages and return the completed run directory."""
+    def execute(self, request: StoryRequest | str | StoryBrief) -> Path:
+        """Run all story stages and return the completed run directory.
+
+        A StoryBrief is composed into its prompt here and then analyzed like any other; the
+        brief itself is kept as brief.json, and its cast is checked once the cast exists.
+        """
+        if isinstance(request, StoryBrief):
+            self.brief = request
+            request = request.to_prompt()
         self.usage_start = len(getattr(self.provider, "usage_records", []))
         # Analysis names the run directory, so its repository cannot exist yet. A failure here
         # still gets one, or this would be the only stage that leaves no error_report.json.
@@ -304,6 +357,11 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
             narrative_voice=self.narrative_voice if self._simulated else None,
             actor_memory=self.actor_memory if self._simulated else None,
         )
+        # Every axis a run can differ on, including the ledger, guidance and audio switches
+        # that no other artifact records (7.3). Written first, so a failed run keeps it too.
+        repository.save_json("generation_options.json", self.options)
+        if self.brief is not None:
+            repository.save_json("brief.json", self.brief)
         if self.on_run_created:
             self.on_run_created(repository.run_dir)
         for record in list(getattr(self.provider, "usage_records", []))[self.usage_start :]:
@@ -427,13 +485,41 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
         assert self.repository is not None
         self._notify(25, "characters", "Diseñando los personajes")
 
-        def build_characters():
+        def build_characters(feedback: str = ""):
             """Generate characters for the bound request and world."""
-            return CharacterDesignerAgent(self.provider).run(request, world, blueprint)
+            return CharacterDesignerAgent(self.provider).run(request, world, blueprint, feedback)
 
         characters = self._call_agent("characters", build_characters)
+        if self.brief is not None and self.brief.cast:
+            characters = self._keep_declared_cast(characters, build_characters)
         self.repository.save_json("characters.json", characters)
         self.repository.complete_stage("characters")
+        return characters
+
+    def _keep_declared_cast(
+        self,
+        characters: CharactersArtifact,
+        build_characters: Callable[[str], CharactersArtifact],
+    ) -> CharactersArtifact:
+        """Ask once more for any character the brief declared and the cast left out.
+
+        One repair is enough to be worth it: losing the character a story was meant to be told
+        from would cost the whole run, and the repair costs one call in its first minute. What
+        is still missing afterwards is reported, not fought over.
+        """
+        assert self.repository is not None and self.brief is not None
+        missing = missing_cast(self.brief, characters)
+        if not missing:
+            return characters
+        self.repository.save_json("characters/attempt-001.json", characters)
+        feedback = cast_repair_feedback(missing)
+        characters = self._call_agent("characters", lambda: build_characters(feedback))
+        still = missing_cast(self.brief, characters)
+        if still:
+            names = ", ".join(member.name for member in still)
+            warning = f"[BRIEF_CAST_MISSING] El reparto no incluye: {names}."
+            self.repository.add_warning(warning)
+            self._emit("brief_cast_missing", warning, stage="characters")
         return characters
 
     def _build_plan(
@@ -1121,6 +1207,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
         usage, and a completed status.
         """
         assert self.repository is not None
+        self._finishing = True
         self._notify(98, "story", saving_message)
         self.repository.save_text("story.md", rendered)
         create_evaluation_template(self.repository.run_dir)
@@ -1140,7 +1227,13 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
         # story that is already written: every failure degrades to a warning, including one
         # raised while registering the artifact.
         try:
-            create_story_audio_sync(self.repository.run_dir / "story.md")
+            story_path = self.repository.run_dir / "story.md"
+            # Only a chosen voice is passed on: without one, the call is the one every run made
+            # before 7.3, and the language of the story picks the voice.
+            if self.options.audio_voice:
+                create_story_audio_sync(story_path, voice=self.options.audio_voice)
+            else:
+                create_story_audio_sync(story_path)
             self.repository.register_existing("story.mp3")
             self.repository.complete_stage("audio")
         except Exception as exc:
@@ -1185,9 +1278,25 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
 
     def _call_agent(self, name: str, function: Callable[[], T]) -> T:
         """Emit an agent event and run the agent, tagging its model calls with stage and agent."""
+        self._checkpoint()
         self._emit("agent_called", f"se llamo al agente {name}", stage=self.progress["stage"])
         with call_context(self.progress["stage"], name):
             return function()
+
+    def _checkpoint(self) -> None:
+        """Stop the run here when its caller asked to, before another model call is spent.
+
+        Every agent call passes through here - the actors, the director and the narrator
+        included - so a cancel waits for one call at most. The check lives in the pipeline
+        rather than in a callback because a callback can fire inside the provider's retry loop,
+        which rewraps any exception as a degradable provider error.
+        """
+        if self.should_cancel is None or self._finishing or not self.should_cancel():
+            return
+        raise RunCancelledError(
+            "La generación se canceló a petición de quien la lanzó.",
+            recommendations=["Vuelve a lanzarla cuando quieras: esta ejecución quedó incompleta."],
+        )
 
     def _notify(
         self,

@@ -5,10 +5,13 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from asg_core import use_utf8_output
+from asg_core import NARRATION_VOICE_NAMES, use_utf8_output
+from pydantic import ValidationError
 
+from ..brief import StoryBrief
 from ..formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
 from ..generator import StoryGenerator
+from ..options import GenerationOptions
 from ..planning.profiles import NarrativeProfile
 from ..runtime.config import load_settings
 from ..runtime.errors import ASGError
@@ -82,7 +85,84 @@ def parser() -> argparse.ArgumentParser:
             "'shared' reparte todo lo publico y sirve de brazo de control"
         ),
     )
+    result.add_argument(
+        "--narrator",
+        help=(
+            "Con --voice limited o first_person: el personaje desde el que se narra, por su "
+            "nombre; si no aparece en el reparto, narra el protagonista y el run lo avisa"
+        ),
+    )
+    result.add_argument(
+        "--tone",
+        dest="narration_tone",
+        help="Con --format simulated: el registro que se pide al narrador, en texto libre",
+    )
+    result.add_argument(
+        "--turns-per-beat",
+        type=int,
+        help=(
+            "Con --format simulated: turnos que puede durar un beat antes de que el mundo lo cierre"
+        ),
+    )
+    result.add_argument(
+        "--audio-voice",
+        choices=sorted(NARRATION_VOICE_NAMES),
+        metavar="VOZ",
+        help=(
+            "Voz de edge-tts que lee story.mp3, p. ej. es-MX-DaliaNeural; sin ella decide el "
+            "idioma de la historia"
+        ),
+    )
+    result.add_argument(
+        "--brief",
+        type=Path,
+        help=(
+            "Ficha JSON de la obra (trama y reparto) en lugar de un prompt, p. ej. el "
+            "brief.json de un run"
+        ),
+    )
+    result.add_argument(
+        "--options",
+        type=Path,
+        help=(
+            "Opciones JSON de un run (su generation_options.json) para repetirlo; los demás "
+            "flags mandan sobre ellas"
+        ),
+    )
     return result
+
+
+def build_options(args: argparse.Namespace, settings) -> GenerationOptions:
+    """Combine the settings, a recorded options file and the flags given, the flags winning.
+
+    A recorded file is a whole run's options, so it replaces what the settings say rather than
+    merging with them: replaying a run must not depend on today's .env.
+    """
+    base = (
+        GenerationOptions.model_validate_json(args.options.read_text(encoding="utf-8"))
+        if args.options
+        else GenerationOptions.from_settings(settings)
+    )
+    flags = {
+        "narrative_profile": args.profile,
+        "audio": False if args.no_audio else None,
+        "audio_voice": args.audio_voice,
+        "story_format": args.story_format,
+        "script_method": args.script_method,
+        "narrative_voice": args.narrative_voice,
+        "narrator": args.narrator,
+        "narration_tone": args.narration_tone,
+        "actor_memory": args.actor_memory,
+        "turns_per_beat": args.turns_per_beat,
+    }
+    return base.with_changes(**{name: value for name, value in flags.items() if value is not None})
+
+
+def read_request(args: argparse.Namespace) -> StoryBrief | str:
+    """Return the brief the flags point at, or the prompt given or typed in."""
+    if args.brief:
+        return StoryBrief.model_validate_json(args.brief.read_text(encoding="utf-8"))
+    return (args.prompt or input("Describe la historia que quieres generar:\n> ")).strip()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -92,30 +172,26 @@ def main(argv: list[str] | None = None) -> int:
     print("Generador automático de historias — Stagecraft")
     print("\nEjemplo de prompt ideal:\n")
     print(f"  {EXAMPLE_PROMPT}\n")
+    if args.brief and args.prompt:
+        print("Error: usa un prompt o --brief, no los dos.", file=sys.stderr)
+        return 2
     try:
-        prompt = (args.prompt or input("Describe la historia que quieres generar:\n> ")).strip()
+        try:
+            prompt = read_request(args)
+            settings = load_settings()
+            options = build_options(args, settings)
+        except (OSError, ValidationError, ValueError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
         if not prompt:
             print("Error: el prompt no puede estar vacío.", file=sys.stderr)
             return 2
-        settings = load_settings()
         if args.model:
             settings = replace(settings, model=args.model)
         if args.output:
             settings = replace(settings, output_root=args.output)
         provider = provider_from_settings(settings)
-        generator = StoryGenerator(
-            provider,
-            settings.output_root,
-            narrative_guidance=settings.narrative_guidance,
-            promise_ledger=settings.promise_ledger,
-            narrative_profile=args.profile,
-            audio=not args.no_audio,
-            story_format=args.story_format or settings.story_format,
-            script_method=args.script_method or settings.script_method,
-            narrative_voice=args.narrative_voice or settings.narrative_voice,
-            actor_memory=args.actor_memory or settings.actor_memory,
-            turns_per_beat=settings.turns_per_beat,
-        )
+        generator = StoryGenerator.from_options(provider, settings.output_root, options)
 
         def report_progress(update) -> None:
             """Print one formatted pipeline progress update."""

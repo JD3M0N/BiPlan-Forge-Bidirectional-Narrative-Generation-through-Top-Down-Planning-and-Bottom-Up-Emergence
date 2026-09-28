@@ -33,7 +33,41 @@ _VOICE_CLAUSES: dict[NarrativeVoice, str] = {
         "thought or did out of your sight; if you refer to it at all, refer to it as something "
         "you later learned or still do not know."
     ),
+    NarrativeVoice.LIMITED: (
+        "Narrate in the third person, past tense, from inside one character only: the one whose "
+        "log this is. The narration knows only what they witnessed and what they were told. "
+        "Never report what another character thought or did out of their sight. Everyone else "
+        "is known only by what they say and do, so render their motives as the point-of-view "
+        "character reads them, which may be wrong."
+    ),
 }
+
+# Who the story is told from, for the voices that are told from one character. First person
+# keeps the exact sentence it had before 7.3, so its prompts did not change.
+_NARRATOR_CLAUSES: dict[NarrativeVoice, str] = {
+    NarrativeVoice.FIRST_PERSON: " You are narrating as {name}.",
+    NarrativeVoice.LIMITED: " The point-of-view character is {name}.",
+}
+
+
+def narrator_clause(voice: NarrativeVoice, narrator_name: str) -> str:
+    """Name the point-of-view character, for a voice told from one, or return nothing."""
+    template = _NARRATOR_CLAUSES.get(voice)
+    return template.format(name=narrator_name) if template and narrator_name else ""
+
+
+def tone_clause(tone: str) -> str:
+    """Carry the register the author asked for, or nothing, so a run without one is unchanged.
+
+    The tone arrives in the author's own words and language. It may colour the voice; it may
+    never add an event, which the rest of the instruction already forbids.
+    """
+    if not tone.strip():
+        return ""
+    return (
+        " Write in the register the author asked for, in the fiction's language, and let it "
+        f"shape the voice only, never the events: {tone.strip()}."
+    )
 
 
 class NarratorAgent(Agent[str]):
@@ -52,13 +86,9 @@ class NarratorAgent(Agent[str]):
         narrator_name: str = "",
         promise_brief: str = "",
         retry_feedback: str = "",
+        tone: str = "",
     ) -> str:
         """Narrate one chapter, inventing nothing the performance did not stage."""
-        narrator_clause = (
-            f" You are narrating as {narrator_name}."
-            if narrator_name and voice is NarrativeVoice.FIRST_PERSON
-            else ""
-        )
         intent = {
             "dramatic_goal": chapter.dramatic_goal,
             "opening_state": chapter.opening_state,
@@ -71,7 +101,8 @@ class NarratorAgent(Agent[str]):
                 "characters actually said, did and thought, in the order it happened. Turn it "
                 f"into one chapter of finished prose in {request.language}, with no heading and "
                 "no process notes. "
-                f"{_VOICE_CLAUSES[voice]}{narrator_clause} "
+                f"{_VOICE_CLAUSES[voice]}{narrator_clause(voice, narrator_name)}"
+                f"{tone_clause(tone)} "
                 "The log is your only source of events. You may cut what does not earn its "
                 "place, merge exchanges, compress time between them and choose where to begin "
                 "and end — that selection is your work. You may not invent an event, a line or "

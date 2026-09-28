@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.6.0] - 2026-09-27
+
+- `create_story_audio` and `create_story_audio_sync` accept a `voice`: the story is read with that
+  edge-tts voice instead of the one the detected language picks, and a finished audio is reused
+  only when it was read with the same voice.
+- Added `NARRATION_VOICES` (the 45 Spanish edge-tts voices, with country and gender),
+  `NARRATION_VOICE_NAMES` and `create_voice_sample`/`create_voice_sample_sync`, which read one
+  line with a voice so an interface can let a person hear it first.
+
 ## [0.5.1] - 2026-09-26
 
 - `slugify` strips the trailing dash a truncation can leave, so a run folder never ends in one.

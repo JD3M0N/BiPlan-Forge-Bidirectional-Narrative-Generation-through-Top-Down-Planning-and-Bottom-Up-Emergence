@@ -268,12 +268,34 @@ resultado.
 | `omniscient` (defecto) | Todos los turnos y los pensamientos de todos |
 | `focalized` | Todo lo público, más los pensamientos del personaje focal de cada escena |
 | `first_person` | Solo lo que el narrador presenció, con solo sus propios pensamientos |
+| `limited` (7.3) | Lo mismo que `first_person`, contado en tercera persona |
 
 `--voice` o `ASG_NARRATIVE_VOICE` lo eligen. La voz **solo** cambia la narración: el plan, el guion
-y la función son idénticos byte a byte entre dos runs que solo difieren en ella.
+y la función son idénticos byte a byte entre dos runs que solo difieren en ella. Desde 7.3 un test
+lo comprueba también sobre el casting, la función y todos los prompts anteriores al narrador.
 
 En primera persona la memoria propia paga dos veces: un capítulo solo puede escribirse con los
 turnos que su narrador percibió, que son exactamente los que ya están en su flujo.
+
+**Quién narra (7.3).** `first_person` y `limited` se cuentan desde un personaje:
+
+- `--narrator` (o el personaje de la visión en StageCraft) lo nombra como lo escribió la persona, y
+  `stage/names.py` lo resuelve contra el reparto: nombre completo, de pila o una palabra que
+  identifique a uno solo. Sin nombre, narra el protagonista; si el nombre no existe o ese
+  personaje no presenció nada, también, y el run lo avisa con `[NARRATOR_FALLBACK]`.
+- Solo ven turnos de escenas en las que el personaje **estaba**, no solo de las que figura como
+  testigo. Con memoria compartida los testigos de un turno público son todo el reparto; sin esta
+  regla, el narrador contaría escenas en las que nunca estuvo y la ablación de memoria se
+  mezclaría con la narración.
+- **Un capítulo sin turnos visibles no se narra**, con ninguna voz: el narrador tendría que
+  inventarlo. Queda en `narration.json` como `source: "absent"`, con `[NARRATOR_ABSENT]`, y fuera
+  de `story.md`.
+- `narration.json` pasa al contrato 2: guarda el nombre pedido (`requested_narrator`), cómo se
+  eligió al narrador (`narrator_source`) y el tono.
+
+**El tono del narrador (7.3).** `--tone` es un registro en texto libre («como un guerrero samurái,
+con tono medieval»). Solo lo lee el narrador, en una cláusula que se añade únicamente cuando hay
+tono: colorea la voz y nunca añade sucesos.
 
 ### El respaldo determinista
 
@@ -509,7 +531,89 @@ dejó de tener los tics de 7.0.
     nota), y de ahí salen confesiones dobles.
 
   Las dos causas, y la memoria sin tope (SIM-9), que era la otra fuente de repetición, están
-  arregladas en 7.2.0. Falta verlo en runs reales: el par de validación de SIM-1.
+  arregladas en 7.2.0, y el par de 7.2 lo confirma en real.
+
+## Validación de 7.2
+
+Dos runs nuevos, los dos con perfil Esencial, `gemini-3.5-flash-lite`, voz `omniscient` y memoria
+`own`, auditados con el mismo juez y contrato 2:
+
+- `20260927-163733-la-habitacion-del-faro-cerrada-por-dentro`, prompt 03, el mismo misterio del
+  faro que los cuatro runs anteriores;
+- `20260927-213245-la-falsificacion-de-la-aurora`, prompt 07, la primera función fuera del
+  prompt 03.
+
+```powershell
+generate-story <prompt 03 Esencial> --format simulated --profile essential --no-audio
+generate-story <prompt 07 Esencial> --format simulated --profile essential --no-audio
+audit-stage-run Stories/Stagecraft/20260927-163733-la-habitacion-del-faro-cerrada-por-dentro
+audit-stage-run Stories/Stagecraft/20260927-213245-la-falsificacion-de-la-aurora
+report-simulations --group version
+```
+
+**Con n=2 por brazo son indicios, no conclusiones**, y el segundo run cambia de prompt, así que
+sus cifras no se restan de las del primero.
+
+| Criterio | 7.0 | 7.1 | 7.2 | Objetivo |
+|---|---|---|---|---|
+| Recuerdos por turno, mediana | 18–29 | 20,5 y 29 | **8 y 8** | ≤ 8 |
+| Recuerdos por turno, máximo | 52–72 | 57 y 70 | **8 y 8** | ≤ 8 |
+| Material propio recuperado | todo | 236 y 367 registros | **0 y 0** | 0 |
+| Turnos con destinatario | 0 | 0/36 y 1/44 | **38/43 y 47/51** | ≥ la mitad |
+| Turnos respondidos | 0 | 0 y 1 | **32 y 41** | sube |
+| Notas repetidas al mismo actor | — | 1 y 4 | **0 y 0** | 0 |
+| Susurros | 0 y 0 | 0 y 0 | **1 y 0** | ≥ 1 |
+| Réplicas copiadas entre escenas | — | 0 y 1 | **0 y 0** | 0 |
+| Fugas según la auditoría | 4 y 1 | 0 y 0 | 1 y 0 | menos que 7.0 |
+| Puntuación de conocimiento | 86,67 y — | — | **95,83 y 100** | — |
+| Fidelidad de la narración | 100 y 85 | 81,67 y 78,33 | **93,33 y 95,0** | — |
+| Beats forzados | 4/12 | 0/12 | 1/6 y 1/6 | ≤ 2/12 |
+| `compression_ratio` | 1,09 y 0,73 | 0,70 y 0,80 | 0,74 y 0,71 | < 0,9 |
+| `script_echo` | — | 0,026 y 0,036 | 0,052 y 0,056 | bajo |
+| Notas del director en inglés | — | 10/31 y 22/40 | 14/33 y 14/39 | 0 |
+| `thought_ratio` | 0,98 y 0,95 | 0,94 y 0,95 | 0,91 y 0,92 | baja de 0,9 |
+| Llamadas / tokens / minutos | 100–119 / 251–337k / 21–31 | 98–111 / 265–289k / 17–22 | 110–126 / 260–321k / **14–16** | — |
+
+La **frontera de conocimiento se sostiene en el dato, no solo por construcción**. Una auditoría
+determinista de los dos runs, sobre `contexts.jsonl`, `turns.jsonl` y `memory/*/records.json`, no
+encontró:
+
+- ni un id, título de evento, capítulo, escena futura o réplica del guion en un contexto de actor;
+- ni un registro de memoria de un turno que su personaje no presenciara;
+- ni un pensamiento o susurro ajeno en el contexto de nadie;
+- ni una compuerta filtrada por el dossier, el objetivo de escena, el escenario, la `public_face`
+  o la nota del director, medida contra el mismo umbral que usa `stage/casting.py`.
+
+La **telemetría de MED-2 mide lo que dice**: la suma de latencias (726 y 572 s) cabe en el reloj
+(951 y 825 s), `failed_calls` es 0 con 2 intentos 504 cada uno, y el reparto por agente sale del
+propio `llm_calls.jsonl`: el actor se lleva 71 de 110 llamadas y 123k de 260k tokens en el
+primero.
+
+**Lo que 7.2 no arregló, y un fallo nuevo:**
+
+- **Un actor puede salirse de la ficción y el log lo acepta.** En `chap_2-scene-1-t005`, Mara dijo
+  «I am checking the import paths for `Model` in the Superset models structure», con una acción
+  sobre `superset/models/core.py`. El turno pasó los seis rechazos de `stage/validation.py`, entró
+  en el log, en el transcript y en la memoria de tres personajes. El juez lo marcó con severidad 5
+  y es la única fuga de los dos runs. El narrador lo omitió, así que no llegó a `story.md`.
+- **El director sigue escribiendo en inglés** 14 de 33 y 14 de 39 notas, y 5 estados de actor del
+  segundo run mezclan idiomas (SIM-2).
+- **Las cláusulas se siguen rehaciendo** en 2 y 4 beats (SIM-2).
+- **Un evento del mundo revela una compuerta antes de su evento.** En el primer run, el del
+  capítulo 1 hizo saltar el pestillo de la puerta interior, que es la compuerta anclada en
+  `event_5`, y de paso destruyó la prueba del cuarto cerrado: Mara dedujo después que «la ráfaga
+  lo forzó desde fuera» y exculpó al contrabandista. Es el rechazo que SIM-2 pide y que no existe.
+- **El mundo entrega la trama.** En el segundo run, un evento hizo que un repartidor trajera un
+  sobre «que detalla la quiebra simulada por Víctor Cárdenas para vengarse de la casa de
+  subastas»: el motivo del caso, por correo. El juez lo archivó como `invented_event` de
+  severidad 4.
+- **Los recursos del mundo se repiten en el misterio del faro**: los dos eventos fueron ráfagas de
+  viento (SIM-6). En el prompt 07 fueron tres recursos distintos.
+- **La resolución sigue llegando por confesión**, que el prompt 03 prohíbe: la hija confesó haber
+  acuñado el pasador, y el contrabandista jugó una sola táctica en toda la obra (SIM-11).
+- **`REPEATED_ACTION` es ahora el único motivo de rechazo**: 7 y 10 turnos, y 2 saltados. Con la
+  memoria acotada de 7.2 y la comparación contra todas las acciones anteriores del actor, la regla
+  puede haberse vuelto la más caliente del validador.
 
 ## De dónde sale cada decisión
 

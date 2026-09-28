@@ -94,6 +94,18 @@ class RunInterruptedError(ASGError):
     stage = "unknown"
 
 
+class RunCancelledError(ASGError):
+    """Signal a run its caller asked to stop, raised by the pipeline at its next agent call.
+
+    Surfaces pass should_cancel to generate() instead of raising from a progress callback: a
+    callback can fire inside the provider's retry loop, where any exception is rewrapped as a
+    degradable provider error, and again while a failure is being recorded.
+    """
+
+    code = "RUN_CANCELLED"
+    stage = "unknown"
+
+
 class GeminiRPMError(ProviderError):
     """Represent GeminiRPMError data and behavior."""
 
@@ -118,8 +130,10 @@ class GeminiBillingQuotaError(ProviderError):
     code = "GEMINI_BILLING_LIMIT_EXHAUSTED"
 
 
-# Errors that must always abort the pipeline instead of being degraded to a warning.
+# Errors that must always abort the pipeline instead of being degraded to a warning. A
+# cancellation belongs here: otherwise a stage that degrades would swallow it and carry on.
 NON_DEGRADABLE_ERRORS = (
+    RunCancelledError,
     ConfigurationError,
     GeminiRPMError,
     GeminiTPMError,

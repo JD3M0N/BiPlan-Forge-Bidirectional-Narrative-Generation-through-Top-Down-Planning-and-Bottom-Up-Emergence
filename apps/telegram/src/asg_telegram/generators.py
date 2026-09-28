@@ -12,7 +12,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from asg_stagecraft import StoryGenerator
+from asg_stagecraft import GenerationOptions, StoryGenerator
 from asg_stagecraft.formats import OUTPUT_CHOICES, output_choice_for
 from asg_stagecraft.planning.profiles import PROFILE_LABELS, NarrativeProfile
 from asg_stagecraft.runtime.config import load_settings as load_stagecraft_settings
@@ -87,20 +87,15 @@ class StagecraftGenerator:
                 ) from exc
         else:
             choice = None
-        generator = StoryGenerator(
-            self._provider,
-            self._settings.output_root,
-            narrative_guidance=self._settings.narrative_guidance,
-            promise_ledger=self._settings.promise_ledger,
+        # The bot exposes no point-of-view step yet, so a simulated run narrates with whatever
+        # the deployment configured, like its memory and turn budget. Tracked in TODO.md.
+        options = GenerationOptions.from_settings(
+            self._settings,
             narrative_profile=NarrativeProfile(narrative_profile) if narrative_profile else None,
-            story_format=choice.story_format if choice else self._settings.story_format,
-            script_method=choice.script_method if choice else self._settings.script_method,
-            # The bot exposes no point-of-view step yet, so a simulated run narrates with
-            # whatever the deployment configured. Tracked in TODO.md.
-            narrative_voice=self._settings.narrative_voice,
-            actor_memory=self._settings.actor_memory,
-            turns_per_beat=self._settings.turns_per_beat,
+            story_format=choice.story_format if choice else None,
+            script_method=choice.script_method if choice else None,
         )
+        generator = StoryGenerator.from_options(self._provider, self._settings.output_root, options)
         try:
             return generator.generate(
                 prompt,

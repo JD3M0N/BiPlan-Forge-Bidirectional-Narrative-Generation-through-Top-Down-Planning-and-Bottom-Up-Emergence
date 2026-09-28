@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.7.0] - 2026-09-27
+
+- Added `pairing`: `read_run_config` rebuilds every axis a run was asked with, from
+  `generation_options.json` when the run has it (7.3) and from `metadata.json`, `performance.json`
+  and `narration.json` otherwise, keeping what was never recorded as `None`. `pair_runs` puts two
+  to four runs side by side, says which axes differ and whether the comparison is clean (same
+  work, model and profile, one arm changed), and warns in Spanish about what it cannot support.
+  `run_measurements` gathers the story, performance, judge and cost figures of one run.
+
 ## [0.6.0] - 2026-09-26
 
 - `report-story-craft` reads `failed_calls` as not measured for runs before pipeline 7.2, where
