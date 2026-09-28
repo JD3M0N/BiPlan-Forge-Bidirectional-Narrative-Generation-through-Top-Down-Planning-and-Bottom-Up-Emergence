@@ -51,31 +51,68 @@ Comandos (opciones completas en [commands.md](commands.md)):
 ### Calidad: ejecutar siempre antes de dar por terminado un cambio
 
 ```powershell
-.\quality.ps1        # ruff check, ruff format --check, pytest y pip check
-.\quality.ps1 -Fast  # solo pytest, para iterar
+.\quality.ps1        # ruff check, ruff format --check, run-tests.ps1 y pip check
+.\quality.ps1 -Fast  # solo run-tests.ps1, para iterar
 ```
 
 - `quality.ps1` se sitúa en la raíz por su cuenta y no corta en el primer fallo, igual que CI.
   `make test` delega en él.
 - `.github/workflows/quality.yml` corre las mismas cuatro comprobaciones en `windows-latest` con
-  Python 3.12, en cada push a `main` y en cada pull request. Un status check `quality` en rojo
-  bloquea el merge.
-- Si lanzas `pytest` a mano, hazlo **desde la raíz**: es donde `pyproject.toml` fija `testpaths`
-  y el resto de la configuración de pytest.
+  Python 3.12, en cada push a `main` y en cada pull request, llamando a `run-tests.ps1` igual que
+  en local. Un status check `quality` en rojo bloquea el merge.
 
-### Iterar rápido
+### Tests: un solo comando, siempre la suite entera
 
 ```powershell
-python -m pytest packages/stagecraft/tests -q          # un subsistema
-python -m pytest packages/stagecraft/tests/test_graph.py -q
-python -m pytest packages/stagecraft/tests/test_generator_v5.py -q -k revision
+.\run-tests.ps1
 ```
 
-- `pyproject.toml` fija `testpaths = ["packages", "apps", "tests"]`, así que `pytest` sin
-  argumentos recoge todo el monorepo.
+- **Es el único comando para correr los tests de este repositorio.** Nunca lances `pytest`
+  directo, ni un archivo suelto, ni `-k`: correr un subconjunto no dice si el cambio rompió algo
+  en otro paquete, y cada vuelta extra gasta contexto sin ganar nada que la vuelta completa no
+  diera ya. `run-tests.ps1` tarda menos de un minuto.
+- Redirige el temporal de pytest a `.cache/pytest-tmp`, porque el temporal por defecto de Windows
+  falla con `PermissionError` en algunos entornos de sandbox.
+- Filtra las líneas de progreso: si todo pasa, la salida es una sola línea; si algo falla, quedan
+  los `FAILED` y sus tracebacks cortos, nada más.
+- `quality.ps1` y `.github/workflows/quality.yml` lo llaman tal cual: local y CI corren
+  exactamente lo mismo.
+- Admite argumentos de pytest después de `--` para depurar un fallo puntual mientras se investiga
+  (`.\run-tests.ps1 -- packages/stagecraft/tests/test_graph.py -k revision`), pero eso no
+  sustituye la vuelta completa antes de dar el cambio por terminado.
+- `pyproject.toml` fija `testpaths = ["packages", "apps", "tests"]`, así que la suite recoge todo
+  el monorepo sin argumentos.
 - Todas las pruebas usan proveedores falsos salvo `packages/stagecraft/tests/test_gemini_live.py`,
   que se omite a menos que `RUN_GEMINI_LIVE=1`. **No activarlo** sin que lo pida explícitamente
   quien manda la tarea: consume cuota real.
+
+### Tests: los mínimos posibles, y corregidos cuando cambie el código que cubren
+
+Cada test cuesta tokens para leerlo, mantenerlo y correrlo, en cada vuelta, para siempre. Antes
+de añadir uno:
+
+- **Uno por comportamiento, no por caso.** Varios casos del mismo camino van en un solo test
+  parametrizado (`@pytest.mark.parametrize`), no en tests independientes que repiten el mismo
+  cuerpo.
+- **Ampliar antes que crear.** Si un test ya ejercita el camino que hace falta cubrir, añadir una
+  fila a su tabla o una aserción a su cuerpo, en vez de escribir uno nuevo.
+- **Reutilizar antes que generar.** Donde exista una función o un run ya construido para otro
+  test (un fixture de sesión, un doble compartido), leerlo en vez de montar una ejecución propia
+  del pipeline: son las pruebas más caras de correr.
+- **Nada de constantes ni tautologías.** Un test que solo repite un literal del código de
+  producción, o que no puede fallar aunque el código esté roto, no aporta nada; no se escribe.
+- **Cuando un cambio toca un método importante** (su firma, el contrato que cumple, el formato de
+  un artefacto o el texto de un prompt), **corregir en el mismo cambio los tests que lo cubren**,
+  y borrar los que prueben un comportamiento que ya no existe. No dejar tests rotos, saltados ni
+  relajados para que la suite pase en verde sin que el cambio esté completo.
+- **Los tests de contrato no se tocan sin querer.** Cuando este documento o un doc de `docs/`
+  cita un test por su nombre exacto (por ejemplo,
+  `test_no_actor_ever_sees_the_plan_or_a_future_scene` en
+  [docs/simulacion_escenica.md](docs/simulacion_escenica.md)), ese nombre y lo que verifica se
+  mantienen; si hace falta reescribirlo, se actualiza también el documento que lo cita.
+- Los dobles y constructores compartidos del pipeline (`FakeProvider`, `make_request`,
+  `valid_plan`…) viven en `packages/stagecraft/tests/test_generator_v5.py`, y otros módulos los
+  importan de ahí.
 
 ## Arquitectura
 

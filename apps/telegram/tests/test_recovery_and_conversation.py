@@ -1,4 +1,5 @@
 import asyncio
+import json
 import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
@@ -25,14 +26,29 @@ class FakeBot:
     async def send_document(self, **kwargs):
         return None
 
+    async def send_audio(self, **kwargs):
+        return None
+
     async def edit_message_text(self, **kwargs):
         self.edits.append(kwargs)
 
 
 def make_story(tmp_path: Path) -> Path:
+    """Write a story with its audio already delivered.
+
+    Without story.mp3 and audio.json, summarize_run defaults audio=True and
+    _deliver_audio falls through to the real edge-tts network call; FakeBot
+    lacking send_audio then swallows the resulting AttributeError as a
+    delivery failure, so the run silently never reaches evaluation.
+    """
     directory = tmp_path / "story"
     directory.mkdir()
     (directory / "story.md").write_text("# Historia\n\nContenido", encoding="utf-8")
+    (directory / "story.mp3").write_bytes(b"fake-mp3")
+    (directory / "audio.json").write_text(
+        json.dumps({"status": "completed", "language": "es", "voice": "es-MX-FakeNeural"}),
+        encoding="utf-8",
+    )
     return directory
 
 
@@ -319,6 +335,7 @@ def test_choose_format_then_free_mode_reaches_the_generator(tmp_path):
     assert len(tasks) == 1
     asyncio.run(tasks[0])
     assert generator.calls[0]["options"]["format"] == "simulated"
+    assert context.user_data["state"] == ConversationState.EVALUATING
 
 
 def test_options_panel_toggle_and_choice_persist_and_are_scoped_to_the_format(tmp_path):
@@ -434,6 +451,7 @@ def test_guided_brief_with_two_cast_members_reaches_the_generator(tmp_path):
     request = generator.calls[0]["request"]
     assert isinstance(request, StoryOutline)
     assert [member.name for member in request.cast] == ["Ana", "Beto"]
+    assert context.user_data["state"] == ConversationState.EVALUATING
 
 
 def test_the_plot_cannot_be_skipped(tmp_path):

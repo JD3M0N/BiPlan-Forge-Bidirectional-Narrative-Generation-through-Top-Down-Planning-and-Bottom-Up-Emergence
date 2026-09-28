@@ -44,11 +44,11 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: ruff format --check .
 
-      # Desde la raíz a propósito: tests/test_source_documentation.py resuelve su glob
-      # contra el directorio de trabajo y pasa en vacío desde cualquier otro sitio.
-      - name: pytest
+      # run-tests.ps1 es el único comando para los tests: local y en CI corren lo mismo.
+      - name: run-tests
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: python -m pytest -q -p no:cacheprovider
+        shell: pwsh
+        run: ./run-tests.ps1
 
       - name: pip check
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}

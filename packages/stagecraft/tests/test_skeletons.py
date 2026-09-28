@@ -30,21 +30,6 @@ from asg_stagecraft.schemas import (
 )
 
 
-def make_request() -> StoryRequest:
-    return StoryRequest(
-        original_prompt="Escribe una historia sobre un robo en un museo vigilado",
-        processed_prompt="Write a story about a theft in a guarded museum.",
-        title="The Price of Truth",
-        language="Spanish",
-        genre="drama",
-        tone="tense",
-        narrative_profile="essential",
-        premise="A thief steals a relic from a guarded museum to save his sister.",
-        constraints=[],
-        creative_directions=[],
-    )
-
-
 class RankingProvider:
     """Return one fixed semantic ranking, or raise, without touching the network."""
 
@@ -102,12 +87,9 @@ def test_lexical_scoring_is_deterministic_and_ranks_the_obvious_shape() -> None:
     assert "rescue" in {row.skeleton_id for row in ranked}
 
 
-def test_normalize_strips_spanish_accents() -> None:
-    assert normalize("Una traición en la prisión") == "una traicion en la prision"
-
-
 def test_spanish_request_fields_still_rank_from_the_english_brief() -> None:
     """The analyst leaves premise, genre and tone in Spanish for Spanish stories."""
+    assert normalize("Una traición en la prisión") == "una traicion en la prision"
     request = StoryRequest(
         original_prompt="Escribe un relato sobre una fuga de una prision en una isla",
         processed_prompt=(
@@ -123,7 +105,11 @@ def test_spanish_request_fields_still_rank_from_the_english_brief() -> None:
         constraints=[],
         creative_directions=[],
     )
-    ranked = rank_skeletons(skeleton_query(request), limit=3)
+    query = skeleton_query(request)
+    assert request.processed_prompt in query
+    assert request.premise in query
+    assert request.original_prompt not in query
+    ranked = rank_skeletons(query, limit=3)
     assert ranked[0].skeleton_id == "escape"
     assert ranked[0].lexical_score > 0.5
 
@@ -159,14 +145,6 @@ def test_semantic_blend_uses_the_declared_weights() -> None:
     heist = scored["heist"]
     assert heist.semantic_score == 0.0
     assert math.isclose(heist.score, LEXICAL_WEIGHT * lexical["heist"], rel_tol=1e-9)
-
-
-def test_skeleton_query_leads_with_processed_prompt_and_skips_the_original() -> None:
-    request = make_request()
-    query = skeleton_query(request)
-    assert request.processed_prompt in query
-    assert request.premise in query
-    assert request.original_prompt not in query
 
 
 def blueprint(**overrides) -> NarrativeBlueprint:

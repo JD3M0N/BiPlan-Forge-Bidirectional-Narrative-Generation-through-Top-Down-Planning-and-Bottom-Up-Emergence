@@ -22,18 +22,16 @@ def _declared_error_names() -> list[str]:
     return re.findall(r"^class (\w+)\(", source, re.MULTILINE)
 
 
-def test_the_repository_root_resolves_to_the_monorepo() -> None:
-    """The scan anchors on the repository, never on the working directory."""
-    assert (REPOSITORY_ROOT / "packages").is_dir()
-    assert (REPOSITORY_ROOT / "apps").is_dir()
-    assert len(_production_sources()) > 1
-    assert len(_declared_error_names()) > 1
-
-
 def test_every_declared_error_is_used_by_production_code() -> None:
     """An error nothing raises, catches, or classifies is taxonomy that carries no weight."""
-    blob = "\n".join(path.read_text(encoding="utf-8") for path in _production_sources())
-    unused = [name for name in _declared_error_names() if not re.search(rf"\b{name}\b", blob)]
+    assert (REPOSITORY_ROOT / "packages").is_dir()
+    assert (REPOSITORY_ROOT / "apps").is_dir()
+    sources = _production_sources()
+    names = _declared_error_names()
+    assert len(sources) > 1
+    assert len(names) > 1
+    blob = "\n".join(path.read_text(encoding="utf-8") for path in sources)
+    unused = [name for name in names if not re.search(rf"\b{name}\b", blob)]
     assert not unused, "these errors are declared but never used outside errors.py: " + ", ".join(
         unused
     )

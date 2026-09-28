@@ -5,9 +5,11 @@
 .DESCRIPTION
     Ejecuta las cuatro comprobaciones desde la raíz del repositorio y no corta en el primer
     fallo, para que una sola vuelta enseñe todo el daño. Devuelve 0 sólo si todas pasan.
+    El paso de tests delega en run-tests.ps1, que es el único comando para correrlos: aquí y
+    en CI corren exactamente lo mismo.
 
 .PARAMETER Fast
-    Lanza únicamente pytest, para el bucle de iteración rápida.
+    Lanza únicamente run-tests.ps1, para el bucle de iteración rápida.
 
 .EXAMPLE
     .\quality.ps1
@@ -20,8 +22,8 @@ param(
 
 $ErrorActionPreference = "Continue"
 
-# tests/test_source_documentation.py resuelve su glob contra el directorio de trabajo y pasa
-# en vacío desde cualquier otro sitio, así que la raíz no es opcional.
+# tests/test_source_documentation.py resuelve su glob desde Path(__file__), así que ya no
+# necesita correr desde la raíz para pasar, pero el resto de rutas relativas del repo sí.
 Set-Location -LiteralPath $PSScriptRoot
 
 $python = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
@@ -55,7 +57,7 @@ if (-not $Fast) {
     Invoke-Check "ruff format --check" { & $python -m ruff format --check . }
 }
 
-Invoke-Check "pytest" { & $python -m pytest -q -p no:cacheprovider }
+Invoke-Check "run-tests" { & (Join-Path $PSScriptRoot "run-tests.ps1") }
 
 if (-not $Fast) {
     Invoke-Check "pip check" { & $python -m pip check }

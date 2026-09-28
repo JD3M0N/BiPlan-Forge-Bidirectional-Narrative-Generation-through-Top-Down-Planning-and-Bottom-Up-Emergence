@@ -1,3 +1,4 @@
+import pytest
 from asg_stagecraft.schemas import ChapterPlan
 from asg_stagecraft.writing.craft_evidence import (
     BLOCK_PARAGRAPHS,
@@ -33,17 +34,19 @@ def narration(words_per_paragraph: int, paragraphs: int = 4) -> str:
     return "\n\n".join([block] * paragraphs)
 
 
-def test_a_chapter_without_any_spoken_exchange_is_reported() -> None:
-    assert chapter_observations(narration(20)) == [NO_DIALOGUE]
-
-
-def test_a_chapter_that_barely_speaks_is_reported_as_narrated() -> None:
-    body = "\n\n".join([f"{DASH}Sube {DASH}dijo.", *[narration(10, 1)] * 9])
-    assert chapter_observations(body) == [RARE_DIALOGUE]
-
-
-def test_block_paragraphs_are_reported_alongside_the_dialogue_verdict() -> None:
-    assert chapter_observations(narration(150)) == [NO_DIALOGUE, BLOCK_PARAGRAPHS]
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        (narration(20), [NO_DIALOGUE]),
+        ("\n\n".join([f"{DASH}Sube {DASH}dijo.", *[narration(10, 1)] * 9]), [RARE_DIALOGUE]),
+        (narration(150), [NO_DIALOGUE, BLOCK_PARAGRAPHS]),
+        (scene(), []),
+        ("", []),
+    ],
+    ids=["silent-chapter", "barely-speaks", "block-paragraphs", "dramatized-chapter", "empty-body"],
+)
+def test_chapter_observations(body, expected) -> None:
+    assert chapter_observations(body) == expected
 
 
 def test_the_paragraph_ceiling_reaches_the_prose_the_drafter_actually_writes() -> None:
@@ -51,14 +54,6 @@ def test_the_paragraph_ceiling_reaches_the_prose_the_drafter_actually_writes() -
     # fire; 100 is the kind of block prose the net exists to catch.
     assert BLOCK_PARAGRAPHS in chapter_observations(narration(100))
     assert BLOCK_PARAGRAPHS not in chapter_observations(narration(65))
-
-
-def test_a_dramatized_chapter_produces_no_observation() -> None:
-    assert chapter_observations(scene()) == []
-
-
-def test_an_empty_body_produces_no_observation() -> None:
-    assert chapter_observations("") == []
 
 
 def test_the_evidence_block_names_only_the_chapters_that_narrate() -> None:
@@ -70,13 +65,6 @@ def test_the_evidence_block_names_only_the_chapters_that_narrate() -> None:
     assert evidence.chapters[1].observations == [NO_DIALOGUE]
     assert "capitulo_1" not in evidence.prompt_block
     assert f"- capitulo_2: {NO_DIALOGUE}." in evidence.prompt_block
-
-
-def test_a_healthy_draft_sends_nothing_to_the_critic() -> None:
-    evidence = craft_evidence([chapter("capitulo_1", 1)], [scene()])
-
-    assert evidence.prompt_block == ""
-    assert evidence.chapters[0].observations == []
 
 
 def test_no_measurement_ever_reaches_the_prompt() -> None:

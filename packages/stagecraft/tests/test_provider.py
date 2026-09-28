@@ -50,6 +50,17 @@ def provider_with(response=None, error: Exception | None = None) -> GeminiProvid
     return provider
 
 
+@pytest.fixture(autouse=True)
+def no_real_waits(monkeypatch):
+    """A provider built with __new__ falls back to real retries and real sleeps.
+
+    Every test here builds through provider_with(), so nothing exercises the real
+    countdown; a test that cares about a specific wait overrides this on top.
+    """
+    monkeypatch.setattr(provider_module, "countdown_wait", lambda *args: None)
+    monkeypatch.setattr(provider_module, "retry_delay", lambda attempt, details: 0)
+
+
 def valid_story_request_json() -> str:
     return StoryRequest(
         original_prompt="historia",
@@ -93,14 +104,6 @@ def test_empty_responses_are_rejected(call) -> None:
     provider = provider_with(SimpleNamespace(parsed=None, text=""))
     with pytest.raises(EmptyResponseError):
         call(provider)
-
-
-def test_structured_generation_rejects_invalid_json() -> None:
-    provider = provider_with(SimpleNamespace(parsed=None, text="{invalid"))
-    with pytest.raises(StructuredResponseError):
-        provider.generate_structured(
-            system_instruction="test", prompt="test", schema=StoryRequest, profile="extraction"
-        )
 
 
 def test_structured_generation_retries_validation_once_then_succeeds() -> None:
@@ -150,7 +153,29 @@ def test_structured_generation_reports_sanitized_errors_after_retry() -> None:
     assert "PRIVATE PROMPT" not in json.dumps(details)
 
 
-def test_provider_wraps_transport_errors() -> None:
+class FlakyModels(FakeModels):
+    """Fails once with a transport error, then answers normally."""
+
+    def generate_content(self, **kwargs):
+        self.generate_calls.append(kwargs)
+        if len(self.generate_calls) == 1:
+            raise type("ConnectError", (Exception,), {})("getaddrinfo failed")
+        return SimpleNamespace(text="respuesta", usage_metadata=None)
+
+
+def test_a_transient_transport_error_is_retried_then_succeeds() -> None:
+    provider = provider_with()
+    provider.max_retries = 3
+    provider._client.models = FlakyModels()
+    assert (
+        provider.generate_text(system_instruction="test", prompt="test", profile="prose")
+        == "respuesta"
+    )
+    assert len(provider._client.models.generate_calls) == 2
+    assert [record.status for record in provider.usage_records] == ["failed", "succeeded"]
+
+
+def test_a_transport_error_that_never_recovers_is_wrapped_and_reported() -> None:
     provider = provider_with(error=OSError("sin red"))
     with pytest.raises(ProviderError, match="comunicarse con Gemini"):
         provider.generate_text(system_instruction="test", prompt="test", profile="prose")
@@ -192,57 +217,52 @@ def test_usage_metadata_respects_tpm_preflight_configuration(
         assert provider.usage_records[0].total_tokens == 17
 
 
-@pytest.mark.parametrize(
-    ("error_text", "expected_exception", "call"),
-    [
-        (
-            "429 Quota exceeded for metric: requests_per_day, 'quotaId': 'PerDay'",
-            GeminiDailyQuotaError,
-            lambda provider: provider._generate("text", provider._client.models.generate_content),
-        ),
-        (
-            "401 invalid API key",
-            ProviderError,
-            lambda provider: provider.generate_text(
-                system_instruction="test", prompt="test", profile="prose"
-            ),
-        ),
-    ],
-    ids=["daily-quota-not-retried", "authentication-error-not-retried"],
-)
-def test_non_retryable_errors_fail_immediately(error_text, expected_exception, call) -> None:
-    provider = provider_with(error=Exception(error_text))
+def test_authentication_errors_fail_immediately_without_retrying() -> None:
+    provider = provider_with(error=Exception("401 invalid API key"))
     provider.max_retries = 3
-    with pytest.raises(expected_exception):
-        call(provider)
+    with pytest.raises(ProviderError):
+        provider.generate_text(system_instruction="test", prompt="test", profile="prose")
     assert len(provider._client.models.generate_calls) == 1
 
 
-def test_the_free_tier_daily_quota_is_not_mistaken_for_billing() -> None:
+@pytest.mark.parametrize(
+    ("error_text", "expected_quota_id"),
+    [
+        (
+            "429 Quota exceeded for metric: requests_per_day, 'quotaId': 'PerDay'",
+            "PerDay",
+        ),
+        (
+            FREE_TIER_DAILY_429,
+            "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+        ),
+    ],
+    ids=["explicit-quota-id", "billing-worded-daily-quota-is-not-mistaken-for-billing"],
+)
+def test_a_daily_quota_is_never_retried_and_keeps_its_id(error_text, expected_quota_id) -> None:
     """MED-1: reading the text before the quota ID turned three daily quotas into billing."""
-    provider = provider_with(error=Exception(FREE_TIER_DAILY_429))
+    provider = provider_with(error=Exception(error_text))
+    provider.max_retries = 3
     with pytest.raises(GeminiDailyQuotaError) as raised:
         provider._generate("text", provider._client.models.generate_content)
-    assert raised.value.details["quota_id"] == "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+    assert raised.value.details["quota_id"] == expected_quota_id
+    assert len(provider._client.models.generate_calls) == 1
+
+
+def test_a_billing_limit_named_only_in_the_text_is_still_billing() -> None:
+    provider = provider_with(error=Exception("429 Your spend cap was reached, check billing."))
+    with pytest.raises(GeminiBillingQuotaError):
+        provider._generate("text", provider._client.models.generate_content)
 
 
 def test_the_attempts_of_one_call_share_its_id_and_keep_their_own_latency(monkeypatch) -> None:
     """MED-2: every attempt had its own call_id and a duration that added up the earlier ones."""
-
-    class FlakyModels(FakeModels):
-        def generate_content(self, **kwargs):
-            self.generate_calls.append(kwargs)
-            if len(self.generate_calls) == 1:
-                raise type("ConnectError", (Exception,), {})("getaddrinfo failed")
-            return SimpleNamespace(text="respuesta", usage_metadata=None)
-
     clock = iter([0.0, 3.0, 100.0, 104.0])
     provider = provider_with()
     provider.max_retries = 3
     provider._client.models = FlakyModels()
     monkeypatch.setattr(provider_module, "time", SimpleNamespace(monotonic=lambda: next(clock)))
     monkeypatch.setattr(provider_module, "retry_delay", lambda attempt, details: 5)
-    monkeypatch.setattr(provider_module, "countdown_wait", lambda *args: None)
     provider._generate("text", provider._client.models.generate_content)
     records = provider.usage_records
     assert len({item.call_id for item in records}) == 1
@@ -260,36 +280,6 @@ def test_a_call_is_tagged_with_the_stage_and_agent_that_made_it() -> None:
     tagged, untagged = provider.usage_records
     assert (tagged.stage, tagged.agent) == ("performance", "actor")
     assert (untagged.stage, untagged.agent) == ("text", "")
-
-
-def test_a_billing_limit_named_only_in_the_text_is_still_billing() -> None:
-    provider = provider_with(error=Exception("429 Your spend cap was reached, check billing."))
-    with pytest.raises(GeminiBillingQuotaError):
-        provider._generate("text", provider._client.models.generate_content)
-
-
-def test_connect_error_is_retried_then_succeeds(monkeypatch) -> None:
-    class ConnectError(Exception):
-        pass
-
-    class FlakyModels(FakeModels):
-        def generate_content(self, **kwargs):
-            self.generate_calls.append(kwargs)
-            if len(self.generate_calls) == 1:
-                raise ConnectError("getaddrinfo failed")
-            return SimpleNamespace(text="respuesta", usage_metadata=None)
-
-    provider = provider_with()
-    provider.max_retries = 3
-    provider._client.models = FlakyModels()
-    monkeypatch.setattr(provider_module, "retry_delay", lambda attempt, details: 0)
-    monkeypatch.setattr(provider_module, "countdown_wait", lambda *args: None)
-    assert (
-        provider.generate_text(system_instruction="test", prompt="test", profile="prose")
-        == "respuesta"
-    )
-    assert len(provider._client.models.generate_calls) == 2
-    assert [record.status for record in provider.usage_records] == ["failed", "succeeded"]
 
 
 @pytest.mark.parametrize(
@@ -319,34 +309,23 @@ def test_error_classification_preserves_safe_diagnostics(build_error, assertions
     assert assertions(error)
 
 
-@pytest.mark.parametrize(
-    ("call", "profile", "expected_temperature"),
-    [
-        (
-            lambda provider: provider.generate_structured(
-                system_instruction="test",
-                prompt="test",
-                schema=StoryRequest,
-                profile="extraction",
-            ),
-            None,
-            0.15,
-        ),
-        (
-            lambda provider: provider.generate_text(
-                system_instruction="test", prompt="test", profile="rewrite"
-            ),
-            None,
-            0.35,
-        ),
-    ],
-    ids=["structured-extraction-profile", "text-rewrite-profile"],
-)
-def test_temperature_uses_the_explicit_profile(call, profile, expected_temperature) -> None:
-    provider = provider_with(SimpleNamespace(parsed=None, text=valid_story_request_json()))
-    call(provider)
-    config = provider._client.models.generate_calls[-1]["config"]
-    assert config.temperature == expected_temperature
+def test_every_named_profile_reaches_the_request_as_its_documented_temperature() -> None:
+    """The five named profiles are the only source of temperature, with no per-instance state."""
+    expected = {"extraction": 0.15, "review": 0.2, "planning": 0.5, "prose": 0.9, "rewrite": 0.35}
+    assert provider_module._DEFAULT_GENERATION_PROFILES == expected
+    for profile, temperature in expected.items():
+        provider = provider_with(SimpleNamespace(text="respuesta", usage_metadata=None))
+        provider.generate_text(system_instruction="test", prompt="test", profile=profile)
+        config = provider._client.models.generate_calls[-1]["config"]
+        assert config.temperature == temperature
+        assert provider._temperature(profile) == temperature
+    structured_provider = provider_with(
+        SimpleNamespace(parsed=None, text=valid_story_request_json())
+    )
+    structured_provider.generate_structured(
+        system_instruction="test", prompt="test", schema=StoryRequest, profile="extraction"
+    )
+    assert structured_provider._client.models.generate_calls[-1]["config"].temperature == 0.15
 
 
 def test_unknown_temperature_profile_is_rejected() -> None:
@@ -356,15 +335,6 @@ def test_unknown_temperature_profile_is_rejected() -> None:
         provider.generate_text(
             system_instruction="test", prompt="test", profile="not-a-real-profile"
         )
-
-
-def test_every_named_profile_resolves_to_its_documented_temperature() -> None:
-    """The five named profiles are the only source of temperature, with no per-instance state."""
-    provider = provider_with(SimpleNamespace(text="respuesta", usage_metadata=None))
-    expected = {"extraction": 0.15, "review": 0.2, "planning": 0.5, "prose": 0.9, "rewrite": 0.35}
-    assert provider_module._DEFAULT_GENERATION_PROFILES == expected
-    for profile, temperature in expected.items():
-        assert provider._temperature(profile) == temperature
 
 
 def routed_pair() -> tuple[provider_module.RoutedProvider, GeminiProvider, GeminiProvider]:
@@ -460,8 +430,9 @@ def test_the_factory_builds_one_provider_until_the_performance_differs(monkeypat
     assert routed.stage_model_name == "gemini-3.1-flash-lite"
 
 
-def test_each_model_and_key_has_its_own_rpm_window() -> None:
+def test_each_model_and_key_has_its_own_rpm_window(monkeypatch) -> None:
     """Gemini counts quota per project and model; the limiter used to key on the RPM alone."""
+    monkeypatch.setattr("google.genai.Client", lambda **kwargs: SimpleNamespace())
     first = GeminiProvider("key-one", "model-a", rpm_limit=41, rpm_reserve=1)
     again = GeminiProvider("key-one", "model-a", rpm_limit=41, rpm_reserve=1)
     other_model = GeminiProvider("key-one", "model-b", rpm_limit=41, rpm_reserve=1)

@@ -54,6 +54,31 @@ def test_options_reject_unknown_fields_and_cannot_change() -> None:
         GenerationOptions(turns_per_beat=1)
 
 
+@pytest.mark.parametrize(
+    ("build", "match"),
+    [
+        (lambda: GenerationOptions(audio_voice="es-XX-NadieNeural"), None),
+        (
+            lambda: GenerationOptions(narrative_voice=NarrativeVoice.OMNISCIENT, narrator="Ana"),
+            "personaje",
+        ),
+        (lambda: GenerationOptions(narration_tone="x" * 301), None),
+    ],
+    ids=["unknown-audio-voice", "narrator-without-a-voice-that-follows-one", "tone-too-long"],
+)
+def test_more_invalid_options_are_rejected(build, match) -> None:
+    with pytest.raises(ValidationError, match=match):
+        build()
+
+
+def test_options_normalize_whitespace_around_the_audio_voice_and_the_narrator() -> None:
+    assert GenerationOptions(audio_voice=" es-MX-JorgeNeural ").audio_voice == "es-MX-JorgeNeural"
+    options = GenerationOptions(
+        narrative_voice=NarrativeVoice.LIMITED, narrator="  Ana \n Vela ", narration_tone="seco"
+    )
+    assert options.narrator == "Ana Vela"
+
+
 def test_settings_supply_defaults_and_flags_override_them() -> None:
     settings = SimpleNamespace(
         api_key="secret",
@@ -127,12 +152,6 @@ def test_the_audio_voice_reaches_the_audio_step_only_when_chosen(tmp_path, monke
     assert calls == [{}, {"voice": "es-CU-BelkysNeural"}]
 
 
-def test_an_audio_voice_must_be_one_the_audio_module_offers() -> None:
-    assert GenerationOptions(audio_voice=" es-MX-JorgeNeural ").audio_voice == "es-MX-JorgeNeural"
-    with pytest.raises(ValidationError):
-        GenerationOptions(audio_voice="es-XX-NadieNeural")
-
-
 def test_every_interface_facing_field_has_a_spanish_label_and_help() -> None:
     """Studio and Telegram read title/description instead of duplicating the strings."""
     hidden = {"story_format", "script_method"}
@@ -141,14 +160,3 @@ def test_every_interface_facing_field_has_a_spanish_label_and_help() -> None:
             continue
         assert field.title, name
         assert field.description, name
-
-
-def test_a_narrator_needs_a_voice_told_from_one_character() -> None:
-    options = GenerationOptions(
-        narrative_voice=NarrativeVoice.LIMITED, narrator="  Ana \n Vela ", narration_tone="seco"
-    )
-    assert options.narrator == "Ana Vela"
-    with pytest.raises(ValidationError, match="personaje"):
-        GenerationOptions(narrative_voice=NarrativeVoice.OMNISCIENT, narrator="Ana")
-    with pytest.raises(ValidationError):
-        GenerationOptions(narration_tone="x" * 301)

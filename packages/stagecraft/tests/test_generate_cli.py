@@ -14,24 +14,34 @@ from asg_stagecraft.tools.generate import (
 )
 
 
-def test_experiment_flags_are_parsed() -> None:
-    args = parser().parse_args(
-        [
-            "Escribe una historia",
-            "--profile",
-            "expansive",
-            "--model",
-            "gemini-3.5-pro",
-            "--output",
-            "runs/batch",
-            "--no-audio",
-        ]
-    )
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        (
+            ["--profile", "expansive", "--model", "gemini-3.5-pro", "--no-audio"],
+            {"profile": NarrativeProfile.EXPANSIVE, "model": "gemini-3.5-pro", "no_audio": True},
+        ),
+        (
+            ["--format", "script", "--script-method", "adapted"],
+            {"story_format": StoryFormat.SCRIPT, "script_method": ScriptMethod.ADAPTED},
+        ),
+        (
+            [],
+            {"story_format": None, "script_method": None},
+        ),
+    ],
+    ids=["experiment-flags", "output-format-flags", "output-format-defaults-to-settings"],
+)
+def test_flags_are_parsed(argv, expected) -> None:
+    args = parser().parse_args(["Escribe una historia", *argv])
     assert args.prompt == "Escribe una historia"
-    assert args.profile is NarrativeProfile.EXPANSIVE
-    assert args.model == "gemini-3.5-pro"
+    for attribute, value in expected.items():
+        assert getattr(args, attribute) == value
+
+
+def test_output_flag_sets_the_run_directory() -> None:
+    args = parser().parse_args(["Escribe una historia", "--output", "runs/batch"])
     assert args.output.name == "batch"
-    assert args.no_audio is True
 
 
 def test_the_model_flags_outrank_the_settings_for_this_run(tmp_path) -> None:
@@ -46,28 +56,18 @@ def test_the_model_flags_outrank_the_settings_for_this_run(tmp_path) -> None:
     assert changed.splits_stage and not base.splits_stage
 
 
-def test_unknown_profile_is_rejected() -> None:
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--profile", "epica"],
+        ["--format", "screenplay"],
+        ["--audio-voice", "es-XX-NadieNeural"],
+    ],
+    ids=["unknown-profile", "unknown-format", "unknown-audio-voice"],
+)
+def test_an_unknown_choice_is_rejected_by_the_parser(argv) -> None:
     with pytest.raises(SystemExit):
-        parser().parse_args(["Escribe una historia", "--profile", "epica"])
-
-
-def test_output_format_flags_are_parsed() -> None:
-    args = parser().parse_args(
-        ["Escribe una historia", "--format", "script", "--script-method", "adapted"]
-    )
-    assert args.story_format is StoryFormat.SCRIPT
-    assert args.script_method is ScriptMethod.ADAPTED
-
-
-def test_output_format_defaults_to_none_and_falls_back_to_settings() -> None:
-    args = parser().parse_args(["Escribe una historia"])
-    assert args.story_format is None
-    assert args.script_method is None
-
-
-def test_unknown_format_is_rejected() -> None:
-    with pytest.raises(SystemExit):
-        parser().parse_args(["Escribe una historia", "--format", "screenplay"])
+        parser().parse_args(["Escribe una historia", *argv])
 
 
 def settings(**fields):
@@ -133,11 +133,6 @@ def test_a_brief_file_is_read_as_the_request(tmp_path) -> None:
     path.write_text(brief.model_dump_json(), encoding="utf-8")
     assert read_request(parser().parse_args(["--brief", str(path)])) == brief
     assert read_request(parser().parse_args(["  Una historia  "])) == "Una historia"
-
-
-def test_an_unknown_audio_voice_is_rejected_by_the_parser() -> None:
-    with pytest.raises(SystemExit):
-        parser().parse_args(["Escribe una historia", "--audio-voice", "es-XX-NadieNeural"])
 
 
 def test_a_prompt_and_a_brief_together_are_refused(tmp_path, capsys) -> None:

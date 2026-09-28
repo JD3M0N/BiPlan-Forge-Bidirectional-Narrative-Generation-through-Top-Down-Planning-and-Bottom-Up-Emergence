@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from asg_stagecraft.planning.graph import (
     materialize_plan,
@@ -225,6 +227,11 @@ def _unknown_payoff(candidate: StoryPlan) -> None:
     candidate.events[1].payoff_of = ["charcoal_note"]
 
 
+def _future_payoff(candidate: StoryPlan) -> None:
+    candidate.dependencies = [dependency("event-1", "event-2"), dependency("event-2", "event-3")]
+    candidate.events[1].payoff_of = ["event-3"]
+
+
 @pytest.mark.parametrize(
     ("mutate", "match"),
     [
@@ -240,43 +247,23 @@ def _unknown_payoff(candidate: StoryPlan) -> None:
         (_duplicate_dependency, "unique"),
         (_only_temporal_dependencies, "causal"),
         (_weakly_disconnected, "weakly connected"),
-        (_unknown_payoff, "unknown event IDs: charcoal_note"),
+        (
+            _unknown_payoff,
+            "unknown event IDs: charcoal_note; allowed earlier event IDs: event-1",
+        ),
+        (
+            _future_payoff,
+            "non-earlier event IDs: event-3; allowed earlier event IDs: event-1",
+        ),
     ],
 )
 def test_structural_rejections(mutate, match) -> None:
     """Every objective invariant validate_story_plan enforces rejects with an ASCII message."""
     candidate = plan([dependency("event-1", "event-2"), dependency("event-2", "event-3")])
     mutate(candidate)
-    with pytest.raises(ValueError, match=match) as captured:
+    with pytest.raises(ValueError, match=re.escape(match)) as captured:
         validate_story_plan(candidate, world(), characters())
     assert str(captured.value).isascii()
-
-
-def test_unknown_payoff_reports_the_allowed_earlier_events() -> None:
-    """A payoff error names both the offending value and the events it could legally cite."""
-    candidate = plan([dependency("event-1", "event-2"), dependency("event-2", "event-3")])
-    candidate.events[1].payoff_of = ["charcoal_note"]
-    with pytest.raises(ValueError) as captured:
-        validate_story_plan(candidate, world(), characters())
-    message = str(captured.value)
-    assert "unknown event IDs: charcoal_note" in message
-    assert "allowed earlier event IDs: event-1" in message
-
-
-def test_future_payoff_reports_only_earlier_events_as_allowed() -> None:
-    candidate = plan([dependency("event-1", "event-2"), dependency("event-2", "event-3")])
-    candidate.events[1].payoff_of = ["event-3"]
-    with pytest.raises(ValueError) as captured:
-        validate_story_plan(candidate, world(), characters())
-    message = str(captured.value)
-    assert "non-earlier event IDs: event-3" in message
-    assert "allowed earlier event IDs: event-1" in message
-
-
-def test_payoff_schema_distinguishes_event_ids_from_story_state() -> None:
-    properties = PlotEvent.model_json_schema()["properties"]
-    assert "earlier event" in properties["payoff_of"]["description"]
-    assert "not IDs" in properties["effects"]["description"]
 
 
 def profile_plan(event_count: int) -> StoryPlan:

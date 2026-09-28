@@ -85,8 +85,8 @@ SUMMARIZED = (
 )
 
 
-def test_story_metrics_record_prose_craft_alongside_size():
-    """Report the craft figures next to the words, chapters and events."""
+def test_story_metrics_record_prose_craft_size_and_per_chapter_figures():
+    """Report the craft figures next to the words, chapters and events, and per chapter."""
     text = story(DRAMATIZED, SUMMARIZED)
     metrics = story_metrics(request(), plan(), text)
 
@@ -99,22 +99,11 @@ def test_story_metrics_record_prose_craft_alongside_size():
     assert metrics.words_per_sentence > 0
     assert metrics.words_per_paragraph > 0
     assert metrics.chapter_bodies_recovered is True
-
-
-def test_prose_words_exclude_the_markdown_headings():
-    """Keep ``words`` as the whole document and ``prose_words`` as the prose."""
-    text = story(DRAMATIZED, SUMMARIZED)
-    metrics = story_metrics(request(), plan(), text)
-
+    # ``words`` is the whole document; ``prose_words`` keeps only the prose.
     assert metrics.words > metrics.prose_words > 0
     assert metrics.prose_words == craft_metrics(text).words
 
-
-def test_chapter_metrics_carry_their_own_craft_figures():
-    """Separate a dramatized chapter from a summarized one."""
-    metrics = story_metrics(request(), plan(), story(DRAMATIZED, SUMMARIZED))
     dramatized, summarized = metrics.chapter_metrics
-
     assert dramatized.paragraphs == 2
     assert dramatized.dialogue_paragraphs == 1
     assert dramatized.dialogue_ratio == 0.5

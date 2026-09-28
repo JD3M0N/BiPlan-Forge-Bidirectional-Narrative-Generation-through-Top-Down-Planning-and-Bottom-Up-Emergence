@@ -7,6 +7,7 @@ beat ends - reached, reached with the world's help, or forced.
 
 import re
 
+import pytest
 from asg_stagecraft.stage.engine import CODA_NOTE, FALLBACK_TURN_NOTE, PerformanceEngine
 from asg_stagecraft.stage.schemas import (
     ActorTurnDraft,
@@ -124,7 +125,7 @@ class Stage:
         return [system for system, _ in self.moves]
 
 
-def test_a_beat_shown_at_the_first_reading_lands_there() -> None:
+def test_a_beat_shown_at_the_first_reading_lands_there_with_no_coda() -> None:
     stage = Stage(lambda mode, context: shown(context))
     performed = stage.engine().perform_scene(scene())
     record = performed.beats[0]
@@ -132,6 +133,8 @@ def test_a_beat_shown_at_the_first_reading_lands_there() -> None:
     assert record.turns == 3
     assert stage.modes == ["check"]
     assert record.evidence == ["chapter-1-scene-1-t003"]
+    assert performed.coda_turns == 0
+    assert len(performed.turns) == 3
 
 
 def test_a_beat_that_never_lands_climbs_the_whole_ladder_before_it_is_forced() -> None:
@@ -150,12 +153,6 @@ def test_a_beat_that_never_lands_climbs_the_whole_ladder_before_it_is_forced() -
     assert [turn.action for turn in world] == [EVENT]
     # The world acted after the eighth turn, and the two reactions came after it.
     assert performed.turns.index(world[0]) == 8
-
-
-def test_the_world_event_is_only_taken_on_the_stall_rung() -> None:
-    stage = Stage(lambda mode, context: unshown("bruno", stage_event=EVENT))
-    performed = stage.engine().perform_scene(scene())
-    assert performed.beats[0].stage_events == [EVENT]
 
 
 def test_a_beat_the_world_resolves_is_reached_with_help_not_forced() -> None:
@@ -229,33 +226,33 @@ def test_a_line_repeated_in_a_later_scene_is_rejected() -> None:
     assert {item.scene_id for item in rejections} == {"chapter-1-scene-2"}
 
 
-def test_a_clause_is_shown_only_with_a_turn_that_exists() -> None:
-    def judge(mode, context):
-        return BeatCheckDraft(
-            parts=[OutcomePart(part="hands it over", shown=True, evidence=["invented-t999"])]
-        )
-
-    stage = Stage(judge)
+@pytest.mark.parametrize(
+    ("parts", "missing"),
+    [
+        (
+            lambda context: [
+                OutcomePart(part="hands it over", shown=True, evidence=["invented-t999"])
+            ],
+            ["hands it over"],
+        ),
+        (
+            lambda context: [
+                OutcomePart(
+                    part="hands it over", shown=True, evidence=_TURN_IDS.findall(context)[-1:]
+                ),
+                OutcomePart(part="admits hiding it", shown=False),
+            ],
+            ["admits hiding it"],
+        ),
+    ],
+    ids=["a-clause-cited-by-a-turn-that-does-not-exist", "one-missing-clause-keeps-it-open"],
+)
+def test_a_clause_only_counts_as_shown_with_a_turn_that_really_exists(parts, missing) -> None:
+    stage = Stage(lambda mode, context: BeatCheckDraft(parts=parts(context)))
     record = stage.engine().perform_scene(scene()).beats[0]
     assert not record.achieved and record.forced
     assert stage.entries[1].achieved is False
-    assert stage.entries[1].missing == ["hands it over"]
-
-
-def test_one_missing_clause_keeps_the_beat_open() -> None:
-    def judge(mode, context):
-        ids = _TURN_IDS.findall(context)
-        return BeatCheckDraft(
-            parts=[
-                OutcomePart(part="hands it over", shown=True, evidence=ids[-1:]),
-                OutcomePart(part="admits hiding it", shown=False),
-            ]
-        )
-
-    stage = Stage(judge)
-    record = stage.engine().perform_scene(scene()).beats[0]
-    assert not record.achieved
-    assert stage.entries[1].missing == ["admits hiding it"]
+    assert stage.entries[1].missing == missing
 
 
 def test_when_the_director_names_nobody_the_engine_picks_and_says_so() -> None:
@@ -315,13 +312,6 @@ def test_the_last_scene_of_the_play_ends_in_a_coda() -> None:
     coda = performed.turns[-2:]
     assert all(turn.direction_note == CODA_NOTE for turn in coda)
     assert {turn.actor_id for turn in coda} == {"ana", "bruno"}
-
-
-def test_a_scene_that_does_not_close_the_play_has_no_coda() -> None:
-    stage = Stage(lambda mode, context: shown(context))
-    performed = stage.engine().perform_scene(scene())
-    assert performed.coda_turns == 0
-    assert len(performed.turns) == 3
 
 
 def test_a_world_event_enters_memory_without_a_speaker() -> None:

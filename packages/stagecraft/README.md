@@ -90,9 +90,10 @@ story.mp3 + audio.json
 ## Tests
 
 ```powershell
-python -m pytest packages/stagecraft/tests
+.\run-tests.ps1                                        # toda la suite del monorepo, desde la raíz
 $env:RUN_GEMINI_LIVE='1'; python -m pytest packages/stagecraft/tests/test_gemini_live.py
 ```
 
-Las pruebas usan proveedores falsos. `test_gemini_live.py` llama a la API real, consume cuota y
-se omite salvo con `RUN_GEMINI_LIVE=1`.
+`run-tests.ps1` es el único comando para los tests: ver CLAUDE.md. Las pruebas usan proveedores
+falsos. `test_gemini_live.py` llama a la API real, consume cuota y se omite salvo con
+`RUN_GEMINI_LIVE=1`.

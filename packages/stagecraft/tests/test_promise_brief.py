@@ -25,7 +25,7 @@ def events_of(plan, chapter_id):
     return [by_id[item] for item in plan.topological_order if by_id[item].chapter_id == chapter_id]
 
 
-def test_a_chapter_is_only_told_about_its_own_events() -> None:
+def test_a_chapter_is_only_told_about_its_own_events_and_that_is_what_the_ledger_stores() -> None:
     plan, ledger = built()
 
     for chapter in plan.chapters:
@@ -34,6 +34,8 @@ def test_a_chapter_is_only_told_about_its_own_events() -> None:
         cited = {line.split(" | ")[0].removeprefix("- ") for line in block.splitlines()[1:]}
         assert cited
         assert cited <= owned
+        assert ledger.chapter_blocks[chapter.id] == block
+    assert ledger.critic_block == critic_obligations(ledger)
 
 
 def test_a_chapter_that_owes_nothing_gets_no_block() -> None:
@@ -41,17 +43,6 @@ def test_a_chapter_that_owes_nothing_gets_no_block() -> None:
     idle = plan.chapters[0]
 
     assert chapter_brief(ledger, idle, []) == ""
-    assert chapter_brief(None, idle, events_of(plan, idle.id)) == ""
-
-
-def test_the_blocks_stored_on_the_ledger_are_the_ones_that_travel() -> None:
-    plan, ledger = built()
-
-    for chapter in plan.chapters:
-        assert ledger.chapter_blocks[chapter.id] == chapter_brief(
-            ledger, chapter, events_of(plan, chapter.id)
-        )
-    assert ledger.critic_block == critic_obligations(ledger)
 
 
 def test_no_promise_count_or_profile_figure_reaches_any_block() -> None:
@@ -65,12 +56,13 @@ def test_no_promise_count_or_profile_figure_reaches_any_block() -> None:
 
 
 def test_the_primary_promise_leads_every_rendering() -> None:
-    _, ledger = built()
+    plan, ledger = built()
 
     obligations = critic_obligations(ledger)
     assert "promise-1 (primary)" in obligations
     assert obligations.index("promise-1") < obligations.index("promise-2")
     assert critic_obligations(None) == ""
+    assert chapter_brief(None, plan.chapters[0], events_of(plan, plan.chapters[0].id)) == ""
 
 
 def test_the_event_index_offers_exactly_the_legal_anchors() -> None:

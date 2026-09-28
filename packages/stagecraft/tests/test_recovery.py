@@ -71,21 +71,17 @@ def metadata_of(run_dir):
     return json.loads((run_dir / "metadata.json").read_text(encoding="utf-8"))
 
 
-def test_only_running_runs_are_reported_as_stalled(tmp_path) -> None:
-    make_run(tmp_path, "stalled")
-    make_run(tmp_path, "done", status="completed")
-    make_run(tmp_path, "broken", status="failed")
-    (tmp_path / "not-a-run").mkdir()
-    assert [run.run_dir.name for run in stalled_runs(tmp_path)] == ["stalled"]
-
-
-def test_a_stalled_run_is_recoverable_only_with_a_story_and_a_supported_version(
+def test_only_running_runs_are_reported_as_stalled_and_recoverable_needs_a_story_and_version(
     tmp_path,
 ) -> None:
     make_run(tmp_path, "a-with-story")
     make_run(tmp_path, "b-no-story", story=False)
     make_run(tmp_path, "c-no-version", version=None)
     make_run(tmp_path, "d-old-version", version="4.1")
+    make_run(tmp_path, "done", status="completed")
+    make_run(tmp_path, "broken", status="failed")
+    (tmp_path / "not-a-run").mkdir()
+
     verdicts = {run.run_dir.name: run.recoverable for run in stalled_runs(tmp_path)}
     assert verdicts == {
         "a-with-story": True,
@@ -95,7 +91,7 @@ def test_a_stalled_run_is_recoverable_only_with_a_story_and_a_supported_version(
     }
 
 
-def test_closing_a_stalled_run_makes_it_openable_and_leaves_an_audit_line(tmp_path) -> None:
+def test_closing_a_stalled_run_makes_it_openable_and_refreshes_the_manifest_hash(tmp_path) -> None:
     run_dir = make_run(tmp_path, "recoverable")
     close_stalled_run(run_dir)
     metadata = metadata_of(run_dir)
@@ -105,10 +101,6 @@ def test_closing_a_stalled_run_makes_it_openable_and_leaves_an_audit_line(tmp_pa
     assert "story" in metadata["warnings"][0]
     assert StoryRun(run_dir).story_path.read_text(encoding="utf-8") == STORY
 
-
-def test_closing_refreshes_the_hash_the_manifest_keeps_of_metadata(tmp_path) -> None:
-    run_dir = make_run(tmp_path, "recoverable")
-    close_stalled_run(run_dir)
     manifest = json.loads((run_dir / "pipeline_manifest.json").read_text(encoding="utf-8"))
     recorded = manifest["artifacts"]["metadata.json"]
     written = (run_dir / "metadata.json").read_text(encoding="utf-8").encode("utf-8")
@@ -124,18 +116,24 @@ def test_closing_a_run_without_a_manifest_still_works(tmp_path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("name", "kwargs", "match"),
+    ("fn", "name", "kwargs", "match"),
     [
-        ("already-done", {"status": "completed"}, "no está en running"),
-        ("no-story", {"story": False}, "no llego a escribir"),
-        ("no-version", {"version": None}, "no soportada"),
+        (close_stalled_run, "already-done", {"status": "completed"}, "no está en running"),
+        (close_stalled_run, "no-story", {"story": False}, "no llego a escribir"),
+        (close_stalled_run, "no-version", {"version": None}, "no soportada"),
+        (discard_stalled_run, "already-done", {"status": "completed"}, "no está en running"),
     ],
-    ids=["already-completed", "never-wrote-a-story", "unsupported-version"],
+    ids=[
+        "close-already-completed",
+        "close-never-wrote-a-story",
+        "close-unsupported-version",
+        "discard-not-stalled",
+    ],
 )
-def test_closing_refuses_a_run_it_cannot_rescue(tmp_path, name, kwargs, match) -> None:
+def test_a_run_it_cannot_rescue_is_refused(tmp_path, fn, name, kwargs, match) -> None:
     run_dir = make_run(tmp_path, name, **kwargs)
     with pytest.raises(RunArtifactError, match=match):
-        close_stalled_run(run_dir)
+        fn(run_dir)
 
 
 def test_discarding_marks_the_run_failed_and_explains_why(tmp_path) -> None:
@@ -150,12 +148,6 @@ def test_discarding_marks_the_run_failed_and_explains_why(tmp_path) -> None:
     assert report["run_id"] == "abandoned"
 
 
-def test_discarding_refuses_a_run_that_is_not_stalled(tmp_path) -> None:
-    run_dir = make_run(tmp_path, "done", status="completed")
-    with pytest.raises(RunArtifactError, match="no está en running"):
-        discard_stalled_run(run_dir)
-
-
 def test_no_transition_ever_removes_an_artifact(tmp_path) -> None:
     closed = make_run(tmp_path, "recoverable")
     discarded = make_run(tmp_path, "abandoned", story=False, version=None)
@@ -166,15 +158,15 @@ def test_no_transition_ever_removes_an_artifact(tmp_path) -> None:
     assert (discarded / "metadata.json").is_file()
 
 
-def test_the_command_lists_without_writing_unless_asked(tmp_path, capsys) -> None:
+def test_the_command_reports_an_empty_directory_then_lists_without_writing_unless_asked(
+    tmp_path, capsys
+) -> None:
+    assert main(["--stories", str(tmp_path), "--all"]) == 0
+    assert "No hay ejecuciones en running" in capsys.readouterr().out
+
     run_dir = make_run(tmp_path, "recoverable")
     assert main(["--stories", str(tmp_path)]) == 0
     assert metadata_of(run_dir)["status"] == "running"
     assert "No se escribió nada" in capsys.readouterr().out
     assert main(["--stories", str(tmp_path), "--all"]) == 0
     assert metadata_of(run_dir)["status"] == "completed"
-
-
-def test_the_command_reports_an_empty_directory(tmp_path, capsys) -> None:
-    assert main(["--stories", str(tmp_path), "--all"]) == 0
-    assert "No hay ejecuciones en running" in capsys.readouterr().out

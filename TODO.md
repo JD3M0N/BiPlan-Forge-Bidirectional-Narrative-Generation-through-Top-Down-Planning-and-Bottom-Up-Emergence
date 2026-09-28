@@ -13,9 +13,10 @@ validado en dos runs reales).** La interfaz gráfica StageCraft (`asg-studio`) y
 - **Evaluación humana: casi inexistente.** De 146 `evaluation.json`, uno solo tiene puntuaciones
   reales (`Top-Down/20260831-223547-el-rescate-de-luminaria`). Todo lo demás que se sabe de la
   calidad sale de métricas automáticas o de jueces LLM, y esos jueces aprueban casi todo (TD-1).
-- **Puerta de calidad limpia.** `ruff check`, `ruff format --check` (190 archivos), 721 pruebas
-  pasan y 2 se omiten, y `pip check`. Corren en `.github/workflows/quality.yml` en cada push y
-  pull request, y en local con `.\quality.ps1`.
+- **Puerta de calidad limpia.** `ruff check`, `ruff format --check` (190 archivos), la suite y
+  `pip check`. Corren en `.github/workflows/quality.yml` en cada push y pull request, y en local
+  con `.\quality.ps1`. Los tests corren siempre con `.\run-tests.ps1`, el único comando: nunca
+  `pytest` a mano ni un archivo suelto.
 - **La corrida de control** (`Stories/Stagecraft/20260926-094204-el-secreto-del-faro-de-san-telmo`,
   narrativa, prompt 03 Esencial) fue la primera narrativa desde el renombrado.
   - Recorrió 7.1.1 entero en 17 llamadas, 97k tokens y unos 92 s de modelo, sin fallos ni

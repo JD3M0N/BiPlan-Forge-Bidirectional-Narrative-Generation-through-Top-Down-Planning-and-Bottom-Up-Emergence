@@ -24,7 +24,7 @@ class JudgeProvider:
         self.prompts = []
 
     def generate_structured(self, *, system_instruction, prompt, schema, profile):
-        self.prompts.append((schema.__name__, prompt))
+        self.prompts.append((schema.__name__, prompt, system_instruction))
         if schema is SceneAudit:
             return SceneAudit(findings=list(self.scene_findings))
         return ChapterAudit(findings=list(self.chapter_findings))
@@ -96,40 +96,29 @@ def test_the_penalty_scheme_matches_the_one_it_borrows() -> None:
     assert score([leak()] * 10) == 0.0
 
 
-def test_a_clean_run_scores_perfectly_and_writes_no_findings(tmp_path) -> None:
+def test_a_clean_run_scores_perfectly_from_only_what_each_judge_could_see(tmp_path) -> None:
     run = build_run(tmp_path)
-    report = audit_run(run, JudgeProvider())
+    judge = JudgeProvider()
+    report = audit_run(run, judge)
+
     assert report["knowledge_leaks"] == 0
     assert report["knowledge_score"] == 100.0
     assert report["narration_score"] == 100.0
     assert report["actor_memory"] == "own"
     assert report["narrative_voice"] == "omniscient"
+    assert report["source_manifest_sha256"] == manifest_hash(run)
+    assert report["model"] == "fake-judge"
 
-
-def test_findings_are_counted_and_scored(tmp_path) -> None:
-    run = build_run(tmp_path)
-    report = audit_run(run, JudgeProvider(scene_findings=[leak()]))
-    assert report["knowledge_leaks"] == 1
-    assert report["knowledge_score"] == 85.0
-    assert report["scenes"][0]["findings"][0]["character_id"] == "ana"
-
-
-def test_the_judge_only_sees_what_a_character_knew_before_the_scene(tmp_path) -> None:
-    run = build_run(tmp_path)
-    judge = JudgeProvider()
-    audit_run(run, judge)
-    scene_prompt = next(prompt for name, prompt in judge.prompts if name == "SceneAudit")
+    scene_prompt = next(prompt for name, prompt, _ in judge.prompts if name == "SceneAudit")
     assert "Ana vio la carta" in scene_prompt
     assert "algo de esta escena" not in scene_prompt
 
-
-def test_the_narration_judge_gets_the_log_and_the_prose(tmp_path) -> None:
-    run = build_run(tmp_path)
-    judge = JudgeProvider()
-    audit_run(run, judge)
-    chapter_prompt = next(prompt for name, prompt in judge.prompts if name == "ChapterAudit")
+    chapter_prompt = next(prompt for name, prompt, _ in judge.prompts if name == "ChapterAudit")
     assert "Ana lo sabia desde el principio." in chapter_prompt
     assert "TRANSCRIPCION" in chapter_prompt
+
+    knowledge_instruction = next(text for name, _, text in judge.prompts if name == "SceneAudit")
+    assert "playing a tactic, not leaking knowledge" in knowledge_instruction
 
 
 def test_scenes_only_skips_the_narration_judge(tmp_path) -> None:
@@ -137,14 +126,7 @@ def test_scenes_only_skips_the_narration_judge(tmp_path) -> None:
     judge = JudgeProvider()
     report = audit_run(run, judge, scenes_only=True)
     assert report["chapters"] == []
-    assert not any(name == "ChapterAudit" for name, _ in judge.prompts)
-
-
-def test_the_audit_records_which_run_it_described(tmp_path) -> None:
-    run = build_run(tmp_path)
-    report = audit_run(run, JudgeProvider())
-    assert report["source_manifest_sha256"] == manifest_hash(run)
-    assert report["model"] == "fake-judge"
+    assert not any(name == "ChapterAudit" for name, _, _ in judge.prompts)
 
 
 def test_the_cli_refuses_a_run_without_a_performance(tmp_path, capsys) -> None:
@@ -172,23 +154,8 @@ def test_a_deliberate_lie_filed_as_a_contradiction_is_set_aside_not_scored(tmp_p
     assert report["contract_version"] == "2"
     assert report["knowledge_leaks"] == 1
     assert report["knowledge_score"] == 85.0
+    assert report["scenes"][0]["findings"][0]["character_id"] == "ana"
     assert report["scenes"][0]["set_aside"][0]["kind"] == "contradiction"
-
-
-def test_the_knowledge_judge_is_told_a_lie_is_not_a_leak(tmp_path) -> None:
-    run = build_run(tmp_path)
-    instructions = []
-
-    class Recording(JudgeProvider):
-        def generate_structured(self, *, system_instruction, prompt, schema, profile):
-            instructions.append((schema.__name__, system_instruction))
-            return super().generate_structured(
-                system_instruction=system_instruction, prompt=prompt, schema=schema, profile=profile
-            )
-
-    audit_run(run, Recording())
-    knowledge = next(text for name, text in instructions if name == "SceneAudit")
-    assert "playing a tactic, not leaking knowledge" in knowledge
 
 
 def test_an_earlier_report_is_kept_rather_than_overwritten(tmp_path) -> None:

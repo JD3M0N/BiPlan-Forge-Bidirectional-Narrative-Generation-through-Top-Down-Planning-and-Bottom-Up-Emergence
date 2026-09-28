@@ -26,47 +26,49 @@ def test_settings_never_carry_legacy_length_budget_fields(tmp_path, monkeypatch)
     assert "target_words" not in settings.__dataclass_fields__
 
 
-def test_missing_api_key_is_actionable(tmp_path, monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("env", "match"),
+    [
+        ({"GEMINI_API_KEY": None}, "GEMINI_API_KEY"),
+        ({"ASG_STORY_FORMAT": "screenplay"}, "ASG_STORY_FORMAT"),
+        ({"ASG_SCRIPT_METHOD": "improvised"}, "ASG_SCRIPT_METHOD"),
+        ({"GEMINI_STAGE_RPM_LIMIT": "many"}, "GEMINI_STAGE_RPM_LIMIT"),
+    ],
+    ids=["missing-api-key", "invalid-story-format", "invalid-script-method", "invalid-stage-rpm"],
+)
+def test_a_bad_environment_variable_names_itself(tmp_path, monkeypatch, env, match) -> None:
     root = project(tmp_path)
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    with pytest.raises(ConfigurationError, match="GEMINI_API_KEY"):
+    monkeypatch.setenv("GEMINI_API_KEY", "secret")
+    for name, value in env.items():
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+    with pytest.raises(ConfigurationError, match=match):
         load_settings(root)
 
 
-def test_output_format_defaults_to_narrative_and_native(tmp_path, monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("story_format", "script_method", "expected_format", "expected_method"),
+    [
+        (None, None, StoryFormat.NARRATIVE, ScriptMethod.NATIVE),
+        ("Script", "ADAPTED", StoryFormat.SCRIPT, ScriptMethod.ADAPTED),
+    ],
+    ids=["defaults-when-unset", "reads-case-insensitively-when-set"],
+)
+def test_output_format_defaults_and_reads_environment_case_insensitively(
+    tmp_path, monkeypatch, story_format, script_method, expected_format, expected_method
+) -> None:
     root = project(tmp_path)
     monkeypatch.setenv("GEMINI_API_KEY", "secret")
-    monkeypatch.delenv("ASG_STORY_FORMAT", raising=False)
-    monkeypatch.delenv("ASG_SCRIPT_METHOD", raising=False)
+    for name, value in (("ASG_STORY_FORMAT", story_format), ("ASG_SCRIPT_METHOD", script_method)):
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
     settings = load_settings(root)
-    assert settings.story_format is StoryFormat.NARRATIVE
-    assert settings.script_method is ScriptMethod.NATIVE
-
-
-def test_output_format_reads_environment_case_insensitively(tmp_path, monkeypatch) -> None:
-    root = project(tmp_path)
-    monkeypatch.setenv("GEMINI_API_KEY", "secret")
-    monkeypatch.setenv("ASG_STORY_FORMAT", "Script")
-    monkeypatch.setenv("ASG_SCRIPT_METHOD", "ADAPTED")
-    settings = load_settings(root)
-    assert settings.story_format is StoryFormat.SCRIPT
-    assert settings.script_method is ScriptMethod.ADAPTED
-
-
-def test_invalid_story_format_names_the_variable(tmp_path, monkeypatch) -> None:
-    root = project(tmp_path)
-    monkeypatch.setenv("GEMINI_API_KEY", "secret")
-    monkeypatch.setenv("ASG_STORY_FORMAT", "screenplay")
-    with pytest.raises(ConfigurationError, match="ASG_STORY_FORMAT"):
-        load_settings(root)
-
-
-def test_invalid_script_method_names_the_variable(tmp_path, monkeypatch) -> None:
-    root = project(tmp_path)
-    monkeypatch.setenv("GEMINI_API_KEY", "secret")
-    monkeypatch.setenv("ASG_SCRIPT_METHOD", "improvised")
-    with pytest.raises(ConfigurationError, match="ASG_SCRIPT_METHOD"):
-        load_settings(root)
+    assert settings.story_format is expected_format
+    assert settings.script_method is expected_method
 
 
 STAGE_VARIABLES = ("GEMINI_STAGE_MODEL", "GEMINI_STAGE_API_KEY", "GEMINI_STAGE_RPM_LIMIT")
@@ -114,14 +116,6 @@ def test_a_blank_number_keeps_its_default(tmp_path, monkeypatch) -> None:
     settings = load_settings(root)
     assert settings.stage_rpm_limit == 0
     assert settings.rpm_limit == 15
-
-
-def test_an_invalid_performance_rpm_names_the_variable(tmp_path, monkeypatch) -> None:
-    root = project(tmp_path)
-    monkeypatch.setenv("GEMINI_API_KEY", "secret")
-    monkeypatch.setenv("GEMINI_STAGE_RPM_LIMIT", "many")
-    with pytest.raises(ConfigurationError, match="GEMINI_STAGE_RPM_LIMIT"):
-        load_settings(root)
 
 
 def test_repository_versions_new_runs_to_match_the_installed_package(tmp_path) -> None:

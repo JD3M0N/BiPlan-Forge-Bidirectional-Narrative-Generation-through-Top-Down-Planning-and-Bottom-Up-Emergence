@@ -79,107 +79,139 @@ def test_a_valid_ledger_derives_its_chapters_from_the_plan() -> None:
     assert [item.id for item in result.promises] == ["promise-1", "promise-2"]
 
 
-def test_an_unknown_anchor_is_rejected_and_names_the_legal_ids() -> None:
+def _unknown_anchor(item) -> None:
+    item.promises[1].progress[0].event_id = "event-99"
+
+
+def _payoff_before_opening(item) -> None:
+    item.promises[1].opening.event_id = "event-2"
+    item.promises[1].payoff.event_id = "event-1"
+
+
+def _progress_outside_span(item) -> None:
+    item.promises[1].progress[0].event_id = "event-4"
+
+
+def _preparation_from_another_promise(item) -> None:
+    item.promises[1].payoff.prepared_by_progress_ids = ["progress-1"]
+
+
+def _primary_not_paying_off_in_final_chapter(item) -> None:
+    item.promises[0].payoff.event_id = "event-2"
+
+
+def _primary_not_story_direction(item) -> None:
+    item.promises[0].kind = "tone"
+
+
+def _unknown_primary_id(item) -> None:
+    item.primary_promise_id = "promise-9"
+
+
+def _promise_opened_in_final_chapter(item) -> None:
+    item.promises[1].opening.event_id = "event-3"
+    item.promises[1].progress[0].event_id = "event-4"
+    item.promises[1].payoff.event_id = "event-4"
+
+
+def _repeated_promise_id(item) -> None:
+    item.promises[1].id = "promise-1"
+
+
+def _repeated_progress_id(item) -> None:
+    item.promises[1].progress[0].id = "progress-1"
+    item.promises[1].payoff.prepared_by_progress_ids = ["progress-1"]
+
+
+def _too_many_promises(item) -> None:
+    item.promises = [item.promises[0]] + [promise(f"promise-{index}") for index in range(2, 6)]
+
+
+_DEVELOPED_FLOOR = promise_band(NarrativeProfile.DEVELOPED)[0]
+
+
+@pytest.mark.parametrize(
+    ("mutate", "profile", "expected"),
+    [
+        (
+            _unknown_anchor,
+            NarrativeProfile.ESSENTIAL,
+            ("event-99", "allowed event IDs: event-1, event-2, event-3, event-4"),
+        ),
+        (
+            _payoff_before_opening,
+            NarrativeProfile.ESSENTIAL,
+            ("does not come after its opening event",),
+        ),
+        (_progress_outside_span, NarrativeProfile.ESSENTIAL, ("is not between the opening event",)),
+        (
+            _preparation_from_another_promise,
+            NarrativeProfile.ESSENTIAL,
+            ("claims preparation from progress-1",),
+        ),
+        (
+            _primary_not_paying_off_in_final_chapter,
+            NarrativeProfile.ESSENTIAL,
+            ("must pay off in the final chapter chapter-2",),
+        ),
+        (
+            _primary_not_story_direction,
+            NarrativeProfile.ESSENTIAL,
+            ("must be the story_direction promise",),
+        ),
+        (
+            _unknown_primary_id,
+            NarrativeProfile.ESSENTIAL,
+            ("is not a promise of this ledger",),
+        ),
+        (
+            _promise_opened_in_final_chapter,
+            NarrativeProfile.ESSENTIAL,
+            ("in the final chapter chapter-2",),
+        ),
+        (
+            _repeated_promise_id,
+            NarrativeProfile.ESSENTIAL,
+            ("promise IDs must be unique; repeated: promise-1",),
+        ),
+        (
+            _repeated_progress_id,
+            NarrativeProfile.ESSENTIAL,
+            ("progress IDs must be unique",),
+        ),
+        (
+            lambda item: None,
+            NarrativeProfile.DEVELOPED,
+            (f"developed profile requires at least {_DEVELOPED_FLOOR} promises",),
+        ),
+        (
+            _too_many_promises,
+            NarrativeProfile.ESSENTIAL,
+            ("allows at most 3 promises",),
+        ),
+    ],
+)
+def test_ledger_rejections_are_ascii_and_reach_a_repair_block(
+    mutate, profile, expected, tmp_path
+) -> None:
+    """Every objective invariant materialize_ledger enforces, and that its repair loop can read."""
     candidate = ledger()
-    candidate.promises[1].progress[0].event_id = "event-99"
+    mutate(candidate)
 
     with pytest.raises(ValueError) as captured:
-        materialize_ledger(candidate, plan(), NarrativeProfile.ESSENTIAL)
+        materialize_ledger(candidate, plan(), profile)
 
-    assert "event-99" in str(captured.value)
-    assert "allowed event IDs: event-1, event-2, event-3, event-4" in str(captured.value)
+    issue = str(captured.value)
+    for fragment in expected:
+        assert fragment in issue
+    assert issue.isascii()
 
-
-def test_a_payoff_before_its_opening_is_rejected() -> None:
-    candidate = ledger()
-    candidate.promises[1].opening.event_id = "event-2"
-    candidate.promises[1].payoff.event_id = "event-1"
-
-    with pytest.raises(ValueError, match="does not come after its opening event"):
-        materialize_ledger(candidate, plan(), NarrativeProfile.ESSENTIAL)
-
-
-def test_a_progress_outside_the_span_is_rejected() -> None:
-    candidate = ledger()
-    candidate.promises[1].progress[0].event_id = "event-4"
-
-    with pytest.raises(ValueError, match="is not between the opening event"):
-        materialize_ledger(candidate, plan(), NarrativeProfile.ESSENTIAL)
-
-
-def test_preparation_may_only_come_from_the_promise_that_pays() -> None:
-    candidate = ledger()
-    candidate.promises[1].payoff.prepared_by_progress_ids = ["progress-1"]
-
-    with pytest.raises(ValueError, match="claims preparation from progress-1"):
-        materialize_ledger(candidate, plan(), NarrativeProfile.ESSENTIAL)
-
-
-def test_the_primary_promise_must_pay_off_in_the_final_chapter() -> None:
-    candidate = ledger()
-    candidate.promises[0].payoff.event_id = "event-2"
-
-    with pytest.raises(ValueError, match="must pay off in the final chapter chapter-2"):
-        materialize_ledger(candidate, plan(), NarrativeProfile.ESSENTIAL)
-
-
-def test_the_primary_promise_must_be_the_story_direction_promise() -> None:
-    candidate = ledger()
-    candidate.promises[0].kind = "tone"
-
-    with pytest.raises(ValueError, match="must be the story_direction promise"):
-        materialize_ledger(candidate, plan(), NarrativeProfile.ESSENTIAL)
-
-
-def test_an_unknown_primary_id_is_rejected() -> None:
-    with pytest.raises(ValueError, match="is not a promise of this ledger"):
-        materialize_ledger(
-            ledger(primary_promise_id="promise-9"), plan(), NarrativeProfile.ESSENTIAL
-        )
-
-
-def test_a_promise_opened_in_the_final_chapter_is_rejected() -> None:
-    candidate = ledger()
-    candidate.promises[1].opening.event_id = "event-3"
-    candidate.promises[1].progress[0].event_id = "event-4"
-    candidate.promises[1].payoff.event_id = "event-4"
-
-    with pytest.raises(ValueError, match="in the final chapter chapter-2"):
-        materialize_ledger(candidate, plan(), NarrativeProfile.ESSENTIAL)
-
-
-def test_repeated_identifiers_are_rejected() -> None:
-    candidate = ledger()
-    candidate.promises[1].id = "promise-1"
-
-    with pytest.raises(ValueError, match="promise IDs must be unique; repeated: promise-1"):
-        materialize_ledger(candidate, plan(), NarrativeProfile.ESSENTIAL)
-
-
-def test_repeated_progress_identifiers_are_rejected() -> None:
-    candidate = ledger()
-    candidate.promises[1].progress[0].id = "progress-1"
-    candidate.promises[1].payoff.prepared_by_progress_ids = ["progress-1"]
-
-    with pytest.raises(ValueError, match="progress IDs must be unique"):
-        materialize_ledger(candidate, plan(), NarrativeProfile.ESSENTIAL)
-
-
-def test_too_few_promises_for_the_profile_are_rejected() -> None:
-    low = promise_band(NarrativeProfile.DEVELOPED)[0]
-
-    with pytest.raises(ValueError, match=f"developed profile requires at least {low} promises"):
-        materialize_ledger(ledger(), plan(), NarrativeProfile.DEVELOPED)
-
-
-def test_more_promises_than_the_ending_can_pay_are_rejected() -> None:
-    candidate = ledger()
-    candidate.promises = [candidate.promises[0]] + [
-        promise(f"promise-{index}") for index in range(2, 6)
-    ]
-
-    with pytest.raises(ValueError, match="allows at most 3 promises"):
-        materialize_ledger(candidate, plan(), NarrativeProfile.ESSENTIAL)
+    pipeline = StoryPipeline(None, tmp_path)
+    pipeline.repository = _RecordingRepository()
+    feedback = pipeline._record_rejected_ledger(candidate, 1, ValueError(issue), plan())
+    assert issue in feedback
+    assert "LEDGER REPAIR REQUIRED" in feedback
+    assert feedback.isascii()
 
 
 def test_a_payoff_that_ignores_its_events_declared_setup_is_only_observed() -> None:
@@ -193,35 +225,6 @@ def test_a_payoff_that_ignores_its_events_declared_setup_is_only_observed() -> N
         "promise promise-1 pays off on event-4, whose declared setups are event-2, but it "
         "opened on event-1"
     ]
-
-
-@pytest.mark.parametrize(
-    "break_it",
-    [
-        lambda item: setattr(item.promises[1].progress[0], "event_id", "event-99"),
-        lambda item: setattr(item.promises[1].payoff, "event_id", "event-1"),
-        lambda item: setattr(item.promises[0].payoff, "event_id", "event-2"),
-        lambda item: setattr(item.promises[0], "kind", "tone"),
-        lambda item: setattr(item.promises[1], "id", "promise-1"),
-        lambda item: setattr(item, "primary_promise_id", "promise-9"),
-    ],
-)
-def test_every_rejection_is_ascii_and_reaches_a_repair_block(break_it, tmp_path) -> None:
-    """No message this validator can raise may reach the model as unreadable repair guidance."""
-    candidate = ledger()
-    break_it(candidate)
-
-    with pytest.raises(ValueError) as captured:
-        materialize_ledger(candidate, plan(), NarrativeProfile.ESSENTIAL)
-
-    issue = str(captured.value)
-    assert issue.isascii()
-    pipeline = StoryPipeline(None, tmp_path)
-    pipeline.repository = _RecordingRepository()
-    feedback = pipeline._record_rejected_ledger(candidate, 1, ValueError(issue), plan())
-    assert issue in feedback
-    assert "LEDGER REPAIR REQUIRED" in feedback
-    assert feedback.isascii()
 
 
 class _RecordingRepository:
