@@ -20,6 +20,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from .formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat, voice_choice
 from .planning.profiles import NarrativeProfile
 
+# The label an interface shows for turns_per_beat's upper bound. The field itself has no ``le``,
+# so a CLI or .env value above it still validates: this is only what a picker offers.
+MAX_OFFERED_TURNS_PER_BEAT = 16
+
+# The choice an interface shows for an empty audio_voice, which lets the story's language decide.
+AUTOMATIC_AUDIO_VOICE_LABEL = "Automática (según el idioma)"
+
 
 class GenerationOptions(BaseModel):
     """The validated choices of one run, persisted with it as generation_options.json."""
@@ -29,21 +36,69 @@ class GenerationOptions(BaseModel):
     story_format: StoryFormat = StoryFormat.NARRATIVE
     script_method: ScriptMethod = ScriptMethod.NATIVE
     # None lets the analyst infer the profile from the prompt; a value outranks that inference.
-    narrative_profile: NarrativeProfile | None = None
-    narrative_guidance: bool = True
-    promise_ledger: bool = True
-    audio: bool = True
+    narrative_profile: NarrativeProfile | None = Field(
+        default=None,
+        title="Perfil narrativo",
+        description="La escala de la historia. Automático deja que lo deduzca el analista.",
+    )
+    narrative_guidance: bool = Field(
+        default=True,
+        title="Guía de esqueletos",
+        description="Inspira el plan con esqueletos de trama clásicos.",
+    )
+    promise_ledger: bool = Field(
+        default=True,
+        title="Ledger de promesas",
+        description=(
+            "Traza qué promete la historia y dónde lo paga. Apagarlo es su brazo de control."
+        ),
+    )
+    audio: bool = Field(
+        default=True,
+        title="Narración en audio",
+        description="Lee la historia terminada en story.mp3.",
+    )
     # The edge-tts voice that reads story.mp3; empty lets the story's language choose it.
-    audio_voice: str = ""
-    narrative_voice: NarrativeVoice = NarrativeVoice.OMNISCIENT
+    audio_voice: str = Field(
+        default="",
+        title="Voz del audio",
+        description="Quién lee la historia. Automática elige por el idioma.",
+    )
+    narrative_voice: NarrativeVoice = Field(
+        default=NarrativeVoice.OMNISCIENT,
+        title="Visión",
+        description="Desde dónde se cuenta la función: qué turnos y qué pensamientos ve.",
+    )
     # The character a voice told from one character follows, as the person typed the name; it
     # is resolved against the cast only once the cast exists. Empty keeps the default narrator.
-    narrator: str = Field(default="", max_length=80)
+    narrator: str = Field(
+        default="",
+        max_length=80,
+        title="Personaje de la visión",
+        description=(
+            "Quién cuenta la historia en las visiones limitada y en primera persona. "
+            "Los capítulos que no presencie se omiten."
+        ),
+    )
     # The register the author asks the narrator for, in their own words. Only the narration of
     # a simulated run reads it, so it can never change the plan, the script or the performance.
-    narration_tone: str = Field(default="", max_length=300)
-    actor_memory: ActorMemory = ActorMemory.OWN
-    turns_per_beat: int = Field(default=8, ge=2)
+    narration_tone: str = Field(
+        default="",
+        max_length=300,
+        title="Tono del narrador",
+        description="El registro de la voz que cuenta. Colorea la prosa; nunca añade sucesos.",
+    )
+    actor_memory: ActorMemory = Field(
+        default=ActorMemory.OWN,
+        title="Memoria de los actores",
+        description="Qué recuerda cada personaje de lo que ocurrió en escena.",
+    )
+    turns_per_beat: int = Field(
+        default=8,
+        ge=2,
+        title="Turnos por beat",
+        description="Cuántos turnos puede durar un beat antes de que el mundo lo cierre.",
+    )
 
     @field_validator("narrator", "narration_tone")
     @classmethod

@@ -1,7 +1,7 @@
 """Version identifiers persisted with every generated story."""
 
 GENERATOR_NAME = "asg-stagecraft"
-__version__ = "7.3.0"
+__version__ = "7.3.1"
 GENERATOR_VERSION = __version__
 PIPELINE_VERSION = "7.3"
 # Runs written as Top-Down 5.x and 6.x stay readable: renaming the package and adding the

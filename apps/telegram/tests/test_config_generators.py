@@ -22,9 +22,9 @@ def test_load_settings_reads_the_token_or_fails_without_leaking_it(tmp_path, mon
     assert "secret-token" not in repr(TelegramConfigurationError("error"))
 
 
-def test_the_pre_rename_generator_name_still_resolves():
-    """A deployed STORY_GENERATOR=top-down must keep starting the bot after the rename."""
-    assert {"stagecraft", "top-down"} <= set(DEFAULT_REGISTRY.available)
+def test_the_default_registry_only_offers_stagecraft():
+    """The registry no longer carries the pre-rename Railway alias."""
+    assert DEFAULT_REGISTRY.available == ("stagecraft",)
 
 
 def test_registry_selects_custom_generator_and_lists_unknown_names():

@@ -2,7 +2,7 @@ import logging
 import sys
 
 import pytest
-from asg_telegram.console import ConsoleFormatter
+from asg_telegram.console import ConsoleFormatter, render_banner
 from asg_telegram.contract import GenerationFailure
 from colorama import Fore, Style
 
@@ -26,17 +26,31 @@ def make_record(level=logging.INFO, message="inició una historia"):
 @pytest.mark.parametrize(
     ("category", "colour", "label"),
     [("acción", Fore.CYAN, "ACCIÓN"), ("éxito", Fore.GREEN, "ÉXITO")],
-    ids=["action-block-is-cyan", "success-block-is-green"],
+    ids=["action-line-is-cyan", "success-line-is-green"],
 )
-def test_console_formatter_renders_a_coloured_user_block_per_category(category, colour, label):
+def test_console_formatter_renders_a_coloured_line_per_category(category, colour, label):
     record = make_record()
     record.category = category
     result = ConsoleFormatter().format(record)
     assert colour in result
     assert Style.RESET_ALL in result
     assert label in result
-    assert "Usuario : 123 (ana)" in result
-    assert "Acción  : inició una historia" in result
+    assert "ana (123)" in result
+    assert "inició una historia" in result
+
+
+def test_console_formatter_shows_the_job_id():
+    record = make_record()
+    record.job_id = "3f2a9c1e-dead-beef"
+    result = ConsoleFormatter().format(record)
+    assert "3f2a9c1e" in result
+
+
+def test_a_record_without_a_category_falls_back_by_level():
+    record = make_record(level=logging.WARNING)
+    record.category = None
+    result = ConsoleFormatter().format(record)
+    assert "ADVERTENCIA" in result
 
 
 def test_console_formatter_shows_actionable_generation_failure():
@@ -73,3 +87,12 @@ def test_console_formatter_redacts_credentials_from_tracebacks(secret):
     assert "super-secret" not in result
     assert "123456789:AA" not in result
     assert "[REDACTED]" in result
+
+
+def test_render_banner_fits_every_row_and_never_leaks_a_token():
+    rows = (("Modelo", "gemini-3.5-flash-lite"), ("Clave", "configurada"))
+    banner = render_banner("ASG Telegram", rows)
+    assert "Modelo: gemini-3.5-flash-lite" in banner
+    assert "AIza" not in banner
+    for line in banner.splitlines():
+        assert len(line) <= 72

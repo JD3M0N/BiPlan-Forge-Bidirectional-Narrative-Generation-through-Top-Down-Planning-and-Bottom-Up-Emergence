@@ -30,6 +30,21 @@ Pronoun = Literal["", "ella", "él", "elle"]
 # A cast this size already strains an Expansive plan; more would be names nobody can stage.
 MAX_CAST = 10
 
+# The label an interface shows for each role and pronoun a cast member may declare.
+ROLE_LABELS: dict[CastRole, str] = {
+    "": "Sin rol",
+    "protagonista": "Protagonista",
+    "antagonista": "Antagonista",
+    "aliado": "Aliado",
+    "secundario": "Secundario",
+}
+PRONOUN_LABELS: dict[Pronoun, str] = {
+    "": "—",
+    "ella": "ella",
+    "él": "él",
+    "elle": "elle",
+}
+
 # How each declared role reads in the English repair instruction the character designer gets.
 _ROLE_IN_ENGLISH = {
     "protagonista": "protagonist",

@@ -19,6 +19,10 @@ PROFILE_LABELS: dict[NarrativeProfile, str] = {
     NarrativeProfile.EXPANSIVE: "Expansiva",
 }
 
+# The label and description an interface shows for a None narrative_profile.
+AUTOMATIC_PROFILE_LABEL = "Automático"
+AUTOMATIC_PROFILE_DESCRIPTION = "Lo deduce el analista a partir de la obra."
+
 
 # Purely qualitative on purpose. Event counts live in profile_event_target and reach the planner
 # from there: this text ships inside every agent prompt, so a number here competed with the

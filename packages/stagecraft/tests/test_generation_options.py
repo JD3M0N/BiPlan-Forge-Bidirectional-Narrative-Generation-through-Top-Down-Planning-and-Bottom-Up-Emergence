@@ -133,6 +133,16 @@ def test_an_audio_voice_must_be_one_the_audio_module_offers() -> None:
         GenerationOptions(audio_voice="es-XX-NadieNeural")
 
 
+def test_every_interface_facing_field_has_a_spanish_label_and_help() -> None:
+    """Studio and Telegram read title/description instead of duplicating the strings."""
+    hidden = {"story_format", "script_method"}
+    for name, field in GenerationOptions.model_fields.items():
+        if name in hidden:
+            continue
+        assert field.title, name
+        assert field.description, name
+
+
 def test_a_narrator_needs_a_voice_told_from_one_character() -> None:
     options = GenerationOptions(
         narrative_voice=NarrativeVoice.LIMITED, narrator="  Ana \n Vela ", narration_tone="seco"

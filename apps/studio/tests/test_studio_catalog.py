@@ -1,6 +1,7 @@
 import pytest
 from asg_stagecraft import GenerationOptions
-from asg_stagecraft.formats import NarrativeVoice
+from asg_stagecraft.brief import MAX_CAST
+from asg_stagecraft.formats import FORMAT_COST_HINTS, NarrativeVoice
 from asg_studio.catalog import SET_BY_PRESET, available_keys, catalog_document, pending_keys
 from pydantic import ValidationError
 
@@ -52,6 +53,24 @@ def test_every_audio_voice_is_offered_once_after_the_automatic_one() -> None:
     values = [choice["value"] for group in voice["groups"] for choice in group["choices"]]
     assert values[0] == ""
     assert len(values) == len(set(values)) == 46
+
+
+def test_available_option_labels_match_the_generator_field_metadata() -> None:
+    doc = document()
+    fields = GenerationOptions.model_fields
+    for group in doc["groups"]:
+        for option in group["options"]:
+            if option["status"] != "available" or option["key"] not in fields:
+                continue
+            field = fields[option["key"]]
+            assert option["label"] == field.title
+            assert option["help"] == field.description
+
+
+def test_cost_hints_match_the_generator_and_max_cast_matches_the_brief() -> None:
+    doc = document()
+    assert doc["cost"] == {fmt.value: hint for fmt, hint in FORMAT_COST_HINTS.items()}
+    assert doc["brief"]["max_cast"] == MAX_CAST
 
 
 def test_the_format_preset_sets_both_the_format_and_the_method() -> None:

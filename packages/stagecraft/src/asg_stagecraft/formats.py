@@ -60,21 +60,34 @@ class OutputChoice:
     label: str
     story_format: StoryFormat
     script_method: ScriptMethod
+    description: str = ""
 
+
+# Labels an interface uses for the control that sets story_format and script_method together.
+OUTPUT_LABEL = "Formato de salida"
+OUTPUT_HELP = "Qué entrega la función terminada."
 
 OUTPUT_CHOICES: tuple[OutputChoice, ...] = (
-    OutputChoice("narrative", "Historia narrativa", StoryFormat.NARRATIVE, ScriptMethod.NATIVE),
+    OutputChoice(
+        "narrative",
+        "Historia narrativa",
+        StoryFormat.NARRATIVE,
+        ScriptMethod.NATIVE,
+        "Prosa escrita a partir del plan: el enfoque Top-Down.",
+    ),
     OutputChoice(
         "script-native",
         "Guion teatral · escrito por escenas",
         StoryFormat.SCRIPT,
         ScriptMethod.NATIVE,
+        "El plan escrito directamente como obra de teatro, por escenas.",
     ),
     OutputChoice(
         "script-adapted",
         "Guion teatral · adaptado de la prosa",
         StoryFormat.SCRIPT,
         ScriptMethod.ADAPTED,
+        "La prosa terminada, adaptada después a guion.",
     ),
     # A simulated run always stages the native script: adapting prose into a script only to
     # perform it and narrate prose again would run the same material through the model twice
@@ -84,8 +97,18 @@ OUTPUT_CHOICES: tuple[OutputChoice, ...] = (
         "Historia simulada · los personajes actúan el guion",
         StoryFormat.SIMULATED,
         ScriptMethod.NATIVE,
+        "Los personajes representan el guion con memoria propia y se narra la función.",
     ),
 )
+
+# What each run costs, as the roadmap's measurement protocol states it; shown before a launch.
+FORMAT_COST_HINTS: dict[StoryFormat, str] = {
+    StoryFormat.NARRATIVE: "Una narrativa cuesta unas 16 llamadas al modelo.",
+    StoryFormat.SCRIPT: "Un guion cuesta unas 20 llamadas al modelo.",
+    StoryFormat.SIMULATED: (
+        "Una simulada cuesta entre 98 y 126 llamadas: una parte grande del cupo diario."
+    ),
+}
 
 
 def output_choice(story_format: StoryFormat, script_method: ScriptMethod) -> OutputChoice:

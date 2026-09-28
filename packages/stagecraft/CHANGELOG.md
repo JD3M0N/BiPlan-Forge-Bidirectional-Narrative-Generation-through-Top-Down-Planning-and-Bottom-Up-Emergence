@@ -1,5 +1,12 @@
 # Historial de cambios
 
+## 7.3.1
+
+No cambia ningún artefacto ni `PIPELINE_VERSION`. Sube las etiquetas y descripciones en español de
+`GenerationOptions`, `OutputChoice`, los perfiles y el reparto (`options.py`, `formats.py`,
+`planning/profiles.py`, `brief.py`) para que StageCraft y el bot de Telegram las lean del mismo
+sitio en vez de duplicarlas.
+
 ## 7.3.0
 
 Hace modulares las opciones de un run y añade lo que necesita StageCraft, la interfaz gráfica.

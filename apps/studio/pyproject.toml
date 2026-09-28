@@ -11,7 +11,7 @@ requires-python = ">=3.11"
 dependencies = [
   "asg-core>=0.6.0",
   "asg-evaluation>=0.7.0",
-  "asg-stagecraft>=7.3.0",
+  "asg-stagecraft>=7.3.1",
   "fastapi>=0.141,<1",
   "uvicorn>=0.54,<1",
   "pydantic>=2.9,<3",

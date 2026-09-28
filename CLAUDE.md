@@ -51,13 +51,13 @@ Comandos (opciones completas en [commands.md](commands.md)):
 ### Calidad: ejecutar siempre antes de dar por terminado un cambio
 
 ```powershell
-.\quality.ps1        # ruff check, ruff format --check, pytest, pip check y el test de PowerShell
+.\quality.ps1        # ruff check, ruff format --check, pytest y pip check
 .\quality.ps1 -Fast  # solo pytest, para iterar
 ```
 
 - `quality.ps1` se sitúa en la raíz por su cuenta y no corta en el primer fallo, igual que CI.
   `make test` delega en él.
-- `.github/workflows/quality.yml` corre las mismas cinco comprobaciones en `windows-latest` con
+- `.github/workflows/quality.yml` corre las mismas cuatro comprobaciones en `windows-latest` con
   Python 3.12, en cada push a `main` y en cada pull request. Un status check `quality` en rojo
   bloquea el merge.
 - Si lanzas `pytest` a mano, hazlo **desde la raíz**: es donde `pyproject.toml` fija `testpaths`
@@ -73,8 +73,6 @@ python -m pytest packages/stagecraft/tests/test_generator_v5.py -q -k revision
 
 - `pyproject.toml` fija `testpaths = ["packages", "apps", "tests"]`, así que `pytest` sin
   argumentos recoge todo el monorepo.
-- `tests/test_sync_railway_stories.ps1` es un test de PowerShell que pytest **no** recoge. Lo
-  lanzan `quality.ps1` y CI.
 - Todas las pruebas usan proveedores falsos salvo `packages/stagecraft/tests/test_gemini_live.py`,
   que se omite a menos que `RUN_GEMINI_LIVE=1`. **No activarlo** sin que lo pida explícitamente
   quien manda la tarea: consume cuota real.
@@ -117,9 +115,10 @@ En la raíz quedan la fachada y el contrato: `__init__`, `version`, `formats`, `
   fachada con `create_autospec(spec_set=True)`, y `test_generation_options.py` falla si un
   campo y un kwarg dejan de coincidir. Las superficies usan `GenerationOptions.from_settings` y
   `StoryGenerator.from_options`; `StoryPipeline` recibe solo `options=`.
-- Añadir una opción: campo en `GenerationOptions`, kwarg en la fachada, consumirlo donde vive el
-  mecanismo (sin tocar los prompts cuando está apagada) y, si la interfaz la muestra, su
-  entrada en `apps/studio/src/asg_studio/catalog.py`.
+- Añadir una opción: campo en `GenerationOptions` con `Field(title=, description=)` en español,
+  kwarg en la fachada, consumirlo donde vive el mecanismo (sin tocar los prompts cuando está
+  apagada) y, si la interfaz la muestra, su entrada en `apps/studio/src/asg_studio/catalog.py` y
+  su `OptionSpec` en `apps/telegram/src/asg_telegram/generators.py`.
 - `StoryBrief` (`brief.py`) es la obra estructurada: trama y reparto se componen en un prompt
   determinista que el analista lee como cualquier otro, así que `StoryRequest` y el esquema que
   va a Gemini no cambian. El run guarda `brief.json`.
@@ -333,14 +332,35 @@ que saber antes de tocar `stage/`:
 ### Telegram: el bot no conoce el pipeline
 
 - `contract.py` define, del lado de la aplicación, el `Protocol` `StoryGeneratorAdapter` y sus
-  tipos (`GenerationProgress`, `RunSummary`, `GenerationFailure`).
+  tipos (`GenerationProgress`, `RunSummary`, `GenerationFailure`, `OptionSpec`, `StoryOutline`,
+  `BriefSpec`, `GeneratorUnavailable`).
 - Los handlers, la entrega y la consola hablan solo ese contrato. `generators.py` tiene los
   adaptadores que traducen un pipeline concreto: al añadir un generador se escribe un adaptador,
-  no se tocan las conversaciones.
-- `STORY_GENERATOR` vale `stagecraft` por defecto. `top-down` sigue registrado como alias porque
-  el despliegue de Railway lo tiene configurado. No quitarlo sin cambiar antes esa variable.
+  no se tocan las conversaciones. Es el único módulo que importa `asg_stagecraft`; un fallo de
+  configuración se envuelve en `GeneratorUnavailable`, no en el error crudo del pipeline.
+- `STORY_GENERATOR` vale `stagecraft`, que es el único generador registrado.
+- **Cada usuario configura sus propias opciones desde el chat.** `/settings` (o `/opciones`)
+  abre un panel de botones sobre `option_specs`, que el adaptador construye a partir de los
+  campos de `GenerationOptions` y sus etiquetas (`options.py`, `formats.py`,
+  `planning/profiles.py`). Las preferencias se guardan por usuario en la cola
+  (`QueueRepository.user_options`), como *overrides* dispersos: solo las claves que el usuario
+  cambió, para que un valor nuevo del `.env` siga llegando a quien no tocó esa opción.
+  `generators.StagecraftGenerator.normalize_options` fusiona, resuelve el formato y valida con
+  `GenerationOptions.with_changes`, traduciendo los errores de Pydantic al español.
+- **La obra guiada construye un `StoryOutline`,** no un prompt de texto: título, género,
+  ambientación, trama, hasta `MAX_CAST` personajes (nombre, rol, pronombre, descripción y
+  secreto) y notas. `wizard.py` tiene el flujo puro; `handlers.py` lo conecta. El adaptador la
+  convierte en `StoryBrief` justo antes de llamar al pipeline.
+- **La cancelación pasa `should_cancel` a `generate()`,** nunca lanza desde el callback de
+  progreso: `generation.py` construye `lambda: queue.cancellation_requested(job_id)` y el
+  adaptador traduce `RunCancelledError` a `GenerationCancelled`.
 - `queue.py` es una cola FIFO SQLite durable (`Stories/telegram_queue.sqlite3`) con migración de
-  esquema y cancelación, y `generation.py` la coordina con la entrega.
+  esquema (v4 añade `options`, `brief` y la tabla `user_options`) y cancelación, y
+  `generation.py` la coordina con la entrega.
+- `console.py` y `terminal.py` dan la consola del operador: una cabecera con el bot, las
+  versiones, el modelo y la cuota, y un registro de una línea por evento. La ventana que abre
+  `asg-telegram` (`launcher.py`) no se cierra si el bot falla al arrancar o se detiene por un
+  error: espera una tecla, para que el error no se pierda con la ventana.
 - Cualquier fallo que escape de un adaptador sin ser `GenerationFailure` se considera un defecto
   interno y se reporta como error inesperado.
 
@@ -371,8 +391,7 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
 ### core
 
 - `find_project_root` sube por el árbol buscando un directorio con `Stories/` y `packages/`. Se
-  puede forzar con `ASG_PROJECT_ROOT`, útil en contenedores; el `Dockerfile` instala solo core,
-  evaluation, stagecraft y telegram.
+  puede forzar con `ASG_PROJECT_ROOT`, útil si se despliega en un contenedor.
 - `files.py` da la escritura atómica UTF-8 (`atomic_write_text`, `atomic_write_json`,
   `atomic_write_csv`) y `artifact_json`, el formato JSON de los artefactos por separado.
 - `locks.py` da `file_lock`, que serializa las evaluaciones del bot y de la consola.
@@ -480,7 +499,11 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
   progreso también corre dentro del bucle de reintentos del proveedor, que convierte cualquier
   excepción en un `ProviderError` degradable, y `_record_failure` vuelve a emitir eventos. El
   pipeline consulta `should_cancel` al entrar en `_call_agent` y lanza `RunCancelledError`, que
-  está en `NON_DEGRADABLE_ERRORS`. Telegram aún cancela desde el callback (OPS-3).
+  está en `NON_DEGRADABLE_ERRORS`. Telegram también pasa `should_cancel` a `generate()` (cerrado
+  en 3.0.0 del bot, antes ficha OPS-3).
+- **El `callback_data` de un botón de Telegram tiene un máximo de 64 bytes.** Los paneles de
+  opciones y del asistente guiado (`panel.py`, `wizard.py`) codifican índices en vez de valores
+  para no acercarse al límite; un test recorre cada teclado y lo comprueba.
 - **Los dobles de audio de los tests reciben solo `story_path`.** Por eso el pipeline pasa
   `voice=` a `create_story_audio_sync` solo cuando hay una voz elegida.
 - **Windows puede servir `.js` como `text/plain`**, y el navegador no ejecuta así un módulo ES:

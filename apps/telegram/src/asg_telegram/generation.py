@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -15,7 +16,9 @@ from .contract import (
     GenerationEvent,
     GenerationFailure,
     GenerationProgress,
+    OptionValue,
     StoryGeneratorAdapter,
+    StoryOutline,
     format_progress,
 )
 from .delivery import DEFAULT_DOCUMENT_CAPTION, TelegramDelivery
@@ -46,6 +49,49 @@ class GenerationCoordinator(TelegramDelivery):
         self.active_users: set[int] = set()
         self.delivery_semaphore = asyncio.Semaphore(1)
         self.generation_semaphore = asyncio.Semaphore(1)
+        self._memory_options: dict[int, dict[str, OptionValue]] = {}
+
+    # --- per-user option preferences ------------------------------------
+
+    def stored_options(self, user_id: int) -> dict[str, OptionValue]:
+        """Return a user's saved option overrides, without merging defaults."""
+        if self.queue:
+            return self.queue.user_options(user_id)
+        return dict(self._memory_options.get(user_id, {}))
+
+    def _save_stored_options(self, user_id: int, options: Mapping[str, OptionValue]) -> None:
+        """Persist a user's option overrides, in the queue when one exists."""
+        if self.queue:
+            self.queue.save_user_options(user_id, options)
+        else:
+            self._memory_options[user_id] = dict(options)
+
+    def effective_options(self, user_id: int) -> tuple[dict[str, OptionValue], bool]:
+        """Return a user's normalized options, resetting them if they no longer validate.
+
+        The second value is True exactly when stored preferences had to be
+        discarded, so the caller can tell the user why their choices changed.
+        """
+        stored = self.stored_options(user_id)
+        try:
+            return self.generator.normalize_options(stored), False
+        except ValueError:
+            self._save_stored_options(user_id, {})
+            return self.generator.normalize_options({}), True
+
+    def change_option(self, user_id: int, key: str, value: OptionValue) -> dict[str, OptionValue]:
+        """Set one option for a user, validating the whole result before saving it."""
+        stored = self.stored_options(user_id)
+        stored[key] = value
+        normalized = self.generator.normalize_options(stored)
+        self._save_stored_options(user_id, stored)
+        return normalized
+
+    def reset_options(self, user_id: int) -> None:
+        """Forget a user's option overrides, returning them to the defaults."""
+        self._save_stored_options(user_id, {})
+
+    # --- recovery ---------------------------------------------------------
 
     async def restore_queue(self, application) -> None:
         """Resume waiting jobs and apply the recovery policy after a restart."""
@@ -61,19 +107,32 @@ class GenerationCoordinator(TelegramDelivery):
                 application=application,
                 user_data=application.user_data[job.user_id],
             )
+            request: str | StoryOutline = (
+                StoryOutline.from_dict(job.brief) if job.brief else job.prompt
+            )
+            options = job.options if job.options is not None else self._legacy_options(job)
             application.create_task(
                 self._generate_and_deliver(
                     context=context,
                     chat_id=job.chat_id,
                     user=user,
-                    prompt=job.prompt,
+                    prompt=request,
+                    options=options,
                     progress_message_id=job.progress_message_id,
                     job_id=job.id,
-                    narrative_profile=job.narrative_profile,
-                    story_format=job.story_format,
                 )
             )
         await self._refresh_queue(application)
+
+    @staticmethod
+    def _legacy_options(job) -> dict[str, OptionValue]:
+        """Rebuild an options snapshot from a pre-7.3 job's plain columns."""
+        options: dict[str, OptionValue] = {}
+        if job.story_format:
+            options["format"] = job.story_format
+        if job.narrative_profile:
+            options["narrative_profile"] = job.narrative_profile
+        return options
 
     async def _apply_recovery_policy(self, application) -> None:
         """Requeue each interrupted job once, then give up and say so.
@@ -100,13 +159,13 @@ class GenerationCoordinator(TelegramDelivery):
             except TelegramError:
                 LOGGER.warning("No se pudo avisar el trabajo interrumpido %s", job.id)
 
+    # --- launching a job ---------------------------------------------------
+
     async def _launch_generation(
         self,
         update,
         context,
-        prompt: str,
-        narrative_profile: str | None = None,
-        story_format: str | None = None,
+        request: str | StoryOutline,
     ) -> None:
         """Enqueue and schedule one user generation request."""
         user_id = update.effective_user.id
@@ -114,6 +173,11 @@ class GenerationCoordinator(TelegramDelivery):
             await update.effective_message.reply_text("Ya hay una generación activa para ti.")
             return
         self.active_users.add(user_id)
+        options, was_reset = self.effective_options(user_id)
+        if was_reset:
+            await update.effective_message.reply_text(
+                "Tus opciones guardadas ya no eran válidas y las restablecí a las de por defecto."
+            )
         log_user_action(
             LOGGER,
             user_id=user_id,
@@ -132,9 +196,7 @@ class GenerationCoordinator(TelegramDelivery):
                 )
             )
         )
-        job_id = await self._enqueue(
-            update, context, prompt, progress_message.message_id, narrative_profile, story_format
-        )
+        job_id = await self._enqueue(update, context, request, progress_message.message_id, options)
         if self.queue and job_id is None:
             return
         context.application.create_task(
@@ -142,11 +204,10 @@ class GenerationCoordinator(TelegramDelivery):
                 context=context,
                 chat_id=update.effective_chat.id,
                 user=update.effective_user,
-                prompt=prompt,
+                prompt=request,
+                options=options,
                 progress_message_id=progress_message.message_id,
                 job_id=job_id,
-                narrative_profile=narrative_profile,
-                story_format=story_format,
             ),
             update=update,
         )
@@ -155,22 +216,26 @@ class GenerationCoordinator(TelegramDelivery):
         self,
         update,
         context,
-        prompt: str,
+        request: str | StoryOutline,
         progress_message_id: int,
-        narrative_profile: str | None,
-        story_format: str | None = None,
+        options: Mapping[str, OptionValue],
     ) -> str | None:
         """Persist a queue job, telling the user when one was already active."""
         if not self.queue:
             return None
+        brief = request.to_dict() if isinstance(request, StoryOutline) else None
+        prompt_text = request if isinstance(request, str) else request.plot
+        profile = options.get("narrative_profile")
         result = self.queue.enqueue(
             user_id=update.effective_user.id,
             username=update.effective_user.username or update.effective_user.full_name,
             chat_id=update.effective_chat.id,
-            prompt=prompt,
+            prompt=prompt_text,
             progress_message_id=progress_message_id,
-            narrative_profile=narrative_profile,
-            story_format=story_format,
+            narrative_profile=str(profile) if profile else None,
+            story_format=str(options.get("format")) if options.get("format") else None,
+            options=dict(options),
+            brief=brief,
         )
         if not result.created:
             context.user_data.clear()
@@ -183,17 +248,18 @@ class GenerationCoordinator(TelegramDelivery):
         await self._refresh_queue(context.application)
         return result.job.id
 
+    # --- running a job -------------------------------------------------------
+
     async def _generate_and_deliver(
         self,
         *,
         context,
         chat_id: int,
         user,
-        prompt: str,
+        prompt: str | StoryOutline,
+        options: Mapping[str, OptionValue] | None = None,
         progress_message_id: int | None = None,
         job_id: str | None = None,
-        narrative_profile: str | None = None,
-        story_format: str | None = None,
     ) -> None:
         """Serialize generation while keeping progress reporting thread-safe."""
         loop = asyncio.get_running_loop()
@@ -201,9 +267,20 @@ class GenerationCoordinator(TelegramDelivery):
 
         def report_progress(update: GenerationProgress) -> None:
             """Forward synchronous pipeline progress to the Telegram event loop."""
-            if job_id and self.queue and self.queue.cancellation_requested(job_id):
-                raise GenerationCancelled(update.stage)
+            changed = not last_progress or (
+                last_progress[-1].percent,
+                last_progress[-1].stage,
+                last_progress[-1].description,
+            ) != (update.percent, update.stage, update.description)
             last_progress[:] = [update]
+            if changed:
+                log_user_action(
+                    LOGGER,
+                    user_id=user.id,
+                    username=user.username or user.full_name,
+                    action=f"{update.percent}% · {update.description}",
+                    category="progreso",
+                )
             if progress_message_id is None:
                 return
             try:
@@ -220,6 +297,10 @@ class GenerationCoordinator(TelegramDelivery):
             except Exception:
                 LOGGER.warning("no se pudo confirmar la edición del progreso a tiempo")
 
+        should_cancel = (
+            (lambda: self.queue.cancellation_requested(job_id)) if job_id and self.queue else None
+        )
+
         try:
             async with self.generation_semaphore:
                 if job_id and self.queue:
@@ -233,11 +314,11 @@ class GenerationCoordinator(TelegramDelivery):
                     chat_id=chat_id,
                     user=user,
                     prompt=prompt,
+                    options=options or {},
                     progress_message_id=progress_message_id,
                     job_id=job_id,
-                    narrative_profile=narrative_profile,
-                    story_format=story_format,
                     report_progress=report_progress,
+                    should_cancel=should_cancel,
                     last_progress=last_progress,
                 )
         finally:
@@ -263,22 +344,22 @@ class GenerationCoordinator(TelegramDelivery):
         chat_id,
         user,
         prompt,
+        options,
         progress_message_id,
         job_id,
-        narrative_profile,
-        story_format,
         report_progress,
+        should_cancel,
         last_progress,
     ) -> None:
         """Generate, report metadata, deliver, and begin evaluation."""
         try:
             story_directory = await self._generate_story(
                 prompt,
+                options,
                 user,
                 job_id,
-                narrative_profile,
-                story_format,
                 report_progress,
+                should_cancel,
             )
         except Exception as exc:
             await self._handle_generation_failure(
@@ -311,19 +392,19 @@ class GenerationCoordinator(TelegramDelivery):
             summary,
         )
 
-    async def _generate_story(
-        self, prompt, user, job_id, narrative_profile, story_format, report_progress
-    ):
+    async def _generate_story(self, prompt, options, user, job_id, report_progress, should_cancel):
         """Invoke the configured generator through the application contract."""
 
         def report_event(event: GenerationEvent) -> None:
             """Record structured pipeline events in the bot console."""
+            level = logging.DEBUG if (event.kind or "").startswith("artifact_") else logging.INFO
             log_user_action(
                 LOGGER,
                 user_id=user.id,
                 username=user.username or user.full_name,
                 action=event.message,
                 category="generación",
+                level=level,
             )
 
         def record_run(path: Path) -> None:
@@ -334,11 +415,11 @@ class GenerationCoordinator(TelegramDelivery):
         return await asyncio.to_thread(
             lambda: self.generator.generate(
                 prompt,
-                narrative_profile=narrative_profile,
-                story_format=story_format,
+                options=options,
                 on_progress=report_progress,
                 on_run_created=record_run if job_id and self.queue else None,
                 on_event=report_event,
+                should_cancel=should_cancel,
             )
         )
 
@@ -481,6 +562,8 @@ class GenerationCoordinator(TelegramDelivery):
                     user=user,
                     story_path=story_directory / "story.md",
                     caption=caption,
+                    audio=summary.audio,
+                    audio_voice=summary.audio_voice,
                 )
                 if not delivered:
                     context.user_data.clear()

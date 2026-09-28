@@ -20,3 +20,49 @@ def test_windows_launcher_opens_a_console_or_reports_the_failure(monkeypatch):
 
     monkeypatch.setattr(launcher.subprocess, "Popen", Mock(side_effect=OSError("boom")))
     assert launcher.main([]) == 1
+
+
+def test_launch_command_runs_the_hosted_launcher():
+    assert launcher.launch_command()[1:] == ["-m", "asg_telegram.launcher", "--hosted"]
+
+
+def test_run_hosted_does_not_pause_on_a_clean_exit():
+    prompts: list[str] = []
+    code = launcher.run_hosted(run_bot=lambda argv: 0, input_fn=prompts.append)
+    assert code == 0
+    assert prompts == []
+
+
+def test_run_hosted_pauses_on_a_reported_failure():
+    prompts: list[str] = []
+    code = launcher.run_hosted(run_bot=lambda argv: 2, input_fn=prompts.append)
+    assert code == 2
+    assert prompts
+
+
+def test_run_hosted_pauses_after_an_unexpected_exception():
+    def boom(argv):
+        raise RuntimeError("se rompió el arranque")
+
+    prompts: list[str] = []
+    code = launcher.run_hosted(run_bot=boom, input_fn=lambda prompt: prompts.append(prompt))
+    assert code == 1
+    assert prompts
+
+
+def test_run_hosted_exits_clean_on_keyboard_interrupt():
+    def interrupted(argv):
+        raise KeyboardInterrupt
+
+    prompts: list[str] = []
+    code = launcher.run_hosted(run_bot=interrupted, input_fn=lambda prompt: prompts.append(prompt))
+    assert code == 0
+    assert prompts == []
+
+
+def test_run_hosted_tolerates_an_eof_while_waiting():
+    def eof_input(prompt):
+        raise EOFError
+
+    code = launcher.run_hosted(run_bot=lambda argv: 2, input_fn=eof_input)
+    assert code == 2

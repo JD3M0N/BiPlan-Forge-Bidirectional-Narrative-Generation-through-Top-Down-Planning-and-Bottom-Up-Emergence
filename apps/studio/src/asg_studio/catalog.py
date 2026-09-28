@@ -16,20 +16,43 @@ from collections import OrderedDict
 
 from asg_core import NARRATION_VOICES
 from asg_stagecraft import GenerationOptions
-from asg_stagecraft.formats import MEMORY_CHOICES, OUTPUT_CHOICES, VOICE_CHOICES, StoryFormat
-from asg_stagecraft.planning.profiles import PROFILE_LABELS
+from asg_stagecraft.brief import MAX_CAST, PRONOUN_LABELS, ROLE_LABELS
+from asg_stagecraft.formats import (
+    FORMAT_COST_HINTS,
+    MEMORY_CHOICES,
+    OUTPUT_CHOICES,
+    OUTPUT_HELP,
+    OUTPUT_LABEL,
+    VOICE_CHOICES,
+    StoryFormat,
+)
+from asg_stagecraft.options import AUTOMATIC_AUDIO_VOICE_LABEL, MAX_OFFERED_TURNS_PER_BEAT
+from asg_stagecraft.planning.profiles import (
+    AUTOMATIC_PROFILE_DESCRIPTION,
+    AUTOMATIC_PROFILE_LABEL,
+    PROFILE_LABELS,
+)
 
 SIMULATED_ONLY = ["simulated"]
 
 # GenerationOptions fields no control sets directly: the format preset sets both of these.
 SET_BY_PRESET = frozenset({"story_format", "script_method"})
 
-# What each run costs, as the roadmap's measurement protocol states it; shown before a launch.
-COST_HINTS = {
-    "narrative": "Una narrativa cuesta unas 16 llamadas al modelo.",
-    "script": "Un guion cuesta unas 20 llamadas al modelo.",
-    "simulated": "Una simulada cuesta entre 98 y 126 llamadas: una parte grande del cupo diario.",
-}
+# What each run costs, keyed the way the interface groups a run: by story_format.value.
+COST_HINTS = {story_format.value: hint for story_format, hint in FORMAT_COST_HINTS.items()}
+
+_FIELDS = GenerationOptions.model_fields
+
+
+def _title(name: str) -> str:
+    """Return the Spanish label GenerationOptions declares for one of its fields."""
+    return _FIELDS[name].title
+
+
+def _help(name: str) -> str:
+    """Return the Spanish help text GenerationOptions declares for one of its fields."""
+    return _FIELDS[name].description
+
 
 PENDING_ROADMAP = {
     "inventory": "Idea del TODO: «Un árbitro de acciones físicas» e «Inventario por personaje».",
@@ -60,19 +83,11 @@ def _pending(key: str, label: str, description: str, measures: str) -> dict:
 
 def _format_group() -> dict:
     """Describe the output format, a preset that sets the format and the script method."""
-    descriptions = {
-        "narrative": "Prosa escrita a partir del plan: el enfoque Top-Down.",
-        "script-native": "El plan escrito directamente como obra de teatro, por escenas.",
-        "script-adapted": "La prosa terminada, adaptada después a guion.",
-        "simulated": (
-            "Los personajes representan el guion con memoria propia y se narra la función."
-        ),
-    }
     choices = [
         _choice(
             item.key,
             item.label,
-            descriptions.get(item.key, ""),
+            item.description,
             sets={
                 "story_format": item.story_format.value,
                 "script_method": item.script_method.value,
@@ -87,8 +102,8 @@ def _format_group() -> dict:
             {
                 "key": "output",
                 "kind": "preset",
-                "label": "Formato de salida",
-                "help": "Qué entrega la función terminada.",
+                "label": OUTPUT_LABEL,
+                "help": OUTPUT_HELP,
                 "status": "available",
                 "choices": choices,
             }
@@ -124,19 +139,16 @@ def _narration_group() -> dict:
             {
                 "key": "narrative_voice",
                 "kind": "choice",
-                "label": "Visión",
-                "help": "Desde dónde se cuenta la función: qué turnos y qué pensamientos ve.",
+                "label": _title("narrative_voice"),
+                "help": _help("narrative_voice"),
                 "status": "available",
                 "choices": voices,
             },
             {
                 "key": "narrator",
                 "kind": "character",
-                "label": "Personaje de la visión",
-                "help": (
-                    "Quién cuenta la historia en las visiones limitada y en primera persona. "
-                    "Los capítulos que no presencie se omiten."
-                ),
+                "label": _title("narrator"),
+                "help": _help("narrator"),
                 "status": "available",
                 "enabled_when": {
                     "narrative_voice": [c["value"] for c in voices if c.get("takes_character")]
@@ -146,8 +158,8 @@ def _narration_group() -> dict:
             {
                 "key": "narration_tone",
                 "kind": "text",
-                "label": "Tono del narrador",
-                "help": "El registro de la voz que cuenta. Colorea la prosa; nunca añade sucesos.",
+                "label": _title("narration_tone"),
+                "help": _help("narration_tone"),
                 "placeholder": "Como un guerrero samurái, con tono medieval",
                 "status": "available",
                 "max_length": 300,
@@ -177,19 +189,19 @@ def _simulation_group() -> dict:
             {
                 "key": "actor_memory",
                 "kind": "choice",
-                "label": "Memoria de los actores",
-                "help": "Qué recuerda cada personaje de lo que ocurrió en escena.",
+                "label": _title("actor_memory"),
+                "help": _help("actor_memory"),
                 "status": "available",
                 "choices": memories,
             },
             {
                 "key": "turns_per_beat",
                 "kind": "integer",
-                "label": "Turnos por beat",
-                "help": "Cuántos turnos puede durar un beat antes de que el mundo lo cierre.",
+                "label": _title("turns_per_beat"),
+                "help": _help("turns_per_beat"),
                 "status": "available",
                 "min": 2,
-                "max": 16,
+                "max": MAX_OFFERED_TURNS_PER_BEAT,
             },
             _pending(
                 "inventory",
@@ -210,29 +222,26 @@ def _planning_group() -> dict:
             {
                 "key": "narrative_profile",
                 "kind": "choice",
-                "label": "Perfil narrativo",
-                "help": "La escala de la historia. Automático deja que lo deduzca el analista.",
+                "label": _title("narrative_profile"),
+                "help": _help("narrative_profile"),
                 "status": "available",
                 "choices": [
-                    _choice(None, "Automático", "Lo deduce el analista a partir de la obra."),
+                    _choice(None, AUTOMATIC_PROFILE_LABEL, AUTOMATIC_PROFILE_DESCRIPTION),
                     *(_choice(profile.value, label) for profile, label in PROFILE_LABELS.items()),
                 ],
             },
             {
                 "key": "promise_ledger",
                 "kind": "toggle",
-                "label": "Ledger de promesas",
-                "help": (
-                    "Traza qué promete la historia y dónde lo paga. Apagarlo es su brazo de "
-                    "control."
-                ),
+                "label": _title("promise_ledger"),
+                "help": _help("promise_ledger"),
                 "status": "available",
             },
             {
                 "key": "narrative_guidance",
                 "kind": "toggle",
-                "label": "Guía de esqueletos",
-                "help": "Inspira el plan con esqueletos de trama clásicos.",
+                "label": _title("narrative_guidance"),
+                "help": _help("narrative_guidance"),
                 "status": "available",
             },
             _pending(
@@ -259,19 +268,19 @@ def _audio_group() -> dict:
             {
                 "key": "audio",
                 "kind": "toggle",
-                "label": "Narración en audio",
-                "help": "Lee la historia terminada en story.mp3.",
+                "label": _title("audio"),
+                "help": _help("audio"),
                 "status": "available",
             },
             {
                 "key": "audio_voice",
                 "kind": "audio_voice",
-                "label": "Voz del audio",
-                "help": "Quién lee la historia. Automática elige por el idioma.",
+                "label": _title("audio_voice"),
+                "help": _help("audio_voice"),
                 "status": "available",
                 "enabled_when": {"audio": [True]},
                 "groups": [
-                    {"label": "", "choices": [_choice("", "Automática (según el idioma)")]},
+                    {"label": "", "choices": [_choice("", AUTOMATIC_AUDIO_VOICE_LABEL)]},
                     *(
                         {"label": country, "choices": choices}
                         for country, choices in countries.items()
@@ -300,20 +309,9 @@ def catalog_document(defaults: GenerationOptions) -> dict:
             _audio_group(),
         ],
         "brief": {
-            "roles": [
-                _choice("", "Sin rol"),
-                _choice("protagonista", "Protagonista"),
-                _choice("antagonista", "Antagonista"),
-                _choice("aliado", "Aliado"),
-                _choice("secundario", "Secundario"),
-            ],
-            "pronouns": [
-                _choice("", "—"),
-                _choice("ella", "ella"),
-                _choice("él", "él"),
-                _choice("elle", "elle"),
-            ],
-            "max_cast": 10,
+            "roles": [_choice(role, label) for role, label in ROLE_LABELS.items()],
+            "pronouns": [_choice(pronoun, label) for pronoun, label in PRONOUN_LABELS.items()],
+            "max_cast": MAX_CAST,
         },
         "cost": COST_HINTS,
         "simulated": StoryFormat.SIMULATED.value,

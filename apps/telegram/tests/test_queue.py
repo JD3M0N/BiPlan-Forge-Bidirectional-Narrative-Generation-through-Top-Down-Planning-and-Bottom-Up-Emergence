@@ -68,6 +68,76 @@ def test_running_job_becomes_recovery_pending_and_queue_continues(tmp_path: Path
     assert restarted.last_recovered_ids == {first.id}
 
 
+def test_user_preferences_survive_reopening_the_database(tmp_path: Path) -> None:
+    path = tmp_path / "queue.sqlite3"
+    queue = QueueRepository(path)
+    queue.save_user_options(1, {"promise_ledger": False, "turns_per_beat": 6})
+    assert queue.user_options(1) == {"promise_ledger": False, "turns_per_beat": 6}
+
+    reopened = QueueRepository(path)
+    assert reopened.user_options(1) == {"promise_ledger": False, "turns_per_beat": 6}
+    assert reopened.user_options(2) == {}
+
+    reopened.clear_user_options(1)
+    assert reopened.user_options(1) == {}
+
+
+def test_options_and_brief_round_trip_through_a_job(tmp_path: Path) -> None:
+    queue = QueueRepository(tmp_path / "queue.sqlite3")
+    job = queue.enqueue(
+        user_id=1,
+        username="uno",
+        chat_id=10,
+        prompt="Una archivera y un secreto",
+        options={"format": "simulated", "turns_per_beat": 6},
+        brief={"plot": "Una trama", "cast": [{"name": "Ana"}]},
+    ).job
+    reopened = queue.get(job.id)
+    assert reopened.options == {"format": "simulated", "turns_per_beat": 6}
+    assert reopened.brief == {"plot": "Una trama", "cast": [{"name": "Ana"}]}
+
+
+def test_unreadable_job_json_is_treated_as_absent(tmp_path: Path) -> None:
+    queue = QueueRepository(tmp_path / "queue.sqlite3")
+    job = queue.enqueue(user_id=1, username="uno", chat_id=10, prompt="a").job
+    with queue._connect() as db:
+        db.execute("UPDATE jobs SET options=? WHERE id=?", ("{not json", job.id))
+    assert queue.get(job.id).options is None
+
+
+def test_a_v3_database_migrates_to_v4_and_keeps_its_jobs(tmp_path: Path) -> None:
+    path = tmp_path / "queue.sqlite3"
+    with sqlite3.connect(path) as db:
+        db.execute(
+            """CREATE TABLE jobs (
+                id TEXT PRIMARY KEY, user_id INTEGER NOT NULL,
+                username TEXT NOT NULL, chat_id INTEGER NOT NULL,
+                prompt TEXT NOT NULL, status TEXT NOT NULL,
+                enqueued_at TEXT NOT NULL, started_at TEXT, finished_at TEXT,
+                progress_message_id INTEGER, run_dir TEXT,
+                recovery_count INTEGER NOT NULL DEFAULT 0,
+                duration_seconds REAL, error_code TEXT,
+                narrative_profile TEXT,
+                cancel_requested INTEGER NOT NULL DEFAULT 0,
+                story_format TEXT
+            )"""
+        )
+        db.execute(
+            "INSERT INTO jobs(id,user_id,username,chat_id,prompt,status,enqueued_at,"
+            "narrative_profile,story_format) VALUES('v3-job',1,'ana',10,'Un cuento','queued',"
+            "'2026-01-01','developed','narrative')"
+        )
+        db.execute("PRAGMA user_version = 3")
+
+    queue = QueueRepository(path)
+    job = queue.get("v3-job")
+    assert job.narrative_profile == "developed"
+    assert job.story_format == "narrative"
+    assert job.options is None
+    queue.save_user_options(1, {"promise_ledger": False})
+    assert queue.user_options(1) == {"promise_ledger": False}
+
+
 def test_every_operation_closes_its_connection(tmp_path: Path, monkeypatch) -> None:
     opened: list[sqlite3.Connection] = []
     original_connect = sqlite3.connect

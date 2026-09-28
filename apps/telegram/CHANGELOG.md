@@ -1,5 +1,34 @@
 # Historial de cambios
 
+## [3.0.0] - 2026-09-28
+
+Quita todo lo de Railway y deja que cada usuario configure desde el chat lo que hasta ahora solo
+se podía fijar en el `.env` del despliegue. Rompe el contrato de la aplicación, de ahí el mayor.
+
+- **Sin Railway.** Se retiran `sync-railway-stories.ps1`, su test de PowerShell, el `Dockerfile`,
+  `.dockerignore` y el alias `top-down` de `STORY_GENERATOR`. `asg-telegram-run` sigue siendo el
+  comando para depurar en la consola actual.
+- **Panel de opciones en el chat.** `/settings` (o `/opciones`) abre un panel con botones para
+  cada opción de `GenerationOptions`: perfil, ledger, guía, y en historias simuladas la visión,
+  el personaje, el tono, la memoria y los turnos por beat, además del audio y su voz entre los 45
+  narradores de `asg-core`. Cada usuario tiene sus propias preferencias, guardadas en la cola
+  (`user_options`) y usadas en cada solicitud nueva.
+- **Obra guiada con reparto.** El asistente guiado ya no compone un prompt de texto: recoge
+  título, género, ambientación, trama, notas y hasta diez personajes con rol, pronombre,
+  descripción y secreto, y genera con `StoryBrief`, como StageCraft.
+- **`should_cancel` en vez de una excepción desde el callback de progreso** (cierra OPS-3):
+  cancelar durante una espera de cuota ahora detiene el run con `RUN_CANCELLED` en vez de que la
+  cancelación se trague en el bucle de reintentos del proveedor.
+- **Consola profesional.** `asg-telegram` abre una ventana con título, una cabecera con el bot,
+  las versiones, el modelo, la cuota y las opciones por defecto, y un registro compacto en color,
+  una línea por evento, incluido el progreso del pipeline. La ventana no se cierra si el bot
+  falla al arrancar o se detiene por un error: espera a que se presione Enter.
+- Cambia el contrato de `StoryGeneratorAdapter`: `profiles`/`formats` se sustituyen por
+  `option_specs`/`brief_spec`/`default_options`/`normalize_options`/`validate_outline`, y
+  `generate()` recibe `options=` y `should_cancel=` en vez de `narrative_profile=`/
+  `story_format=`. Exige `asg-stagecraft>=7.3.1`.
+- Cola SQLite en esquema 4: `jobs` gana `options` y `brief`, y hay una tabla `user_options`.
+
 ## [2.0.3] - 2026-09-27
 
 - Construye las opciones con `GenerationOptions.from_settings` y la fachada con

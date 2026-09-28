@@ -3,7 +3,7 @@
     Puerta de calidad local: las mismas comprobaciones que .github/workflows/quality.yml.
 
 .DESCRIPTION
-    Ejecuta las cinco comprobaciones desde la raíz del repositorio y no corta en el primer
+    Ejecuta las cuatro comprobaciones desde la raíz del repositorio y no corta en el primer
     fallo, para que una sola vuelta enseñe todo el daño. Devuelve 0 sólo si todas pasan.
 
 .PARAMETER Fast
@@ -59,10 +59,6 @@ Invoke-Check "pytest" { & $python -m pytest -q -p no:cacheprovider }
 
 if (-not $Fast) {
     Invoke-Check "pip check" { & $python -m pip check }
-    # pytest no lo recoge (python_files = ["test_*.py"]) y exige Windows PowerShell 5.1.
-    Invoke-Check "sync-railway-stories" {
-        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'tests\test_sync_railway_stories.ps1'
-    }
 }
 
 Write-Host ""

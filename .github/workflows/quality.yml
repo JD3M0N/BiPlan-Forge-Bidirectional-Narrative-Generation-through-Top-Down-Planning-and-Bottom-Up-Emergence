@@ -34,7 +34,7 @@ jobs:
         id: install
         run: python -m pip install -r requirements-dev.txt
 
-      # Las cinco comprobaciones corren aunque una falle, para que una vuelta de CI
+      # Las cuatro comprobaciones corren aunque una falle, para que una vuelta de CI
       # enseñe todo el daño en vez de sólo el primer fallo.
       - name: ruff check
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
@@ -53,11 +53,3 @@ jobs:
       - name: pip check
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: python -m pip check
-
-      # pytest no lo recoge (python_files = ["test_*.py"]) y exige Windows PowerShell 5.1.
-      - name: sync-railway-stories (PowerShell 5.1)
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        shell: powershell
-        run: |
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests\test_sync_railway_stories.ps1
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

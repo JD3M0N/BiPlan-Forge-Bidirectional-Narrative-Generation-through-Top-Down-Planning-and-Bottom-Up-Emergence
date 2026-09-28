@@ -1,79 +1,15 @@
 import asyncio
 import json
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from asg_core import AudioGenerationError
 from asg_telegram import delivery as delivery_module
 from asg_telegram import generation as generation_module
-from asg_telegram.contract import (
-    GenerationEvent,
-    GenerationFailure,
-    GenerationProgress,
-    ProfileOption,
-)
-from asg_telegram.generators import summarize_run
+from asg_telegram.contract import GenerationEvent, GenerationProgress
 from asg_telegram.handlers import TelegramStoryBot, _evaluator_name
 from telegram.error import BadRequest, TimedOut
-
-PROFILES = (
-    ProfileOption("essential", "Esencial", ("essential", "esencial")),
-    ProfileOption("developed", "Desarrollada", ("developed", "desarrollada")),
-    ProfileOption("expansive", "Expansiva", ("expansive", "expansiva")),
-)
-
-
-class FakeGenerator:
-    """A generator double bound to the same contract the real adapter honours."""
-
-    display_name = "Fake"
-    profiles = PROFILES
-
-    def __init__(self, story_directory: Path):
-        self.story_directory = story_directory
-        self.prompts = []
-        self.requested_profiles = []
-
-    def generate(
-        self,
-        prompt: str,
-        *,
-        narrative_profile=None,
-        story_format=None,
-        on_progress=None,
-        on_run_created=None,
-        on_event=None,
-    ) -> Path:
-        self.prompts.append(prompt)
-        self.requested_profiles.append(narrative_profile)
-        self._report(on_progress, on_event)
-        if on_run_created is not None:
-            on_run_created(self.story_directory)
-        return self.story_directory
-
-    def _report(self, on_progress, on_event):
-        """Emit whatever progress and events this double is configured with."""
-
-    def summarize(self, run_dir: Path):
-        return summarize_run(run_dir)
-
-
-class FailingGenerator(FakeGenerator):
-    display_name = "Fake"
-    profiles = PROFILES
-
-    def __init__(self):
-        super().__init__(Path("."))
-
-    def generate(self, prompt: str, **kwargs):
-        raise GenerationFailure(
-            "No se pudo completar el capítulo 1 «El eco».",
-            code="ARTIFACT_VALIDATION_FAILED",
-            stage="planning",
-            recommendation="Revisa los checkpoints de planificación.",
-            run_id="run-seguro",
-        )
+from telegram_fakes import FailingGenerator, FakeGenerator
 
 
 class FakeBot:
@@ -164,7 +100,7 @@ def test_generation_edits_one_progress_message_until_complete(tmp_path):
     story = make_story(tmp_path)
 
     class ProgressGenerator(FakeGenerator):
-        def _report(self, on_progress, on_event):
+        def _report(self, on_progress, on_event, should_cancel):
             on_progress(GenerationProgress(25, "world", "Construyendo el mundo"))
             on_progress(GenerationProgress(100, "completed", "Historia terminada"))
 
@@ -192,7 +128,7 @@ def test_generation_is_not_blocked_by_a_hanging_progress_edit(tmp_path):
     story = make_story(tmp_path)
 
     class ProgressGenerator(FakeGenerator):
-        def _report(self, on_progress, on_event):
+        def _report(self, on_progress, on_event, should_cancel):
             on_progress(GenerationProgress(25, "world", "Construyendo el mundo"))
 
     class HangingBot(FakeBot):
@@ -405,6 +341,56 @@ def test_audio_retries_temporary_network_errors(tmp_path, monkeypatch):
     assert bot.audios[0]["content"] == b"fake-mp3"
 
 
+def test_chosen_voice_is_passed_to_audio_creation(tmp_path, monkeypatch):
+    story = make_story(tmp_path)
+    handler = TelegramStoryBot(FakeGenerator(story))
+    bot = FakeBot()
+    context = SimpleNamespace(bot=bot, user_data={})
+    user = SimpleNamespace(id=1, username="ana", full_name="Ana")
+    calls = []
+
+    async def create(story_path, **kwargs):
+        calls.append(kwargs)
+        path = story_path.with_suffix(".mp3")
+        return SimpleNamespace(path=path, language="es", voice=kwargs["voice"])
+
+    (story / "story.mp3").write_bytes(b"fake-mp3")
+    monkeypatch.setattr(delivery_module, "create_story_audio", create)
+
+    asyncio.run(
+        handler._deliver_audio(
+            context=context,
+            chat_id=2,
+            user=user,
+            story_path=story / "story.md",
+            story="texto",
+            voice="es-CU-BelkysNeural",
+        )
+    )
+    assert calls == [{"voice": "es-CU-BelkysNeural"}]
+
+
+def test_audio_is_skipped_when_the_run_had_it_off(tmp_path):
+    story = make_story(tmp_path)
+    handler = TelegramStoryBot(FakeGenerator(story))
+    bot = FakeBot()
+    context = SimpleNamespace(bot=bot, user_data={})
+    user = SimpleNamespace(id=1, username="ana", full_name="Ana")
+
+    delivered = asyncio.run(
+        handler._deliver_story(
+            context=context,
+            chat_id=2,
+            user=user,
+            story_path=story / "story.md",
+            audio=False,
+        )
+    )
+
+    assert delivered
+    assert bot.audios == []
+
+
 def test_audio_failure_never_blocks_evaluation_regardless_of_cause(tmp_path, monkeypatch):
     """A rejected audio and a failed audio generation both still let the user evaluate."""
     rejected = make_story(tmp_path / "rejected")
@@ -511,7 +497,7 @@ def test_pipeline_events_are_logged_without_editing_chat(tmp_path, monkeypatch):
     actions = []
 
     class EventGenerator(FakeGenerator):
-        def _report(self, on_progress, on_event):
+        def _report(self, on_progress, on_event, should_cancel):
             on_event(GenerationEvent("se llamo al agente planner", "planning"))
 
     monkeypatch.setattr(
@@ -534,3 +520,28 @@ def test_pipeline_events_are_logged_without_editing_chat(tmp_path, monkeypatch):
     )
     assert "se llamo al agente planner" in actions
     assert bot.edits == []
+
+
+def test_artifact_events_stay_out_of_the_info_log(tmp_path, monkeypatch):
+    story = make_story(tmp_path)
+    levels = []
+
+    class EventGenerator(FakeGenerator):
+        def _report(self, on_progress, on_event, should_cancel):
+            on_event(GenerationEvent("artefacto creado", "writing", "artifact_created"))
+
+    monkeypatch.setattr(
+        generation_module,
+        "log_user_action",
+        lambda logger, **kwargs: levels.append(kwargs.get("level")),
+    )
+    handler = TelegramStoryBot(EventGenerator(story))
+    bot = FakeBot()
+    context = SimpleNamespace(bot=bot, user_data={})
+    user = SimpleNamespace(id=11, username="ana", full_name="Ana")
+    asyncio.run(
+        handler._generate_and_deliver(context=context, chat_id=20, user=user, prompt="Una historia")
+    )
+    import logging
+
+    assert logging.DEBUG in levels

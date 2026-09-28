@@ -5,13 +5,13 @@ from __future__ import annotations
 import argparse
 import logging
 
-from asg_stagecraft.runtime.errors import ASGError
 from telegram import Update
 from telegram.error import TelegramError
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
 
 from .config import TelegramConfigurationError, load_settings
-from .console import configure_console_logging
+from .console import configure_console_logging, log_user_action, print_banner
+from .contract import GeneratorUnavailable
 from .generators import create_generator
 from .handlers import TelegramStoryBot
 from .queue import QueueRepository
@@ -21,12 +21,32 @@ LOGGER = logging.getLogger(__name__)
 __all__ = ["build_application", "main"]
 
 
-def build_application(token: str, bot: TelegramStoryBot) -> Application:
+def build_application(token: str, bot: TelegramStoryBot, *, on_ready=None) -> Application:
     """Build and register the complete python-telegram-bot application."""
 
     async def post_init(application) -> None:
-        """Restore persisted queue state after Telegram initialization."""
+        """Restore persisted queue state and greet the operator after start-up."""
         await bot.restore_queue(application)
+        try:
+            await application.bot.set_my_commands(
+                [
+                    ("newstory", "Crear una historia"),
+                    ("settings", "Configurar las opciones"),
+                    ("cancel", "Cancelar la solicitud o evaluación actual"),
+                    ("help", "Ver los comandos disponibles"),
+                ]
+            )
+        except TelegramError as exc:
+            LOGGER.warning("No se pudieron publicar los comandos del bot: %s", exc)
+        if on_ready is not None:
+            me = await application.bot.get_me()
+            on_ready(me.username)
+
+    async def post_shutdown(application) -> None:
+        """Record that the bot stopped, so the console shows a clean ending."""
+        log_user_action(
+            LOGGER, user_id=None, username=None, action="Bot detenido", category="sistema"
+        )
 
     application = (
         Application.builder()
@@ -38,14 +58,21 @@ def build_application(token: str, bot: TelegramStoryBot) -> Application:
         .pool_timeout(10)
         .concurrent_updates(True)
         .post_init(post_init)
+        .post_shutdown(post_shutdown)
         .build()
     )
     application.add_handler(CommandHandler("start", bot.start))
     application.add_handler(CommandHandler("help", bot.help))
     application.add_handler(CommandHandler("newstory", bot.new_story))
+    application.add_handler(CommandHandler("settings", bot.settings))
+    application.add_handler(CommandHandler("opciones", bot.settings))
     application.add_handler(CommandHandler("cancel", bot.cancel))
     application.add_handler(CallbackQueryHandler(bot.choose_format, pattern=r"^format:[a-z0-9-]+$"))
-    application.add_handler(CallbackQueryHandler(bot.choose_mode, pattern=r"^mode:(free|guided)$"))
+    application.add_handler(
+        CallbackQueryHandler(bot.choose_mode, pattern=r"^mode:(free|guided|options)$")
+    )
+    application.add_handler(CallbackQueryHandler(bot.option_callback, pattern=r"^opt:"))
+    application.add_handler(CallbackQueryHandler(bot.brief_callback, pattern=r"^brief:"))
     application.add_handler(
         CallbackQueryHandler(
             bot.score,
@@ -56,6 +83,7 @@ def build_application(token: str, bot: TelegramStoryBot) -> Application:
         )
     )
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, bot.text_input))
+    application.add_error_handler(bot.on_error)
     return application
 
 
@@ -71,21 +99,28 @@ def main(argv: list[str] | None = None) -> int:
     try:
         settings = load_settings()
         generator = create_generator(settings.generator_name)
-        application = build_application(
-            settings.telegram_token,
-            TelegramStoryBot(
-                generator,
-                QueueRepository(settings.project_root / "Stories" / "telegram_queue.sqlite3"),
-            ),
+        bot = TelegramStoryBot(
+            generator,
+            QueueRepository(settings.project_root / "Stories" / "telegram_queue.sqlite3"),
         )
-    except (TelegramConfigurationError, ValueError, ASGError) as exc:
+    except (TelegramConfigurationError, ValueError, GeneratorUnavailable) as exc:
         LOGGER.error("%s", exc)
         return 2
-    LOGGER.info("Iniciando bot con el generador %s", generator.display_name)
+
+    def announce(username: str) -> None:
+        """Print the start-up banner once the bot's own identity is known."""
+        rows = (("Bot", f"@{username}"),) + generator.startup_details()
+        print_banner("ASG Telegram", rows)
+        LOGGER.info("Iniciando bot con el generador %s", generator.display_name)
+
+    application = build_application(settings.telegram_token, bot, on_ready=announce)
     try:
         application.run_polling(allowed_updates=Update.ALL_TYPES)
     except TelegramError as exc:
         LOGGER.error("No se pudo conectar con Telegram: %s", exc)
+        return 1
+    except Exception:
+        LOGGER.exception("El bot se detuvo por un error inesperado")
         return 1
     return 0
 

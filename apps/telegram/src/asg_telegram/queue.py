@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
 CANCELLABLE_STATUSES = ("queued", "recovery_pending")
 MINIMUM_SAMPLES_FOR_ESTIMATE = 3
@@ -28,7 +29,15 @@ _SCHEMA = """CREATE TABLE IF NOT EXISTS jobs (
     duration_seconds REAL, error_code TEXT,
     narrative_profile TEXT,
     cancel_requested INTEGER NOT NULL DEFAULT 0,
-    story_format TEXT
+    story_format TEXT,
+    options TEXT,
+    brief TEXT
+)"""
+
+_USER_OPTIONS_SCHEMA = """CREATE TABLE IF NOT EXISTS user_options (
+    user_id INTEGER PRIMARY KEY,
+    options TEXT NOT NULL,
+    updated_at TEXT NOT NULL
 )"""
 
 # Columns introduced after the first unversioned schema, added by migration.
@@ -36,7 +45,27 @@ _ADDED_COLUMNS = (
     ("narrative_profile", "narrative_profile TEXT"),
     ("cancel_requested", "cancel_requested INTEGER NOT NULL DEFAULT 0"),
     ("story_format", "story_format TEXT"),
+    ("options", "options TEXT"),
+    ("brief", "brief TEXT"),
 )
+
+
+def _parse_json(value: str | None) -> dict | None:
+    """Parse an optional JSON column, treating unreadable text as absent."""
+    if not value:
+        return None
+    try:
+        parsed = json.loads(value)
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _dump_json(value: Mapping | None) -> str | None:
+    """Serialize an optional mapping deterministically, or store nothing."""
+    if value is None:
+        return None
+    return json.dumps(dict(value), ensure_ascii=False, sort_keys=True)
 
 
 @dataclass(slots=True)
@@ -57,6 +86,8 @@ class QueueJob:
     narrative_profile: str | None = None
     cancel_requested: int = 0
     story_format: str | None = None
+    options: dict | None = None
+    brief: dict | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +120,7 @@ class QueueRepository:
         if db.execute("PRAGMA user_version").fetchone()[0] >= SCHEMA_VERSION:
             return
         db.execute(_SCHEMA)
+        db.execute(_USER_OPTIONS_SCHEMA)
         present = {row["name"] for row in db.execute("PRAGMA table_info(jobs)")}
         for column, definition in _ADDED_COLUMNS:
             if column not in present:
@@ -110,6 +142,8 @@ class QueueRepository:
     def _job(row: sqlite3.Row) -> QueueJob:
         """Convert a database row into the public queue-job model."""
         values: dict[str, Any] = {key: row[key] for key in QueueJob.__dataclass_fields__}
+        values["options"] = _parse_json(values.get("options"))
+        values["brief"] = _parse_json(values.get("brief"))
         return QueueJob(**values)
 
     def enqueue(
@@ -122,6 +156,8 @@ class QueueRepository:
         progress_message_id: int | None = None,
         narrative_profile: str | None = None,
         story_format: str | None = None,
+        options: Mapping | None = None,
+        brief: Mapping | None = None,
     ) -> EnqueueResult:
         """Append a job unless the user already has an active request."""
         with self._lock, self._connect() as db:
@@ -142,10 +178,13 @@ class QueueRepository:
                 progress_message_id,
                 narrative_profile=narrative_profile,
                 story_format=story_format,
+                options=dict(options) if options is not None else None,
+                brief=dict(brief) if brief is not None else None,
             )
             db.execute(
                 "INSERT INTO jobs(id,user_id,username,chat_id,prompt,status,enqueued_at,"
-                "progress_message_id,narrative_profile,story_format) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                "progress_message_id,narrative_profile,story_format,options,brief) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     job.id,
                     job.user_id,
@@ -157,6 +196,8 @@ class QueueRepository:
                     progress_message_id,
                     narrative_profile,
                     story_format,
+                    _dump_json(options),
+                    _dump_json(brief),
                 ),
             )
             return EnqueueResult(job, created=True)
@@ -237,7 +278,7 @@ class QueueRepository:
 
         Returns ``"cancelled"`` when a job left the queue immediately,
         ``"requested"`` when a running job was flagged to stop at its next
-        stage boundary, and None when the user had nothing to cancel.
+        checkpoint, and None when the user had nothing to cancel.
         """
         placeholders = ",".join("?" * len(CANCELLABLE_STATUSES))
         with self._lock, self._connect() as db:
@@ -294,3 +335,35 @@ class QueueRepository:
         if len(rows) < MINIMUM_SAMPLES_FOR_ESTIMATE:
             return None
         return sum(row[0] for row in rows) / len(rows)
+
+    def counts(self) -> dict[str, int]:
+        """Return how many jobs are queued and running, for the startup banner."""
+        with self._lock, self._connect() as db:
+            rows = db.execute(
+                "SELECT status, COUNT(*) AS total FROM jobs "
+                "WHERE status IN ('queued','running') GROUP BY status"
+            ).fetchall()
+        return {row["status"]: row["total"] for row in rows}
+
+    def user_options(self, user_id: int) -> dict:
+        """Return a user's stored option overrides, or an empty mapping."""
+        with self._lock, self._connect() as db:
+            row = db.execute(
+                "SELECT options FROM user_options WHERE user_id=?", (user_id,)
+            ).fetchone()
+        return _parse_json(row["options"]) or {} if row else {}
+
+    def save_user_options(self, user_id: int, options: Mapping) -> None:
+        """Persist a user's option overrides, replacing any earlier ones."""
+        with self._lock, self._connect() as db:
+            db.execute(
+                """INSERT INTO user_options(user_id, options, updated_at) VALUES(?,?,?)
+                    ON CONFLICT(user_id) DO UPDATE SET
+                        options=excluded.options, updated_at=excluded.updated_at""",
+                (user_id, _dump_json(options), datetime.now(UTC).isoformat()),
+            )
+
+    def clear_user_options(self, user_id: int) -> None:
+        """Forget a user's stored option overrides."""
+        with self._lock, self._connect() as db:
+            db.execute("DELETE FROM user_options WHERE user_id=?", (user_id,))

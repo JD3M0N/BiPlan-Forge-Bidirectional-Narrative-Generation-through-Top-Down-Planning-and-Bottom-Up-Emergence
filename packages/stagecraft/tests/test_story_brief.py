@@ -1,12 +1,25 @@
 """7.3: a story asked for as a structured brief, and a cast that keeps the declared names."""
 
 import json
+from typing import get_args
 
 import pytest
 from asg_stagecraft import CastMember, StoryBrief, StoryGenerator
-from asg_stagecraft.brief import cast_repair_feedback, missing_cast
+from asg_stagecraft.brief import (
+    PRONOUN_LABELS,
+    ROLE_LABELS,
+    CastRole,
+    Pronoun,
+    cast_repair_feedback,
+    missing_cast,
+)
 from pydantic import ValidationError
 from test_generator_v5 import FakeProvider, make_characters
+
+
+def test_role_and_pronoun_labels_cover_every_declared_value() -> None:
+    assert set(ROLE_LABELS) == set(get_args(CastRole))
+    assert set(PRONOUN_LABELS) == set(get_args(Pronoun))
 
 
 def read_json(run_dir, name):

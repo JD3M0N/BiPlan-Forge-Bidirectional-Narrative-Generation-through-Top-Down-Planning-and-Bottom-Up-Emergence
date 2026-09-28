@@ -13,9 +13,9 @@ validado en dos runs reales).** La interfaz gráfica StageCraft (`asg-studio`) y
 - **Evaluación humana: casi inexistente.** De 146 `evaluation.json`, uno solo tiene puntuaciones
   reales (`Top-Down/20260831-223547-el-rescate-de-luminaria`). Todo lo demás que se sabe de la
   calidad sale de métricas automáticas o de jueces LLM, y esos jueces aprueban casi todo (TD-1).
-- **Puerta de calidad limpia.** `ruff check`, `ruff format --check` (184 archivos), 662 pruebas
-  pasan y 2 se omiten, `pip check` y `tests/test_sync_railway_stories.ps1`. Corren en
-  `.github/workflows/quality.yml` en cada push y pull request, y en local con `.\quality.ps1`.
+- **Puerta de calidad limpia.** `ruff check`, `ruff format --check` (190 archivos), 704 pruebas
+  pasan y 2 se omiten, y `pip check`. Corren en `.github/workflows/quality.yml` en cada push y
+  pull request, y en local con `.\quality.ps1`.
 - **La corrida de control** (`Stories/Stagecraft/20260926-094204-el-secreto-del-faro-de-san-telmo`,
   narrativa, prompt 03 Esencial) fue la primera narrativa desde el renombrado.
   - Recorrió 7.1.1 entero en 17 llamadas, 97k tokens y unos 92 s de modelo, sin fallos ni
@@ -1045,8 +1045,8 @@ gratuita · *Depende de:* MED-5, MED-7
 *Área:* ingeniería · *Cuota:* sin cuota · *Depende de:* —
 
 - **Síntoma.**
-  - **CI no prueba lo que se despliega.** Corre solo en `windows-latest` con Python 3.12, mientras
-    el `Dockerfile` despliega `python:3.11-slim` en Linux, y la imagen nunca se construye en CI.
+  - **CI solo prueba una plataforma.** Corre solo en `windows-latest` con Python 3.12; el resto
+    de versiones soportadas (`requires-python = ">=3.11"`) no se comprueban.
   - **Sin tipos ni cobertura.** No hay comprobador de tipos, aunque ya hay 3
     `# type: ignore[arg-type]` en `stage/engine.py` y `stage/memory.py`. Tampoco se mide
     cobertura.
@@ -1054,11 +1054,11 @@ gratuita · *Depende de:* MED-5, MED-7
     formatos de cabecera. Las cotas internas se subieron al mínimo real en 7.2.0, pero nada
     impide que vuelvan a quedarse atrás.
 - **Qué hacer.**
-  - Ampliar la matriz de CI a Linux y 3.11, con un job que construya la imagen.
+  - Ampliar la matriz de CI a Linux y 3.11.
   - Añadir pyright o mypy, empezando por `core`.
   - Informar de la cobertura, sin umbral al principio.
-- **Hecho cuando.** CI prueba lo que se despliega, y una dependencia interna demasiado vieja falla
-  al instalar, no al importar.
+- **Hecho cuando.** CI prueba la versión mínima de Python declarada, y una dependencia interna
+  demasiado vieja falla al instalar, no al importar.
 
 ### ING-6 · Cerrar los huecos de cobertura
 
@@ -1093,46 +1093,6 @@ gratuita · *Depende de:* MED-5, MED-7
   `PIPELINE_VERSION` y dar una lectura compatible a los runs que lo traen.
 - **Hecho cuando.** Hay una decisión escrita y, si se elimina, los runs anteriores se siguen
   abriendo.
-
-### OPS-1 · Persistencia real de lo desplegado
-
-*Área:* despliegue · *Cuota:* sin cuota · *Depende de:* —
-
-- **Síntoma.** El `Dockerfile` no declara ningún `VOLUME`, y la cola SQLite vive en
-  `/app/Stories`, que se pierde en cada redeploy. `sync-railway-stories.ps1` existe para rescatar
-  las historias antes: tiene 720 líneas y un único `try` de 222.
-- **Qué hacer.** Montar un volumen para la cola y las historias.
-- **Hecho cuando.** Artefactos y cola sobreviven a un redeploy sin intervención, y el script queda
-  como herramienta de archivado opcional.
-
-### OPS-2 · Elegir el punto de vista desde Telegram
-
-*Área:* despliegue · *Cuota:* sin cuota · *Depende de:* —
-
-- **Síntoma.**
-  - **La voz no se puede elegir.** El bot ofrece los formatos, pero una historia simulada se
-    narra con la voz del despliegue: `generators.py` toma `narrative_voice` de los settings.
-  - **No hay dónde guardarla.** No existe estado de conversación para elegirla, y la cola no
-    guarda la voz ni el personaje de la visión.
-  - Las etiquetas ya están en `formats.VOICE_CHOICES` (7.3.0), y la consola y StageCraft las usan.
-- **Qué hacer.**
-  - Añadir un paso de conversación, solo con formato simulado, y otro para el personaje cuando la
-    visión se cuenta desde uno (`limited`, `first_person`).
-  - Añadir columnas de voz y personaje a la cola, con su migración.
-- **Hecho cuando.** Un usuario puede pedir una historia simulada en primera persona desde el chat.
-
-### OPS-3 · El bot cancela desde el callback de progreso
-
-*Área:* despliegue · *Cuota:* sin cuota · *Depende de:* —
-
-- **Síntoma.** `apps/telegram/src/asg_telegram/generation.py:204-205` lanza `GenerationCancelled`
-  desde el callback de progreso. Ese callback también corre dentro del bucle de reintentos del
-  proveedor (espera de cuota), que convierte la excepción en un `ProviderError` degradable: una
-  etapa que degrada la traga y el run sigue. El run cancelado además queda como fallo inesperado.
-- **Qué hacer.** Pasar `should_cancel` a `generate()`, como hace StageCraft, y traducir
-  `RunCancelledError` a `GenerationCancelled` en el adaptador.
-- **Hecho cuando.** Cancelar durante una espera de cuota detiene el run con `RUN_CANCELLED`, con
-  test.
 
 ### ING-8 · Documentar los contratos públicos y rellenar el README
 

@@ -29,6 +29,8 @@ class TelegramDelivery:
         user,
         story_path: Path,
         caption: str = DEFAULT_DOCUMENT_CAPTION,
+        audio: bool = True,
+        audio_voice: str = "",
     ) -> bool:
         """Send the complete file first and then best-effort HTML fragments."""
         if not await self._send_document_with_retry(
@@ -40,13 +42,15 @@ class TelegramDelivery:
         ):
             return False
         story = await asyncio.to_thread(story_path.read_text, encoding="utf-8")
-        await self._deliver_audio(
-            context=context,
-            chat_id=chat_id,
-            user=user,
-            story_path=story_path,
-            story=story,
-        )
+        if audio:
+            await self._deliver_audio(
+                context=context,
+                chat_id=chat_id,
+                user=user,
+                story_path=story_path,
+                story=story,
+                voice=audio_voice,
+            )
         chunks = telegram_story_chunks(story)
         for index, chunk in enumerate(chunks, start=1):
             try:
@@ -93,10 +97,14 @@ class TelegramDelivery:
         user,
         story_path: Path,
         story: str,
+        voice: str = "",
     ) -> bool:
         """Ensure and send narration without blocking the story workflow."""
         try:
-            artifact = await create_story_audio(story_path)
+            if voice:
+                artifact = await create_story_audio(story_path, voice=voice)
+            else:
+                artifact = await create_story_audio(story_path)
         except AudioGenerationError:
             log_user_action(
                 LOGGER,
