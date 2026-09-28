@@ -347,6 +347,8 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
 
     def _create_repository(self, title: str) -> ArtifactRepository:
         """Create the run repository and attach artifact event reporting."""
+        # A routed provider names the performance's own model; a single one names none.
+        stage_model = getattr(self.provider, "stage_model_name", None)
         repository = ArtifactRepository(
             self.output_root,
             self.provider.model_name,
@@ -356,6 +358,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
             script_method=self._recorded_script_method(),
             narrative_voice=self.narrative_voice if self._simulated else None,
             actor_memory=self.actor_memory if self._simulated else None,
+            stage_model=stage_model if self._simulated else None,
         )
         # Every axis a run can differ on, including the ledger, guidance and audio switches
         # that no other artifact records (7.3). Written first, so a failed run keeps it too.

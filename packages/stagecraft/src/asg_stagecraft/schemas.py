@@ -850,3 +850,7 @@ class RunMetadata(BaseModel):
     # The profile the run was generated with, so a run that failed before request.json existed
     # still says what it was asked for (7.2).
     narrative_profile: NarrativeProfile | None = None
+    # The model the performance ran on, set only for a simulated run whose performance had a model,
+    # key or pace of its own (GEMINI_STAGE_*, 7.4). None means the performance ran on `model`, as
+    # every run before 7.4 did; llm_calls.jsonl names the model of each call.
+    stage_model: str | None = None

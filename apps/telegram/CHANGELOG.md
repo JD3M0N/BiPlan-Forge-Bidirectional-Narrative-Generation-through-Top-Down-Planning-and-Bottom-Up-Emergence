@@ -1,5 +1,11 @@
 # Historial de cambios
 
+## [3.1.0] - 2026-09-28
+
+- La cabecera de la consola del operador añade la fila «Modelo de la función» cuando la función
+  simulada tiene modelo, clave o RPM propios (`GEMINI_STAGE_*`). Nunca muestra la clave: solo
+  indica «clave propia». Exige `asg-stagecraft>=7.4.0`.
+
 ## [3.0.0] - 2026-09-28
 
 Quita todo lo de Railway y deja que cada usuario configure desde el chat lo que hasta ahora solo

@@ -1,5 +1,6 @@
 """Language-model provider abstraction and Gemini implementation."""
 
+import hashlib
 import json
 import threading
 import time
@@ -32,8 +33,18 @@ from .quota import (
 )
 
 T = TypeVar("T", bound=BaseModel)
-_LIMITERS: dict[tuple[int, int], SlidingWindowLimiter] = {}
+# One RPM limiter per (key fingerprint, model, capacity), shared by every provider in the process.
+# Gemini counts its quota per project and per model, so two models - or two keys - never share a
+# window; before 7.4 the key was the capacity alone, and a performance model paced at the same RPM
+# as the main one would have waited on the main one's calls.
+_LIMITERS: dict[tuple[str, str, int], SlidingWindowLimiter] = {}
 _LIMITERS_LOCK = threading.Lock()
+
+# The pipeline stages whose calls go to the performance model when one is configured. Only the
+# performance: it spends most of a simulated run's calls, casting is one strictly validated call,
+# and narration writes the text that is evaluated, which stays on the main model so it can be
+# compared with the runs before 7.4.
+STAGE_MODEL_STAGES = frozenset({"performance"})
 # Both settings below are module constants, not constructor arguments: no call site in
 # the repository ever configured them, and the per-instance copies only survived because
 # the code read them through getattr defaults to tolerate a test double that skips
@@ -72,6 +83,11 @@ def call_context(stage: str, agent: str) -> Iterator[None]:
 def current_call_context() -> tuple[str, str]:
     """Return the (stage, agent) the pipeline declared for the call being made now."""
     return _CALL_CONTEXT.get()
+
+
+def _key_fingerprint(api_key: str) -> str:
+    """Name a key's quota bucket without keeping the key itself in the limiter registry."""
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:16]
 
 
 def _gemini_response_schema(schema: type[BaseModel]) -> dict:
@@ -119,7 +135,7 @@ def _safe_provider_error(exc: Exception) -> ProviderError:
         recommendation = "Revisa el esquema indicado y la compatibilidad del modelo configurado."
     elif status == 404:
         summary = "Gemini no encontró el modelo o recurso configurado."
-        recommendation = "Comprueba GEMINI_MODEL."
+        recommendation = "Comprueba GEMINI_MODEL y, si la usas, GEMINI_STAGE_MODEL."
     elif any(token in message for token in ("quota", "rate limit", "resource_exhausted", "429")):
         summary = "Gemini rechazó la solicitud por cuota o límite de uso."
         recommendation = "Espera unos minutos o revisa la cuota del proyecto de Gemini."
@@ -244,7 +260,9 @@ class GeminiProvider:
         self.max_retry_delay = max_retry_delay
         capacity = max(1, rpm_limit - rpm_reserve)
         with _LIMITERS_LOCK:
-            self._limiter = _LIMITERS.setdefault((capacity, 60), SlidingWindowLimiter(capacity))
+            self._limiter = _LIMITERS.setdefault(
+                (_key_fingerprint(api_key), model_name, capacity), SlidingWindowLimiter(capacity)
+            )
         self._client = genai.Client(
             api_key=api_key,
             http_options=types.HttpOptions(
@@ -551,15 +569,102 @@ class GeminiProvider:
             raise _safe_provider_error(exc) from exc
 
 
-def provider_from_settings(settings: Settings) -> GeminiProvider:
-    """Build a GeminiProvider from loaded Stagecraft settings."""
-    return GeminiProvider(
-        settings.api_key,
-        settings.model,
-        rpm_limit=settings.rpm_limit,
-        rpm_reserve=settings.rpm_reserve,
-        tpm_limit=settings.tpm_limit,
-        max_retries=settings.max_retries,
-        max_retry_delay=settings.max_retry_delay,
-        request_timeout_ms=settings.request_timeout_ms,
+class RoutedProvider:
+    """Send the performance's calls to their own provider and every other call to the main one.
+
+    The pipeline tags each call with its stage (call_context), so routing needs no agent to
+    know about it. Both providers append to one usage list and share the run's callbacks, so the
+    pipeline, which reads usage_records and sets the callbacks, sees a single provider; each record
+    still names the model that answered it.
+    """
+
+    def __init__(self, main, stage, *, stages: frozenset[str] = STAGE_MODEL_STAGES) -> None:
+        """Wrap the main and performance providers and join their usage records."""
+        self.main = main
+        self.stage = stage
+        self.stages = stages
+        self.model_name = main.model_name
+        self.stage_model_name = stage.model_name
+        self.usage_records = []
+        self._wait_callback: Callable[[int, str], None] | None = None
+        self._usage_callback: Callable[[LLMUsageRecord], None] | None = None
+
+    @property
+    def usage_records(self) -> list[LLMUsageRecord]:
+        """Return the usage list both providers append to."""
+        return self._usage_records
+
+    @usage_records.setter
+    def usage_records(self, records: list[LLMUsageRecord]) -> None:
+        """Replace the shared usage list in both providers at once."""
+        self._usage_records = records
+        self.main.usage_records = records
+        self.stage.usage_records = records
+
+    @property
+    def wait_callback(self) -> Callable[[int, str], None] | None:
+        """Return the quota-wait callback both providers report to."""
+        return self._wait_callback
+
+    @wait_callback.setter
+    def wait_callback(self, callback: Callable[[int, str], None] | None) -> None:
+        """Hand the quota-wait callback to both providers."""
+        self._wait_callback = callback
+        self.main.wait_callback = callback
+        self.stage.wait_callback = callback
+
+    @property
+    def usage_callback(self) -> Callable[[LLMUsageRecord], None] | None:
+        """Return the usage callback both providers report to."""
+        return self._usage_callback
+
+    @usage_callback.setter
+    def usage_callback(self, callback: Callable[[LLMUsageRecord], None] | None) -> None:
+        """Hand the usage callback to both providers."""
+        self._usage_callback = callback
+        self.main.usage_callback = callback
+        self.stage.usage_callback = callback
+
+    def provider_for_current_call(self):
+        """Pick the provider for the call being made now, from the stage the pipeline declared."""
+        stage, _ = current_call_context()
+        return self.stage if stage in self.stages else self.main
+
+    def generate_structured(
+        self, *, system_instruction: str, prompt: str, schema: type[T], profile: str
+    ) -> T:
+        """Generate a structured response with the provider this stage belongs to."""
+        return self.provider_for_current_call().generate_structured(
+            system_instruction=system_instruction, prompt=prompt, schema=schema, profile=profile
+        )
+
+    def generate_text(self, *, system_instruction: str, prompt: str, profile: str) -> str:
+        """Generate free text with the provider this stage belongs to."""
+        return self.provider_for_current_call().generate_text(
+            system_instruction=system_instruction, prompt=prompt, profile=profile
+        )
+
+
+def provider_from_settings(settings: Settings) -> GeminiProvider | RoutedProvider:
+    """Build the provider a run uses: one Gemini provider, or a routed pair for the performance.
+
+    The pair exists only when GEMINI_STAGE_MODEL, GEMINI_STAGE_API_KEY or GEMINI_STAGE_RPM_LIMIT
+    make the performance differ from the main model; otherwise nothing changes.
+    """
+    shared = {
+        "rpm_reserve": settings.rpm_reserve,
+        "tpm_limit": settings.tpm_limit,
+        "max_retries": settings.max_retries,
+        "max_retry_delay": settings.max_retry_delay,
+        "request_timeout_ms": settings.request_timeout_ms,
+    }
+    main = GeminiProvider(settings.api_key, settings.model, rpm_limit=settings.rpm_limit, **shared)
+    if not settings.splits_stage:
+        return main
+    stage = GeminiProvider(
+        settings.effective_stage_api_key,
+        settings.effective_stage_model,
+        rpm_limit=settings.effective_stage_rpm_limit,
+        **shared,
     )
+    return RoutedProvider(main, stage)

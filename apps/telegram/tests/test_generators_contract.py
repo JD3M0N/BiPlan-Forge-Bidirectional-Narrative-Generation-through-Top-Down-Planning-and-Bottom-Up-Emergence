@@ -5,6 +5,7 @@ import pytest
 from asg_stagecraft import GenerationOptions, StoryBrief, StoryGenerator
 from asg_stagecraft.formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
 from asg_stagecraft.planning.profiles import NarrativeProfile
+from asg_stagecraft.runtime.config import Settings
 from asg_stagecraft.runtime.errors import PlotValidationError, RunCancelledError
 from asg_stagecraft.runtime.progress import PipelineEvent, ProgressUpdate
 from asg_telegram import generators as generators_module
@@ -28,6 +29,7 @@ def _patch_facade(
     story_format=StoryFormat.NARRATIVE,
     script_method=ScriptMethod.NATIVE,
     on_generate=None,
+    **setting_changes,
 ):
     def build(provider, output_root, options):
         captured["provider"] = provider
@@ -55,7 +57,7 @@ def _patch_facade(
     facade = create_autospec(StoryGenerator, spec_set=True)
     facade.from_options.side_effect = build
     provider = SimpleNamespace(usage_records=[])
-    settings = SimpleNamespace(
+    settings = Settings(
         api_key="secret-key",
         model="fake-model",
         output_root=tmp_path,
@@ -69,6 +71,7 @@ def _patch_facade(
         narrative_voice=NarrativeVoice.OMNISCIENT,
         actor_memory=ActorMemory.OWN,
         turns_per_beat=8,
+        **setting_changes,
     )
     monkeypatch.setattr(generators_module, "StoryGenerator", facade)
     monkeypatch.setattr(generators_module, "load_stagecraft_settings", lambda: settings)
@@ -276,3 +279,19 @@ def test_startup_details_never_show_the_api_key(tmp_path, monkeypatch):
     joined = " ".join(f"{label}={value}" for label, value in details)
     assert "secret-key" not in joined
     assert "configurada" in joined
+    assert "Modelo de la función" not in joined
+
+
+def test_startup_details_name_the_performance_model_but_not_its_key(tmp_path, monkeypatch):
+    captured: dict = {}
+    _patch_facade(
+        monkeypatch,
+        tmp_path,
+        captured,
+        stage_model="gemini-3.1-flash-lite",
+        stage_api_key="stage-secret",
+    )
+    details = dict(generators_module.StagecraftGenerator().startup_details())
+    assert details["Modelo"] == "fake-model"
+    assert details["Modelo de la función"] == "gemini-3.1-flash-lite · 15 RPM · clave propia"
+    assert "stage-secret" not in " ".join(details.values())

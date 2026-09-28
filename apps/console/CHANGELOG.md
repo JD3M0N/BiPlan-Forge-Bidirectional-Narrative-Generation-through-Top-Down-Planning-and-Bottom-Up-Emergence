@@ -1,5 +1,10 @@
 # Historial de cambios
 
+## [3.2.0] - 2026-09-28
+
+- Al generar una historia simulada cuya función tiene modelo propio (`GEMINI_STAGE_MODEL`),
+  anuncia los dos: «Generando con X (función: Y)». Exige `asg-stagecraft>=7.4.0`.
+
 ## [3.1.0] - 2026-09-27
 
 - Construye las opciones con `GenerationOptions` y usa las etiquetas de voz de

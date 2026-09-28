@@ -28,13 +28,19 @@ def _settings(request: Request):
 
 @router.get("/health")
 def health(request: Request) -> dict:
-    """Say whether generation can start, with which model, and whether this is a demo."""
+    """Say whether generation can start, with which models, and whether this is a demo.
+
+    stage_model names the performance's own model (GEMINI_STAGE_MODEL), or None when the
+    performance runs on the main one.
+    """
     settings = _settings(request)
+    splits = bool(getattr(settings, "splits_stage", False))
     return {
         "name": "StageCraft",
         "generator_version": __version__,
         "key_present": bool(settings and settings.api_key),
         "model": getattr(settings, "model", None),
+        "stage_model": settings.effective_stage_model if splits else None,
         "demo": request.app.state.demo,
     }
 

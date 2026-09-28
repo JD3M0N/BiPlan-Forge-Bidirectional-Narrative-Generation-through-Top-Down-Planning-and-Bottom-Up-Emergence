@@ -51,7 +51,8 @@ class StagecraftMenu:
             voice = self._choose_voice(settings)
             if voice_choice(voice).takes_character:
                 narrator = self.input("Personaje de la visión [el protagonista]: ").strip()
-        self.output(f"Generando con {settings.model}...")
+        simulated = choice.story_format is StoryFormat.SIMULATED
+        self.output(f"Generando con {settings.model_summary(simulated=simulated)}...")
         options = GenerationOptions.from_settings(
             settings,
             story_format=choice.story_format,

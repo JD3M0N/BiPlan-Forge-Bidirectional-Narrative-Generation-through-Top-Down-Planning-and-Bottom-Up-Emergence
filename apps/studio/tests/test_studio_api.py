@@ -1,6 +1,7 @@
 import time
 
 import pytest
+from asg_stagecraft.runtime.config import Settings
 from asg_studio import create_app
 from fastapi.testclient import TestClient
 from studio_fakes import FakeGenerator, settings_loader, simulated_run
@@ -32,6 +33,26 @@ def test_health_answers_without_a_key(stories) -> None:
     assert health["name"] == "StageCraft"
     assert health["key_present"] is False
     assert health["demo"] is False
+    assert health["stage_model"] is None
+
+
+def test_health_names_the_performance_model_when_it_has_its_own(stories) -> None:
+    settings = Settings(
+        api_key="secret",
+        model="gemini-3.5-flash-lite",
+        output_root=stories / "Stagecraft",
+        stage_model="gemini-3.1-flash-lite",
+    )
+    app = create_app(
+        stories_root=stories,
+        generator_factory=lambda options: FakeGenerator(stories),
+        settings_loader=lambda start=None, *, require_api_key=True: settings,
+        cache_dir=stories.parent / "cache",
+    )
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        health = client.get("/api/health").json()
+    assert health["model"] == "gemini-3.5-flash-lite"
+    assert health["stage_model"] == "gemini-3.1-flash-lite"
 
 
 def test_the_catalog_opens_on_the_simulated_format_with_settings_defaults(stories) -> None:

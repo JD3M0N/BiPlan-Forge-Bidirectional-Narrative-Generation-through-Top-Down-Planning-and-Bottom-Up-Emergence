@@ -1,5 +1,30 @@
 # Historial de cambios
 
+## 7.4.0
+
+La función simulada puede ir con un modelo propio. Gemini cuenta la cuota gratuita diaria por
+proyecto y por modelo, y los actores gastan casi todas las llamadas de un run simulado: con un
+segundo modelo, la función tiene su propio cupo y deja el del pipeline intacto. `metadata.json`
+gana `stage_model`, así que `PIPELINE_VERSION` pasa a 7.4; los runs 5.0 a 7.3 se siguen abriendo.
+
+- **`GEMINI_STAGE_MODEL`, `GEMINI_STAGE_API_KEY` y `GEMINI_STAGE_RPM_LIMIT`.** Vacíos heredan
+  `GEMINI_MODEL`, `GEMINI_API_KEY` y `GEMINI_RPM_LIMIT`, así que sin configurarlos nada cambia.
+  El modelo recomendado es `gemini-3.1-flash-lite`. La clave aparte es para un proyecto con su
+  propia cuota (por ejemplo, de pago), no para multiplicar la gratuita.
+- **`RoutedProvider`.** `provider_from_settings` devuelve un par enrutado cuando la función
+  difiere del modelo principal. Enruta por la etapa que el pipeline ya declara en cada llamada
+  (`call_context`): solo `performance` (turnos, reflexiones y director de escena) va al modelo
+  de la función (`STAGE_MODEL_STAGES`). El casting y la narración siguen en el principal. Los
+  dos proveedores comparten la lista de uso y los callbacks del run.
+- **Un limitador de RPM por modelo y clave.** `_LIMITERS` iba solo por capacidad, y dos modelos
+  con el mismo RPM habrían compartido la misma ventana aunque Google los cuente aparte.
+- **Registro.** `metadata.json` guarda `stage_model` en un run simulado con modelo propio, y
+  `None` en el resto, que significa «el mismo que `model`». Cada línea de `llm_calls.jsonl` ya
+  nombraba su modelo.
+- `generate-story` gana `--stage-model`.
+- Una variable numérica vacía (`GEMINI_STAGE_RPM_LIMIT=`, como la deja `.env.example`) vale su
+  defecto, igual que las booleanas y las de opción. Antes abortaba con «debe ser un número entero».
+
 ## 7.3.1
 
 No cambia ningún artefacto ni `PIPELINE_VERSION`. Sube las etiquetas y descripciones en español de

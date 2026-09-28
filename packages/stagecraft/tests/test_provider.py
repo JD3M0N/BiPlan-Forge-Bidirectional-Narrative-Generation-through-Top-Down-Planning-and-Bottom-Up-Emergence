@@ -365,3 +365,109 @@ def test_every_named_profile_resolves_to_its_documented_temperature() -> None:
     assert provider_module._DEFAULT_GENERATION_PROFILES == expected
     for profile, temperature in expected.items():
         assert provider._temperature(profile) == temperature
+
+
+def routed_pair() -> tuple[provider_module.RoutedProvider, GeminiProvider, GeminiProvider]:
+    main = provider_with(response=SimpleNamespace(text="principal", usage_metadata=None))
+    main.model_name = "main-model"
+    stage = provider_with(response=SimpleNamespace(text="escena", usage_metadata=None))
+    stage.model_name = "stage-model"
+    return provider_module.RoutedProvider(main, stage), main, stage
+
+
+def test_the_performance_goes_to_its_own_model_and_everything_else_to_the_main_one() -> None:
+    routed, main, stage = routed_pair()
+    ask = {"system_instruction": "s", "prompt": "p", "profile": "prose"}
+    with provider_module.call_context("performance", "actor"):
+        assert routed.generate_text(**ask) == "escena"
+    with provider_module.call_context("performance", "stage_manager"):
+        assert routed.generate_text(**ask) == "escena"
+    for stage_name in ("planning", "casting", "narration"):
+        with provider_module.call_context(stage_name, "agent"):
+            assert routed.generate_text(**ask) == "principal"
+    # A call outside any stage, such as the stage audit's judge, stays on the main model.
+    assert routed.generate_text(**ask) == "principal"
+    assert len(stage._client.models.generate_calls) == 2
+    assert len(main._client.models.generate_calls) == 4
+    assert [record.model for record in routed.usage_records] == [
+        "stage-model",
+        "stage-model",
+        "main-model",
+        "main-model",
+        "main-model",
+        "main-model",
+    ]
+
+
+def test_the_routed_pair_shares_one_usage_list_and_the_run_callbacks() -> None:
+    routed, main, stage = routed_pair()
+    seen, waits = [], []
+    routed.usage_callback = seen.append
+    routed.wait_callback = lambda seconds, reason: waits.append(reason)
+    assert main.usage_callback is stage.usage_callback is routed.usage_callback
+    assert main.wait_callback is stage.wait_callback is routed.wait_callback
+    with provider_module.call_context("performance", "actor"):
+        routed.generate_text(system_instruction="s", prompt="p", profile="prose")
+    routed.generate_text(system_instruction="s", prompt="p", profile="prose")
+    assert [record.model for record in seen] == ["stage-model", "main-model"]
+    assert main.usage_records is stage.usage_records is routed.usage_records
+    # The Telegram adapter empties the list between jobs; both providers must see it emptied.
+    routed.usage_records.clear()
+    assert main.usage_records == stage.usage_records == []
+    routed.usage_callback = None
+    assert main.usage_callback is None and stage.usage_callback is None
+    assert routed.model_name == "main-model"
+    assert routed.stage_model_name == "stage-model"
+
+
+class RecordingGemini:
+    """Stand in for GeminiProvider, keeping what the factory built it with."""
+
+    built: list[dict] = []
+
+    def __init__(self, api_key, model_name, **kwargs):
+        self.model_name = model_name
+        RecordingGemini.built.append({"api_key": api_key, "model": model_name, **kwargs})
+
+
+def test_the_factory_builds_one_provider_until_the_performance_differs(monkeypatch, tmp_path):
+    from asg_stagecraft.runtime.config import Settings
+
+    RecordingGemini.built = []
+    monkeypatch.setattr(provider_module, "GeminiProvider", RecordingGemini)
+    same = Settings(api_key="k", model="gemini-3.5-flash-lite", output_root=tmp_path)
+    assert isinstance(provider_module.provider_from_settings(same), RecordingGemini)
+    assert len(RecordingGemini.built) == 1
+
+    RecordingGemini.built = []
+    split = Settings(
+        api_key="k",
+        model="gemini-3.5-flash-lite",
+        output_root=tmp_path,
+        rpm_limit=15,
+        stage_model="gemini-3.1-flash-lite",
+        stage_rpm_limit=10,
+    )
+    routed = provider_module.provider_from_settings(split)
+    assert isinstance(routed, provider_module.RoutedProvider)
+    main, stage = RecordingGemini.built
+    assert (main["model"], main["rpm_limit"]) == ("gemini-3.5-flash-lite", 15)
+    assert (stage["model"], stage["rpm_limit"], stage["api_key"]) == (
+        "gemini-3.1-flash-lite",
+        10,
+        "k",
+    )
+    assert routed.stage_model_name == "gemini-3.1-flash-lite"
+
+
+def test_each_model_and_key_has_its_own_rpm_window() -> None:
+    """Gemini counts quota per project and model; the limiter used to key on the RPM alone."""
+    first = GeminiProvider("key-one", "model-a", rpm_limit=41, rpm_reserve=1)
+    again = GeminiProvider("key-one", "model-a", rpm_limit=41, rpm_reserve=1)
+    other_model = GeminiProvider("key-one", "model-b", rpm_limit=41, rpm_reserve=1)
+    other_key = GeminiProvider("key-two", "model-a", rpm_limit=41, rpm_reserve=1)
+    assert first._limiter is again._limiter
+    assert first._limiter is not other_model._limiter
+    assert first._limiter is not other_key._limiter
+    # The registry names a key by its fingerprint, never by the key itself.
+    assert not any("key-one" in key or "key-two" in key for key in provider_module._LIMITERS)

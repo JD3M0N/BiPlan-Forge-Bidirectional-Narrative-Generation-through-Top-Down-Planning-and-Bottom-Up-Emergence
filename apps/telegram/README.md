@@ -14,8 +14,13 @@ TELEGRAM_BOT_TOKEN=token_entregado_por_BotFather
 STORY_GENERATOR=stagecraft
 GEMINI_API_KEY=tu_clave
 GEMINI_MODEL=gemini-3.5-flash-lite
+GEMINI_STAGE_MODEL=gemini-3.1-flash-lite
 TTS_FALLBACK_VOICE=
 ```
+
+`GEMINI_STAGE_MODEL` es opcional: manda los actores y el director de escena de las
+historias simuladas a otro modelo, que tiene su propio cupo diario gratuito, y deja el de
+`GEMINI_MODEL` para el resto del pipeline. Vacío, la función usa el modelo principal.
 
 Las variables `ASG_*` de `.env.example` fijan los valores por defecto de cada opción
 (formato, visión, memoria, turnos por beat, ledger de promesas y guía de esqueletos);
@@ -30,8 +35,8 @@ asg-telegram
 
 En Windows, `asg-telegram` abre el bot en una consola independiente con su propio
 título, y devuelve inmediatamente el control a la consola original. Al arrancar, la
-nueva ventana muestra una cabecera con el bot, el modelo, la cuota y las opciones por
-defecto, y después un registro compacto en color: una línea por comando, selección,
+nueva ventana muestra una cabecera con el bot, el modelo (y el de la función, si tiene
+uno propio), la cuota y las opciones por defecto, y después un registro compacto en color: una línea por comando, selección,
 paso de generación, entrega y evaluación de cada usuario, incluido el progreso del
 pipeline. Si el bot no puede arrancar o se detiene por un error, la ventana no se
 cierra: espera a que se presione Enter, para que el error quede a la vista.

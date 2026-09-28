@@ -286,13 +286,22 @@ class StagecraftGenerator:
             quota += f" · {settings.tpm_limit} TPM"
         else:
             quota += " · TPM sin límite"
-        return (
+        rows = [
             ("Generador", "Stagecraft"),
             ("Modelo", settings.model),
             ("Cuota", quota),
+        ]
+        if settings.splits_stage:
+            # The performance's own model has its own daily quota; the key itself is never shown.
+            stage = f"{settings.effective_stage_model} · {settings.effective_stage_rpm_limit} RPM"
+            if settings.stage_api_key:
+                stage += " · clave propia"
+            rows.append(("Modelo de la función", stage))
+        rows += [
             ("Clave de Gemini", "configurada" if settings.api_key else "sin configurar"),
             ("Historias", str(settings.output_root)),
-        )
+        ]
+        return tuple(rows)
 
     def _brief_from(self, outline: StoryOutline) -> StoryBrief:
         """Translate an application outline into the pipeline's structured brief."""

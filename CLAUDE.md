@@ -237,7 +237,7 @@ A esa lista, el guion y el simulado añaden los suyos.
   `report-story-craft` las recalcula desde `story.md`, así que también mide los runs anteriores
   a 6.5.0, que no las traen.
 
-`version.py` fija `PIPELINE_VERSION` (7.3) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.3).
+`version.py` fija `PIPELINE_VERSION` (7.4) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.4).
 `StoryRun` se niega a abrir un run incompleto o de una versión no soportada. Si cambias el
 conjunto de artefactos o su significado, sube la versión en vez de romper los runs ya generados:
 son datos de la tesis. Una limpieza que no toca artefactos sube solo el parche de
@@ -257,9 +257,24 @@ esquema Pydantic, y `generate_text`) e implementa `GeminiProvider`. Lo que impor
   Gemini lo rechazan. Pydantic sigue siendo la autoridad local con `extra="forbid"`.
 - `_safe_provider_error` clasifica los fallos sin filtrar credenciales ni el contenido del
   prompt.
-- `runtime/quota.py` mantiene limitadores de ventana deslizante **compartidos a nivel de
-  proceso** (`_LIMITERS`): dos generaciones concurrentes respetan un único presupuesto de
-  RPM/TPM.
+- Los limitadores de RPM (`_LIMITERS` en `provider.py`, con las clases de `runtime/quota.py`) se
+  **comparten a nivel de proceso**: dos generaciones concurrentes respetan un único presupuesto
+  de RPM.
+  - La clave de cada limitador es (huella de la clave, modelo, capacidad), porque Gemini cuenta la
+    cuota por proyecto y por modelo. Desde 7.4, dos modelos no comparten ventana aunque tengan el
+    mismo RPM.
+  - El limitador de TPM, en cambio, es por instancia.
+- **La función simulada puede ir con un modelo propio** (7.4).
+  - `GEMINI_STAGE_MODEL`, `GEMINI_STAGE_API_KEY` y `GEMINI_STAGE_RPM_LIMIT`; vacíos heredan los
+    principales.
+  - Si difieren, `provider_from_settings` devuelve un `RoutedProvider`, que enruta por la etapa
+    que `_call_agent` ya declara (`call_context`). Solo `performance` (turnos, reflexiones y
+    director de escena) va al modelo de la función (`STAGE_MODEL_STAGES`). El casting y la
+    narración siguen en el principal, y la auditoría también, porque no corre dentro de una etapa.
+  - Los dos proveedores comparten `usage_records` y los callbacks del run, así que el pipeline
+    ve uno solo. Ningún agente ni doble de test sabe del reparto.
+  - `metadata.json` lo registra en `stage_model`, que es `None` si la función usó `model`. El eje
+    `stage_model` de `evaluation/pairing.py` impide emparejar funciones de modelos distintos.
 
 Los tests inyectan un `FakeProvider` (ver `packages/stagecraft/tests/test_generator_v5.py`), que es
 la forma canónica de probar el pipeline. Se le pasa una secuencia de respuestas estructuradas y

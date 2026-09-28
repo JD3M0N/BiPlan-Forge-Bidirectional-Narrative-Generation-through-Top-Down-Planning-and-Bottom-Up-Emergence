@@ -8,6 +8,7 @@ from asg_console.app import ConsoleApp, StagecraftMenu
 from asg_stagecraft import GenerationOptions, StoryGenerator
 from asg_stagecraft.formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
 from asg_stagecraft.runtime import provider as stagecraft_provider_module
+from asg_stagecraft.runtime.config import Settings
 
 
 class MenuSpy:
@@ -21,6 +22,29 @@ class MenuSpy:
 def input_sequence(values):
     iterator = iter(values)
     return lambda prompt="": next(iterator)
+
+
+def console_settings(tmp_path, **changes) -> Settings:
+    """Real settings, so a field the menu or the provider factory reads cannot go missing."""
+    values = {
+        "api_key": "test",
+        "model": "fake",
+        "output_root": tmp_path,
+        "rpm_limit": 10,
+        "rpm_reserve": 2,
+        "tpm_limit": 3000,
+        "max_retries": 4,
+        "max_retry_delay": 30,
+        "request_timeout_ms": 45000,
+        "narrative_guidance": True,
+        "promise_ledger": True,
+        "story_format": StoryFormat.NARRATIVE,
+        "script_method": ScriptMethod.NATIVE,
+        "narrative_voice": NarrativeVoice.OMNISCIENT,
+        "actor_memory": ActorMemory.OWN,
+        "turns_per_beat": 8,
+    }
+    return Settings(**{**values, **changes})
 
 
 def test_main_menu_navigates_both_menus_and_rejects_bad_input() -> None:
@@ -61,28 +85,7 @@ def test_stagecraft_passes_prompt_to_orchestrator(tmp_path, monkeypatch) -> None
     Orchestrator = create_autospec(StoryGenerator, spec_set=True)
     Orchestrator.from_options.side_effect = build_generator
 
-    settings = type(
-        "Settings",
-        (),
-        {
-            "api_key": "test",
-            "model": "fake",
-            "output_root": tmp_path,
-            "rpm_limit": 10,
-            "rpm_reserve": 2,
-            "tpm_limit": 3000,
-            "max_retries": 4,
-            "max_retry_delay": 30,
-            "request_timeout_ms": 45000,
-            "narrative_guidance": True,
-            "promise_ledger": True,
-            "story_format": StoryFormat.NARRATIVE,
-            "script_method": ScriptMethod.NATIVE,
-            "narrative_voice": NarrativeVoice.OMNISCIENT,
-            "actor_memory": ActorMemory.OWN,
-            "turns_per_beat": 8,
-        },
-    )()
+    settings = console_settings(tmp_path)
     monkeypatch.setattr(stagecraft_module, "load_stagecraft_settings", lambda: settings)
     monkeypatch.setattr(stagecraft_provider_module, "GeminiProvider", Provider)
     monkeypatch.setattr(stagecraft_module, "StoryGenerator", Orchestrator)
@@ -117,28 +120,7 @@ def test_stagecraft_accepts_a_script_output_choice(tmp_path, monkeypatch) -> Non
     Orchestrator = create_autospec(StoryGenerator, spec_set=True)
     Orchestrator.from_options.side_effect = build_generator
 
-    settings = type(
-        "Settings",
-        (),
-        {
-            "api_key": "test",
-            "model": "fake",
-            "output_root": tmp_path,
-            "rpm_limit": 10,
-            "rpm_reserve": 2,
-            "tpm_limit": 3000,
-            "max_retries": 4,
-            "max_retry_delay": 30,
-            "request_timeout_ms": 45000,
-            "narrative_guidance": True,
-            "promise_ledger": True,
-            "story_format": StoryFormat.NARRATIVE,
-            "script_method": ScriptMethod.NATIVE,
-            "narrative_voice": NarrativeVoice.OMNISCIENT,
-            "actor_memory": ActorMemory.OWN,
-            "turns_per_beat": 8,
-        },
-    )()
+    settings = console_settings(tmp_path)
     monkeypatch.setattr(stagecraft_module, "load_stagecraft_settings", lambda: settings)
     monkeypatch.setattr(stagecraft_provider_module, "GeminiProvider", Provider)
     monkeypatch.setattr(stagecraft_module, "StoryGenerator", Orchestrator)
@@ -211,24 +193,7 @@ def test_stagecraft_asks_who_a_limited_voice_follows(tmp_path, monkeypatch) -> N
 
     Orchestrator = create_autospec(StoryGenerator, spec_set=True)
     Orchestrator.from_options.side_effect = build_generator
-    settings = SimpleNamespace(
-        api_key="test",
-        model="fake",
-        output_root=tmp_path,
-        rpm_limit=10,
-        rpm_reserve=2,
-        tpm_limit=3000,
-        max_retries=4,
-        max_retry_delay=30,
-        request_timeout_ms=45000,
-        narrative_guidance=True,
-        promise_ledger=True,
-        story_format=StoryFormat.NARRATIVE,
-        script_method=ScriptMethod.NATIVE,
-        narrative_voice=NarrativeVoice.OMNISCIENT,
-        actor_memory=ActorMemory.OWN,
-        turns_per_beat=8,
-    )
+    settings = console_settings(tmp_path)
     monkeypatch.setattr(stagecraft_module, "load_stagecraft_settings", lambda: settings)
     monkeypatch.setattr(stagecraft_provider_module, "GeminiProvider", Provider)
     monkeypatch.setattr(stagecraft_module, "StoryGenerator", Orchestrator)
@@ -242,3 +207,34 @@ def test_stagecraft_asks_who_a_limited_voice_follows(tmp_path, monkeypatch) -> N
     assert options.story_format is StoryFormat.SIMULATED
     assert options.narrative_voice is NarrativeVoice.LIMITED
     assert options.narrator == "Ana"
+
+
+def test_a_simulated_run_announces_the_performance_model(tmp_path, monkeypatch) -> None:
+    captured = {}
+
+    class Provider:
+        def __init__(self, api_key, model, **kwargs):
+            self.model_name = model
+
+    def build_generator(provider, output_root, options):
+        captured["provider"] = provider
+        instance = create_autospec(StoryGenerator, spec_set=True, instance=True)
+        instance.generate.return_value = SimpleNamespace(run_dir=tmp_path)
+        return instance
+
+    Orchestrator = create_autospec(StoryGenerator, spec_set=True)
+    Orchestrator.from_options.side_effect = build_generator
+    settings = console_settings(tmp_path, stage_model="gemini-3.1-flash-lite")
+    monkeypatch.setattr(stagecraft_module, "load_stagecraft_settings", lambda: settings)
+    monkeypatch.setattr(stagecraft_provider_module, "GeminiProvider", Provider)
+    monkeypatch.setattr(stagecraft_module, "StoryGenerator", Orchestrator)
+    messages = []
+    # Output 4 is the simulated story; an empty answer keeps the omniscient voice.
+    menu = StagecraftMenu(
+        input_fn=input_sequence(["1", "Una historia", "4", "", "0"]),
+        output=messages.append,
+    )
+    menu.run()
+    assert "Generando con fake (función: gemini-3.1-flash-lite)..." in messages
+    assert isinstance(captured["provider"], stagecraft_provider_module.RoutedProvider)
+    assert captured["provider"].stage_model_name == "gemini-3.1-flash-lite"

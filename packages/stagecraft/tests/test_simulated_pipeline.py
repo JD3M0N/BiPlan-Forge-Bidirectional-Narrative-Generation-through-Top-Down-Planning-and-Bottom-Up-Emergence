@@ -1,4 +1,6 @@
 import json
+import uuid
+from datetime import UTC, datetime
 
 import pytest
 from asg_stagecraft import StoryGenerator
@@ -11,7 +13,8 @@ from asg_stagecraft.formats import (
     voice_choice,
 )
 from asg_stagecraft.runtime.errors import GeminiDailyQuotaError
-from asg_stagecraft.runtime.provider import current_call_context
+from asg_stagecraft.runtime.provider import RoutedProvider, current_call_context
+from asg_stagecraft.schemas import LLMUsageRecord
 from asg_stagecraft.stage.schemas import NarrationArtifact, PerformanceArtifact
 from asg_stagecraft.tools import recompute
 from stage_fakes import StageFakeProvider
@@ -390,6 +393,71 @@ def test_every_stage_call_is_tagged_with_its_agent(tmp_path) -> None:
     assert all(stage and agent for stage, agent in contexts), contexts
     assert {("performance", "actor"), ("performance", "stage_manager")} <= set(contexts)
     assert ("narration", "narrator") in set(contexts)
+
+
+class RecordingStageProvider(StageFakeProvider):
+    """Record every call the way GeminiProvider does, under this double's own model name."""
+
+    def __init__(self, model_name: str, **kwargs) -> None:
+        super().__init__(story_review=major_story_review(), **kwargs)
+        self.model_name = model_name
+
+    def _record_call(self) -> None:
+        stage, agent = current_call_context()
+        record = LLMUsageRecord(
+            call_id=uuid.uuid4().hex,
+            operation="fake",
+            stage=stage or "fake",
+            agent=agent,
+            attempt=1,
+            status="succeeded",
+            model=self.model_name,
+            timestamp=datetime.now(UTC),
+        )
+        self.usage_records.append(record)
+        if self.usage_callback:
+            self.usage_callback(record)
+
+    def generate_structured(self, **kwargs):
+        self._record_call()
+        return super().generate_structured(**kwargs)
+
+    def generate_text(self, **kwargs):
+        self._record_call()
+        return super().generate_text(**kwargs)
+
+
+PERFORMANCE_SCHEMAS = {"ActorTurnDraft", "BeatDirection", "BeatCheckDraft", "ReflectionDraft"}
+
+
+def test_the_performance_can_run_on_a_model_of_its_own(tmp_path) -> None:
+    """7.4: the actors spend most of a run's calls, so they may draw on another model's quota."""
+    main = RecordingStageProvider("main-model")
+    stage = RecordingStageProvider("stage-model")
+    run, _ = generate(tmp_path, RoutedProvider(main, stage))
+    main_schemas = {name for name, *_ in main.structured_calls}
+    stage_schemas = {name for name, *_ in stage.structured_calls}
+    assert stage_schemas and stage_schemas <= PERFORMANCE_SCHEMAS
+    assert not main_schemas & PERFORMANCE_SCHEMAS
+    # Casting and narration stay on the main model: the narration is the text that is evaluated.
+    assert "CastBibleDraft" in main_schemas
+    assert main.narrator_prompts and not stage.text_calls
+    metadata = read_json(run, "metadata.json")
+    assert metadata["status"] == "completed"
+    assert (metadata["model"], metadata["stage_model"]) == ("main-model", "stage-model")
+    lines = (run.run_dir / "llm_calls.jsonl").read_text(encoding="utf-8").splitlines()
+    calls = [json.loads(line) for line in lines]
+    assert {item["model"] for item in calls if item["stage"] == "performance"} == {"stage-model"}
+    assert {item["model"] for item in calls if item["stage"] != "performance"} == {"main-model"}
+    assert read_json(run, "llm_usage.json")["calls"] == len(calls)
+
+
+def test_a_run_without_a_performance_names_no_performance_model(tmp_path) -> None:
+    routed = RoutedProvider(RecordingStageProvider("main-model"), RecordingStageProvider("other"))
+    run = StoryGenerator(routed, tmp_path).generate(make_request())
+    metadata = read_json(run, "metadata.json")
+    assert (metadata["model"], metadata["stage_model"]) == ("main-model", None)
+    assert routed.stage.structured_calls == []
 
 
 def test_each_actor_records_how_it_left_every_scene(tmp_path) -> None:

@@ -52,6 +52,13 @@ def parser() -> argparse.ArgumentParser:
         help="Modelo de Gemini a utilizar en lugar del configurado en .env",
     )
     result.add_argument(
+        "--stage-model",
+        help=(
+            "Con --format simulated: modelo de Gemini para actores y director de escena en lugar "
+            "de GEMINI_STAGE_MODEL; con su propio cupo diario, deja intacto el del pipeline"
+        ),
+    )
+    result.add_argument(
         "--no-audio",
         action="store_true",
         help="Omite la narración en audio, que domina el tiempo de una tanda de experimentos",
@@ -165,6 +172,12 @@ def read_request(args: argparse.Namespace) -> StoryBrief | str:
     return (args.prompt or input("Describe la historia que quieres generar:\n> ")).strip()
 
 
+def apply_setting_flags(args: argparse.Namespace, settings):
+    """Let --model, --stage-model and --output outrank .env for this run only."""
+    flags = {"model": args.model, "stage_model": args.stage_model, "output_root": args.output}
+    return replace(settings, **{name: value for name, value in flags.items() if value})
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the command-line entry point."""
     use_utf8_output()
@@ -186,10 +199,7 @@ def main(argv: list[str] | None = None) -> int:
         if not prompt:
             print("Error: el prompt no puede estar vacío.", file=sys.stderr)
             return 2
-        if args.model:
-            settings = replace(settings, model=args.model)
-        if args.output:
-            settings = replace(settings, output_root=args.output)
+        settings = apply_setting_flags(args, settings)
         provider = provider_from_settings(settings)
         generator = StoryGenerator.from_options(provider, settings.output_root, options)
 
@@ -201,7 +211,8 @@ def main(argv: list[str] | None = None) -> int:
             """Print one structured pipeline event message."""
             print(event.message, flush=True)
 
-        print(f"\nGenerando con {settings.model}...")
+        simulated = options.story_format is StoryFormat.SIMULATED
+        print(f"\nGenerando con {settings.model_summary(simulated=simulated)}...")
         output = generator.generate(
             prompt,
             on_progress=report_progress,

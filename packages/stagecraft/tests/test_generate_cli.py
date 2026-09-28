@@ -4,7 +4,14 @@ import pytest
 from asg_stagecraft import CastMember, GenerationOptions, StoryBrief
 from asg_stagecraft.formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
 from asg_stagecraft.planning.profiles import NarrativeProfile
-from asg_stagecraft.tools.generate import build_options, main, parser, read_request
+from asg_stagecraft.runtime.config import Settings
+from asg_stagecraft.tools.generate import (
+    apply_setting_flags,
+    build_options,
+    main,
+    parser,
+    read_request,
+)
 
 
 def test_experiment_flags_are_parsed() -> None:
@@ -25,6 +32,18 @@ def test_experiment_flags_are_parsed() -> None:
     assert args.model == "gemini-3.5-pro"
     assert args.output.name == "batch"
     assert args.no_audio is True
+
+
+def test_the_model_flags_outrank_the_settings_for_this_run(tmp_path) -> None:
+    base = Settings(api_key="k", model="gemini-3.5-flash-lite", output_root=tmp_path)
+    args = parser().parse_args(["Escribe una historia", "--stage-model", "gemini-3.1-flash-lite"])
+    changed = apply_setting_flags(args, base)
+    assert (changed.model, changed.stage_model, changed.output_root) == (
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
+        tmp_path,
+    )
+    assert changed.splits_stage and not base.splits_stage
 
 
 def test_unknown_profile_is_rejected() -> None:

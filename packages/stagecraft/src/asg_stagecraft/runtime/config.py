@@ -31,12 +31,51 @@ class Settings:
     narrative_voice: NarrativeVoice = NarrativeVoice.OMNISCIENT
     actor_memory: ActorMemory = ActorMemory.OWN
     turns_per_beat: int = 8
+    # The performance may run on its own model, key and RPM: Gemini counts the free daily quota
+    # per project and per model, and the actors spend most of a simulated run's calls. Empty (or
+    # 0) means the same as the main model, key and RPM, so an unset .env behaves as before 7.4.
+    stage_model: str = ""
+    stage_api_key: str = ""
+    stage_rpm_limit: int = 0
+
+    @property
+    def effective_stage_model(self) -> str:
+        """Return the model the performance runs on, falling back to the main one."""
+        return self.stage_model or self.model
+
+    @property
+    def effective_stage_api_key(self) -> str:
+        """Return the key the performance calls with, falling back to the main one."""
+        return self.stage_api_key or self.api_key
+
+    @property
+    def effective_stage_rpm_limit(self) -> int:
+        """Return the RPM the performance is paced at, falling back to the main one."""
+        return self.stage_rpm_limit or self.rpm_limit
+
+    @property
+    def splits_stage(self) -> bool:
+        """Say whether the performance runs on a model, key or pace of its own."""
+        return (
+            self.effective_stage_model != self.model
+            or self.effective_stage_api_key != self.api_key
+            or self.effective_stage_rpm_limit != self.rpm_limit
+        )
+
+    def model_summary(self, *, simulated: bool) -> str:
+        """Name the model a run uses, and the performance's own when a simulated run has one."""
+        if simulated and self.splits_stage:
+            return f"{self.model} (función: {self.effective_stage_model})"
+        return self.model
 
 
 def _integer(name: str, default: int, *, minimum: int = 0) -> int:
-    """Handle the integer operation for component."""
+    """Read an integer environment setting, treating unset or blank values as the default."""
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
     try:
-        value = int(os.getenv(name, str(default)))
+        value = int(raw)
     except ValueError as exc:
         raise ConfigurationError(f"{name} debe ser un número entero.") from exc
     if value < minimum:
@@ -92,4 +131,7 @@ def load_settings(start: Path | None = None, *, require_api_key: bool = True) ->
         narrative_voice=_choice("ASG_NARRATIVE_VOICE", NarrativeVoice, NarrativeVoice.OMNISCIENT),
         actor_memory=_choice("ASG_ACTOR_MEMORY", ActorMemory, ActorMemory.OWN),
         turns_per_beat=_integer("ASG_STAGE_TURNS_PER_BEAT", 8, minimum=2),
+        stage_model=os.getenv("GEMINI_STAGE_MODEL", "").strip(),
+        stage_api_key=os.getenv("GEMINI_STAGE_API_KEY", "").strip(),
+        stage_rpm_limit=_integer("GEMINI_STAGE_RPM_LIMIT", 0),
     )

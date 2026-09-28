@@ -415,6 +415,13 @@ La escalera de 7.1 añade como mucho una lectura del director y 2 turnos por bea
 tope, y la coda 2 turnos por obra; si los beats caen antes, el coste baja. Los mandos son
 `ASG_STAGE_TURNS_PER_BEAT` y el perfil narrativo.
 
+**El cupo diario es por modelo (7.4).** Gemini cuenta la cuota gratuita por proyecto y por modelo.
+Con `GEMINI_STAGE_MODEL` (recomendado: `gemini-3.1-flash-lite`), la función, unas 85–110 de esas
+llamadas, gasta el cupo de otro modelo y deja el de `GEMINI_MODEL` para el plan, el guion, el
+casting y la narración. Cambiar el modelo de los actores cambia la condición experimental:
+`metadata.json` lo registra en `stage_model`, y dos funciones con actores de modelos distintos no
+se emparejan.
+
 ## Degradación
 
 | Falla | Qué pasa |

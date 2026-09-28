@@ -69,6 +69,61 @@ def test_invalid_script_method_names_the_variable(tmp_path, monkeypatch) -> None
         load_settings(root)
 
 
+STAGE_VARIABLES = ("GEMINI_STAGE_MODEL", "GEMINI_STAGE_API_KEY", "GEMINI_STAGE_RPM_LIMIT")
+
+
+def test_an_unset_performance_model_inherits_the_main_one(tmp_path, monkeypatch) -> None:
+    root = project(tmp_path)
+    monkeypatch.setenv("GEMINI_API_KEY", "secret")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    for name in STAGE_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+    settings = load_settings(root)
+    assert settings.effective_stage_model == "gemini-3.5-flash-lite"
+    assert settings.effective_stage_api_key == "secret"
+    assert settings.effective_stage_rpm_limit == settings.rpm_limit
+    assert not settings.splits_stage
+    assert settings.model_summary(simulated=True) == "gemini-3.5-flash-lite"
+
+
+def test_the_performance_reads_its_own_model_key_and_pace(tmp_path, monkeypatch) -> None:
+    root = project(tmp_path)
+    monkeypatch.setenv("GEMINI_API_KEY", "secret")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    monkeypatch.setenv("GEMINI_STAGE_MODEL", " gemini-3.1-flash-lite ")
+    monkeypatch.setenv("GEMINI_STAGE_API_KEY", "stage-secret")
+    monkeypatch.setenv("GEMINI_STAGE_RPM_LIMIT", "10")
+    settings = load_settings(root)
+    assert settings.effective_stage_model == "gemini-3.1-flash-lite"
+    assert settings.effective_stage_api_key == "stage-secret"
+    assert settings.effective_stage_rpm_limit == 10
+    assert settings.splits_stage
+    assert settings.model_summary(simulated=True) == (
+        "gemini-3.5-flash-lite (función: gemini-3.1-flash-lite)"
+    )
+    # Only a simulated run has a performance, so any other run names the main model alone.
+    assert settings.model_summary(simulated=False) == "gemini-3.5-flash-lite"
+
+
+def test_a_blank_number_keeps_its_default(tmp_path, monkeypatch) -> None:
+    """.env.example leaves GEMINI_STAGE_RPM_LIMIT blank; a copied example must still load."""
+    root = project(tmp_path)
+    monkeypatch.setenv("GEMINI_API_KEY", "secret")
+    monkeypatch.setenv("GEMINI_STAGE_RPM_LIMIT", "")
+    monkeypatch.setenv("GEMINI_RPM_LIMIT", "  ")
+    settings = load_settings(root)
+    assert settings.stage_rpm_limit == 0
+    assert settings.rpm_limit == 15
+
+
+def test_an_invalid_performance_rpm_names_the_variable(tmp_path, monkeypatch) -> None:
+    root = project(tmp_path)
+    monkeypatch.setenv("GEMINI_API_KEY", "secret")
+    monkeypatch.setenv("GEMINI_STAGE_RPM_LIMIT", "many")
+    with pytest.raises(ConfigurationError, match="GEMINI_STAGE_RPM_LIMIT"):
+        load_settings(root)
+
+
 def test_repository_versions_new_runs_to_match_the_installed_package(tmp_path) -> None:
     repository = ArtifactRepository(tmp_path, "model", "Historia")
     metadata = json.loads((repository.run_dir / "metadata.json").read_text(encoding="utf-8"))

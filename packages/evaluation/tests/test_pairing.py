@@ -8,7 +8,7 @@ def write(path, document):
     path.write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
 
 
-def run_73(root, name, *, memory="own", prompt="Una historia", voice="omniscient"):
+def run_73(root, name, *, memory="own", prompt="Una historia", voice="omniscient", metadata=None):
     run = root / name
     options = {
         "story_format": "simulated",
@@ -25,7 +25,10 @@ def run_73(root, name, *, memory="own", prompt="Una historia", voice="omniscient
         "turns_per_beat": 8,
     }
     write(run / "generation_options.json", options)
-    write(run / "metadata.json", {"status": "completed", "pipeline_version": "7.3", "model": "m"})
+    write(
+        run / "metadata.json",
+        {"status": "completed", "pipeline_version": "7.3", "model": "m", **(metadata or {})},
+    )
     write(run / "request.json", {"original_prompt": prompt, "title": "T"})
     write(run / "simulation_metrics.json", {"beats_forced": 1, "repetition_ratio": 0.1})
     (run / "story.md").write_text("# El faro\n\nTexto.", encoding="utf-8")
@@ -79,6 +82,34 @@ def test_an_older_run_rebuilds_its_axes_and_keeps_the_unrecorded_ones_unknown(tm
     pairing = pair_runs([run_72(tmp_path, "old"), run_73(tmp_path, "new")])
     assert "promise_ledger" in pairing.unknown_axes
     assert pairing.differing_axes == []
+
+
+def test_a_performance_without_its_own_model_ran_on_the_main_one(tmp_path) -> None:
+    older = read_run_config(run_72(tmp_path, "old"))
+    newer = read_run_config(run_73(tmp_path, "new"))
+    assert older.axes["stage_model"] == "m"
+    assert newer.axes["stage_model"] == "m"
+
+
+def test_actors_on_another_model_are_never_a_clean_pair(tmp_path) -> None:
+    same = run_73(tmp_path, "a")
+    other = run_73(
+        tmp_path,
+        "b",
+        metadata={"pipeline_version": "7.4", "stage_model": "gemini-3.1-flash-lite"},
+    )
+    pairing = pair_runs([same, other])
+    # The only difference, but a pairing axis: a clean pair needs the same actors' model.
+    assert pairing.differing_axes == ["stage_model"]
+    assert not pairing.clean
+    assert any("actores usan modelos distintos" in item for item in pairing.warnings)
+
+
+def test_a_narrative_run_has_no_performance_model(tmp_path) -> None:
+    run = tmp_path / "prose"
+    write(run / "metadata.json", {"status": "completed", "pipeline_version": "7.4", "model": "m"})
+    write(run / "request.json", {"original_prompt": "Una historia"})
+    assert read_run_config(run).axes["stage_model"] is None
 
 
 def test_a_figure_a_run_never_recorded_is_none_not_zero(tmp_path) -> None:

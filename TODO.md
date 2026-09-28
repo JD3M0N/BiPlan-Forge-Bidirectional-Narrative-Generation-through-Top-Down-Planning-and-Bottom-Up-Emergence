@@ -1,6 +1,6 @@
 # Hoja de ruta
 
-**Estado medido el 2026-09-27 con `asg-stagecraft` 7.3.0 (pipeline 7.3; el corpus llega a 7.2,
+**Estado medido el 2026-09-28 con `asg-stagecraft` 7.4.0 (pipeline 7.4; el corpus llega a 7.2,
 validado en dos runs reales).** La interfaz gráfica StageCraft (`asg-studio`) ya existe. Un solo generador, Stagecraft, con tres formatos: `narrative`, `script` y `simulated`
 (ver [docs/simulacion_escenica.md](docs/simulacion_escenica.md)).
 
@@ -13,7 +13,7 @@ validado en dos runs reales).** La interfaz gráfica StageCraft (`asg-studio`) y
 - **Evaluación humana: casi inexistente.** De 146 `evaluation.json`, uno solo tiene puntuaciones
   reales (`Top-Down/20260831-223547-el-rescate-de-luminaria`). Todo lo demás que se sabe de la
   calidad sale de métricas automáticas o de jueces LLM, y esos jueces aprueban casi todo (TD-1).
-- **Puerta de calidad limpia.** `ruff check`, `ruff format --check` (190 archivos), 704 pruebas
+- **Puerta de calidad limpia.** `ruff check`, `ruff format --check` (190 archivos), 721 pruebas
   pasan y 2 se omiten, y `pip check`. Corren en `.github/workflows/quality.yml` en cada push y
   pull request, y en local con `.\quality.ps1`.
 - **La corrida de control** (`Stories/Stagecraft/20260926-094204-el-secreto-del-faro-de-san-telmo`,
@@ -125,8 +125,15 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   El tope gratuito es diario y por modelo (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`).
   Por el run que lo agotó ronda las 500 peticiones al día, cifra inferida, no confirmada. Una
   matriz simulada de 9 runs no cabe en un día.
+  - Desde 7.4, la función puede gastar el cupo de otro modelo con `GEMINI_STAGE_MODEL`
+    (recomendado `gemini-3.1-flash-lite`, con unas 500 RPD propias según fuentes de septiembre de
+    2026). Así el cupo de `GEMINI_MODEL` queda para plan, guion, casting y narración, unas 15–25
+    llamadas por run.
+  - El RPD real de cada modelo se ve en AI Studio → Rate limits: Google ya no lo publica.
 - **Emparejar.** Mismo prompt del catálogo ([docs/prompts_top_down.md](docs/prompts_top_down.md)),
-  mismo perfil forzado con `--profile` y mismo modelo. Cuando exista MED-5, también el mismo plan.
+  mismo perfil forzado con `--profile` y mismo modelo. En runs simulados, también el mismo modelo
+  de la función (`stage_model`): `pair_runs` no da por limpio un par que lo cambie. Cuando exista
+  MED-5, también el mismo plan.
 - **A ciegas.** Para comparar:
   - `compare-story-runs` sobre `story.md`;
   - `report-story-craft --format prose --group format` para la artesanía;
@@ -1113,6 +1120,16 @@ gratuita · *Depende de:* MED-5, MED-7
 ---
 
 ## Ideas
+
+### La temperatura no llega a `gemini-3.5-flash-lite`
+
+Desde el 21 de julio de 2026, Gemini acepta `temperature`, `top_p` y `top_k` en 3.5 Flash-Lite y
+3.6 Flash, pero los ignora. Google anuncia un 400 en generaciones futuras y pide llevar el control
+a la instrucción de sistema. Así que los cinco perfiles de `_DEFAULT_GENERATION_PROFILES` no hacen
+nada en el modelo principal: el actor no escribe a 0,9 ni el crítico a 0,2. `gemini-3.1-flash-lite`
+sí los respeta, lo que es otra diferencia entre una función con `GEMINI_STAGE_MODEL` y una sin él.
+Decidir si los runs 7.x anteriores a esa fecha se separan de los posteriores, y qué hacer con los
+perfiles antes de que un modelo nuevo los rechace.
 
 ### Caché de contexto en la función
 

@@ -45,7 +45,7 @@ function showStatus(health) {
   text.textContent = health.demo
     ? "Demostración · sin llamadas al modelo"
     : health.key_present
-      ? `${health.model} · Stagecraft ${health.generator_version}`
+      ? `${health.model}${health.stage_model ? ` · función: ${health.stage_model}` : ""} · Stagecraft ${health.generator_version}`
       : "Falta GEMINI_API_KEY en .env";
   status.title = health.key_present
     ? "Lista para generar."

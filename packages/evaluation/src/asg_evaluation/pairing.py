@@ -36,6 +36,7 @@ class Axis:
 AXES: tuple[Axis, ...] = (
     Axis("work", "Obra", pairing=True),
     Axis("model", "Modelo", pairing=True),
+    Axis("stage_model", "Modelo de la función", SIMULATED, pairing=True),
     Axis("narrative_profile", "Perfil", pairing=True),
     Axis("story_format", "Formato"),
     Axis("script_method", "Método del guion", frozenset({"script"})),
@@ -181,6 +182,13 @@ def read_run_config(run_dir: str | Path) -> RunConfig:
     put("narrative_profile", text_field(metadata, "narrative_profile"), "metadata.json")
     put("narrative_profile", text_field(request, "narrative_profile"), "request.json")
     put("story_format", text_field(metadata, "story_format") or "narrative", "metadata.json")
+    # A performance ran on `model` unless metadata names its own (7.4): every earlier run used one.
+    if axes.get("story_format") in SIMULATED:
+        put(
+            "stage_model",
+            text_field(metadata, "stage_model") or text_field(metadata, "model"),
+            "metadata.json",
+        )
     put("script_method", text_field(metadata, "script_method"), "metadata.json")
     put("narrative_voice", text_field(metadata, "narrative_voice"), "metadata.json")
     put("actor_memory", text_field(metadata, "actor_memory"), "metadata.json")
@@ -267,6 +275,10 @@ def _warnings(configs: list[RunConfig], differing: list[str]) -> list[str]:
         warnings.append("Las funciones cuentan obras distintas: no es una comparación emparejada.")
     if "model" in differing:
         warnings.append("Usan modelos distintos: la diferencia puede ser del modelo.")
+    if "stage_model" in differing:
+        warnings.append(
+            "Los actores usan modelos distintos: la diferencia de la función puede ser del modelo."
+        )
     if "narrative_profile" in differing:
         warnings.append("Tienen perfiles narrativos distintos.")
     versions = {config.pipeline_version for config in configs if config.pipeline_version}

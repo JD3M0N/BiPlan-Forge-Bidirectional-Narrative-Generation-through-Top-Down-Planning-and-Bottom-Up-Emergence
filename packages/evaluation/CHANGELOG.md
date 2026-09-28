@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0] - 2026-09-28
+
+- `pairing` gains the `stage_model` axis ("Modelo de la función"), a pairing axis for simulated
+  runs. It reads `metadata.json`'s `stage_model` (Stagecraft 7.4), or `model` when the run names
+  none, since every earlier performance ran on the main model. Runs whose actors used different
+  models are never a clean pair and get their own warning.
+
 ## [0.7.0] - 2026-09-27
 
 - Added `pairing`: `read_run_config` rebuilds every axis a run was asked with, from

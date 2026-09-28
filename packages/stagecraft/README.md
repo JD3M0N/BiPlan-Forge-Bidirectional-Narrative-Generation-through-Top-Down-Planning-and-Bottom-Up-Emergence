@@ -44,7 +44,7 @@ print(run.story_path, run.audio_path)
 `on_progress`, `on_run_created` y `on_event` que usan la consola y Telegram. Devuelve un
 `StoryRun` con `run_dir`, `story_format` y las rutas `story_path`, `audio_path`, `script_path`,
 `performance_path` y `narration_path`. `StoryRun` solo abre runs terminados de una versión de
-pipeline soportada (`SUPPORTED_PIPELINE_VERSIONS`: de 5.0 a 7.1).
+pipeline soportada (`SUPPORTED_PIPELINE_VERSIONS`: de 5.0 a 7.4).
 
 El resto de opciones de la fachada (`narrative_profile`, `promise_ledger`, `audio`,
 `script_method`, `narrative_voice`, `actor_memory`, `turns_per_beat`) tienen su opción en

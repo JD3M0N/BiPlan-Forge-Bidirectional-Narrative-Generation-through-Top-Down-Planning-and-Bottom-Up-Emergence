@@ -17,7 +17,8 @@ asg-studio                                      # abre http://127.0.0.1:8765/
 | `--host H` | Escucha en otra dirección. Fuera de `127.0.0.1`, cualquiera en la red podría gastar tu cuota: el comando lo avisa. |
 
 Generar necesita `GEMINI_API_KEY` en el `.env` de la raíz; sin ella la interfaz abre igual, lo
-indica en la cabecera y deja explorar y comparar las funciones guardadas.
+indica en la cabecera y deja explorar y comparar las funciones guardadas. Si la función
+simulada tiene modelo propio (`GEMINI_STAGE_MODEL`), la cabecera lo muestra junto al principal.
 
 ## Las tres vistas
 
