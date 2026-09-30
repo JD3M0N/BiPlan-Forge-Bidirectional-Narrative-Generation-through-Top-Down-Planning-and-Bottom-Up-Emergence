@@ -195,6 +195,17 @@ def _simulation_group() -> dict:
                 "choices": memories,
             },
             {
+                "key": "simulation_mode",
+                "kind": "choice",
+                "label": _title("simulation_mode"),
+                "help": _help("simulation_mode"),
+                "status": "available",
+                "choices": [
+                    {"value": "fixed", "label": "Hitos fijos"},
+                    {"value": "adaptive", "label": "Hitos adaptables"},
+                ],
+            },
+            {
                 "key": "turns_per_beat",
                 "kind": "integer",
                 "label": _title("turns_per_beat"),

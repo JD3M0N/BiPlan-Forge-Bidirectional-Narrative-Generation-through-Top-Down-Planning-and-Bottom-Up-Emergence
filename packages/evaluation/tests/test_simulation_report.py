@@ -140,3 +140,35 @@ def test_an_unmeasured_figure_is_an_empty_csv_cell(tmp_path) -> None:
     cells = dict(zip(header.split(","), row.split(","), strict=True))
     assert cells["compression_ratio"] == ""
     assert cells["beats_forced"] == "2.0"
+
+
+def test_partial_performance_is_reported_without_inventing_final_metrics(tmp_path) -> None:
+    root = tmp_path / "Stories" / "Stagecraft"
+    run = write_run(root, "interrumpida")
+    (run / "simulation_metrics.json").unlink()
+    metadata = json.loads((run / "metadata.json").read_text(encoding="utf-8"))
+    metadata["status"] = "failed"
+    (run / "metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
+    stage = run / "stage" / "chapter-1-scene-1"
+    stage.mkdir(parents=True)
+    (stage / "turns.jsonl").write_text(
+        json.dumps(
+            {
+                "id": "turn-1",
+                "kind": "actor",
+                "actor_id": "ana",
+                "addressed_to": ["bruno"],
+                "retrieved_memory_ids": ["ana-m1"],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    records = collect_simulations(tmp_path / "Stories")
+    assert len(records) == 1
+    assert records[0].status == "failed"
+    assert records[0].values["logged_turns"] == 1
+    assert records[0].values["beats_forced"] is None
+    assert records[0].values["logged_attempts"] is None
+    assert records[0].values["logged_contexts"] is None
+    assert records[0].values["context_coverage"] is None

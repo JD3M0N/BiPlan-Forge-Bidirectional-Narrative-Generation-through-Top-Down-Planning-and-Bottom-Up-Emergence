@@ -8,6 +8,7 @@ assert that two identical runs produce identical logs.
 
 from __future__ import annotations
 
+import json
 import re
 
 from asg_stagecraft.runtime.errors import GeminiDailyQuotaError
@@ -18,10 +19,15 @@ from asg_stagecraft.stage.schemas import (
     BeatCheckDraft,
     BeatDirection,
     CastBibleDraft,
+    FutureConflict,
+    FutureRevision,
     KnowledgeGate,
     OutcomePart,
+    PromiseStoryAuditDraft,
+    PromiseStoryCheck,
     ReflectionDraft,
     RelationshipState,
+    RevisedScene,
 )
 from test_generator_v5 import FakeProvider
 
@@ -129,6 +135,27 @@ class StageFakeProvider(FakeProvider):
         if schema is BeatCheckDraft:
             self.structured_calls.append((schema.__name__, system_instruction, prompt))
             return self._check(system_instruction, prompt)
+        if schema is FutureConflict:
+            self.structured_calls.append((schema.__name__, system_instruction, prompt))
+            return FutureConflict()
+        if schema is PromiseStoryAuditDraft:
+            self.structured_calls.append((schema.__name__, system_instruction, prompt))
+            ledger = json.loads(prompt.split("LEDGER:\n", 1)[1].split("\n\nPERFORMED TURNS:", 1)[0])
+            return PromiseStoryAuditDraft(
+                checks=[
+                    PromiseStoryCheck(
+                        promise_id=item["id"], opened=False, progressed=False, paid=False
+                    )
+                    for item in ledger["promises"]
+                ]
+            )
+        if schema is FutureRevision:
+            self.structured_calls.append((schema.__name__, system_instruction, prompt))
+            remaining = json.loads(prompt)["remaining"]
+            return FutureRevision(
+                reason="Los personajes dejaron el hito abierto.",
+                scenes=[RevisedScene(scene_id=item["scene_id"], keep=False) for item in remaining],
+            )
         if schema is ReflectionDraft:
             self.structured_calls.append((schema.__name__, system_instruction, prompt))
             return self._reflection(prompt)

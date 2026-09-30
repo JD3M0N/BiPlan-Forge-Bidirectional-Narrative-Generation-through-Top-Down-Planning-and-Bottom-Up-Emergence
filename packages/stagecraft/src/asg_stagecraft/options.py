@@ -17,7 +17,14 @@ from typing import Any
 from asg_core import NARRATION_VOICE_NAMES
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat, voice_choice
+from .formats import (
+    ActorMemory,
+    NarrativeVoice,
+    ScriptMethod,
+    SimulationMode,
+    StoryFormat,
+    voice_choice,
+)
 from .planning.profiles import NarrativeProfile
 
 # The label an interface shows for turns_per_beat's upper bound. The field itself has no ``le``,
@@ -92,6 +99,11 @@ class GenerationOptions(BaseModel):
         default=ActorMemory.OWN,
         title="Memoria de los actores",
         description="Qué recuerda cada personaje de lo que ocurrió en escena.",
+    )
+    simulation_mode: SimulationMode = Field(
+        default=SimulationMode.FIXED,
+        title="Modo de simulaci?n",
+        description="Fijo conserva los hitos; adaptable permite cambiar los pendientes.",
     )
     turns_per_beat: int = Field(
         default=8,

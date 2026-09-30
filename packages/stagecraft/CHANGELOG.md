@@ -1,5 +1,32 @@
 # Historial de cambios
 
+## 7.5.1
+
+Tras dos funciones Gemini emparejadas se conservan las cláusulas que faltan
+en beats no logrados, las propuestas originales de revisión y el juicio
+original del auditor de promesas. Una revisión puede cambiar objetivos de
+solo algunos actores; los demás retienen los suyos. Los estados emocionales
+iniciales y finales se piden en el idioma de la ficción. La validación
+real y sus límites están en
+[validacion_asg_hibrido_7_5.md](../../docs/validacion_asg_hibrido_7_5.md).
+
+## 7.5.0
+
+La función puede conservar los hitos (`fixed`) o revisar escenas pendientes (`adaptive`) cuando
+los actores frustran uno. La revisión solo cambia escenas futuras, con reparto, eventos y orden
+validados; si falla, el desenlace queda abierto. `generation_options.json` guarda el modo.
+
+- `performance.json` sube al contrato 3: registra modo, cláusulas pendientes y pruebas con
+  fragmento y procedencia. `director.jsonl` conserva la decisión y sus citas.
+- La función guarda intentos, contextos del director, reflexiones, memoria incremental y un
+  checkpoint por escena. `llm_calls.jsonl` vincula cada llamada con `decision_id`.
+- `report-simulations --all-status` incluye funciones interrumpidas que dejaron turnos;
+  `--cost-csv` exporta coste por agente y modelo.
+- El narrador solo recibe la actuación y la premisa estable. Los susurros sin destinatario se
+  reparan antes de incorporarse al log.
+- `--plan-from <run>` vuelve a representar un plan, guion y reparto congelados; `source_run.json` registra sus hashes.
+- `PIPELINE_VERSION` pasa a 7.5; las versiones anteriores siguen siendo legibles.
+
 ## 7.4.0
 
 La función simulada puede ir con un modelo propio. Gemini cuenta la cuota gratuita diaria por

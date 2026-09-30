@@ -24,6 +24,7 @@ from asg_core import (
     stories_path,
 )
 from asg_core import audio as audio_module
+from asg_core import files as files_module
 
 
 def test_find_project_root_and_story_path(tmp_path):
@@ -81,6 +82,26 @@ def test_slugify_uses_ascii_and_fallback():
 def test_a_truncated_slug_never_ends_in_a_dash():
     """Cutting to the maximum after removing dashes could leave one at the end."""
     assert slugify("a" * 59 + " bc") == "a" * 59
+
+
+def test_atomic_writer_retries_a_transient_windows_lock(tmp_path, monkeypatch):
+    """A brief indexer lock does not discard an otherwise complete artifact."""
+    if os.name != "nt":
+        pytest.skip("Windows replacement lock")
+    original = files_module.os.replace
+    calls = 0
+
+    def briefly_locked(source, destination):
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            raise PermissionError("temporary lock")
+        return original(source, destination)
+
+    monkeypatch.setattr(files_module.os, "replace", briefly_locked)
+    path = atomic_write_text(tmp_path / "note.txt", "ready")
+    assert calls == 3
+    assert path.read_text(encoding="utf-8") == "ready"
 
 
 def test_atomic_writers_replace_complete_files(tmp_path):

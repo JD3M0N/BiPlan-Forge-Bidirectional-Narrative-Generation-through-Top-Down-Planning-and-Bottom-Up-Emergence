@@ -1,5 +1,31 @@
 # La función simulada: los personajes actúan el guion y la historia se narra del log
 
+## Estado de 7.5: control fijo y modo adaptable
+
+`--simulation-mode fixed` conserva el comportamiento de control. Con
+`--simulation-mode adaptive`, un hito no representado queda pendiente: al cerrar la
+escena el director puede revisar solo las escenas futuras. El motor mantiene el
+prefijo actuado, la identidad del reparto, el presupuesto original y las dependencias
+entre eventos. Se permite una propuesta y una reparación por frontera; si ninguna
+valida, la función termina abierta y registra el diagnóstico. El plan, guion y
+ledger originales siguen guardados sin cambios; `active_plan/` contiene las revisiones.
+
+La evidencia se escribe durante la actuación: `stage/<escena>/attempts.jsonl`
+conserva solicitudes, rechazos y aceptaciones; `director_requests.jsonl` y
+`director.jsonl` conservan la lectura de cada hito; `reflections.jsonl`,
+`memory/<personaje>/records.jsonl` y los checkpoints de escena permiten examinar
+una interrupción sin presentarla como función completa. Cada prueba de un hito
+indica cláusula, turno, fragmento y si procede de acción, declaración
+o evento del mundo. La relación semántica entre fragmento y cláusula sigue
+siendo un juicio del director, no una verdad verificada por el motor.
+
+`report-simulations --all-status --group mode` incluye ejecuciones parciales y
+distingue datos ausentes de cero. `--cost-csv` exporta coste por etapa, agente y
+modelo. No hay reanudación automática de llamadas ni comparación real
+`fixed`/`adaptive` en el corpus 7.5. `--plan-from <run>` ya permite repetir
+una función con el mismo plan, guion y casting; `source_run.json` registra
+los hashes de origen. La matriz real requiere un presupuesto explícito.
+
 El formato `simulated` es la mitad Bottom-Up del pipeline híbrido. El plan y el guion deciden
 **qué tiene que pasar**; la función decide **cómo pasa**, y la historia final se escribe a partir
 del registro de lo que pasó de verdad, no de lo que estaba previsto.

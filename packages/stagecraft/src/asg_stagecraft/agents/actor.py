@@ -58,7 +58,9 @@ class ActorAgent(Agent[ActorTurnDraft]):
                 f"{scene_log}\n\n"
                 f"Escribe en primera persona y en {language}: que has hecho y que te ha pasado, "
                 "que crees ahora que antes no creias, y como te has quedado con cada uno de los "
-                "que estaban ahi. Cuenta solo lo que tu has vivido o te han dicho en esta escena."
+                "que estaban ahi. Declara tu objetivo, compromiso, version que sostienes y que "
+                "te haria reconsiderar. Cuenta solo lo que tu has vivido o te han dicho "
+                "en esta escena."
             ),
             schema=ReflectionDraft,
             profile="planning",

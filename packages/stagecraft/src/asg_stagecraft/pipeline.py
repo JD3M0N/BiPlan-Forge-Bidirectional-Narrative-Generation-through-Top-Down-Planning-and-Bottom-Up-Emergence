@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
@@ -52,6 +54,7 @@ from .schemas import (
     CharactersArtifact,
     LLMUsageArtifact,
     NarrativeBlueprint,
+    PlayScript,
     PlotEvent,
     PromiseAuditArtifact,
     PromiseAuditEntry,
@@ -69,7 +72,9 @@ from .schemas import (
 )
 from .script.render import render_script
 from .script.stages import ScriptStagesMixin
+from .stage.schemas import CastBible
 from .stage.stages import SimulationStagesMixin
+from .version import SUPPORTED_PIPELINE_VERSIONS
 from .writing.acceptance import writer_candidate_issue, writer_fallback_warning
 from .writing.assembly import assemble_story
 from .writing.audit import story_metrics, word_count
@@ -296,6 +301,78 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
         except BaseException as exc:
             # KeyboardInterrupt and SystemExit are not Exception, so without this branch an
             # abandoned run kept status "running" forever and StoryRun refused to open it.
+            self._record_interruption(exc)
+            raise
+        finally:
+            self._clear_provider_callbacks()
+
+    def execute_from_plan(self, source_run: Path) -> Path:
+        """Perform a new run from the source's frozen request, plan, script and cast."""
+        if not self._simulated:
+            raise ValueError("plan reuse requires the simulated story format")
+        source = Path(source_run)
+        metadata = json.loads((source / "metadata.json").read_text(encoding="utf-8"))
+        if (
+            metadata.get("status") != "completed"
+            or metadata.get("story_format") != StoryFormat.SIMULATED.value
+            or metadata.get("pipeline_version") not in SUPPORTED_PIPELINE_VERSIONS
+        ):
+            raise ValueError("plan source must be a completed compatible simulated run")
+        frozen_types = {
+            "request.json": StoryRequest,
+            "world.json": WorldArtifact,
+            "characters.json": CharactersArtifact,
+            "story_plan.json": StoryPlan,
+            "script.json": PlayScript,
+            "cast_bible.json": CastBible,
+        }
+        raw = {name: (source / name).read_bytes() for name in frozen_types}
+        frozen = {
+            name: model.model_validate_json(raw[name]) for name, model in frozen_types.items()
+        }
+        request = frozen["request.json"]
+        world = frozen["world.json"]
+        characters = frozen["characters.json"]
+        plan = frozen["story_plan.json"]
+        play = frozen["script.json"]
+        bible = frozen["cast_bible.json"]
+        validate_story_plan(plan, world, characters)
+        ledger_path = source / "promise_ledger.json"
+        ledger = (
+            PromiseLedger.model_validate_json(ledger_path.read_bytes())
+            if ledger_path.is_file()
+            else None
+        )
+        self.usage_start = len(getattr(self.provider, "usage_records", []))
+        self.repository = self._create_repository(request.title)
+        try:
+            self._configure_provider_callbacks()
+            self.repository.save_data(
+                "source_run.json",
+                {
+                    "run_id": metadata["run_id"],
+                    "frozen_sha256": {
+                        name: hashlib.sha256(content).hexdigest() for name, content in raw.items()
+                    },
+                },
+            )
+            for name, artifact in frozen.items():
+                self.repository.save_json(name, artifact)
+            if ledger is not None:
+                self.repository.save_json("promise_ledger.json", ledger)
+            for name in ("script_presentation.json", "script_promise_audit.json"):
+                path = source / name
+                if path.is_file():
+                    self.repository.save_data(name, json.loads(path.read_text(encoding="utf-8")))
+            self.repository.metadata.narrative_profile = request.narrative_profile
+            for stage in ("analysis", "world", "characters", "planning", "drafting", "casting"):
+                self.repository.complete_stage(stage)
+            self._perform_and_narrate(request, world, characters, plan, play, ledger, bible)
+            return self.repository.run_dir
+        except Exception as exc:
+            self._record_failure(exc)
+            raise
+        except BaseException as exc:
             self._record_interruption(exc)
             raise
         finally:

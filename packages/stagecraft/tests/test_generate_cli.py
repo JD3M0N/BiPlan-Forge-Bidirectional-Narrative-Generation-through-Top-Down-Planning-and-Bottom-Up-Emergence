@@ -138,3 +138,11 @@ def test_a_brief_file_is_read_as_the_request(tmp_path) -> None:
 def test_a_prompt_and_a_brief_together_are_refused(tmp_path, capsys) -> None:
     assert main(["Una historia", "--brief", str(tmp_path / "brief.json")]) == 2
     assert "--brief" in capsys.readouterr().err
+
+
+def test_plan_from_selects_simulation_without_prompting() -> None:
+    args = parser().parse_args(["--plan-from", "Stories/original", "--simulation-mode", "adaptive"])
+    options = build_options(args, settings())
+    assert read_request(args) == ""
+    assert options.story_format is StoryFormat.SIMULATED
+    assert options.simulation_mode.value == "adaptive"

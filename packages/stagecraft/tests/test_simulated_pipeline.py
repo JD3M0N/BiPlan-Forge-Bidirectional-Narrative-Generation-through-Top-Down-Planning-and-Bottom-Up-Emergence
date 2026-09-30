@@ -9,6 +9,7 @@ from asg_stagecraft.formats import (
     ActorMemory,
     NarrativeVoice,
     ScriptMethod,
+    SimulationMode,
     StoryFormat,
     voice_choice,
 )
@@ -59,6 +60,9 @@ def test_simulated_run_writes_every_artifact_and_completes(tmp_path) -> None:
         assert (run.run_dir / name).is_file(), name
     assert run.performance_path.is_file()
     assert run.narration_path.is_file()
+    assert read_json(run, "promise_audit.json")["source"] == "performance"
+    assert (run.run_dir / "script_promise_audit.json").is_file()
+    assert (run.run_dir / "stage/promise_audit_draft.json").is_file()
     completed = metadata["completed_stages"]
     assert completed == sorted(completed, key=pipeline_module.CHECKPOINT_STAGES.index)
     for stage in ("casting", "performance", "narration", "story"):
@@ -292,7 +296,7 @@ def test_every_director_call_lands_in_director_jsonl(tmp_path) -> None:
 def test_the_last_scene_of_the_play_ends_in_a_coda(tmp_path) -> None:
     run, _ = generate(tmp_path)
     performance = PerformanceArtifact.model_validate(read_json(run, "performance.json"))
-    assert performance.contract_version == "2"
+    assert performance.contract_version == "3"
     assert performance.scenes[-1].coda_turns > 0
     assert all(scene.coda_turns == 0 for scene in performance.scenes[:-1])
     assert read_json(run, "simulation_metrics.json")["coda_turns"] == (
@@ -559,3 +563,47 @@ def test_script_runs_are_unaffected_by_the_simulation_stages(tmp_path) -> None:
         assert not (run.run_dir / name).exists(), name
     for stage in ("casting", "performance", "narration"):
         assert stage not in metadata["completed_stages"]
+
+
+def test_adaptive_run_can_end_open_when_actors_refuse_a_beat(tmp_path) -> None:
+    provider = StageFakeProvider(story_review=major_story_review(), beat_never_achieved=True)
+    run, _ = generate(tmp_path, provider, simulation_mode=SimulationMode.ADAPTIVE, turns_per_beat=2)
+    performance = read_json(run, "performance.json")
+    assert performance["settings"]["simulation_mode"] == "adaptive"
+    assert len(performance["scenes"]) == 1
+    assert not performance["scenes"][0]["beats"][0]["achieved"]
+    assert not performance["scenes"][0]["beats"][0]["forced"]
+    assert list(run.run_dir.glob("active_plan/revision-*.json"))
+    revision_logs = list(run.run_dir.glob("active_plan/revision-*-attempts.jsonl"))
+    assert revision_logs
+    statuses = [
+        json.loads(line)["status"]
+        for line in revision_logs[0].read_text(encoding="utf-8").splitlines()
+    ]
+    assert statuses == ["requested", "proposed", "accepted"]
+    assert not list(run.run_dir.glob("stage/*/checkpoint.json")) == []
+    assert read_json(run, "story_metrics.json")["events"] == 0
+
+
+def test_a_new_performance_reuses_the_exact_plan_script_and_cast(tmp_path) -> None:
+    """Paired modes can share the same initial causes and actor dossiers."""
+    original, _ = generate(tmp_path, audio=False)
+    replay = StoryGenerator(
+        StageFakeProvider(story_review=major_story_review()),
+        tmp_path,
+        story_format=StoryFormat.SIMULATED,
+        simulation_mode=SimulationMode.ADAPTIVE,
+        audio=False,
+    ).generate_from_plan(original.run_dir)
+    assert read_json(replay, "metadata.json")["status"] == "completed"
+    assert read_json(replay, "source_run.json")["run_id"] == original.run_dir.name
+    for name in (
+        "request.json",
+        "world.json",
+        "characters.json",
+        "story_plan.json",
+        "script.json",
+        "cast_bible.json",
+    ):
+        assert (replay.run_dir / name).read_bytes() == (original.run_dir / name).read_bytes()
+    assert read_json(replay, "performance.json")["settings"]["simulation_mode"] == "adaptive"

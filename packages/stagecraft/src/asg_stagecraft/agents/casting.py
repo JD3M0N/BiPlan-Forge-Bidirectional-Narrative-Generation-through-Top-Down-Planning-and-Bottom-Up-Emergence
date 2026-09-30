@@ -53,9 +53,9 @@ class CastingDirectorAgent(Agent[CastBibleDraft]):
                 "something new. Asymmetry is the point: a cast that all know the same things has "
                 "no scenes to play. Antagonists get the same care as protagonists; write what "
                 "they want and why it is worth wanting, never a label for how bad they are. "
-                "Use only the character IDs listed. Write public_face, initial_knowledge and "
-                f"every gate fact in {request.language}, because they reach the actors as "
-                "memories; write every other field in English."
+                "Use only the character IDs listed. Write public_face, initial_knowledge, "
+                f"initial_emotion, initial_goal and every gate fact in {request.language}, "
+                "because they reach the actors directly; write other dossier fields in English."
             ),
             prompt=(
                 f"{story_specification_header(request)}"

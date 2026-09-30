@@ -1,15 +1,15 @@
 # Hoja de ruta
 
-**Estado medido el 2026-09-28 con `asg-stagecraft` 7.4.0 (pipeline 7.4; el corpus llega a 7.2,
-validado en dos runs reales).** La interfaz gráfica StageCraft (`asg-studio`) ya existe. Un solo generador, Stagecraft, con tres formatos: `narrative`, `script` y `simulated`
+**Estado medido el 2026-09-30 con `asg-stagecraft` 7.5.1 (pipeline 7.5; dos funciones reales completadas en 7.5).** La interfaz gráfica StageCraft (`asg-studio`) ya existe. Un solo generador, Stagecraft, con tres formatos: `narrative`, `script` y `simulated`
 (ver [docs/simulacion_escenica.md](docs/simulacion_escenica.md)).
 
 | Corpus | Runs | Completados | Fallidos | Qué es |
 |---|---|---|---|---|
-| `Stories/Stagecraft/` | 10 | 7 | 3 | 7.0–7.2: ocho simulados y una corrida narrativa de control |
+| `Stories/Stagecraft/` | 14 | 10 | 4 | 7.0–7.5: trece simulados y una corrida narrativa de control |
 | `Stories/Top-Down/` | 176 | 135 | 41 | 4.0–6.2, anteriores al renombrado; 18 sin versión |
 | `Stories/Bottom-Up/` | 6 | — | — | el escape room retirado en 7.1.1, más tres lotes de CSV |
 
+- **Validación real 7.5:** dos funciones `fixed`/`adaptive` desde el mismo plan congelado; ver [docs/validacion_asg_hibrido_7_5.md](docs/validacion_asg_hibrido_7_5.md). La revisión adaptativa falló con Gemini y se corrigieron sus objetivos parciales después del experimento.
 - **Evaluación humana: casi inexistente.** De 146 `evaluation.json`, uno solo tiene puntuaciones
   reales (`Top-Down/20260831-223547-el-rescate-de-luminaria`). Todo lo demás que se sabe de la
   calidad sale de métricas automáticas o de jueces LLM, y esos jueces aprueban casi todo (TD-1).
@@ -519,6 +519,8 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
 - **Ojo.** El run de origen tiene que ser de una versión que el código aún lea
   (`SUPPORTED_PIPELINE_VERSIONS`).
 
+
+**Avance 7.5:** `--plan-from` ya empareja funciones simuladas con el mismo plan, guion y casting; queda extenderlo a formatos distintos y agrupar por origen en los informes.
 ### SIM-4 · Los timeouts de actor se comen entre un cuarto y dos tercios del reloj
 
 *Área:* función simulada · *Cuota:* ~110 llamadas · *Depende de:* MED-2

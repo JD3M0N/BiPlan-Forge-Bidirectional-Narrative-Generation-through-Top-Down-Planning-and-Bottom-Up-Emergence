@@ -20,7 +20,7 @@ from .simulation_report import (
 )
 from .text import count_noun, format_number
 
-SUMMARY_AXES = ("voice", "memory", "profile", "version", "voice-memory")
+SUMMARY_AXES = ("voice", "memory", "profile", "version", "voice-memory", "mode")
 # Fields that read as a proportion get more decimals; the rest are counts or averages.
 RATIO_FIELDS = frozenset(
     {
@@ -32,6 +32,7 @@ RATIO_FIELDS = frozenset(
         "script_echo",
         "compression_ratio",
         "dialogue_survival",
+        "context_coverage",
     }
 )
 
@@ -48,6 +49,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument(
         "--csv",
         help="Escribe una fila por función en este archivo CSV",
+    )
+    result.add_argument(
+        "--cost-csv",
+        help="Escribe coste por run, etapa, agente y modelo en un CSV independiente",
     )
     result.add_argument(
         "--group",
@@ -109,6 +114,19 @@ def main(argv: list[str] | None = None) -> int:
         destination = Path(args.csv)
         write_csv(destination, selected)
         print(f"CSV escrito en {destination}")
+    if args.cost_csv:
+        destination = Path(args.cost_csv)
+        columns = ("run_id", "stage", "agent", "model", "calls", "tokens", "latency_seconds")
+        atomic_write_csv(
+            destination,
+            columns,
+            (
+                [record.run_id, *[cost[name] for name in columns[1:]]]
+                for record in selected
+                for cost in record.costs
+            ),
+        )
+        print(f"CSV de costes escrito en {destination}")
 
     axes = SUMMARY_AXES if args.group == "all" else (args.group,)
     for axis in axes:

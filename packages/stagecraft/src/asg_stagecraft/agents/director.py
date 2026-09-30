@@ -13,7 +13,7 @@ itself does, visibly, on stage - so the log stays the only source of what happen
 beat is still a beat that was performed rather than asserted.
 """
 
-from ..stage.schemas import BeatCheckDraft, BeatDirection
+from ..stage.schemas import BeatCheckDraft, BeatDirection, FutureConflict, FutureRevision
 from .base import Agent
 
 _DIRECTION_RULES = (
@@ -94,12 +94,51 @@ class StageManagerAgent(Agent[BeatDirection]):
                 "shown only if an audience watching this scene would have seen it happen, and "
                 "then cite the turn IDs that show it. Judge what was played, not what was meant. "
                 "A clause that describes a situation rather than an action is shown as soon as "
-                f"the situation is established on stage. {_DIRECTION_RULES}"
+                "the situation is established on stage. Include each required revelation as "
+                "its own exact clause, citing a visible turn that supports its stated method. "
+                "Record an established world fact only when a cited action or world turn shows "
+                "it directly. A spoken claim, intention or thought is not a world fact. "
+                f"{_DIRECTION_RULES}"
                 f"{_MODE_CLAUSES[mode].format(language=language)}"
             ),
             prompt=context,
             schema=BeatCheckDraft,
             profile="review",
+        )
+
+    def future_conflict(self, context: str) -> FutureConflict:
+        """Identify future events made impossible by witnessed, accepted actions."""
+        return self.provider.generate_structured(
+            system_instruction=(
+                "Compare the performed transcript with the remaining events. Report only a "
+                "direct contradiction caused by a witnessed action or world event, with the "
+                "exact future event IDs and turn IDs as evidence. A character's claim, plan, "
+                "thought or lie is not an established fact. Return empty lists if no future "
+                "event is made impossible."
+            ),
+            prompt=context,
+            schema=FutureConflict,
+            profile="review",
+        )
+
+    def revise_future(self, context: str, language: str) -> FutureRevision:
+        """Revise unperformed scenes after the actors have changed the story's course."""
+        return self.provider.generate_structured(
+            system_instruction=(
+                "You revise only the listed future scenes of an improvised play. Keep every "
+                "scene ID, order, location and cast fixed. Return each remaining scene once, "
+                "either kept with revised outcomes and changed actor objectives or omitted. Kept "
+                "scenes must retain the same event IDs and order, and may omit events; never "
+                "add an event. Preserve the user's premise, explicit constraints and world "
+                "rules. Treat the performed transcript as irreversible history. Do not force "
+                "an originally planned ending when it no longer follows. Write new scene "
+                f"settings and changed objectives in {language}. Omit unchanged objectives. "
+                "Actors will see only their own "
+                "circumstances and objectives, never this revision."
+            ),
+            prompt=context,
+            schema=FutureRevision,
+            profile="planning",
         )
 
     def run(self, context: str, language: str) -> BeatDirection:

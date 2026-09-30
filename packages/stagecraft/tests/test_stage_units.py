@@ -232,10 +232,13 @@ def test_an_action_that_is_only_the_name_survives() -> None:
     assert clean.action == "Ana"
 
 
-def test_a_whisper_with_nobody_to_hear_it_becomes_public() -> None:
+def test_a_whisper_without_a_recipient_is_rejected_without_becoming_public() -> None:
     draft = act(speech="Algo.", visibility="whisper", addressed_to=["fantasma"])
     clean = normalize_turn(draft, on_stage=["ana"])
-    assert clean.visibility == "public"
+    assert clean.visibility == "whisper"
+    with pytest.raises(TurnIssue) as error:
+        validate_turn(clean, previous_speech=[])
+    assert error.value.code == "INVALID_WHISPER"
 
 
 def test_an_actor_can_address_someone_by_the_name_it_sees() -> None:

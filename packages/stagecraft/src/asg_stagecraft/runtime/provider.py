@@ -68,6 +68,17 @@ COUNT_TOKENS_OPERATION = "count_tokens"
 # the provider reads it when recording, so the cost of a run can be split by stage and agent
 # without the provider knowing either. Unset, records fall back to the operation, as before 7.2.
 _CALL_CONTEXT: ContextVar[tuple[str, str]] = ContextVar("llm_call_context", default=("", ""))
+_DECISION_CONTEXT: ContextVar[str] = ContextVar("stage_decision_context", default="")
+
+
+@contextmanager
+def decision_context(decision_id: str) -> Iterator[None]:
+    """Link one stage decision with all provider attempts it causes."""
+    token = _DECISION_CONTEXT.set(decision_id)
+    try:
+        yield
+    finally:
+        _DECISION_CONTEXT.reset(token)
 
 
 @contextmanager
@@ -315,6 +326,7 @@ class GeminiProvider:
         self._emit_record(
             LLMUsageRecord(
                 call_id=uuid.uuid4().hex,
+                decision_id=_DECISION_CONTEXT.get(),
                 operation=operation,
                 stage=stage or operation,
                 agent=agent,
@@ -346,6 +358,7 @@ class GeminiProvider:
         stage, agent = current_call_context()
         record = LLMUsageRecord(
             call_id=call_id,
+            decision_id=_DECISION_CONTEXT.get(),
             operation=operation,
             stage=stage or operation,
             agent=agent,
@@ -378,6 +391,7 @@ class GeminiProvider:
         self._emit_record(
             LLMUsageRecord(
                 call_id=call_id,
+                decision_id=_DECISION_CONTEXT.get(),
                 operation=operation,
                 stage=stage or operation,
                 agent=agent,

@@ -378,11 +378,13 @@ class PromiseAuditEntry(BaseModel):
     progressed: bool
     paid: bool
     evidence: str = ""
+    supporting_turn_ids: list[str] = Field(default_factory=list)
 
 
 class PromiseAuditArtifact(BaseModel):
     """Observed promise fulfillment for one run, never a target handed to any agent."""
 
+    source: Literal["script", "performance"] = "script"
     promises: int = Field(default=0, ge=0)
     fulfilled: int = Field(default=0, ge=0)
     weak: int = Field(default=0, ge=0)
@@ -791,6 +793,7 @@ class LLMUsageRecord(BaseModel):
     """
 
     call_id: str
+    decision_id: str = ""
     operation: str
     stage: str
     agent: str = ""

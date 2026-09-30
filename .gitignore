@@ -17,5 +17,6 @@ docs/*
 !docs/promesas_ppp.md
 !docs/prompts_top_down.md
 !docs/simulacion_escenica.md
+!docs/validacion_asg_hibrido_7_5.md
 .cache/
 story-comparison.html

@@ -87,9 +87,7 @@ def normalize_turn(
     # correction that keeps the turn, and the cast is the script's, not the actor's, to change.
     addressed = _addressees(turn.addressed_to, on_stage, names or {})
     visibility = turn.visibility
-    # A whisper with nobody to whisper to is a public line that mislabelled itself.
-    if visibility == "whisper" and not addressed:
-        visibility = "public"
+    # A whisper without a resolved recipient is rejected; making it public leaks a secret.
     return turn.model_copy(
         update={
             "speech": speech,
@@ -108,6 +106,16 @@ def validate_turn(
     previous_actions: list[str] | None = None,
 ) -> None:
     """Accept one normalized turn, or raise a TurnIssue saying in English what to fix."""
+    if turn.visibility == "whisper" and not turn.addressed_to:
+        raise TurnIssue("INVALID_WHISPER", "a whisper needs one unambiguous addressee on stage")
+    if re.search(
+        r"`|\b(?:as an ai|i am checking the import paths|superset/models)\b|\b\w+\.py\b",
+        f"{turn.speech} {turn.action}",
+        re.IGNORECASE,
+    ):
+        raise TurnIssue(
+            "OUT_OF_FICTION", "the turn refers to code or an assistant task outside the fiction"
+        )
     if not turn.speech and not turn.action:
         raise TurnIssue(
             "EMPTY_TURN",

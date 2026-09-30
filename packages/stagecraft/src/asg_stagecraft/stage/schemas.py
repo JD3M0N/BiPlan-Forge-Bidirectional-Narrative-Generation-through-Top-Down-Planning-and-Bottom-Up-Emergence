@@ -12,7 +12,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..formats import ActorMemory, NarrativeVoice
+from ..formats import ActorMemory, NarrativeVoice, SimulationMode
 from ..schemas import ID_PATTERN
 
 # What a character contributes in one turn, and who is allowed to perceive it.
@@ -79,6 +79,7 @@ class BeatBrief(BaseModel):
     outcome: str = Field(min_length=1)
     conflict: str = Field(min_length=1)
     promise_brief: str = ""
+    required_gates: list[str] = Field(default_factory=list)
 
 
 class SceneBrief(BaseModel):
@@ -96,6 +97,47 @@ class SceneBrief(BaseModel):
     gate_facts: list[str] = Field(default_factory=list)
     scripted_lines: list[str] = Field(default_factory=list)
     closes_play: bool = False
+
+
+class RevisedBeat(BaseModel):
+    """A changed outcome for an existing, still unperformed event."""
+
+    model_config = ConfigDict(extra="forbid")
+    event_id: str = Field(pattern=ID_PATTERN)
+    outcome: str = Field(min_length=1)
+    purpose: str = Field(min_length=1)
+    conflict: str = Field(min_length=1)
+
+
+class RevisedScene(BaseModel):
+    """One remaining scene, kept or omitted without changing its cast or event identities."""
+
+    model_config = ConfigDict(extra="forbid")
+    scene_id: str = Field(pattern=ID_PATTERN)
+    keep: bool
+    setting: str = ""
+    beats: list[RevisedBeat] = Field(default_factory=list)
+    objectives: dict[str, str] = Field(
+        default_factory=dict,
+        description="Changed objectives keyed by original cast ID; omitted actors keep theirs.",
+    )
+
+
+class FutureConflict(BaseModel):
+    """A cited conflict between performed turns and an unperformed event."""
+
+    model_config = ConfigDict(extra="forbid")
+    invalidated_event_ids: list[str] = Field(default_factory=list)
+    evidence_turn_ids: list[str] = Field(default_factory=list)
+    reason: str = ""
+
+
+class FutureRevision(BaseModel):
+    """A bounded revision of scenes that have not yet been performed."""
+
+    model_config = ConfigDict(extra="forbid")
+    reason: str = Field(min_length=1)
+    scenes: list[RevisedScene] = Field(default_factory=list)
 
 
 # --------------------------------------------------------------------------------------
@@ -212,11 +254,11 @@ class ActorDossier(BaseModel):
     relationships: list[ActorRelationship] = Field(default_factory=list)
     initial_emotion: str = Field(
         default="",
-        description="In English: one word for how they feel when the story opens.",
+        description="In the fiction language: one word for how they feel when the story opens.",
     )
     initial_goal: str = Field(
         default="",
-        description="In English: the immediate thing they are trying to do when the story opens.",
+        description="In the fiction language: their immediate goal at the start.",
     )
 
 
@@ -328,6 +370,18 @@ class ActorTurnDraft(BaseModel):
         ),
     )
     tactic: Tactic = Field(description="The move this turn tries, from the fixed list.")
+    goal_after: str = Field(
+        default="", description="My current private goal after this move, if it changed."
+    )
+    commitment_after: str = Field(
+        default="", description="My private commitment after this move, if it changed."
+    )
+    cover_story_after: str = Field(
+        default="", description="The account I privately intend to maintain, if it changed."
+    )
+    change_condition_after: str = Field(
+        default="", description="What I would need to see to reconsider, if it changed."
+    )
 
 
 class StageTurn(ActorTurnDraft):
@@ -370,6 +424,8 @@ class TurnRejection(BaseModel):
         "REPEATED_LINE",
         "REPEATED_ACTION",
         "ACTOR_CALL_FAILED",
+        "INVALID_WHISPER",
+        "OUT_OF_FICTION",
     ]
     issue: str
     turn: dict | None = None
@@ -404,6 +460,37 @@ class OutcomePart(BaseModel):
     )
 
 
+class BeatEvidence(BaseModel):
+    """A cited, publicly visible fragment and its provenance."""
+
+    clause_id: str
+    turn_id: str
+    kind: Literal["action", "declaration", "world_event"]
+    excerpt: str
+    assessment: Literal["director"] = "director"
+
+
+class FactProposal(BaseModel):
+    """A world change the director says an observable turn established."""
+
+    model_config = ConfigDict(extra="forbid")
+    statement: str = Field(min_length=1)
+    source_turn_id: str
+    supersedes_id: str = ""
+
+
+class StageFact(BaseModel):
+    """A director-assessed fact with its observed source and witnesses."""
+
+    id: str
+    statement: str
+    source_turn_id: str
+    kind: Literal["action", "world_event"]
+    witnesses: list[str] = Field(default_factory=list)
+    supersedes_id: str = ""
+    assessment: Literal["director"] = "director"
+
+
 class BeatCheckDraft(BaseModel):
     """The director's reading of a beat, as proposed. Whether it landed is derived, not declared.
 
@@ -415,6 +502,7 @@ class BeatCheckDraft(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    facts: list[FactProposal] = Field(default_factory=list)
     parts: list[OutcomePart] = Field(
         min_length=1,
         description="Every clause of the outcome, each judged separately.",
@@ -450,6 +538,7 @@ class BeatCheckDraft(BaseModel):
 class DirectorEntry(BaseModel):
     """One call to the director, with what the engine made of it: a line of director.jsonl."""
 
+    decision_id: str = ""
     scene_id: str = Field(pattern=ID_PATTERN)
     beat_event_id: str
     beat_index: int = Field(ge=0)
@@ -458,6 +547,8 @@ class DirectorEntry(BaseModel):
     draft: dict | None = None
     achieved: bool | None = None
     evidence: list[str] = Field(default_factory=list)
+    proofs: list[BeatEvidence] = Field(default_factory=list)
+    accepted_facts: list[StageFact] = Field(default_factory=list)
     missing: list[str] = Field(default_factory=list)
     turning_actor_id: str = ""
     turning_fallback: bool = False
@@ -479,9 +570,11 @@ class BeatRecord(BaseModel):
     intervened: bool = False
     forced: bool = False
     evidence: list[str] = Field(default_factory=list)
+    proofs: list[BeatEvidence] = Field(default_factory=list)
     stage_events: list[str] = Field(default_factory=list)
     turning_actor_id: str = ""
     reaction_turns: int = Field(default=0, ge=0)
+    missing: list[str] = Field(default_factory=list)
 
 
 class RelationshipState(BaseModel):
@@ -504,6 +597,10 @@ class CharacterState(BaseModel):
     scene_number: int = Field(ge=0)
     emotion: str = ""
     goal: str = ""
+    commitment: str = ""
+    cover_story: str = ""
+    change_condition: str = ""
+    source_turn_id: str = ""
     relationships: list[RelationshipState] = Field(default_factory=list)
 
 
@@ -566,9 +663,20 @@ class ReflectionDraft(BaseModel):
         ),
     )
     emotion: str = Field(
-        default="", description="In English: one word for how I feel leaving this scene."
+        default="", description="In the fiction language: one word for my mood after this scene."
     )
-    goal: str = Field(default="", description="In English: what I am trying to do next.")
+    goal: str = Field(
+        default="", description="In the fiction language: what I am trying to do next."
+    )
+    commitment: str = Field(
+        default="", description="In the fiction language: what I am still resolved to do."
+    )
+    cover_story: str = Field(
+        default="", description="In the fiction language: what I intend others to believe."
+    )
+    change_condition: str = Field(
+        default="", description="In the fiction language: what I would need to see to reconsider."
+    )
     importance: float = Field(
         default=0.5,
         ge=0.0,
@@ -596,6 +704,7 @@ class PerformanceSettings(BaseModel):
     """The exact knobs one performance ran with, so a reader can repeat or compare it."""
 
     actor_memory: ActorMemory
+    simulation_mode: SimulationMode = SimulationMode.FIXED
     turns_per_beat: int = Field(ge=2)
     check_every: int = Field(ge=1)
     reaction_turns: int = Field(default=2, ge=0)
@@ -614,12 +723,30 @@ class PerformanceArtifact(BaseModel):
 
     # 2: achieved is derived from the director's clauses, gates say how they come out, and
     # every director call is logged. A 7.0 run still reads as contract 1.
-    contract_version: str = "2"
+    contract_version: str = "3"
     language: str
     settings: PerformanceSettings
     scenes: list[ScenePerformance] = Field(default_factory=list)
     states: list[CharacterState] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+class PromiseStoryCheck(BaseModel):
+    """A proposed promise judgement anchored in prose and performed turns."""
+
+    model_config = ConfigDict(extra="forbid")
+    promise_id: str = Field(pattern=ID_PATTERN)
+    opened: bool
+    progressed: bool
+    paid: bool
+    quote: str = ""
+    turn_ids: list[str] = Field(default_factory=list)
+
+
+class PromiseStoryAuditDraft(BaseModel):
+    """All promise judgements proposed after narrating the performance."""
+
+    checks: list[PromiseStoryCheck] = Field(default_factory=list)
 
 
 # --------------------------------------------------------------------------------------

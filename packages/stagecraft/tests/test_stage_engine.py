@@ -6,16 +6,23 @@ beat ends - reached, reached with the world's help, or forced.
 """
 
 import re
+from types import SimpleNamespace
 
 import pytest
+from asg_stagecraft.formats import SimulationMode
 from asg_stagecraft.stage.engine import CODA_NOTE, FALLBACK_TURN_NOTE, PerformanceEngine
+from asg_stagecraft.stage.revision import materialize_revision
 from asg_stagecraft.stage.schemas import (
     ActorTurnDraft,
     BeatBrief,
     BeatCheckDraft,
     BeatDirection,
+    FactProposal,
+    FutureRevision,
     OutcomePart,
     ReflectionDraft,
+    RevisedBeat,
+    RevisedScene,
     SceneBrief,
     SceneCastBrief,
 )
@@ -146,6 +153,7 @@ def test_a_beat_that_never_lands_climbs_the_whole_ladder_before_it_is_forced() -
     record = performed.beats[0]
     assert stage.modes == ["check", "turn", "stall", "final"]
     assert record.forced and not record.achieved
+    assert record.missing == ["hands it over"]
     assert record.reaction_turns == 2
     assert record.turns == 10
     assert record.stage_events == [EVENT]
@@ -253,6 +261,7 @@ def test_a_clause_only_counts_as_shown_with_a_turn_that_really_exists(parts, mis
     assert not record.achieved and record.forced
     assert stage.entries[1].achieved is False
     assert stage.entries[1].missing == missing
+    assert record.missing == missing
 
 
 def test_when_the_director_names_nobody_the_engine_picks_and_says_so() -> None:
@@ -352,3 +361,100 @@ def test_an_event_proposed_on_a_reading_that_lands_never_happens() -> None:
     stall = next(entry for entry in stage.entries if entry.mode == "stall")
     assert stall.stage_event == ""
     assert stall.draft["stage_event"] == EVENT
+
+
+def test_adaptive_mode_keeps_an_unreached_beat_open_without_a_world_event() -> None:
+    stage = Stage(lambda mode, context: unshown("bruno", stage_event=EVENT))
+    engine = stage.engine()
+    engine.simulation_mode = SimulationMode.ADAPTIVE
+    performed = engine.perform_scene(scene(beats=2))
+    assert len(performed.beats) == 1
+    assert performed.beats[0].missing == ["hands it over"]
+    assert not performed.beats[0].achieved
+    assert not performed.beats[0].forced
+    assert all(turn.kind == "actor" for turn in performed.turns)
+    assert stage.modes == ["check", "turn", "stall"]
+
+
+def test_future_revision_changes_outcomes_but_keeps_the_scene_graph() -> None:
+    original = scene(beats=2)
+    proposal = FutureRevision(
+        reason="El reparto eligio negociar.",
+        scenes=[
+            RevisedScene(
+                scene_id=original.scene_id,
+                keep=True,
+                setting="El archivo despues de la negativa.",
+                beats=[
+                    RevisedBeat(
+                        event_id="event-2",
+                        outcome="Bruno retiene la carpeta",
+                        purpose="abrir una negociacion",
+                        conflict="Ana exige pruebas",
+                    )
+                ],
+                objectives={"ana": "averiguar la verdad", "bruno": "guardar la carpeta"},
+            )
+        ],
+    )
+    changed = materialize_revision(proposal, [original], SimpleNamespace(dependencies=[]), set())
+    assert [beat.event_id for beat in changed[0].beats] == ["event-2"]
+    assert changed[0].beats[0].outcome == "Bruno retiene la carpeta"
+    assert [item.character_id for item in changed[0].cast] == ["ana", "bruno"]
+    with pytest.raises(ValueError, match="depends"):
+        materialize_revision(
+            proposal,
+            [original],
+            SimpleNamespace(
+                dependencies=[SimpleNamespace(source_event_id="event-1", target_event_id="event-2")]
+            ),
+            set(),
+        )
+
+
+def test_a_revision_keeps_unmentioned_actor_objectives() -> None:
+    """Omitting an unchanged cast member does not invalidate a future revision."""
+    original = scene()
+    proposal = FutureRevision(
+        reason="Ana cambia de estrategia.",
+        scenes=[
+            RevisedScene(
+                scene_id=original.scene_id,
+                keep=True,
+                setting=original.setting,
+                beats=[
+                    RevisedBeat(
+                        event_id="event-1",
+                        outcome="Bruno conserva la carpeta",
+                        purpose="mantener el conflicto",
+                        conflict="Ana busca otra prueba",
+                    )
+                ],
+                objectives={"ana": "buscar otra prueba"},
+            )
+        ],
+    )
+    changed = materialize_revision(proposal, [original], SimpleNamespace(dependencies=[]), set())
+    assert [item.objective for item in changed[0].cast] == [
+        "buscar otra prueba",
+        original.cast[1].objective,
+    ]
+
+
+def test_world_facts_require_a_real_observable_source() -> None:
+    def judge(mode, context):
+        ids = _TURN_IDS.findall(context)
+        return BeatCheckDraft(
+            parts=[OutcomePart(part="hands it over", shown=True, evidence=ids[-1:])],
+            facts=[
+                FactProposal(statement="La puerta qued? abierta", source_turn_id=ids[0]),
+                FactProposal(statement="Un secreto imaginado", source_turn_id="missing-turn"),
+            ],
+        )
+
+    stage = Stage(judge)
+    engine = stage.engine()
+    engine.perform_scene(scene())
+    assert len(engine.facts) == 1
+    assert engine.facts[0].source_turn_id == "chapter-1-scene-1-t001"
+    assert engine.facts[0].kind == "action"

@@ -138,6 +138,14 @@ def _build_option_specs() -> tuple[OptionSpec, ...]:
             formats=_SIMULATED,
         ),
         OptionSpec(
+            "simulation_mode",
+            "choice",
+            _FIELDS["simulation_mode"].title,
+            _FIELDS["simulation_mode"].description,
+            (OptionChoice("fixed", "Hitos fijos"), OptionChoice("adaptive", "Hitos adaptables")),
+            formats=_SIMULATED,
+        ),
+        OptionSpec(
             "turns_per_beat",
             "integer",
             _FIELDS["turns_per_beat"].title,

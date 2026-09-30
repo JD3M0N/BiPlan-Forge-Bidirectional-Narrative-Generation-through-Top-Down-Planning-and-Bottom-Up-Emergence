@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import math
 from collections import Counter
+from collections.abc import Callable
 
 from ..planning.skeleton_match import normalize
 from .schemas import MemoryRecord, MemoryRetrieval
@@ -169,6 +170,7 @@ class CharacterMemory:
         self.records: list[MemoryRecord] = []
         self.retrievals: list[MemoryRetrieval] = []
         self._counter = 0
+        self.on_record: Callable[[MemoryRecord], None] | None = None
         self._document_frequency: Counter[str] = Counter()
 
     def remember(
@@ -194,6 +196,8 @@ class CharacterMemory:
             importance=max(0.0, min(1.0, importance)),
         )
         self.records.append(record)
+        if self.on_record:
+            self.on_record(record)
         for token in set(tokens(record.text)):
             self._document_frequency[token] += 1
         return record

@@ -29,7 +29,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from ..formats import ActorMemory
+from ..formats import ActorMemory, SimulationMode
 from ..runtime.errors import NON_DEGRADABLE_ERRORS, StagePerformanceError
 from . import policy
 from .memory import CharacterMemory
@@ -41,12 +41,14 @@ from .schemas import (
     BeatBrief,
     BeatCheckDraft,
     BeatDirection,
+    BeatEvidence,
     BeatRecord,
     CharacterState,
     DirectorEntry,
     ReflectionDraft,
     SceneBrief,
     ScenePerformance,
+    StageFact,
     StageTurn,
     TurnRejection,
 )
@@ -84,6 +86,7 @@ class _Verdict:
 
     achieved: bool
     evidence: list[str] = field(default_factory=list)
+    proofs: list[BeatEvidence] = field(default_factory=list)
     missing: list[str] = field(default_factory=list)
     turning_actor_id: str = ""
     turning_fallback: bool = False
@@ -121,6 +124,7 @@ class PerformanceEngine:
         whole_cast: list[str],
         language: str,
         actor_memory: ActorMemory = ActorMemory.OWN,
+        simulation_mode: SimulationMode = SimulationMode.FIXED,
         turns_per_beat: int = 8,
         reaction_turns: int = REACTION_TURNS,
         coda_turns: int = CODA_TURNS,
@@ -128,6 +132,11 @@ class PerformanceEngine:
         on_rejection: Callable[[TurnRejection], None] | None = None,
         on_turn: Callable[[StageTurn, str], None] | None = None,
         on_direction: Callable[[DirectorEntry], None] | None = None,
+        on_attempt: Callable[[dict], None] | None = None,
+        on_reflection: Callable[[dict], None] | None = None,
+        on_decision: Callable[[str], None] | None = None,
+        on_director_request: Callable[[dict], None] | None = None,
+        on_fact: Callable[[StageFact], None] | None = None,
     ) -> None:
         """Wire the engine to its model calls and the cast it will run."""
         self.take_turn = take_turn
@@ -141,6 +150,14 @@ class PerformanceEngine:
         self.whole_cast = whole_cast
         self.language = language
         self.actor_memory = actor_memory
+        self.simulation_mode = simulation_mode
+        self.on_attempt = on_attempt
+        self.on_reflection = on_reflection
+        self.on_decision = on_decision
+        self.on_director_request = on_director_request
+        self.on_fact = on_fact
+        self.facts: list[StageFact] = []
+        self._clauses: dict[str, list[str]] = {}
         self.turns_per_beat = turns_per_beat
         self.reaction_turns = reaction_turns
         self.coda_turns = coda_turns
@@ -151,7 +168,15 @@ class PerformanceEngine:
         self.memories: dict[str, CharacterMemory] = {
             character_id: CharacterMemory(character_id) for character_id in whole_cast
         }
-        self.states: dict[str, CharacterState] = {}
+        self.states: dict[str, CharacterState] = {
+            character_id: CharacterState(
+                character_id=character_id,
+                scene_number=0,
+                goal=dossier.initial_goal or dossier.want,
+                commitment=dossier.want,
+            )
+            for character_id, dossier in dossiers.items()
+        }
         self.warnings: list[str] = []
         # World events already used anywhere in the play, so the director never reaches for the
         # same device twice: the first real run used three thunderclaps and a power cut.
@@ -172,7 +197,13 @@ class PerformanceEngine:
             on_stage=[member.character_id for member in scene.cast],
             objectives={member.character_id: member.objective for member in scene.cast},
         )
-        beats = [self._perform_beat(run, index, beat) for index, beat in enumerate(scene.beats)]
+        beats = []
+        for index, beat in enumerate(scene.beats):
+            result = self._perform_beat(run, index, beat)
+            beats.append(result)
+            if self.simulation_mode is SimulationMode.ADAPTIVE and not result.achieved:
+                break
+        self._scene_beats = beats
         coda = self._play_coda(run) if scene.closes_play else 0
 
         if not run.turns:
@@ -194,6 +225,34 @@ class PerformanceEngine:
             rejected=run.rejected,
             skipped=run.skipped,
             coda_turns=coda,
+        )
+
+    def _announce_decision(self, decision_id: str) -> None:
+        """Publish the decision currently responsible for a model call."""
+        if self.on_decision:
+            self.on_decision(decision_id)
+
+    def perform_open_coda(self, brief: SceneBrief, performed: ScenePerformance) -> ScenePerformance:
+        """Give an unexpectedly final scene a short, explicitly open ending."""
+        run = _SceneRun(
+            brief=brief,
+            on_stage=[member.character_id for member in brief.cast],
+            objectives={member.character_id: member.objective for member in brief.cast},
+            turns=list(performed.turns),
+            rejected=performed.rejected,
+            skipped=performed.skipped,
+        )
+        self._scene_beats = performed.beats
+        count = self._play_coda(run, open_ending=True)
+        if count:
+            self._reflect_all(brief, run.turns, run.on_stage)
+        return performed.model_copy(
+            update={
+                "turns": run.turns,
+                "coda_turns": performed.coda_turns + count,
+                "rejected": run.rejected,
+                "skipped": run.skipped,
+            }
         )
 
     # -- beats ---------------------------------------------------------------------------
@@ -226,7 +285,11 @@ class PerformanceEngine:
                 self._land(record, verdict, run)
                 return record
             if at_cap:
-                self._resolve_stall(run, index, beat, record, verdict)
+                if self.simulation_mode is SimulationMode.ADAPTIVE:
+                    record.missing = list(verdict.missing)
+                    self._emit("beat_unreached", f"{run.brief.scene_id} no alcanzo {beat.event_id}")
+                else:
+                    self._resolve_stall(run, index, beat, record, verdict)
                 return record
             requested = verdict.turning_actor_id or verdict.next_actor_id
             notes = verdict.notes
@@ -264,6 +327,9 @@ class PerformanceEngine:
             self._land(record, final, run)
             return
         record.forced = True
+        record.missing = list(final.missing)
+        record.evidence = list(final.evidence)
+        record.proofs = list(final.proofs)
         self.warnings.append(
             f"[BEAT_FORCED] {run.brief.scene_id}: el beat {beat.event_id} no se alcanzo "
             f"ni con la intervencion del mundo."
@@ -274,13 +340,14 @@ class PerformanceEngine:
         """Close one beat as reached, keeping the turns that prove it."""
         record.achieved = True
         record.evidence = list(verdict.evidence)
+        record.proofs = list(verdict.proofs)
         self._emit("beat_achieved", f"{run.brief.scene_id} alcanzo {record.event_id}")
 
-    def _play_coda(self, run: _SceneRun) -> int:
+    def _play_coda(self, run: _SceneRun, *, open_ending: bool = False) -> int:
         """Give the play's ending a scene: the most involved characters answer the outcome."""
         if not run.turns or self.coda_turns <= 0:
             return 0
-        index = len(run.brief.beats) - 1
+        index = self._scene_beats[-1].index if self._scene_beats else len(run.brief.beats) - 1
         beat = run.brief.beats[index]
         tally = {
             actor: sum(1 for turn in run.turns if turn.actor_id == actor and turn.kind == "actor")
@@ -293,7 +360,18 @@ class PerformanceEngine:
         # Whoever moved last cannot move again at once, so they close the coda instead.
         last = next((turn.actor_id for turn in reversed(run.turns) if turn.kind == "actor"), "")
         chosen.sort(key=lambda actor: actor == last)
-        notes = [f"{actor}: {CODA_NOTE}" for actor in chosen]
+        settled = (
+            not open_ending
+            and bool(self._scene_beats)
+            and self._scene_beats[-1].event_id == run.brief.beats[-1].event_id
+            and self._scene_beats[-1].achieved
+        )
+        note = (
+            CODA_NOTE
+            if settled
+            else "La cuesti?n sigue abierta. Act?a seg?n lo que sabes y quieres ahora."
+        )
+        notes = [f"{actor}: {note}" for actor in chosen]
         played = 0
         for actor in chosen:
             moved = self._advance(run, index, beat, actor, notes)
@@ -337,6 +415,32 @@ class PerformanceEngine:
             return actor_id
         run.turns.append(turn)
         self._record_turn(turn, run.brief.number)
+        updates = {
+            field: value
+            for field, value in (
+                ("goal", turn.goal_after),
+                ("commitment", turn.commitment_after),
+                ("cover_story", turn.cover_story_after),
+                ("change_condition", turn.change_condition_after),
+            )
+            if value
+        }
+        if updates:
+            previous = self.states.get(actor_id) or CharacterState(
+                character_id=actor_id, scene_number=0
+            )
+            self.states[actor_id] = previous.model_copy(
+                update={**updates, "scene_number": run.brief.number, "source_turn_id": turn.id}
+            )
+            if self.on_reflection:
+                self.on_reflection(
+                    {
+                        "status": "state_updated",
+                        "character_id": actor_id,
+                        "source_turn_id": turn.id,
+                        "state": self.states[actor_id].model_dump(mode="json"),
+                    }
+                )
         if turn.speech:
             self._spoken.setdefault(actor_id, []).append(turn.speech)
         if turn.action:
@@ -394,15 +498,37 @@ class PerformanceEngine:
         feedback = ""
         rejections = 0
         for attempt in range(1, TURN_ATTEMPTS + 1):
+            attempt_id = f"{scene.scene_id}:{actor_id}:{number}:{attempt}"
+            self._announce_decision(attempt_id)
+            if self.on_attempt:
+                self.on_attempt(
+                    {
+                        "id": attempt_id,
+                        "status": "requested",
+                        "scene_id": scene.scene_id,
+                        "actor_id": actor_id,
+                        "context": context,
+                        "system_instruction": self.system_prompts[actor_id],
+                        "feedback": feedback,
+                    }
+                )
             try:
                 draft = self.take_turn(self.system_prompts[actor_id], context, feedback)
-            except NON_DEGRADABLE_ERRORS:
+            except NON_DEGRADABLE_ERRORS as exc:
+                if self.on_attempt:
+                    self.on_attempt(
+                        {"id": attempt_id, "status": "failed", "error": type(exc).__name__}
+                    )
                 raise
             except Exception as exc:
                 rejections += 1
                 self._reject(
                     scene, actor_id, attempt, "ACTOR_CALL_FAILED", type(exc).__name__, None
                 )
+                if self.on_attempt:
+                    self.on_attempt(
+                        {"id": attempt_id, "status": "failed", "error": type(exc).__name__}
+                    )
                 self._note_failure(actor_id)
                 feedback = (
                     "\n\nCORRECCION: el intento anterior no pudo completarse. Vuelve a hacer tu "
@@ -410,6 +536,10 @@ class PerformanceEngine:
                 )
                 continue
             self._failures = 0
+            if self.on_attempt:
+                self.on_attempt(
+                    {"id": attempt_id, "status": "proposed", "draft": draft.model_dump(mode="json")}
+                )
             candidate = normalize_turn(
                 draft,
                 on_stage=on_stage,
@@ -430,6 +560,15 @@ class PerformanceEngine:
                     str(issue),
                     candidate.model_dump(mode="json"),
                 )
+                if self.on_attempt:
+                    self.on_attempt(
+                        {
+                            "id": attempt_id,
+                            "status": "rejected",
+                            "code": issue.code,
+                            "normalized": candidate.model_dump(mode="json"),
+                        }
+                    )
                 feedback = f"\n\nCORRECCION:\n{issue}\nVuelve a hacer tu movimiento."
                 continue
             turn = StageTurn(
@@ -451,6 +590,15 @@ class PerformanceEngine:
                 retrieved_memory_ids=[item.id for item in recalled],
                 attempts=attempt,
             )
+            if self.on_attempt:
+                self.on_attempt(
+                    {
+                        "id": attempt_id,
+                        "status": "accepted",
+                        "turn_id": turn.id,
+                        "normalized": candidate.model_dump(mode="json"),
+                    }
+                )
             if self.on_turn:
                 self.on_turn(turn, context)
             return turn, rejections
@@ -487,6 +635,13 @@ class PerformanceEngine:
     def _open(self, run: _SceneRun, index: int, beat: BeatBrief) -> BeatDirection:
         """Ask the director to open one beat, falling back to a silent opening."""
         context = self._director_context(run, beat)
+        decision_id = f"{run.brief.scene_id}:director:open:{len(run.turns)}"
+        if self.on_decision:
+            self.on_decision(decision_id)
+        if self.on_director_request:
+            self.on_director_request(
+                {"decision_id": decision_id, "status": "requested", "context": context}
+            )
         try:
             direction = self.open_beat(context)
         except NON_DEGRADABLE_ERRORS:
@@ -504,6 +659,13 @@ class PerformanceEngine:
     def _check(self, run: _SceneRun, index: int, beat: BeatBrief, mode: str) -> _Verdict:
         """Ask the director to read the beat, and derive the verdict from its clauses."""
         context = self._director_context(run, beat)
+        decision_id = f"{run.brief.scene_id}:director:{mode}:{len(run.turns)}"
+        if self.on_decision:
+            self.on_decision(decision_id)
+        if self.on_director_request:
+            self.on_director_request(
+                {"decision_id": decision_id, "status": "requested", "context": context}
+            )
         try:
             draft = self.check_beat(context, mode)
         except NON_DEGRADABLE_ERRORS:
@@ -515,27 +677,60 @@ class PerformanceEngine:
             verdict = _Verdict(achieved=False, missing=[beat.outcome])
             self._log(run, index, beat, mode, None, verdict, failed=True)
             return verdict
-        verdict = self._derive(draft, run, mode)
+        verdict = self._derive(draft, run, mode, beat.event_id)
+        self._accept_facts(draft, run)
         self._log(run, index, beat, mode, draft.model_dump(mode="json"), verdict)
         return verdict
 
-    def _derive(self, draft: BeatCheckDraft, run: _SceneRun, mode: str) -> _Verdict:
+    def _derive(self, draft: BeatCheckDraft, run: _SceneRun, mode: str, event_id: str) -> _Verdict:
         """Turn the director's clauses into a verdict the model never gets to declare.
 
         A clause counts as shown only when it cites a turn that exists. Every missing clause
         keeps the beat open. When the rung requires someone to be named and the director named
         nobody, or gave them no note, the engine fills the gap deterministically and says so.
         """
-        known = {turn.id for turn in run.turns}
+        known = {turn.id: turn for turn in run.turns}
+        beat_key = run.brief.scene_id + ":" + event_id
+        clauses = [part.part for part in draft.parts]
+        required = run.brief.beats[
+            next(index for index, beat in enumerate(run.brief.beats) if beat.event_id == event_id)
+        ].required_gates
+        frozen = self._clauses.setdefault(beat_key, list(dict.fromkeys([*clauses, *required])))
         evidence: list[str] = []
+        proofs: list[BeatEvidence] = []
         missing: list[str] = []
         for part in draft.parts:
-            cited = [item for item in part.evidence if item in known]
+            if part.part not in frozen:
+                continue
+            cited = [
+                item
+                for item in part.evidence
+                if item in known
+                and (known[item].kind == "world" or known[item].action or known[item].speech)
+            ]
             if part.shown and cited:
                 evidence.extend(item for item in cited if item not in evidence)
+                for item in cited:
+                    turn = known[item]
+                    kind = (
+                        "world_event"
+                        if turn.kind == "world"
+                        else "action"
+                        if turn.action
+                        else "declaration"
+                    )
+                    proofs.append(
+                        BeatEvidence(
+                            clause_id=f"{event_id}:c{frozen.index(part.part) + 1:02d}",
+                            turn_id=item,
+                            kind=kind,
+                            excerpt=turn.action if kind != "declaration" else turn.speech,
+                        )
+                    )
             else:
                 missing.append(part.part)
-        achieved = bool(draft.parts) and not missing
+        missing.extend(part for part in frozen if part not in clauses)
+        achieved = bool(frozen) and not missing and set(clauses) == set(frozen)
         turning = draft.turning_actor_id if draft.turning_actor_id in run.on_stage else ""
         notes = list(draft.notes)
         fallback = False
@@ -550,6 +745,7 @@ class PerformanceEngine:
         return _Verdict(
             achieved=achieved,
             evidence=sorted(evidence),
+            proofs=proofs,
             missing=missing,
             turning_actor_id=turning if not achieved else "",
             turning_fallback=fallback,
@@ -559,6 +755,34 @@ class PerformanceEngine:
             # director proposed never happens and must not be logged as if it had.
             stage_event=draft.stage_event.strip() if mode == "stall" and not achieved else "",
         )
+
+    def _accept_facts(self, draft: BeatCheckDraft, run: _SceneRun) -> None:
+        """Record only world changes grounded in a witnessed action or world turn."""
+        turns = {turn.id: turn for turn in run.turns}
+        previous = {fact.id for fact in self.facts}
+        seen = {(fact.source_turn_id, fact.statement.casefold()) for fact in self.facts}
+        for proposal in draft.facts:
+            turn = turns.get(proposal.source_turn_id)
+            if turn is None or not turn.action:
+                continue
+            if proposal.supersedes_id and proposal.supersedes_id not in previous:
+                continue
+            key = (turn.id, proposal.statement.casefold())
+            if key in seen:
+                continue
+            fact = StageFact(
+                id=f"fact-{len(self.facts) + 1:04d}",
+                statement=proposal.statement,
+                source_turn_id=turn.id,
+                kind="world_event" if turn.kind == "world" else "action",
+                witnesses=list(turn.witnesses),
+                supersedes_id=proposal.supersedes_id,
+            )
+            self.facts.append(fact)
+            seen.add(key)
+            previous.add(fact.id)
+            if self.on_fact:
+                self.on_fact(fact)
 
     def _likely_turner(self, run: _SceneRun) -> str:
         """Name who has dug in hardest when the director named nobody: most resisting tactics."""
@@ -590,6 +814,7 @@ class PerformanceEngine:
             gates=run.brief.gate_facts,
             tactics=self._recent_tactics(run),
             used_events=self.used_events,
+            clauses=self._clauses.get(run.brief.scene_id + ":" + beat.event_id),
         )
 
     def _log(
@@ -608,6 +833,7 @@ class PerformanceEngine:
             return
         self.on_direction(
             DirectorEntry(
+                decision_id=f"{run.brief.scene_id}:director:{mode}:{len(run.turns)}",
                 scene_id=run.brief.scene_id,
                 beat_event_id=beat.event_id,
                 beat_index=index,
@@ -616,6 +842,7 @@ class PerformanceEngine:
                 draft=draft,
                 achieved=verdict.achieved if verdict else None,
                 evidence=verdict.evidence if verdict else [],
+                proofs=verdict.proofs if verdict else [],
                 missing=verdict.missing if verdict else [],
                 turning_actor_id=verdict.turning_actor_id if verdict else "",
                 turning_fallback=verdict.turning_fallback if verdict else False,
@@ -676,11 +903,39 @@ class PerformanceEngine:
             if not witnessed:
                 continue
             log = scene_log(witnessed, self.names, thoughts=False)
+            decision_id = f"{scene.scene_id}:reflection:{character_id}"
+            if self.on_decision:
+                self.on_decision(decision_id)
+            if self.on_reflection:
+                self.on_reflection(
+                    {
+                        "decision_id": decision_id,
+                        "status": "requested",
+                        "context": log,
+                        "system_instruction": self.system_prompts[character_id],
+                    }
+                )
             try:
                 reflection = self.reflect(self.system_prompts[character_id], log)
-            except NON_DEGRADABLE_ERRORS:
+            except NON_DEGRADABLE_ERRORS as exc:
+                if self.on_reflection:
+                    self.on_reflection(
+                        {
+                            "decision_id": decision_id,
+                            "status": "failed",
+                            "error": type(exc).__name__,
+                        }
+                    )
                 raise
-            except Exception:
+            except Exception as exc:
+                if self.on_reflection:
+                    self.on_reflection(
+                        {
+                            "decision_id": decision_id,
+                            "status": "failed",
+                            "error": type(exc).__name__,
+                        }
+                    )
                 self.warnings.append(
                     f"[REFLECTION_FALLBACK] {scene.scene_id}: "
                     f"{self.names.get(character_id, character_id)} no pudo reflexionar."
@@ -703,6 +958,17 @@ class PerformanceEngine:
                     importance=min(1.0, reflection.importance + 0.1),
                 )
             self.states[character_id] = self._consolidate(character_id, scene.number, reflection)
+            if self.on_reflection:
+                self.on_reflection(
+                    {
+                        "scene_id": scene.scene_id,
+                        "character_id": character_id,
+                        "draft": reflection.model_dump(mode="json"),
+                        "state": self.states[character_id].model_dump(mode="json"),
+                        "decision_id": decision_id,
+                        "status": "accepted",
+                    }
+                )
             if reflection.emotion:
                 self.emotions.setdefault(character_id, []).append(reflection.emotion)
 
@@ -724,6 +990,11 @@ class PerformanceEngine:
             scene_number=scene_number,
             emotion=reflection.emotion or (previous.emotion if previous else ""),
             goal=reflection.goal or (previous.goal if previous else ""),
+            commitment=reflection.commitment or (previous.commitment if previous else ""),
+            cover_story=reflection.cover_story or (previous.cover_story if previous else ""),
+            change_condition=reflection.change_condition
+            or (previous.change_condition if previous else ""),
+            source_turn_id=previous.source_turn_id if previous else "",
             relationships=[stances[key] for key in sorted(stances)],
         )
 

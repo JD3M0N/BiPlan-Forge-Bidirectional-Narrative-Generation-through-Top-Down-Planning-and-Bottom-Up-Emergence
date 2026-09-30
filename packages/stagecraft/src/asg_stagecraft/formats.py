@@ -52,6 +52,13 @@ class ActorMemory(StrEnum):
     SHARED = "shared"
 
 
+class SimulationMode(StrEnum):
+    """Whether a performed beat must be reached or may change the remaining play."""
+
+    FIXED = "fixed"
+    ADAPTIVE = "adaptive"
+
+
 @dataclass(frozen=True)
 class OutputChoice:
     """One combined output option, as shown on every interactive surface."""

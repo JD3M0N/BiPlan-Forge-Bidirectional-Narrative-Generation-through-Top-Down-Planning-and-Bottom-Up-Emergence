@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from .brief import StoryBrief
-from .formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
+from .formats import ActorMemory, NarrativeVoice, ScriptMethod, SimulationMode, StoryFormat
 from .options import GenerationOptions
 from .pipeline import StoryPipeline
 from .planning.profiles import NarrativeProfile
@@ -111,6 +111,7 @@ class StoryGenerator:
         narrator: str = "",
         narration_tone: str = "",
         actor_memory: ActorMemory = ActorMemory.OWN,
+        simulation_mode: SimulationMode = SimulationMode.FIXED,
         turns_per_beat: int = 8,
     ) -> None:
         """Configure a generator with its provider, output directory and run options."""
@@ -128,6 +129,7 @@ class StoryGenerator:
             narrator=narrator,
             narration_tone=narration_tone,
             actor_memory=actor_memory,
+            simulation_mode=simulation_mode,
             turns_per_beat=turns_per_beat,
         )
 
@@ -140,6 +142,27 @@ class StoryGenerator:
     ) -> StoryGenerator:
         """Build a generator from options a surface has already validated."""
         return cls(provider, output_root, **dict(options))
+
+    def generate_from_plan(
+        self,
+        source_run: Path,
+        on_progress: ProgressCallback | None = None,
+        on_run_created: Callable[[Path], None] | None = None,
+        on_event: PipelineEventCallback | None = None,
+        *,
+        should_cancel: Callable[[], bool] | None = None,
+    ) -> StoryRun:
+        """Run a new performance using the source's original plan, script and cast."""
+        pipeline = StoryPipeline(
+            self.provider,
+            self.output_root,
+            options=self.options,
+            on_progress=on_progress,
+            on_run_created=on_run_created,
+            on_event=on_event,
+            should_cancel=should_cancel,
+        )
+        return StoryRun(pipeline.execute_from_plan(source_run))
 
     def generate(
         self,

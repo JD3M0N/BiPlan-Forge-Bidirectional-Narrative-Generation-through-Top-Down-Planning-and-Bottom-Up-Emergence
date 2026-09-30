@@ -15,8 +15,11 @@ import json
 import re
 
 from ..agents import ActorAgent, CastingDirectorAgent, NarratorAgent, StageManagerAgent
+from ..agents.promise_auditor import PromiseStoryAuditorAgent
+from ..formats import SimulationMode
 from ..planning.promise_brief import chapter_brief
 from ..runtime.errors import NON_DEGRADABLE_ERRORS, ASGError
+from ..runtime.provider import decision_context
 from ..schemas import (
     ChapterPresentation,
     CharactersArtifact,
@@ -44,7 +47,9 @@ from .narration import (
     scene_presence,
 )
 from .policy import CHECK_EVERY
+from .promise_audit import broken_promise_audit, materialize_promise_audit
 from .render import actor_system_prompt, scene_log, transcript
+from .revision import materialize_revision
 from .schemas import (
     BeatBrief,
     CastBible,
@@ -76,15 +81,18 @@ class SimulationStagesMixin:
         plan: StoryPlan,
         play: PlayScript,
         ledger: PromiseLedger | None,
+        bible: CastBible | None = None,
     ) -> None:
-        """Cast the actors, play the script, and write the story from what they played."""
-        bible = self._cast_actors(request, world, characters, plan, play)
+        """Cast or reuse actors, then narrate what their performance established."""
+        if bible is None:
+            bible = self._cast_actors(request, world, characters, plan, play)
         performance, engine, briefs = self._perform_play(
-            request, characters, plan, play, bible, ledger
+            request, world, characters, plan, play, bible, ledger
         )
         story, narration, fallbacks, narrated = self._narrate(
             request, characters, plan, play, performance, ledger
         )
+        self._audit_performed_promises(ledger, performance, story)
         self._finalize_simulation(
             request, narrated, bible, performance, narration, engine, briefs, story, fallbacks
         )
@@ -162,6 +170,7 @@ class SimulationStagesMixin:
     def _perform_play(
         self,
         request: StoryRequest,
+        world: WorldArtifact,
         characters: CharactersArtifact,
         plan: StoryPlan,
         play: PlayScript,
@@ -195,17 +204,24 @@ class SimulationStagesMixin:
 
         actor = ActorAgent(self.provider)
         director = StageManagerAgent(self.provider)
+        active_decision = {"id": ""}
+
+        def stage_call(name, function):
+            """Tag provider records with the stage decision that requested the call."""
+            with decision_context(active_decision["id"]):
+                return self._call_agent(name, function)
+
         engine = PerformanceEngine(
-            take_turn=lambda system, context, feedback: self._call_agent(
+            take_turn=lambda system, context, feedback: stage_call(
                 "actor", lambda: actor.run(system, context, feedback)
             ),
-            open_beat=lambda context: self._call_agent(
+            open_beat=lambda context: stage_call(
                 "stage_manager", lambda: director.open_beat(context, request.language)
             ),
-            check_beat=lambda context, mode: self._call_agent(
+            check_beat=lambda context, mode: stage_call(
                 "stage_manager", lambda: director.check(context, request.language, mode=mode)
             ),
-            reflect=lambda system, log: self._call_agent(
+            reflect=lambda system, log: stage_call(
                 "actor", lambda: actor.reflect(system, log, request.language)
             ),
             dossiers=dossiers,
@@ -215,15 +231,37 @@ class SimulationStagesMixin:
             whole_cast=whole_cast,
             language=request.language,
             actor_memory=self.actor_memory,
+            simulation_mode=self.options.simulation_mode,
             turns_per_beat=self.turns_per_beat,
             reaction_turns=REACTION_TURNS,
             coda_turns=CODA_TURNS,
             on_event=lambda kind, message: self._emit(kind, message, stage="performance"),
+            on_decision=lambda decision_id: active_decision.update(id=decision_id),
+            on_fact=lambda fact: self.repository.append_jsonl("stage/facts.jsonl", fact),
         )
+
+        for memory in engine.memories.values():
+            memory.on_record = lambda record: self.repository.append_jsonl(
+                f"memory/{record.character_id}/records.jsonl", record
+            )
+            for record in memory.records:
+                memory.on_record(record)
 
         briefs = self._scene_briefs(plan, play, bible, ledger, names)
         scenes: list[ScenePerformance] = []
-        for index, brief in enumerate(briefs, 1):
+        played_briefs: list[SceneBrief] = []
+        index = 0
+        if self.options.simulation_mode is SimulationMode.ADAPTIVE:
+            self.repository.save_data(
+                "active_plan/initial.json",
+                {
+                    "scene_ids": [item.scene_id for item in briefs],
+                    "event_ids": [beat.event_id for item in briefs for beat in item.beats],
+                },
+            )
+        while index < len(briefs):
+            brief = briefs[index]
+            index += 1
             self._notify(
                 52 + (index - 1) * 30 // len(briefs),
                 "performance",
@@ -239,6 +277,15 @@ class SimulationStagesMixin:
                 self.repository.append_jsonl(f"stage/{scene_id}/director.jsonl", entry)
             )
             engine.on_turn = self._turn_logger(brief.scene_id)
+            engine.on_attempt = lambda entry, scene_id=brief.scene_id: self.repository.append_jsonl(
+                f"stage/{scene_id}/attempts.jsonl", entry
+            )
+            engine.on_reflection = lambda entry, scene_id=brief.scene_id: (
+                self.repository.append_jsonl(f"stage/{scene_id}/reflections.jsonl", entry)
+            )
+            engine.on_director_request = lambda entry, scene_id=brief.scene_id: (
+                self.repository.append_jsonl(f"stage/{scene_id}/director_requests.jsonl", entry)
+            )
             try:
                 scene = engine.perform_scene(brief)
             except ASGError as error:
@@ -246,10 +293,32 @@ class SimulationStagesMixin:
                 error.details.setdefault("scene_id", brief.scene_id)
                 raise
             scenes.append(scene)
+            played_briefs.append(brief)
+            self.repository.save_data(
+                f"stage/{brief.scene_id}/checkpoint.json",
+                {
+                    "scene_id": brief.scene_id,
+                    "completed_scenes": [item.scene_id for item in scenes],
+                    "states": {
+                        key: value.model_dump(mode="json") for key, value in engine.states.items()
+                    },
+                    "memory_lengths": {
+                        key: len(value.records) for key, value in engine.memories.items()
+                    },
+                },
+            )
             self.repository.save_text(
                 f"stage/{brief.scene_id}/transcript.md", transcript(scene.turns, names)
             )
             self._emit("scene_performed", f"escena {index} representada", stage="performance")
+            changed = self._maybe_revise_future(
+                director, request, world, plan, engine, scenes, briefs[index:], names
+            )
+            if changed is not None:
+                briefs = [*briefs[:index], *changed]
+                if not changed:
+                    self._finish_open_scene(engine, brief, scenes, names)
+                    break
 
         for character_id in sorted(engine.memories):
             memory = engine.memories[character_id]
@@ -266,6 +335,7 @@ class SimulationStagesMixin:
             language=request.language,
             settings=PerformanceSettings(
                 actor_memory=self.actor_memory,
+                simulation_mode=self.options.simulation_mode,
                 turns_per_beat=self.turns_per_beat,
                 check_every=CHECK_EVERY,
                 reaction_turns=REACTION_TURNS,
@@ -283,13 +353,230 @@ class SimulationStagesMixin:
             "performance.md",
             "\n\n".join(
                 f"## {brief.setting}\n\n{transcript(scene.turns, names)}"
-                for brief, scene in zip(briefs, scenes, strict=True)
+                for brief, scene in zip(played_briefs, scenes, strict=True)
             ),
         )
         for warning in engine.warnings:
             self.repository.add_warning(warning)
         self.repository.complete_stage("performance")
-        return performance, engine, briefs
+        return performance, engine, played_briefs
+
+    def _finish_open_scene(self, engine, brief, scenes, names) -> None:
+        """Record a short open coda when adaptation removes the original last scene."""
+        assert self.repository is not None
+        if brief.closes_play:
+            return
+        scenes[-1] = engine.perform_open_coda(brief, scenes[-1])
+        self.repository.save_text(
+            f"stage/{brief.scene_id}/transcript.md", transcript(scenes[-1].turns, names)
+        )
+        self.repository.save_data(
+            f"stage/{brief.scene_id}/checkpoint.json",
+            {
+                "scene_id": brief.scene_id,
+                "completed_scenes": [item.scene_id for item in scenes],
+                "states": {
+                    key: value.model_dump(mode="json") for key, value in engine.states.items()
+                },
+                "memory_lengths": {
+                    key: len(value.records) for key, value in engine.memories.items()
+                },
+            },
+        )
+
+    def _maybe_revise_future(
+        self, director, request, world, plan, engine, scenes, remaining, names
+    ) -> list[SceneBrief] | None:
+        """Return a revised suffix when a played scene changes what can happen next."""
+        if self.options.simulation_mode is not SimulationMode.ADAPTIVE or not remaining:
+            return None
+        missed = any(not beat.achieved for beat in scenes[-1].beats)
+        if not missed and not self._future_conflict(
+            director, request, world, engine, scenes, remaining, names
+        ):
+            return None
+        return self._revise_future(director, request, world, plan, engine, scenes, remaining, names)
+
+    def _future_conflict(self, director, request, world, engine, scenes, remaining, names) -> bool:
+        """Ask whether a witnessed action contradicts an event still to be played."""
+        assert self.repository is not None
+        current = scenes[-1]
+        context = json.dumps(
+            {
+                "premise": request.premise,
+                "constraints": request.constraints,
+                "world_rules": world.rules,
+                "accepted_facts": [fact.model_dump(mode="json") for fact in engine.facts],
+                "performed": [
+                    {"scene_id": scene.scene_id, "transcript": transcript(scene.turns, names)}
+                    for scene in scenes
+                ],
+                "future_events": [
+                    {"event_id": beat.event_id, "outcome": beat.outcome}
+                    for scene in remaining
+                    for beat in scene.beats
+                ],
+            },
+            ensure_ascii=False,
+        )
+        decision_id = f"conflict-{len(scenes):03d}"
+        attempts_path = "active_plan/conflict_attempts.jsonl"
+        self.repository.append_jsonl(
+            attempts_path,
+            {"decision_id": decision_id, "status": "requested", "prompt": context},
+        )
+        try:
+            with decision_context(decision_id):
+                proposal = self._call_agent(
+                    "stage_manager", lambda: director.future_conflict(context)
+                )
+        except NON_DEGRADABLE_ERRORS as exc:
+            self.repository.append_jsonl(
+                attempts_path,
+                {"decision_id": decision_id, "status": "failed", "error": type(exc).__name__},
+            )
+            raise
+        except Exception as exc:
+            self.repository.append_jsonl(
+                attempts_path,
+                {"decision_id": decision_id, "status": "failed", "error": type(exc).__name__},
+            )
+            return False
+        self.repository.append_jsonl(
+            attempts_path,
+            {
+                "decision_id": decision_id,
+                "status": "proposed",
+                "draft": proposal.model_dump(mode="json"),
+            },
+        )
+        future = {beat.event_id for scene in remaining for beat in scene.beats}
+        known = {fact.source_turn_id for fact in engine.facts}
+        valid = (
+            set(proposal.invalidated_event_ids) <= future
+            and bool(proposal.evidence_turn_ids)
+            and set(proposal.evidence_turn_ids) <= known
+        )
+        self.repository.save_data(
+            f"active_plan/conflict-{len(scenes):03d}.json",
+            {
+                "after_scene": current.scene_id,
+                "proposal": proposal.model_dump(mode="json"),
+                "accepted": bool(proposal.invalidated_event_ids) and valid,
+            },
+        )
+        return bool(proposal.invalidated_event_ids) and valid
+
+    def _revise_future(
+        self, director, request, world, plan, engine, scenes, remaining, names
+    ) -> list[SceneBrief]:
+        """Revise one unperformed suffix, or stop with an honest open ending."""
+        assert self.repository is not None
+        achieved = {beat.event_id for scene in scenes for beat in scene.beats if beat.achieved}
+        context = json.dumps(
+            {
+                "premise": request.premise,
+                "constraints": request.constraints,
+                "world_rules": world.rules,
+                "accepted_facts": [fact.model_dump(mode="json") for fact in engine.facts],
+                "performed": [
+                    {
+                        "scene_id": scene.scene_id,
+                        "transcript": transcript(scene.turns, names),
+                        "beats": [
+                            {
+                                "event_id": beat.event_id,
+                                "achieved": beat.achieved,
+                                "missing": beat.missing,
+                            }
+                            for beat in scene.beats
+                        ],
+                    }
+                    for scene in scenes
+                ],
+                "remaining": [item.model_dump(mode="json") for item in remaining],
+            },
+            ensure_ascii=False,
+        )
+        feedback = ""
+        attempts_path = f"active_plan/revision-{len(scenes):03d}-attempts.jsonl"
+        for attempt in range(1, 3):
+            decision_id = f"revision-{len(scenes):03d}-a{attempt}"
+            prompt = context + feedback
+            self.repository.append_jsonl(
+                attempts_path,
+                {"decision_id": decision_id, "status": "requested", "prompt": prompt},
+            )
+            try:
+                with decision_context(decision_id):
+                    proposal = self._call_agent(
+                        "stage_manager",
+                        lambda prompt_snapshot=prompt: director.revise_future(
+                            prompt_snapshot, request.language
+                        ),
+                    )
+            except NON_DEGRADABLE_ERRORS as exc:
+                self.repository.append_jsonl(
+                    attempts_path,
+                    {"decision_id": decision_id, "status": "failed", "error": type(exc).__name__},
+                )
+                raise
+            except Exception as exc:
+                self.repository.append_jsonl(
+                    attempts_path,
+                    {"decision_id": decision_id, "status": "failed", "error": type(exc).__name__},
+                )
+                feedback = (
+                    f"\nPrevious revision failed: {type(exc).__name__}. "
+                    "Return all remaining scenes."
+                )
+                continue
+            self.repository.append_jsonl(
+                attempts_path,
+                {
+                    "decision_id": decision_id,
+                    "status": "proposed",
+                    "draft": proposal.model_dump(mode="json"),
+                },
+            )
+            try:
+                changed = materialize_revision(proposal, remaining, plan, achieved)
+            except ValueError as exc:
+                self.repository.append_jsonl(
+                    attempts_path,
+                    {"decision_id": decision_id, "status": "rejected", "issue": str(exc)},
+                )
+                feedback = f"\nRevision rejected: {exc}. Return a complete corrected revision."
+                continue
+            self.repository.append_jsonl(
+                attempts_path,
+                {"decision_id": decision_id, "status": "accepted"},
+            )
+            self.repository.save_data(
+                f"active_plan/revision-{len(scenes):03d}.json",
+                {
+                    "after_scene": scenes[-1].scene_id,
+                    "attempt": attempt,
+                    "reason": proposal.reason,
+                    "scenes": [item.model_dump(mode="json") for item in changed],
+                    "omitted_scene_ids": [
+                        item.scene_id
+                        for item in remaining
+                        if item.scene_id not in {new.scene_id for new in changed}
+                    ],
+                },
+            )
+            return changed
+        warning = (
+            f"[REVISION_FAILED] {scenes[-1].scene_id}: "
+            "no se pudo revisar el futuro; cierre abierto."
+        )
+        self.repository.add_warning(warning)
+        self.repository.save_data(
+            f"active_plan/revision-{len(scenes):03d}-failed.json",
+            {"after_scene": scenes[-1].scene_id, "status": "failed", "feedback": feedback},
+        )
+        return []
 
     def _turn_logger(self, scene_id: str):
         """Build the callback that logs each performed turn of one scene as it happens."""
@@ -332,6 +619,14 @@ class SimulationStagesMixin:
                         outcome=events[event_id].outcome,
                         conflict=events[event_id].conflict,
                         promise_brief=chapter_brief(ledger, chapter, [events[event_id]]),
+                        required_gates=[
+                            (
+                                f"{gate.id}: {gate.fact} ({gate.how}, "
+                                f"{names.get(gate.revealed_by, gate.revealed_by)})"
+                            )
+                            for gate in bible.knowledge_gates
+                            if gate.revealed_at_event_id == event_id
+                        ],
                     )
                     for event_id in scene.event_ids
                     if event_id in events
@@ -402,6 +697,11 @@ class SimulationStagesMixin:
             self._emit("narrator_fallback", choice.warning, stage="narration")
         narrator = choice.character_id
         titles = self._localized_titles(play)
+        if self.options.simulation_mode is SimulationMode.ADAPTIVE:
+            titles = {
+                chapter.id: f"Cap\u00edtulo {index}"
+                for index, chapter in enumerate(plan.chapters, 1)
+            }
         views = chapter_views(voice, plan, performance.scenes, narrator=narrator, presence=presence)
 
         agent = NarratorAgent(self.provider)
@@ -432,10 +732,8 @@ class SimulationStagesMixin:
                 titles.get(chapter.id, chapter.title),
                 voice,
                 log,
-                bodies[-1] if bodies else "",
                 narrator,
                 names,
-                self._promise_brief(ledger, chapter.id),
                 view.visible,
                 index,
             )
@@ -479,10 +777,8 @@ class SimulationStagesMixin:
         title,
         voice,
         log,
-        previous,
         narrator,
         names,
-        promise_brief,
         visible,
         index,
     ) -> tuple[str, int, str]:
@@ -499,9 +795,7 @@ class SimulationStagesMixin:
                     title,
                     voice,
                     log,
-                    previous,
                     narrator_name=names.get(narrator, ""),
-                    promise_brief=promise_brief,
                     retry_feedback=feedback_snapshot,
                     tone=self.options.narration_tone,
                 )
@@ -539,6 +833,42 @@ class SimulationStagesMixin:
         self.repository.save_text(f"narration/chapter-{index:03d}.md", body)
         return body, NARRATION_ATTEMPTS, "fallback"
 
+    def _audit_performed_promises(self, ledger, performance, story) -> None:
+        """Replace the script audit with an audit of the narrated performance."""
+        assert self.repository is not None
+        if ledger is None:
+            return
+        earlier = self.repository.run_dir / "promise_audit.json"
+        if earlier.is_file():
+            self.repository.save_data(
+                "script_promise_audit.json", json.loads(earlier.read_text(encoding="utf-8"))
+            )
+        turns = [
+            {
+                "id": turn.id,
+                "action": turn.action,
+                "speech": turn.speech,
+                "kind": turn.kind,
+                "visibility": turn.visibility,
+            }
+            for scene in performance.scenes
+            for turn in scene.turns
+        ]
+        try:
+            auditor = PromiseStoryAuditorAgent(self.provider)
+            draft = self._call_agent("promise_auditor", lambda: auditor.run(ledger, story, turns))
+            self.repository.save_json("stage/promise_audit_draft.json", draft)
+            result = materialize_promise_audit(draft, ledger, performance, story)
+        except NON_DEGRADABLE_ERRORS:
+            raise
+        except Exception as exc:
+            result = broken_promise_audit(ledger)
+            self.repository.add_warning(
+                f"[PROMISE_AUDIT_FALLBACK] No se pudieron verificar las promesas "
+                f"en la historia ({type(exc).__name__})."
+            )
+        self.repository.save_json("promise_audit.json", result)
+
     # -- finishing -----------------------------------------------------------------------
 
     def _finalize_simulation(
@@ -559,7 +889,20 @@ class SimulationStagesMixin:
         )
         metrics = metrics.model_copy(update={"narrative_voice": narration.narrative_voice})
         self.repository.save_json("simulation_metrics.json", metrics)
-        self.repository.save_json("story_metrics.json", story_metrics(request, plan, story))
+        measured_plan = plan
+        if self.options.simulation_mode is SimulationMode.ADAPTIVE:
+            performed_ids = {
+                beat.event_id
+                for scene in performance.scenes
+                for beat in scene.beats
+                if beat.achieved
+            }
+            measured_plan = plan.model_copy(
+                update={"events": [event for event in plan.events if event.id in performed_ids]}
+            )
+        self.repository.save_json(
+            "story_metrics.json", story_metrics(request, measured_plan, story)
+        )
         self._publish(story, "Guardando la historia", "Historia simulada terminada")
 
     def _localized_titles(self, play: PlayScript) -> dict[str, str]:
@@ -585,6 +928,11 @@ class SimulationStagesMixin:
     def _presentation_from(self, play: PlayScript, plan: StoryPlan) -> StoryPresentation:
         """Rebuild the localized presentation the assembler needs for the narrated story."""
         titles = self._localized_titles(play)
+        if self.options.simulation_mode is SimulationMode.ADAPTIVE:
+            titles = {
+                chapter.id: f"Cap\u00edtulo {index}"
+                for index, chapter in enumerate(plan.chapters, 1)
+            }
         return StoryPresentation(
             title=play.title,
             chapters=[

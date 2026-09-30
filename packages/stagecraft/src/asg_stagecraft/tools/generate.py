@@ -9,7 +9,7 @@ from asg_core import NARRATION_VOICE_NAMES, use_utf8_output
 from pydantic import ValidationError
 
 from ..brief import StoryBrief
-from ..formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
+from ..formats import ActorMemory, NarrativeVoice, ScriptMethod, SimulationMode, StoryFormat
 from ..generator import StoryGenerator
 from ..options import GenerationOptions
 from ..planning.profiles import NarrativeProfile
@@ -93,6 +93,12 @@ def parser() -> argparse.ArgumentParser:
         ),
     )
     result.add_argument(
+        "--simulation-mode",
+        type=SimulationMode,
+        choices=list(SimulationMode),
+        help="Con --format simulated: fixed o adaptive para desviar hitos pendientes",
+    )
+    result.add_argument(
         "--narrator",
         help=(
             "Con --voice limited o first_person: el personaje desde el que se narra, por su "
@@ -119,6 +125,11 @@ def parser() -> argparse.ArgumentParser:
             "Voz de edge-tts que lee story.mp3, p. ej. es-MX-DaliaNeural; sin ella decide el "
             "idioma de la historia"
         ),
+    )
+    result.add_argument(
+        "--plan-from",
+        type=Path,
+        help="Con --format simulated: reutiliza request, plan, guion y casting de un run completo",
     )
     result.add_argument(
         "--brief",
@@ -154,12 +165,13 @@ def build_options(args: argparse.Namespace, settings) -> GenerationOptions:
         "narrative_profile": args.profile,
         "audio": False if args.no_audio else None,
         "audio_voice": args.audio_voice,
-        "story_format": args.story_format,
+        "story_format": args.story_format or (StoryFormat.SIMULATED if args.plan_from else None),
         "script_method": args.script_method,
         "narrative_voice": args.narrative_voice,
         "narrator": args.narrator,
         "narration_tone": args.narration_tone,
         "actor_memory": args.actor_memory,
+        "simulation_mode": args.simulation_mode,
         "turns_per_beat": args.turns_per_beat,
     }
     return base.with_changes(**{name: value for name, value in flags.items() if value is not None})
@@ -167,6 +179,8 @@ def build_options(args: argparse.Namespace, settings) -> GenerationOptions:
 
 def read_request(args: argparse.Namespace) -> StoryBrief | str:
     """Return the brief the flags point at, or the prompt given or typed in."""
+    if args.plan_from:
+        return ""
     if args.brief:
         return StoryBrief.model_validate_json(args.brief.read_text(encoding="utf-8"))
     return (args.prompt or input("Describe la historia que quieres generar:\n> ")).strip()
@@ -185,7 +199,7 @@ def main(argv: list[str] | None = None) -> int:
     print("Generador automático de historias — Stagecraft")
     print("\nEjemplo de prompt ideal:\n")
     print(f"  {EXAMPLE_PROMPT}\n")
-    if args.brief and args.prompt:
+    if (args.brief and args.prompt) or (args.plan_from and (args.prompt or args.brief)):
         print("Error: usa un prompt o --brief, no los dos.", file=sys.stderr)
         return 2
     try:
@@ -196,7 +210,10 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValidationError, ValueError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 2
-        if not prompt:
+        if args.plan_from and options.story_format is not StoryFormat.SIMULATED:
+            print("Error: --plan-from exige --format simulated.", file=sys.stderr)
+            return 2
+        if not prompt and not args.plan_from:
             print("Error: el prompt no puede estar vacío.", file=sys.stderr)
             return 2
         settings = apply_setting_flags(args, settings)
@@ -213,11 +230,18 @@ def main(argv: list[str] | None = None) -> int:
 
         simulated = options.story_format is StoryFormat.SIMULATED
         print(f"\nGenerando con {settings.model_summary(simulated=simulated)}...")
-        output = generator.generate(
-            prompt,
-            on_progress=report_progress,
-            on_event=report_event,
-        )
+        if args.plan_from:
+            output = generator.generate_from_plan(
+                args.plan_from,
+                on_progress=report_progress,
+                on_event=report_event,
+            )
+        else:
+            output = generator.generate(
+                prompt,
+                on_progress=report_progress,
+                on_event=report_event,
+            )
         if output.story_format is StoryFormat.SCRIPT:
             print(f"\nGuion terminado: {output.story_path}")
             print(f"Guion estructurado: {output.script_path}")
@@ -228,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
         elif not args.no_audio:
             print("Advertencia: la historia se guardó, pero no fue posible crear el audio.")
         return 0
-    except (ASGError, KeyboardInterrupt) as exc:
+    except (ASGError, OSError, ValueError, KeyboardInterrupt) as exc:
         message = exc.public_message() if isinstance(exc, ASGError) else "operación cancelada"
         print(f"\nError: {message}", file=sys.stderr)
         return 1

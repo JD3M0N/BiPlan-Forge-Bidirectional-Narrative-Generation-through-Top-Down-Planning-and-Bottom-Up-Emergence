@@ -13,7 +13,7 @@ disagree, the log wins - because the log is what happened.
 
 from ..formats import NarrativeVoice
 from ..schemas import ChapterPlan, StoryRequest
-from .base import Agent, json_text, story_specification_header
+from .base import Agent, json_text
 
 _VOICE_CLAUSES: dict[NarrativeVoice, str] = {
     NarrativeVoice.OMNISCIENT: (
@@ -82,18 +82,15 @@ class NarratorAgent(Agent[str]):
         chapter_title: str,
         voice: NarrativeVoice,
         log: str,
-        previous_chapter: str,
         narrator_name: str = "",
-        promise_brief: str = "",
         retry_feedback: str = "",
         tone: str = "",
     ) -> str:
         """Narrate one chapter, inventing nothing the performance did not stage."""
-        intent = {
-            "dramatic_goal": chapter.dramatic_goal,
-            "opening_state": chapter.opening_state,
-            "turning_point": chapter.turning_point,
-            "closing_state": chapter.closing_state,
+        stable_context = {
+            "premise": request.premise,
+            "constraints": request.constraints,
+            "genre": request.genre,
         }
         return self.provider.generate_text(
             system_instruction=(
@@ -120,18 +117,13 @@ class NarratorAgent(Agent[str]):
                 "the dialogue-dash convention of the language, give each beat its own paragraph, "
                 "and let what characters do carry what they feel. Hold this through the last "
                 "chapter: an ending is a scene, not an account of how matters turned out. "
-                "When PROMISE OBLIGATIONS are supplied, deliver each one through what happens "
-                "and what is said, never by announcing it. Do not expose internal IDs, turn "
-                "identifiers or planning terminology."
+                "If a question remains open in the log, leave it open. Do not expose "
+                "internal IDs, turn identifiers or planning terminology."
             ),
             prompt=(
-                f"{story_specification_header(request)}"
-                f"\n\nCHAPTER: {chapter_title}"
-                f"\n\nWHAT THIS CHAPTER IS FOR:\n{json_text(intent)}"
-                + (f"\n\nPROMISE OBLIGATIONS:\n{promise_brief}" if promise_brief else "")
-                + f"\n\nPREVIOUS CHAPTER:\n{previous_chapter or 'none'}"
-                + f"\n\nPERFORMANCE LOG:\n{log}"
-                + retry_feedback
+                "PREMISA Y REGLAS (son contexto, no sucesos ya ocurridos):\n"
+                f"{json_text(stable_context)}"
+                f"\n\nCHAPTER: {chapter_title}" + f"\n\nPERFORMANCE LOG:\n{log}" + retry_feedback
             ),
             profile="prose",
         )

@@ -7,6 +7,7 @@ import io
 import json
 import os
 import tempfile
+import time
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
@@ -27,7 +28,15 @@ def atomic_write_text(destination: str | Path, content: str) -> Path:
             stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, path)
+        # Windows indexers can briefly hold the destination between successive writes.
+        for attempt in range(8):
+            try:
+                os.replace(temporary, path)
+                break
+            except PermissionError:
+                if os.name != "nt" or attempt == 7:
+                    raise
+                time.sleep(0.02 * 2**attempt)
     except BaseException:
         temporary.unlink(missing_ok=True)
         raise

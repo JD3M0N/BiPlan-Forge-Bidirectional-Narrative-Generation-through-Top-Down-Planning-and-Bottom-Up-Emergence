@@ -183,6 +183,7 @@ def director_beat_context(
     gates: list[str],
     tactics: dict[str, list[str]] | None = None,
     used_events: list[str] | None = None,
+    clauses: list[str] | None = None,
 ) -> str:
     """Build the block the director reads to open or judge one beat.
 
@@ -204,6 +205,16 @@ def director_beat_context(
             f"- El conflicto: {beat.conflict}"
         ),
     ]
+    if beat.required_gates:
+        blocks.append(
+            "REVELACIONES OBLIGATORIAS EN ESTE BEAT:\n"
+            + "\n".join(f"- {item}" for item in beat.required_gates)
+        )
+    if clauses:
+        blocks.append(
+            "CLAUSULAS FIJAS DEL BEAT (evalua exactamente estas):\n"
+            + "\n".join(f"- {item}" for item in clauses)
+        )
     if beat.promise_brief:
         blocks.append(f"LO QUE ESTE MOMENTO LE DEBE AL LECTOR:\n{beat.promise_brief}")
     if gates:
@@ -300,6 +311,12 @@ def _state_line(state: CharacterState, names: dict[str, str]) -> str:
         pieces.append(f"te sientes {state.emotion}")
     if state.goal:
         pieces.append(f"ahora mismo intentas {state.goal}")
+    if state.commitment:
+        pieces.append(f"sigues comprometido con {state.commitment}")
+    if state.cover_story:
+        pieces.append(f"la version que sostienes es {state.cover_story}")
+    if state.change_condition:
+        pieces.append(f"reconsiderarias si {state.change_condition}")
     for item in state.relationships:
         other = names.get(item.character_id, item.character_id)
         pieces.append(f"con {other}: {item.stance}")
