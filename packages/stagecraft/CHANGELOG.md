@@ -8,7 +8,7 @@ original del auditor de promesas. Una revisión puede cambiar objetivos de
 solo algunos actores; los demás retienen los suyos. Los estados emocionales
 iniciales y finales se piden en el idioma de la ficción. La validación
 real y sus límites están en
-[validacion_asg_hibrido_7_5.md](../../docs/validacion_asg_hibrido_7_5.md).
+[resumen.md](../../docs/resumen.md).
 
 ## 7.5.0
 
@@ -217,7 +217,7 @@ idénticos byte a byte.
   pipeline narrativo corre entero y un Adaptador convierte cada capítulo final de prosa al mismo
   contrato). Ambos métodos producen exactamente el mismo contrato — `script.json` más un
   `story.md` renderizado — para poder compararlos a ciegas y quedarse con uno; ver
-  [docs/guion_teatral.md](../../docs/guion_teatral.md).
+  [docs/resumen.md](../../docs/resumen.md).
 - Nuevo `script.py`, hermano de `graph.py` y `promises.py` y con su misma regla de idioma: los
   `ValueError` van en inglés ASCII porque se reinyectan literalmente, junto al índice de anclas
   legales, en el prompt de reparación del acto. Normaliza más de lo que rechaza: solo hay una

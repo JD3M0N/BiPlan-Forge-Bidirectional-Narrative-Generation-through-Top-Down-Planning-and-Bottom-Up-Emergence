@@ -1,6 +1,6 @@
-# Command Reference
+# Comandos
 
-Run from the repository root after activating the virtual environment:
+Desde la raíz, con el entorno activo:
 
 ```powershell
 python -m venv .venv
@@ -8,17 +8,36 @@ python -m venv .venv
 python -m pip install -r requirements-dev.txt
 ```
 
-| Command | Description |
-| --- | --- |
-| `generate-story [prompt] [--brief PATH] [--options PATH] [--profile {essential,developed,expansive}] [--output PATH] [--model NAME] [--stage-model NAME] [--no-audio] [--audio-voice VOICE] [--format {narrative,script,simulated}] [--script-method {native,adapted}] [--voice {omniscient,focalized,first_person,limited}] [--narrator NAME] [--tone TEXT] [--actor-memory {own,shared}] [--turns-per-beat N]` | Generate a story; without `prompt`, asks for it interactively. `--profile` overrides the profile inferred from the prompt, and `--no-audio` skips the narration, which dominates the wall-clock time of an experiment batch. `--format script` requests a theater script instead of narrative prose, and `--script-method` picks how it is written (see [docs/guion_teatral.md](docs/guion_teatral.md)). `--format simulated` goes one step further: the characters perform that script with a memory of their own and the story is narrated from the log of what they actually did. `--voice` picks the point of view that narration is written from, and `--actor-memory shared` is its control arm, which gives every character everything public instead of only what they witnessed (see [docs/simulacion_escenica.md](docs/simulacion_escenica.md)). `--voice limited` and `first_person` are told from one character: `--narrator` names it as it appears in the cast (otherwise the protagonist narrates), and `--tone` gives the narrator a free-text register. `--audio-voice` picks one of the 45 Spanish edge-tts voices. `--brief` reads a structured brief (plot and cast, a run's `brief.json`) instead of a prompt, and `--options` replays a run's `generation_options.json`, with any other flag winning over it. `--stage-model` sends the performance of a simulated run (actor turns, reflections and the stage manager) to another Gemini model, which has its own daily free quota; it overrides `GEMINI_STAGE_MODEL`, and casting and narration stay on the main model. |
-| `compare-story-runs <run>... [--output PATH]` | Compare 2+ generated runs and produce an HTML report (default `story-comparison.html`). |
-| `audit-stage-run <run> [--model NAME] [--scenes-only]` | Ask an LLM judge whether any character in a simulated run spoke of something it could not know, scene by scene, and whether the narration is faithful to the performance log. Writes `audit/audit.json` inside the run and never overwrites a previous report. `--model` swaps the judge configured in `.env`, and `--scenes-only` skips the narration check. Spends quota. |
-| `recompute-simulation-metrics <run>` | Measure a performed run again with the current code, from the artifacts it already has on disk, and write the result beside the original as `simulation_metrics.recomputed.json`. The original `simulation_metrics.json` is never touched. Gives a 7.0 run the figures 7.1 added; `gates_known_by_discoverer` comes back as not measured when the cast bible predates the current gate contract, and the per-scene emotions, which the logs do not keep, are copied from the original. Spends no quota. |
-| `recover-story-runs [--stories PATH] [--close] [--discard] [--all]` | Close or discard the runs a killed process left stranded in `running`, which `StoryRun` refuses to open. Without a flag it only lists and classifies them: a run with `story.md` and a supported pipeline version can be closed as `completed`, the rest can only be discarded as `failed`. No artifact is ever deleted. Defaults to `Stories/Stagecraft`; pass `--stories Stories/Top-Down` for runs generated before 7.0. |
-| `report-evaluations [--stories PATH] [--csv PATH] [--group {story,profile,version,version-profile,approach,format,all}]` | Summarize the stored human evaluations (mean, standard deviation and variance per metric) and optionally export one CSV row per evaluation. |
-| `report-story-craft [--stories PATH] [--csv PATH] [--group {story,profile,version,version-profile,approach,status,format,all}] [--min-version V] [--include-unversioned] [--approach NAME] [--all-status] [--format {narrative,script,simulated,prose,all}]` | Measure the prose craft of every stored story —dialogue proportion, words per sentence and words per paragraph— recomputed from `story.md`, and group it with median and range. `--min-version` defaults to `6`, so unversioned runs stay out unless `--include-unversioned` asks for them; unfinished runs reach the CSV but not the summary unless `--all-status` is given. `--format` defaults to `narrative` because `craft_metrics` reads dialogue by quote marks or a leading dash and would measure almost none in a theater script; `prose` selects the two formats that do deliver prose, narrative and simulated, which is the comparison the hybrid pipeline exists to make. |
-| `report-simulations [--stories PATH] [--csv PATH] [--group {story,voice,memory,profile,version,voice-memory,all}] [--all-status]` | Summarize every stored performance from its `simulation_metrics.json`: beats reached, intervened and forced, turns per beat, speech and gesture repetition, how far the improvised lines drifted from the script (`script_echo`), mentions of what a character could not know (`unknown_mentions`) and narration compression, grouped by the axes the thesis turns. A figure a run never recorded is reported as not measured, not as zero. |
-| `asg-studio [--port N] [--host H] [--no-browser] [--demo]` | Open StageCraft, the graphical interface, at `http://127.0.0.1:8765/`: write a work and its cast, choose the format, point of view, narrator, tone, simulation knobs and audio voice, follow a run live and cancel it, read stored runs, repeat one with another setting, and compare two to four runs axis by axis. Pending options (inventory and others from the roadmap) are shown disabled. `--demo` replays a run's progress without calling Gemini or writing anything. See [apps/studio/README.md](apps/studio/README.md). |
-| `asg-console` | Open the interactive console: generate a Stagecraft story or record a human evaluation of any stored story. |
-| `asg-telegram` | Launch the Telegram bot in a separate console. |
-| `asg-telegram-run` | Run the Telegram bot in the current console. |
+Copia `.env.example` a `.env` (`GEMINI_API_KEY` solo hace falta para generar de verdad).
+Añade `--help` a cualquiera para ver todas sus opciones.
+
+## Generar y analizar (Stagecraft)
+
+- `generate-story [prompt]`: genera una historia (pide el prompt si no se da). Opciones útiles:
+  `--format {narrative,script,simulated}`, `--profile {essential,developed,expansive}`,
+  `--voice`, `--narrator`, `--actor-memory {own,shared}`, `--no-audio`, `--brief`, `--options`.
+- `compare-story-runs <run>...`: compara 2 o más runs y saca un informe HTML.
+- `audit-stage-run <run>`: un juez LLM revisa un run simulado (filtraciones de conocimiento y
+  fidelidad de la narración). Gasta cuota.
+- `recompute-simulation-metrics <run>`: recalcula las métricas de un run simulado desde disco.
+  No gasta cuota ni toca el original.
+- `recover-story-runs`: lista, cierra o descarta runs que quedaron atascados en `running`.
+
+## Informes (evaluation)
+
+- `report-evaluations`: resume las evaluaciones humanas (media y desviación por métrica).
+- `report-story-craft`: mide la artesanía de la prosa (diálogo, frases, párrafos) desde `story.md`.
+- `report-simulations`: resume las métricas de las funciones simuladas por voz, memoria y versión.
+
+## Interfaces
+
+- `asg-console`: consola interactiva para generar historias y evaluar las guardadas.
+- `asg-telegram`: abre la consola de Telegram en una ventana aparte y monta el servidor del bot.
+- `asg-telegram-run`: lo mismo, pero en la consola actual.
+- `asg-studio`: abre StageCraft, la interfaz web local (`http://127.0.0.1:8765/`), para configurar,
+  seguir y comparar runs. `--demo` la prueba sin gastar cuota.
+
+## Calidad
+
+- `.\run-tests.ps1`: la suite entera (único comando de tests).
+- `.\quality.ps1`: ruff, formato, tests y `pip check`; `-Fast` solo tests.

@@ -5,10 +5,10 @@ después. Hay tres formatos de salida, que comparten el plan:
 
 - **`narrative`** (por defecto): el pipeline Top-Down de siempre, en prosa.
 - **`script`**: el mismo plan como guion teatral por actos y escenas, por dos métodos
-  (`native` o `adapted`). Ver [docs/guion_teatral.md](../../docs/guion_teatral.md).
+  (`native` o `adapted`). Ver [docs/resumen.md](../../docs/resumen.md).
 - **`simulated`**: los personajes **representan** ese guion con memoria propia, sin verlo, y la
   historia se narra del log de la función. Ver
-  [docs/simulacion_escenica.md](../../docs/simulacion_escenica.md).
+  [docs/resumen.md](../../docs/resumen.md).
 
 ```text
 Analyst → Architect → World → Characters → Plot Planner → Plan Critic → Promise Ledger
@@ -82,10 +82,10 @@ story.mp3 + audio.json
   `revision_report.json`, `promise_audit.json`, `craft_evidence.json` y `story_metrics.json`, con
   la artesanía observada de la prosa. Ninguna de esas cifras viaja a un prompt.
 - **Guion**: `script.json`, el contrato que comparten los dos métodos, más `script_metrics.json`.
-  La lista por método está en `docs/guion_teatral.md`.
+  La lista por método está en `docs/resumen.md`.
 - **Simulado**: el guion nativo más `cast_bible.json`, `stage/`, `memory/`, `performance.json`,
   `narration/`, `narration.json`, `simulation_metrics.json` y `story_metrics.json`, detallados en
-  `docs/simulacion_escenica.md`.
+  `docs/resumen.md`.
 
 ## Tests
 

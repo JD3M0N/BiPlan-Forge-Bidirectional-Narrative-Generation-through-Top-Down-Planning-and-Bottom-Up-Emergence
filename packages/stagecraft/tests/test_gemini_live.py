@@ -10,20 +10,28 @@ from asg_stagecraft.runtime.config import load_settings
 from asg_stagecraft.runtime.provider import provider_from_settings
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-PROMPT_CATALOG = REPOSITORY_ROOT / "docs" / "prompts_top_down.md"
-PROMPT_START = "<!-- PROMPT_01_START -->"
-PROMPT_END = "<!-- PROMPT_01_END -->"
+CANONICAL_PROMPT = (
+    "Escribe en español un relato de fantasía épica con perfil narrativo Expansiva. Sir "
+    "Aldren, un caballero veterano atormentado por el fracaso de una misión anterior, "
+    "debe entrar en una fortaleza levantada sobre un volcán para rescatar a la princesa "
+    "Elara de un dragón ancestral. Elara no debe ser una víctima pasiva: debe investigar "
+    "su cautiverio, tomar decisiones arriesgadas y contribuir de forma decisiva a su "
+    "propia liberación. El dragón debe tener una motivación comprensible relacionada con "
+    "una antigua promesa rota por el reino, y no ser simplemente un monstruo malvado. "
+    "Desarrolla una cadena causal clara desde la llegada del caballero hasta el "
+    "enfrentamiento final; prepara con antelación cualquier objeto, conocimiento o "
+    "habilidad que resulte decisivo. Mantén la continuidad de lugares, heridas, "
+    "información y relaciones. Usa un tono aventurero y emotivo, incluye un dilema moral "
+    "que obligue a Aldren a elegir entre obedecer al rey y hacer lo correcto, y termina "
+    "con un desenlace cerrado y esperanzador. Evita el deus ex machina, las profecías que "
+    "resuelven el conflicto por sí solas y las explicaciones sobre el proceso de "
+    "escritura."
+)
 
 
 def _canonical_prompt() -> str:
-    """Load the canonical Gemini prompt from its documented source of truth."""
-    catalog = PROMPT_CATALOG.read_text(encoding="utf-8")
-    if catalog.count(PROMPT_START) != 1 or catalog.count(PROMPT_END) != 1:
-        raise ValueError("the prompt catalog must contain one canonical prompt marker pair")
-    prompt = catalog.split(PROMPT_START, 1)[1].split(PROMPT_END, 1)[0].strip()
-    if not prompt:
-        raise ValueError("the canonical Gemini prompt cannot be empty")
-    return prompt
+    """Return the canonical Gemini regression prompt."""
+    return CANONICAL_PROMPT
 
 
 pytestmark = pytest.mark.skipif(

@@ -14,7 +14,7 @@ Monorepo de investigación que genera y evalúa historias narrativas con un solo
   guion teatral.
 - **Híbrido** (formato `simulated`): el mismo plan se escribe como guion, los personajes lo
   **representan** con memoria propia, y la historia se narra del log de esa función. Ver
-  [docs/simulacion_escenica.md](docs/simulacion_escenica.md).
+  [docs/resumen.md](docs/resumen.md).
 
 El paquete se llamaba `top_down`; se renombró cuando dejó de ser solo top-down.
 
@@ -108,7 +108,7 @@ de añadir uno:
 - **Los tests de contrato no se tocan sin querer.** Cuando este documento o un doc de `docs/`
   cita un test por su nombre exacto (por ejemplo,
   `test_no_actor_ever_sees_the_plan_or_a_future_scene` en
-  [docs/simulacion_escenica.md](docs/simulacion_escenica.md)), ese nombre y lo que verifica se
+  [docs/resumen.md](docs/resumen.md)), ese nombre y lo que verifica se
   mantienen; si hace falta reescribirlo, se actualiza también el documento que lo cita.
 - Los dobles y constructores compartidos del pipeline (`FakeProvider`, `make_request`,
   `valid_plan`…) viven en `packages/stagecraft/tests/test_generator_v5.py`, y otros módulos los
@@ -243,7 +243,7 @@ por `script/render.py`.
 - La orquestación vive aparte, en **`script/stages.py`**, porque el experimento es temporal:
   borrar el método perdedor toca un solo archivo.
 
-Detalles en [docs/guion_teatral.md](docs/guion_teatral.md).
+Detalles en [docs/resumen.md](docs/resumen.md).
 
 ### Top-Down: artefactos de un run
 
@@ -320,7 +320,7 @@ puede forzar fallos en llamadas concretas.
 ### Híbrido: la función simulada
 
 `ASG_STORY_FORMAT=simulated` (o `--format simulated`) añade tres etapas tras el guion nativo. El
-diseño completo está en [docs/simulacion_escenica.md](docs/simulacion_escenica.md); lo que hay
+diseño completo está en [docs/resumen.md](docs/resumen.md); lo que hay
 que saber antes de tocar `stage/`:
 
 - **Los actores nunca ven el guion.** Al intérprete le llegan las circunstancias, su objetivo, la
@@ -563,27 +563,13 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
 
 ## Documentos de referencia
 
-- [docs/simulacion_escenica.md](docs/simulacion_escenica.md): la función simulada. Por qué los
-  actores no ven el guion, cómo funciona la memoria propia y su ablación, el bucle de escena, el
-  punto de vista modular, los artefactos y qué se mide.
-- [docs/estado_del_arte_simulacion.md](docs/estado_del_arte_simulacion.md): las cuarenta
-  referencias que sostienen ese diseño, con qué se tomó y qué se descartó de cada una.
-- [docs/marco_hibrido.md](docs/marco_hibrido.md): el marco teórico de la tesis. La paradoja
-  narrativa, la tradición híbrida (Façade, Thespian, Virtual Storyteller, Sabre), su versión con
-  LLM, por qué memoria propia, y qué afirma la tesis y cómo se mide.
-- [docs/mejoras_simulacion.md](docs/mejoras_simulacion.md): el diagnóstico de la actuación en los
-  runs 7.1 y las mejoras propuestas, cada una con su respaldo y su ficha del `TODO.md`.
-- [docs/guion_teatral.md](docs/guion_teatral.md): el formato guion. Los dos métodos, el contrato
-  de `script.json`, qué valida `script/validation.py` y qué solo corrige, y cómo comparar los
-  métodos.
-- [docs/promesas_ppp.md](docs/promesas_ppp.md): el contrato Promise-Progress-Payoff. Qué dice la
-  fuente, qué invariantes se formalizaron, cuáles se dejaron fuera y cómo se mide el efecto.
-- [docs/prompts_top_down.md](docs/prompts_top_down.md): el catálogo canónico de prompts (7
-  prompts × 3 perfiles) sobre el que se mide cada versión. `test_gemini_live.py` lee el prompt 1
-  entre sus marcadores, así que no se renombra ni se reestructura sin tocar ese test.
+- [docs/resumen.md](docs/resumen.md): resumen único del diseño (plan, promesas, guion, función
+  simulada, validación 7.5). Junto a él, en `docs/`, los dos PDF fuente de la tesis: Roger Fuentes
+  y *Sanderson Craft*. El catálogo de prompts se retiró; el prompt canónico vive en
+  `test_gemini_live.py`.
 - [packages/evaluation/README.md](packages/evaluation/README.md): el formato de
   `evaluation.json`, las seis métricas humanas y los tres informes.
-- [commands.md](commands.md): todos los comandos con sus opciones.
+- [commands.md](commands.md): los comandos, en una línea cada uno.
 
 El informe de artesanía de la prosa (6.5.0 contra 6.6.0 y su réplica de ruido), la calibración de
 perfiles de 6.0 y el recorrido de etapas de 6.2 se retiraron en 7.1.1 porque describían

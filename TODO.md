@@ -1,7 +1,7 @@
 # Hoja de ruta
 
 **Estado medido el 2026-09-30 con `asg-stagecraft` 7.5.1 (pipeline 7.5; dos funciones reales completadas en 7.5).** La interfaz gráfica StageCraft (`asg-studio`) ya existe. Un solo generador, Stagecraft, con tres formatos: `narrative`, `script` y `simulated`
-(ver [docs/simulacion_escenica.md](docs/simulacion_escenica.md)).
+(ver [docs/resumen.md](docs/resumen.md)).
 
 | Corpus | Runs | Completados | Fallidos | Qué es |
 |---|---|---|---|---|
@@ -9,7 +9,7 @@
 | `Stories/Top-Down/` | 176 | 135 | 41 | 4.0–6.2, anteriores al renombrado; 18 sin versión |
 | `Stories/Bottom-Up/` | 6 | — | — | el escape room retirado en 7.1.1, más tres lotes de CSV |
 
-- **Validación real 7.5:** dos funciones `fixed`/`adaptive` desde el mismo plan congelado; ver [docs/validacion_asg_hibrido_7_5.md](docs/validacion_asg_hibrido_7_5.md). La revisión adaptativa falló con Gemini y se corrigieron sus objetivos parciales después del experimento.
+- **Validación real 7.5:** dos funciones `fixed`/`adaptive` desde el mismo plan congelado; ver [docs/resumen.md](docs/resumen.md). La revisión adaptativa falló con Gemini y se corrigieron sus objetivos parciales después del experimento.
 - **Evaluación humana: casi inexistente.** De 146 `evaluation.json`, uno solo tiene puntuaciones
   reales (`Top-Down/20260831-223547-el-rescate-de-luminaria`). Todo lo demás que se sabe de la
   calidad sale de métricas automáticas o de jueces LLM, y esos jueces aprueban casi todo (TD-1).
@@ -48,7 +48,7 @@
   de 8 recuerdos por turno frente a los 20,5–29 de mediana y 57–70 de máximo de 7.1, cero material
   propio recuperado, 38 de 43 y 47 de 51 turnos con destinatario frente a 1 de 80, cero notas
   repetidas y el primer susurro del corpus. La tabla completa está en
-  [docs/simulacion_escenica.md](docs/simulacion_escenica.md), «Validación de 7.2».
+  [docs/resumen.md](docs/resumen.md), «Validación de 7.2».
 - **La frontera de conocimiento se sostiene en el dato.** Una auditoría determinista de los dos
   runs sobre `contexts.jsonl`, `turns.jsonl` y `memory/*/records.json` no encontró ningún id ni
   réplica del guion en un contexto de actor, ningún recuerdo de lo no presenciado, ningún
@@ -60,8 +60,8 @@
   del diseño) y casi nunca tenían destinatario. Sus métricas recalculadas con el código de 7.2
   están en `simulation_metrics.recomputed.json`.
 - **Dos documentos nuevos fundamentan la tesis y ordenan el trabajo de la función:**
-  - [docs/marco_hibrido.md](docs/marco_hibrido.md): por qué mezclar Top-Down y Bottom-Up;
-  - [docs/mejoras_simulacion.md](docs/mejoras_simulacion.md): diagnóstico de la actuación en los
+  - [docs/resumen.md](docs/resumen.md): por qué mezclar Top-Down y Bottom-Up;
+  - [docs/resumen.md](docs/resumen.md): diagnóstico de la actuación en los
     runs 7.1 y mejoras con su respaldo.
 
   De ahí salieron SIM-9 a SIM-13, MED-7 y EXP-5; SIM-9 y SIM-10 están cerradas.
@@ -106,8 +106,8 @@ La tesis se cierra con experimentos medidos y evaluados por personas. Para llega
 ING-2 abarata todo lo que reescribe prompts (SIM-1, SIM-2, SIM-6, SIM-15, TD-2, TD-4), así que
 conviene hacerlo antes o a la vez. El resto de ING y OPS puede avanzar en paralelo y sin cuota.
 
-El porqué de esta ruta, con sus fuentes, está en [docs/marco_hibrido.md](docs/marco_hibrido.md); el
-de las fichas SIM, en [docs/mejoras_simulacion.md](docs/mejoras_simulacion.md).
+El porqué de esta ruta, con sus fuentes, está en [docs/resumen.md](docs/resumen.md); el
+de las fichas SIM, en [docs/resumen.md](docs/resumen.md).
 
 ## Protocolo de medición
 
@@ -131,7 +131,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
     2026). Así el cupo de `GEMINI_MODEL` queda para plan, guion, casting y narración, unas 15–25
     llamadas por run.
   - El RPD real de cada modelo se ve en AI Studio → Rate limits: Google ya no lo publica.
-- **Emparejar.** Mismo prompt del catálogo ([docs/prompts_top_down.md](docs/prompts_top_down.md)),
+- **Emparejar.** Mismo prompt del catálogo ([docs/resumen.md](docs/resumen.md)),
   mismo perfil forzado con `--profile` y mismo modelo. En runs simulados, también el mismo modelo
   de la función (`stage_model`): `pair_runs` no da por limpio un par que lo cambie. Cuando exista
   MED-5, también el mismo plan.
@@ -147,9 +147,9 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   TD-1 y la calibración de EXP-2, ninguna cifra de juez cuenta como medida. La literatura dice lo
   mismo: un juez prefiere sus propias generaciones, y aquí Gemini juzga a Gemini; y los jueces al
   uso puntúan historias de LLM por encima de relatos del *New Yorker* (ver
-  [docs/marco_hibrido.md](docs/marco_hibrido.md), §9).
+  [docs/resumen.md](docs/resumen.md), §9).
 - **Por escrito.** El resultado va con cifras y comandos en el doc del formato
-  (`docs/simulacion_escenica.md` o `docs/guion_teatral.md`), no aquí.
+  (`docs/resumen.md` o `docs/resumen.md`), no aquí.
 
 ---
 
@@ -211,7 +211,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
 *Área:* medición · *Cuota:* sin cuota · *Depende de:* —
 
 - **Síntoma.** `simulation_metrics.json` no mide lo que más falla en la actuación, y las cifras de
-  `docs/mejoras_simulacion.md` salieron de scripts de un solo uso:
+  `docs/resumen.md` salieron de scripts de un solo uso:
   - a quién se dirige cada turno (1 de 80 con destinatario) y si alguien le responde;
   - las notas que se repiten al mismo actor (5 de 54 turnos con nota);
   - los pensamientos que son un plan (35 % y 62 %) o que repiten la nota;
@@ -231,7 +231,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
 
   Como en el resto de `evaluation`, lo que un run no registró sale como «no medido».
 - **Hecho cuando.** El informe da esas cifras para las cinco funciones de `Stories/Stagecraft/` y
-  reproduce las de `docs/mejoras_simulacion.md`.
+  reproduce las de `docs/resumen.md`.
 - **Ojo.** Son indicadores deterministas y groseros: sirven para comparar versiones sobre el mismo
   plan, no como nota de calidad. Ninguno viaja a un prompt.
 
@@ -540,7 +540,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   - Un timeout propio y corto para actor, director y reflexión.
   - Un presupuesto de pensamiento mínimo para el actor, medido con y sin él sobre el mismo plan
     (EXP-5). La literatura dice que razonar no mejora el role-play y puede empeorarlo
-    (`docs/mejoras_simulacion.md` §10).
+    (`docs/resumen.md` §10).
 - **Medido en 7.2.** Mucho menos grave que en 7.1, pero sigue ahí: 2 intentos 504 por run, y el
   reloj (951 y 825 s) deja 100 y 49 s sin explicar sobre la suma de latencias más las esperas. Los
   runs bajaron a 14–16 minutos, frente a los 17–31 de 7.0 y 7.1. Un `ConnectError` de red mató
@@ -614,7 +614,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   - baja `thought_ratio` claramente de 0,9, y bajan los pensamientos de plan que mide MED-7;
   - tiene al menos un susurro que la ablación pueda medir;
   - no repite tipo de evento del mundo.
-- **Ojo.** El porqué de cada punto, con su respaldo, está en `docs/mejoras_simulacion.md` §4 y §7.
+- **Ojo.** El porqué de cada punto, con su respaldo, está en `docs/resumen.md` §4 y §7.
 
 ### SIM-7 · Reanudar una función interrumpida
 
@@ -678,7 +678,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   - hay más tácticas distintas por actor que en 7.1, leídas con MED-7.
 - **Ojo.** Vigilar que la nota de giro no convierta cada mentira en confesión inmediata: una cesión
   que solo llega con la nota es obediencia, no un cambio del personaje. El porqué, en
-  `docs/mejoras_simulacion.md` §5.
+  `docs/resumen.md` §5.
 
 ### SIM-12 · La deducción llega sin sus premisas
 
@@ -704,7 +704,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   - ninguna deducción se abre sin sus premisas en la memoria del deductor;
   - ninguna compuerta se revela antes de su evento.
 - **Ojo.** Es la versión en la función de TD-4 y de las reglas de juego limpio: el lector y quien
-  investiga tienen que haber visto lo mismo. El porqué, en `docs/mejoras_simulacion.md` §6.
+  investiga tienen que haber visto lo mismo. El porqué, en `docs/resumen.md` §6.
 
 ### SIM-13 · El narrador omnisciente destripa el misterio
 
@@ -727,7 +727,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   - Hay test de la estrategia.
   - La lectura a ciegas decide entre esta voz, `omniscient` y `focalized` sobre quien investiga.
 - **Ojo.** Fuera del misterio la omnisciencia completa puede ser lo mejor: decide la lectura, no una
-  regla. El porqué, en `docs/mejoras_simulacion.md` §9.
+  regla. El porqué, en `docs/resumen.md` §9.
 
 ### TD-3 · La revisión alarga en vez de reparar
 
@@ -868,7 +868,7 @@ cuota gratuita · *Depende de:* SIM-1, SIM-2, SIM-14, MED-3; mejor con MED-5
     `beat_completion_ratio`.
   - Leer también el coste por agente (MED-2), y si el último capítulo es el más mudo o el más
     corto.
-- **Hecho cuando.** Hay una decisión escrita, con cifras, en `docs/simulacion_escenica.md`.
+- **Hecho cuando.** Hay una decisión escrita, con cifras, en `docs/resumen.md`.
 
 ### EXP-2 · Medir la ablación de memoria propia contra memoria compartida
 
@@ -895,7 +895,7 @@ cuota gratuita · *Depende de:* SIM-1, SIM-2, SIM-14, MED-3; mejor con MED-5
     presenciado. La ablación corre ya sobre 7.2, que aplica el tope; no mezclar sus runs con los
     anteriores.
   - El respaldo de la hipótesis, y lo que ya dice la literatura sobre filtrar lo que un personaje
-    sabe, está en `docs/marco_hibrido.md` §7.
+    sabe, está en `docs/resumen.md` §7.
 
 ### EXP-3 · Medir guion nativo frente a adaptado y quedarse con uno
 
@@ -917,7 +917,7 @@ mejor con MED-5
   - Una matriz con los dos métodos sobre los mismos prompts, mejor desde el mismo plan (MED-5).
   - Leer `script_metrics.json`, los intentos rechazados, los avisos, la tasa de copia desde la
     prosa y el coste, y comparar a ciegas.
-- **Hecho cuando.** Hay una decisión escrita, con cifras, en `docs/guion_teatral.md`, y se ha
+- **Hecho cuando.** Hay una decisión escrita, con cifras, en `docs/resumen.md`, y se ha
   borrado el método que pierda: su agente, sus prompts, sus tests y `ASG_SCRIPT_METHOD`.
 
 ### EXP-5 · Medir qué aporta cada mejora de la función
@@ -937,7 +937,7 @@ gratuita · *Depende de:* MED-5, MED-7
   - Usar tres prompts de géneros distintos: 03 (misterio), 04 (drama) y 01 (fantasía).
   - Añadir como brazo el presupuesto de pensamiento del actor (SIM-4).
   - Leer MED-7, `report-simulations`, el coste por agente (MED-2) y la comparación a ciegas.
-- **Hecho cuando.** Hay una tabla por versión en `docs/simulacion_escenica.md` y una decisión
+- **Hecho cuando.** Hay una tabla por versión en `docs/resumen.md` y una decisión
   escrita sobre qué mecanismo se queda.
 - **Ojo.** En el prompt 03 el brazo base pueden ser los propios runs 7.1: con `--plan-from` sobre
   `070539` y `072847`, las versiones nuevas representan exactamente su plan. En los otros dos
@@ -1243,5 +1243,5 @@ puntuar. Hay dos salidas:
 - puntuarlos como línea base, que es lo único que les daría uso en la tesis;
 - o sacarlos del menú de la consola, conservando siempre los datos.
 
-Ya tienen otro uso: `docs/marco_hibrido.md` §3 los cita como evidencia interna de que la simulación
+Ya tienen otro uso: `docs/resumen.md` §3 los cita como evidencia interna de que la simulación
 sola produce registros, no historias.
