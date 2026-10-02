@@ -20,7 +20,7 @@ def test_every_available_control_sets_a_real_option() -> None:
 
 def test_pending_controls_are_not_options_and_are_rejected() -> None:
     pending = pending_keys(document())
-    assert pending == {"inventory", "plan_from", "multi_voice"}
+    assert pending == {"plan_from", "multi_voice"}
     assert not pending & set(GenerationOptions.model_fields)
     for key in pending:
         with pytest.raises(ValidationError):

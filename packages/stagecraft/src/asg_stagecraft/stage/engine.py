@@ -32,8 +32,9 @@ from dataclasses import dataclass, field
 from ..formats import ActorMemory, SimulationMode
 from ..runtime.errors import NON_DEGRADABLE_ERRORS, StagePerformanceError
 from . import policy
+from .inventory import StageInventory
 from .memory import CharacterMemory
-from .perception import stage_direction, witnesses
+from .perception import item_line, stage_direction, witnesses
 from .render import actor_turn_context, director_beat_context, scene_log
 from .schemas import (
     ActorDossier,
@@ -45,6 +46,8 @@ from .schemas import (
     BeatRecord,
     CharacterState,
     DirectorEntry,
+    ItemAction,
+    ItemActionDraft,
     ReflectionDraft,
     SceneBrief,
     ScenePerformance,
@@ -125,6 +128,7 @@ class PerformanceEngine:
         language: str,
         actor_memory: ActorMemory = ActorMemory.OWN,
         simulation_mode: SimulationMode = SimulationMode.FIXED,
+        inventory: StageInventory | None = None,
         turns_per_beat: int = 8,
         reaction_turns: int = REACTION_TURNS,
         coda_turns: int = CODA_TURNS,
@@ -151,6 +155,9 @@ class PerformanceEngine:
         self.language = language
         self.actor_memory = actor_memory
         self.simulation_mode = simulation_mode
+        # None in every run without the inventory option, and then no object block, no object
+        # schema and no arbitration: the performance is byte for byte the one 7.5 produced.
+        self.inventory = inventory
         self.on_attempt = on_attempt
         self.on_reflection = on_reflection
         self.on_decision = on_decision
@@ -414,6 +421,12 @@ class PerformanceEngine:
             )
             return actor_id
         run.turns.append(turn)
+        # Applied before the turn is remembered, so what each witness records is the world as it
+        # stands after the object moved, never before.
+        if self.inventory is not None and turn.item_action is not None:
+            self.inventory.apply(
+                turn.item_action, actor_id=actor_id, location_id=run.brief.location_id or ""
+            )
         self._record_turn(turn, run.brief.number)
         updates = {
             field: value
@@ -492,6 +505,12 @@ class PerformanceEngine:
             witnessed=witnessed,
             character_id=actor_id,
             names=self.names,
+            held=self.inventory.held_by(actor_id) if self.inventory else None,
+            in_reach=(
+                self.inventory.in_reach(actor_id, on_stage, scene.location_id or "")
+                if self.inventory
+                else None
+            ),
         )
         previous_speech = self._spoken.get(actor_id, [])
         previous_actions = self._gestures.get(actor_id, [])
@@ -546,10 +565,12 @@ class PerformanceEngine:
                 actor_name=self.names.get(actor_id, ""),
                 names=self.names,
             )
+            item_action = None
             try:
                 validate_turn(
                     candidate, previous_speech=previous_speech, previous_actions=previous_actions
                 )
+                item_action = self._arbitrate(candidate, actor_id, scene, on_stage)
             except TurnIssue as issue:
                 rejections += 1
                 self._reject(
@@ -572,7 +593,8 @@ class PerformanceEngine:
                 feedback = f"\n\nCORRECCION:\n{issue}\nVuelve a hacer tu movimiento."
                 continue
             turn = StageTurn(
-                **candidate.model_dump(),
+                **candidate.model_dump(exclude={"item_action"}),
+                item_action=item_action,
                 id=f"{scene.scene_id}-t{number:03d}",
                 scene_id=scene.scene_id,
                 number=number,
@@ -603,6 +625,31 @@ class PerformanceEngine:
                 self.on_turn(turn, context)
             return turn, rejections
         return None, rejections
+
+    def _arbitrate(
+        self,
+        candidate: ActorTurnDraft,
+        actor_id: str,
+        scene: SceneBrief,
+        on_stage: list[str],
+    ) -> ItemAction | None:
+        """Put the object move a turn proposed to the arbiter, if there is one to put.
+
+        Called once the turn itself has validated, so a rejected object move costs the actor the
+        same single repair any other fault would, with the arbiter's own English message.
+        """
+        if self.inventory is None:
+            return None
+        return self.inventory.resolve(
+            getattr(candidate, "item_action", None) or ItemActionDraft(),
+            actor_id=actor_id,
+            on_stage=on_stage,
+            location_id=scene.location_id or "",
+            names=self.names,
+            visibility=candidate.visibility,
+            addressed_to=candidate.addressed_to,
+            whole_cast=self.whole_cast,
+        )
 
     def _stage_event_turn(
         self, run: _SceneRun, beat_index: int, beat: BeatBrief, text: str
@@ -815,6 +862,11 @@ class PerformanceEngine:
             tactics=self._recent_tactics(run),
             used_events=self.used_events,
             clauses=self._clauses.get(run.brief.scene_id + ":" + beat.event_id),
+            props=(
+                self.inventory.director_view(run.on_stage, run.brief.location_id or "", self.names)
+                if self.inventory
+                else None
+            ),
         )
 
     def _log(
@@ -867,13 +919,31 @@ class PerformanceEngine:
                 )
                 if piece
             )
-        for character_id in turn.witnesses:
+        # An object move is remembered by exactly those who perceived it, which is not always
+        # the turn's own witness list: a hidden object is nobody's business but its holder's,
+        # and a hand-over reaches the hands even when the words did not.
+        moved = ""
+        item_witnesses: list[str] = []
+        if turn.item_action is not None:
+            item_witnesses = list(turn.item_action.witnesses)
+            speaker = self.names.get(turn.actor_id, turn.actor_id)
+            line = item_line(turn.item_action, self.names, concealed_from=True)
+            moved = f"{speaker} {line}" if line else ""
+        for character_id in dict.fromkeys([*turn.witnesses, *item_witnesses]):
             memory = self.memories.get(character_id)
-            if memory is None or not visible:
+            if memory is None:
+                continue
+            perceived = character_id in set(turn.witnesses)
+            pieces = [
+                visible if perceived else "",
+                moved if character_id in set(item_witnesses) else "",
+            ]
+            text = " ".join(piece for piece in pieces if piece)
+            if not text:
                 continue
             memory.remember(
                 kind=self._memory_kind(turn, character_id),
-                text=visible,
+                text=text,
                 scene_number=scene_number,
                 turn_id=turn.id,
                 participants=list(turn.witnesses),

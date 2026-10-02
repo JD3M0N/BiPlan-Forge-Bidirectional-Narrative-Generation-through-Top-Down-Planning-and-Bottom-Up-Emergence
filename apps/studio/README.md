@@ -51,17 +51,17 @@ simulada tiene modelo propio (`GEMINI_STAGE_MODEL`), la cabecera lo muestra junt
 ## Opciones pendientes
 
 La interfaz enseña, deshabilitadas y con su ficha, las opciones que el roadmap aún no construye:
-inventario de objetos, memoria completa frente a recuperada, partir del plan de otra función
-(MED-5), la visión «omnisciente sin destripes» (SIM-13) y el audio a varias voces.
+memoria completa frente a recuperada, partir del plan de otra función (MED-5), la visión
+«omnisciente sin destripes» (SIM-13) y el audio a varias voces.
 
-**Receta para volver real una pendiente** (el inventario como ejemplo):
+**Receta para volver real una pendiente**, tal como se siguió para el inventario en 7.6:
 
 1. Añadir el campo a `GenerationOptions` (`packages/stagecraft/src/asg_stagecraft/options.py`)
    y el mismo kwarg a `StoryGenerator`; `test_generation_options.py` obliga a hacer las dos.
 2. Consumirlo donde vive el mecanismo, condicionado a que esté activo para que los prompts sin
-   él no cambien: en el inventario, estado en `stage/`, `perception.py` y el bloque del actor en
-   `render.py`.
+   él no cambien. El inventario lo hizo con un módulo de estado (`stage/inventory.py`), los
+   testigos en `perception.py` y los bloques del actor y del director en `render.py`.
 3. En `catalog.py` de esta app, pasar su `status` de `pending` a `available`.
-4. Añadir un test y subir `PIPELINE_VERSION` si cambia algún artefacto.
+4. Añadir un test de los dos brazos y subir `PIPELINE_VERSION` si cambia algún artefacto.
 
 La interfaz y `generation_options.json` lo recogen solos.

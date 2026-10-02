@@ -10,6 +10,7 @@ from .narrator import NarratorAgent
 from .planner import PlotPlannerAgent
 from .playwright import PlaywrightAgent, ScriptAdapterAgent, ScriptWriterAgent
 from .promises import PromiseLedgerAgent
+from .props import PropMasterAgent
 from .review import DramaCriticAgent, PlanCriticAgent, ScriptCriticAgent
 from .world import WorldBuilderAgent
 from .writer import DrafterAgent, WriterAgent
@@ -25,6 +26,7 @@ __all__ = [
     "PlotPlannerAgent",
     "PlaywrightAgent",
     "PromiseLedgerAgent",
+    "PropMasterAgent",
     "PlanCriticAgent",
     "DramaCriticAgent",
     "ScriptAdapterAgent",

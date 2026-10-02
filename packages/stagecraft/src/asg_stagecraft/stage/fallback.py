@@ -6,12 +6,13 @@ floor the model narrator is compared against - the same log, rendered with no in
 all.
 
 It invents nothing. Speech becomes dialogue under the Spanish dash convention, actions become
-sentences, thoughts become reported interiority, and that is all.
+sentences, thoughts become reported interiority, an object changing hands becomes the sentence
+the arbiter recorded, and that is all.
 """
 
 from __future__ import annotations
 
-from .perception import stage_direction
+from .perception import item_line, stage_direction
 from .schemas import StageTurn
 
 
@@ -25,6 +26,10 @@ def narrate(turns: list[StageTurn], names: dict[str, str]) -> str:
         speaker = names.get(turn.actor_id, turn.actor_id)
         if turn.action:
             paragraphs.append(_sentence(stage_direction(speaker, turn.action, names)))
+        if turn.item_action:
+            moved = item_line(turn.item_action, names).strip("[]")
+            if moved:
+                paragraphs.append(_sentence(f"{speaker} {moved}"))
         if turn.speech:
             aside = ""
             if turn.visibility == "whisper":

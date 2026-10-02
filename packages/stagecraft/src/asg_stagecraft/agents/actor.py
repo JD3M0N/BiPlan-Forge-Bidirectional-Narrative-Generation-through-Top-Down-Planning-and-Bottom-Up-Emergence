@@ -11,7 +11,7 @@ is never perceived by anyone else, so a character can lie on stage while the log
 lied, and the narrator can later dramatize the gap.
 """
 
-from ..stage.schemas import ActorTurnDraft, ReflectionDraft
+from ..stage.schemas import ActorTurnDraft, ActorTurnWithItemsDraft, ReflectionDraft
 from .base import Agent
 
 
@@ -25,8 +25,16 @@ class ActorAgent(Agent[ActorTurnDraft]):
         system_instruction: str,
         context: str,
         retry_feedback: str = "",
+        *,
+        items: bool = False,
     ) -> ActorTurnDraft:
-        """Take one turn in the current scene from the bound character's point of view."""
+        """Take one turn in the current scene from the bound character's point of view.
+
+        ``items`` swaps in the schema with an object field. It is the only difference between a
+        run with an inventory and one without, and it is deliberately a different schema rather
+        than an optional field: the schema crosses to the provider, so an object field present
+        but unused would change every actor request in the corpus.
+        """
         return self.provider.generate_structured(
             system_instruction=system_instruction,
             prompt=(
@@ -35,7 +43,7 @@ class ActorAgent(Agent[ActorTurnDraft]):
                 "Escribe solo lo que dices y lo que haces, sin tu nombre delante y sin comillas."
                 f"{retry_feedback}"
             ),
-            schema=ActorTurnDraft,
+            schema=ActorTurnWithItemsDraft if items else ActorTurnDraft,
             profile="prose",
         )
 

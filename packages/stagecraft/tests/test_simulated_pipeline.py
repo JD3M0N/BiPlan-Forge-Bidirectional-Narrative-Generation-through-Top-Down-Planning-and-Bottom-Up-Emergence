@@ -296,7 +296,7 @@ def test_every_director_call_lands_in_director_jsonl(tmp_path) -> None:
 def test_the_last_scene_of_the_play_ends_in_a_coda(tmp_path) -> None:
     run, _ = generate(tmp_path)
     performance = PerformanceArtifact.model_validate(read_json(run, "performance.json"))
-    assert performance.contract_version == "3"
+    assert performance.contract_version == "4"
     assert performance.scenes[-1].coda_turns > 0
     assert all(scene.coda_turns == 0 for scene in performance.scenes[:-1])
     assert read_json(run, "simulation_metrics.json")["coda_turns"] == (
@@ -607,3 +607,104 @@ def test_a_new_performance_reuses_the_exact_plan_script_and_cast(tmp_path) -> No
     ):
         assert (replay.run_dir / name).read_bytes() == (original.run_dir / name).read_bytes()
     assert read_json(replay, "performance.json")["settings"]["simulation_mode"] == "adaptive"
+
+
+def test_the_inventory_dresses_the_stage_and_arbitrates_the_performance(tmp_path) -> None:
+    """7.6: the objects of the world were ignored, so a seal changed hands with no hand-over."""
+    provider = StageFakeProvider(story_review=major_story_review())
+    run, _ = generate(tmp_path, provider, inventory=True)
+    metadata = read_json(run, "metadata.json")
+    assert metadata["status"] == "completed"
+    completed = metadata["completed_stages"]
+    assert completed == sorted(completed, key=pipeline_module.CHECKPOINT_STAGES.index)
+    assert completed.index("casting") < completed.index("props") < completed.index("performance")
+    assert read_json(run, "generation_options.json")["inventory"] is True
+
+    props = read_json(run, "props.json")
+    assert [item["name"] for item in props["props"]] == [
+        "Una llave de laton",
+        "Un cuaderno cosido",
+        "Un farol apagado",
+    ]
+    assert props["fallback"] is False
+
+    performance = PerformanceArtifact.model_validate(read_json(run, "performance.json"))
+    assert performance.contract_version == "4"
+    assert performance.settings.inventory is True
+    assert [item.id for item in performance.props] == ["prop-1", "prop-2", "prop-3"]
+    moves = [
+        turn.item_action
+        for scene in performance.scenes
+        for turn in scene.turns
+        if turn.item_action is not None
+    ]
+    assert moves, "the actors never handled an object"
+    # Every move the log kept is one the arbiter accepted, with the object resolved to an id.
+    assert all(item.item_id and item.item_name and item.witnesses for item in moves)
+    assert {item.verb for item in moves} <= {"use", "give", "take", "drop", "hide", "show"}
+
+    logged = (run.run_dir / "stage/inventory.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(logged) == len(moves)
+    cast = {turn.actor_id for scene in performance.scenes for turn in scene.turns}
+    # Every line says who ended up holding the object: a cast member, or nobody.
+    assert all(json.loads(line)["holder_id"] in {"", *cast} for line in logged)
+
+    metrics = read_json(run, "simulation_metrics.json")
+    assert metrics["inventory"] is True
+    assert metrics["props"] == 3
+    assert metrics["item_actions"] == len(moves)
+    assert metrics["props_used_ratio"] > 0
+    assert metrics["item_witness_share"] > 0
+    # Measured from the log alone, so a finished run can be measured again without quota.
+    assert recompute.main([str(run.run_dir)]) == 0
+    assert read_json(run, recompute.OUTPUT_NAME) == metrics
+
+    # The actors were told what they carry, and still never what the plan holds.
+    assert any("LO QUE LLEVAS:" in context for context in provider.actor_contexts)
+    plan = read_json(run, "story_plan.json")
+    forbidden = {event["id"] for event in plan["events"]}
+    forbidden |= {item.id for item in performance.props}
+    for context in provider.actor_contexts:
+        for token in forbidden:
+            assert token not in context, token
+    # And no figure of the stage reached the prop master either.
+    props_prompts = [
+        prompt for name, _, prompt in provider.structured_calls if name == "PropListDraft"
+    ]
+    assert len(props_prompts) == 1
+    for needle in ("MAX_PERSONAL_PROPS", "at most 2", "props_used_ratio"):
+        assert needle not in props_prompts[0], needle
+
+
+def test_without_the_inventory_no_object_reaches_a_prompt_or_an_artifact(tmp_path) -> None:
+    """The control arm: a run with the option off is the run 7.5 produced, prompt for prompt."""
+    provider = StageFakeProvider(story_review=major_story_review())
+    run, _ = generate(tmp_path, provider)
+    assert not (run.run_dir / "props.json").exists()
+    assert not (run.run_dir / "stage/inventory.jsonl").exists()
+    assert "props" not in read_json(run, "metadata.json")["completed_stages"]
+    performance = PerformanceArtifact.model_validate(read_json(run, "performance.json"))
+    assert performance.settings.inventory is False
+    assert performance.props == [] and performance.inventory == []
+    assert all(turn.item_action is None for scene in performance.scenes for turn in scene.turns)
+    # The actor schema is the one every earlier run used, and no object block was ever rendered.
+    schemas = {name for name, *_ in provider.structured_calls}
+    assert "ActorTurnDraft" in schemas
+    assert "ActorTurnWithItemsDraft" not in schemas and "PropListDraft" not in schemas
+    prompts = [prompt for _, prompt in provider.text_calls] + [
+        prompt for _, _, prompt in provider.structured_calls
+    ]
+    for needle in ("LO QUE LLEVAS", "LO QUE VES", "UTILERIA", "WHAT YOU ARE CARRYING"):
+        assert not any(needle in prompt for prompt in prompts), needle
+    systems = {system for system, _, _ in provider.structured_calls}
+    assert not any("WHAT YOU ARE CARRYING" in system for system in systems)
+
+
+def test_the_stage_is_dressed_from_the_world_when_the_prop_master_fails(tmp_path) -> None:
+    provider = StageFakeProvider(story_review=major_story_review(), fail_props_call={1, 2})
+    run, events = generate(tmp_path, provider, inventory=True)
+    assert run.story_path.is_file()
+    assert read_json(run, "props.json")["fallback"] is True
+    warnings = read_json(run, "metadata.json")["warnings"]
+    assert any("PROPS_FALLBACK" in warning for warning in warnings)
+    assert any(event.kind == "props_fallback" for event in events)

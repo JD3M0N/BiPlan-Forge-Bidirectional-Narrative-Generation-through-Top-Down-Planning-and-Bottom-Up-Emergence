@@ -102,8 +102,16 @@ class GenerationOptions(BaseModel):
     )
     simulation_mode: SimulationMode = Field(
         default=SimulationMode.FIXED,
-        title="Modo de simulaci?n",
+        title="Modo de simulación",
         description="Fijo conserva los hitos; adaptable permite cambiar los pendientes.",
+    )
+    inventory: bool = Field(
+        default=False,
+        title="Inventario de objetos",
+        description=(
+            "Da objetos a los personajes y arbitra en código quién tiene qué: "
+            "un objeto solo lo percibe quien lo ve."
+        ),
     )
     turns_per_beat: int = Field(
         default=8,

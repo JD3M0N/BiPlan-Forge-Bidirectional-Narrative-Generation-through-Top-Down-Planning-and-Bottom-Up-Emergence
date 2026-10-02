@@ -57,6 +57,13 @@ SIMULATION_FIELDS: tuple[str, ...] = (
     "unknown_mentions",
     "memory_records",
     "retrievals",
+    "props",
+    "item_actions",
+    "item_repairs",
+    "props_used_ratio",
+    "hidden_item_actions",
+    "secret_handoffs",
+    "item_witness_share",
     "narration_source_fallbacks",
     "narrated_words",
     "compression_ratio",
@@ -90,6 +97,7 @@ class SimulationRecord:
     values: dict[str, float | None] = field(default_factory=dict)
     costs: list[dict] = field(default_factory=list)
     simulation_mode: str = "fixed"
+    inventory: str = "sin inventario"
 
 
 @dataclass
@@ -109,6 +117,7 @@ SIMULATION_GROUPINGS: dict[str, Callable[[SimulationRecord], str]] = {
     "version": lambda record: record.generator_version,
     "voice-memory": lambda record: f"{record.narrative_voice} / {record.actor_memory}",
     "mode": lambda record: record.simulation_mode,
+    "inventory": lambda record: record.inventory,
 }
 
 
@@ -160,6 +169,10 @@ def read_simulation(directory: str | Path, stories_root: str | Path) -> Simulati
         simulation_mode=load_json_object(run_dir / "generation_options.json").get(
             "simulation_mode", "fixed"
         ),
+        # A performance before 7.6 could not track objects, so a run that is silent ran without.
+        inventory="con inventario"
+        if (load_json_object(run_dir / "performance.json").get("settings") or {}).get("inventory")
+        else "sin inventario",
     )
 
 

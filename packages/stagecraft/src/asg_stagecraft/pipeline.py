@@ -96,9 +96,11 @@ CHECKPOINT_STAGES = (
     "critique",
     "revision",
     "adaptation",
-    # The three hybrid stages of a simulated run: the cast bible, the performance the
-    # actors improvise from the frozen script, and the prose narrated from its log.
+    # The hybrid stages of a simulated run: the cast bible, the props when the inventory is on,
+    # the performance the actors improvise from the frozen script, and the prose narrated from
+    # its log.
     "casting",
+    "props",
     "performance",
     "narration",
     "story",
@@ -201,6 +203,11 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
     def actor_memory(self) -> ActorMemory:
         """Return whether each actor remembers only what it witnessed or everything public."""
         return self.options.actor_memory
+
+    @property
+    def inventory(self) -> bool:
+        """Say whether the performance tracks and arbitrates physical objects."""
+        return self.options.inventory
 
     @property
     def turns_per_beat(self) -> int:

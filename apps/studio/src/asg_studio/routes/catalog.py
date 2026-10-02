@@ -91,6 +91,8 @@ def command_line(job: JobRequest) -> str:
             parts += [flag, _quoted(value) if " " in value else value]
     if not options.audio:
         parts.append("--no-audio")
+    if options.inventory and options.story_format is INTERFACE_FORMAT:
+        parts.append("--inventory")
     prefix = [
         f"$env:{name}='false';"
         for name, enabled in (

@@ -13,17 +13,40 @@ foreshadowing a scene it has not lived yet.
 
 from __future__ import annotations
 
-from .perception import stage_direction, visible_text
+from .perception import item_line, stage_direction, visible_text
 from .schemas import (
     ActorDossier,
     BeatBrief,
     CharacterState,
     MemoryRecord,
+    Prop,
     SceneBrief,
     SceneCastBrief,
     StageTurn,
 )
 from .validation import strip_internal_ids
+
+# The only thing the inventory adds to an actor's standing instruction, and only when it is on.
+# What each verb requires is arbitrated in stage/inventory.py; this just tells the actor the
+# rules it will be held to, so a rejection is never a surprise.
+INVENTORY_RULES = (
+    "",
+    "WHAT YOU ARE CARRYING",
+    "- You are told what you are holding and what you can see. Those are the only objects there "
+    "are for you: never produce, invent or mention one that is not listed, and never assume you "
+    "have something back once you have given it away.",
+    "- To handle one, name it in item_action exactly as it is listed, with the verb for what you "
+    "do: use it, give it to someone present, take it, drop it, hide it, or show it. Most turns "
+    "handle nothing; leave the verb as 'none' then.",
+    "- You can only use, give, drop, hide or show what is in your own hands. To get hold of "
+    "something else you have to take it, and only while it is here.",
+    "- Say in your action what you do with it, as the audience would see it. The object is a "
+    "move, not a label: reach for one when it gets you what you want.",
+    "- Something you hide is out of sight: nobody else knows you have it until you show it, so "
+    "when you hide one do not name it in your action - the others may see you put something "
+    "away, never what it was. What you hand over in a whisper passes between the two of you "
+    "alone.",
+)
 
 
 def actor_system_prompt(
@@ -32,6 +55,7 @@ def actor_system_prompt(
     name: str,
     language: str,
     names: dict[str, str],
+    inventory: bool = False,
 ) -> str:
     """Build the fixed instruction one actor carries for the whole performance.
 
@@ -46,14 +70,16 @@ def actor_system_prompt(
         "WHO YOU ARE",
         f"- What you want: {dossier.want}",
     ]
-    if dossier.need:
-        lines.append(f"- What you actually need, whether or not you know it: {dossier.need}")
-    if dossier.wound:
-        lines.append(f"- The injury you carry: {dossier.wound}")
-    if dossier.fear:
-        lines.append(f"- What you are afraid of: {dossier.fear}")
-    if dossier.moral_line:
-        lines.append(f"- What you will not do: {dossier.moral_line}")
+    lines += [
+        f"- {label}: {value}"
+        for label, value in (
+            ("What you actually need, whether or not you know it", dossier.need),
+            ("The injury you carry", dossier.wound),
+            ("What you are afraid of", dossier.fear),
+            ("What you will not do", dossier.moral_line),
+        )
+        if value
+    ]
     if dossier.secret:
         hidden = ", ".join(names.get(item, item) for item in dossier.secret_from)
         kept = f" You keep it from: {hidden}." if hidden else ""
@@ -108,6 +134,8 @@ def actor_system_prompt(
             "- Never mention that any of this is a story, a scene or a script.",
         ]
     )
+    if inventory:
+        lines.extend(INVENTORY_RULES)
     return "\n".join(lines)
 
 
@@ -122,14 +150,25 @@ def actor_turn_context(
     witnessed: list[StageTurn],
     character_id: str,
     names: dict[str, str],
+    held: list[Prop] | None = None,
+    in_reach: list[Prop] | None = None,
 ) -> str:
-    """Build the variable block one actor reads before taking a turn."""
+    """Build the variable block one actor reads before taking a turn.
+
+    ``held`` and ``in_reach`` arrive only when the inventory is on, and only ever hold what this
+    character can actually see: what is in its own hands, and what is in front of it. A block
+    for an object it does not know about would be the plan leaking in by another door.
+    """
     blocks = [f"CIRCUNSTANCIAS DADAS:\n{strip_internal_ids(scene.setting)}"]
     # Each person on stage comes with what anyone can see of them. With names alone, the first
     # real run had a character call a woman "muchacho" eleven times.
     others = [_presented(item, names) for item in scene.cast if item.character_id != character_id]
     if others:
         blocks.append("CONTIGO EN ESCENA:\n" + "\n".join(f"- {line}" for line in others))
+    if held:
+        blocks.append("LO QUE LLEVAS:\n" + "\n".join(f"- {prop_line(item)}" for item in held))
+    if in_reach:
+        blocks.append("LO QUE VES:\n" + "\n".join(f"- {prop_line(item)}" for item in in_reach))
     blocks.append(f"LO QUE QUIERES AQUI: {strip_internal_ids(objective)}")
     if state:
         blocks.append(f"COMO ESTAS: {_state_line(state, names)}")
@@ -184,12 +223,17 @@ def director_beat_context(
     tactics: dict[str, list[str]] | None = None,
     used_events: list[str] | None = None,
     clauses: list[str] | None = None,
+    props: list[str] | None = None,
 ) -> str:
     """Build the block the director reads to open or judge one beat.
 
     Two deterministic signals ride along. The last tactics of each actor make a deadlock
     visible ("confront, confront, confront"), and the world events already used in the play
     stop the director from reaching for the same thunderclap twice.
+
+    ``props`` is the third, when the inventory is on: who is holding what right now, concealed
+    objects included. The director is the one agent allowed to know that, because it can then
+    point an actor at an object it is carrying and has forgotten about.
     """
     cast = "\n".join(
         f"- {_presented(item, names)} ({item.character_id}) quiere: {item.objective}"
@@ -231,6 +275,11 @@ def director_beat_context(
                 if value
             )
         )
+    if props:
+        blocks.append(
+            "UTILERIA EN JUEGO (sugiere usarla, nunca la dictes; lo escondido solo lo sabe quien "
+            "lo lleva):\n" + "\n".join(f"- {item}" for item in props)
+        )
     if used_events:
         blocks.append(
             "EVENTOS DEL MUNDO YA USADOS:\n" + "\n".join(f"- {item}" for item in used_events)
@@ -250,6 +299,8 @@ def transcript(turns: list[StageTurn], names: dict[str, str]) -> str:
         pieces = []
         if turn.action:
             pieces.append(f"({stage_direction(speaker, turn.action, names)})")
+        if turn.item_action:
+            pieces.append(item_line(turn.item_action, names, concealed_from=True))
         if turn.speech:
             aside = ""
             if turn.visibility == "whisper":
@@ -259,7 +310,7 @@ def transcript(turns: list[StageTurn], names: dict[str, str]) -> str:
         if turn.thought:
             pieces.append(f"[{speaker} piensa: {turn.thought}]")
         if pieces:
-            lines.append(f"{turn.id} {' '.join(pieces)}")
+            lines.append(f"{turn.id} {' '.join(piece for piece in pieces if piece)}")
     return "TRANSCRIPCION:\n" + "\n".join(lines)
 
 
@@ -287,6 +338,12 @@ def scene_log(
             lines.append(mark.strip())
         if turn.action:
             lines.append(f"({stage_direction(speaker, turn.action, names)})")
+        if turn.item_action:
+            # The narrator is told what actually changed hands, so it can dramatize the gap
+            # between what a character said and what it was quietly doing with an object.
+            moved = item_line(turn.item_action, names, concealed_from=True)
+            if moved:
+                lines.append(f"{speaker} {moved}")
         if turn.speech:
             aside = ""
             if turn.visibility == "whisper":
@@ -296,6 +353,12 @@ def scene_log(
         if thoughts and turn.thought:
             lines.append(f"[{speaker} piensa: {turn.thought}]")
     return "\n".join(lines)
+
+
+def prop_line(prop: Prop) -> str:
+    """Name one object for an actor, with what it can see of it and whether it is out of sight."""
+    line = f"{prop.name}, {prop.appearance}" if prop.appearance else prop.name
+    return f"{line} (lo llevas escondido)" if prop.concealed else line
 
 
 def _presented(member: SceneCastBrief, names: dict[str, str]) -> str:

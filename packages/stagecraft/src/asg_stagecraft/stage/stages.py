@@ -14,7 +14,13 @@ from __future__ import annotations
 import json
 import re
 
-from ..agents import ActorAgent, CastingDirectorAgent, NarratorAgent, StageManagerAgent
+from ..agents import (
+    ActorAgent,
+    CastingDirectorAgent,
+    NarratorAgent,
+    PropMasterAgent,
+    StageManagerAgent,
+)
 from ..agents.promise_auditor import PromiseStoryAuditorAgent
 from ..formats import SimulationMode
 from ..planning.promise_brief import chapter_brief
@@ -37,6 +43,7 @@ from ..writing.audit import story_metrics, word_count
 from . import fallback
 from .casting import dossier_index, fallback_bible, gates_for, materialize_bible
 from .engine import CODA_TURNS, REACTION_TURNS, PerformanceEngine
+from .inventory import StageInventory
 from .memory import RECENCY_DECAY, RETRIEVED_RECORDS
 from .metrics import simulation_metrics
 from .narration import (
@@ -48,6 +55,7 @@ from .narration import (
 )
 from .policy import CHECK_EVERY
 from .promise_audit import broken_promise_audit, materialize_promise_audit
+from .props import fallback_props, materialize_props
 from .render import actor_system_prompt, scene_log, transcript
 from .revision import materialize_revision
 from .schemas import (
@@ -57,6 +65,7 @@ from .schemas import (
     NarrationArtifact,
     PerformanceArtifact,
     PerformanceSettings,
+    PropList,
     SceneBrief,
     SceneCastBrief,
     ScenePerformance,
@@ -67,6 +76,7 @@ from .validation import REPETITION_THRESHOLD
 _ACT_LABEL = re.compile("^\\s*(?:acto|act)\\s+(?:[ivxlc]+|\\d+)\\s*[:.\\-–—]\\s*", re.IGNORECASE)
 
 CASTING_ATTEMPTS = 2
+PROPS_ATTEMPTS = 2
 NARRATION_ATTEMPTS = 2
 
 
@@ -83,11 +93,12 @@ class SimulationStagesMixin:
         ledger: PromiseLedger | None,
         bible: CastBible | None = None,
     ) -> None:
-        """Cast or reuse actors, then narrate what their performance established."""
+        """Cast or reuse actors, dress the stage if asked, then narrate the performance."""
         if bible is None:
             bible = self._cast_actors(request, world, characters, plan, play)
+        props = self._dress_stage(request, world, characters, plan, play, bible)
         performance, engine, briefs = self._perform_play(
-            request, world, characters, plan, play, bible, ledger
+            request, world, characters, plan, play, bible, ledger, props
         )
         story, narration, fallbacks, narrated = self._narrate(
             request, characters, plan, play, performance, ledger
@@ -165,6 +176,77 @@ class SimulationStagesMixin:
         self.repository.complete_stage("casting")
         return bible
 
+    # -- the props -----------------------------------------------------------------------
+
+    def _dress_stage(
+        self,
+        request: StoryRequest,
+        world: WorldArtifact,
+        characters: CharactersArtifact,
+        plan: StoryPlan,
+        play: PlayScript,
+        bible: CastBible,
+    ) -> PropList | None:
+        """Place the objects the performance may handle, or return None when the option is off.
+
+        Returning None rather than an empty list is the whole discipline of this option: the
+        engine then builds no arbiter, asks for no object field and renders no object block, so
+        a run without an inventory is the run 7.5 produced, prompt for prompt.
+        """
+        assert self.repository is not None
+        if not self.inventory:
+            return None
+        self._notify(51, "props", "Preparando la utileria")
+        cast_ids = [member.character_id for member in play.cast]
+        agent = PropMasterAgent(self.provider)
+        feedback = ""
+        for attempt in range(1, PROPS_ATTEMPTS + 1):
+
+            def draw_props(feedback_snapshot: str = feedback):
+                """Draw one set of props with feedback bound to this attempt."""
+                return agent.run(
+                    request, world, characters, plan, bible, cast_ids, feedback_snapshot
+                )
+
+            try:
+                draft = self._call_agent("prop_master", draw_props)
+            except NON_DEGRADABLE_ERRORS:
+                raise
+            except Exception as exc:
+                self.repository.save_data(
+                    f"props/attempt-{attempt:03d}.json",
+                    {"attempt": attempt, "status": "failed", "exception_type": type(exc).__name__},
+                )
+                feedback = (
+                    "\n\nPROPS REPAIR REQUIRED. RETURN A COMPLETE REPLACEMENT PROP LIST. "
+                    "The previous attempt could not be completed."
+                )
+                continue
+            try:
+                props = materialize_props(draft, world=world, cast_ids=cast_ids, plan=plan)
+            except ValueError as exc:
+                issue = str(exc).strip() or type(exc).__name__
+                self.repository.save_data(
+                    f"props/attempt-{attempt:03d}.json",
+                    {"attempt": attempt, "issue": issue, "props": draft.model_dump(mode="json")},
+                )
+                feedback = (
+                    "\n\nPROPS REPAIR REQUIRED. RETURN A COMPLETE REPLACEMENT PROP LIST. "
+                    f"The previous one was rejected: {issue}"
+                )
+                continue
+            self.repository.save_json("props.json", props)
+            self.repository.complete_stage("props")
+            return props
+
+        warning = "No se pudo vestir el escenario; la utileria se deriva de world.json."
+        self.repository.add_warning(f"[PROPS_FALLBACK] {warning}")
+        self._emit("props_fallback", warning, stage="props")
+        props = fallback_props(world, plan)
+        self.repository.save_json("props.json", props)
+        self.repository.complete_stage("props")
+        return props
+
     # -- the performance -----------------------------------------------------------------
 
     def _perform_play(
@@ -176,6 +258,7 @@ class SimulationStagesMixin:
         play: PlayScript,
         bible: CastBible,
         ledger: PromiseLedger | None,
+        props: PropList | None = None,
     ) -> tuple[PerformanceArtifact, PerformanceEngine, list[SceneBrief]]:
         """Let the actors play every scene of the script, scene by scene."""
         assert self.repository is not None
@@ -188,6 +271,7 @@ class SimulationStagesMixin:
                 name=names.get(character_id, character_id),
                 language=request.language,
                 names=names,
+                inventory=props is not None,
             )
             for character_id, dossier in dossiers.items()
         }
@@ -205,6 +289,15 @@ class SimulationStagesMixin:
         actor = ActorAgent(self.provider)
         director = StageManagerAgent(self.provider)
         active_decision = {"id": ""}
+        inventory = (
+            StageInventory(
+                props.props,
+                actor_memory=self.actor_memory,
+                on_item=lambda entry: self.repository.append_jsonl("stage/inventory.jsonl", entry),
+            )
+            if props is not None
+            else None
+        )
 
         def stage_call(name, function):
             """Tag provider records with the stage decision that requested the call."""
@@ -213,7 +306,8 @@ class SimulationStagesMixin:
 
         engine = PerformanceEngine(
             take_turn=lambda system, context, feedback: stage_call(
-                "actor", lambda: actor.run(system, context, feedback)
+                "actor",
+                lambda: actor.run(system, context, feedback, items=inventory is not None),
             ),
             open_beat=lambda context: stage_call(
                 "stage_manager", lambda: director.open_beat(context, request.language)
@@ -232,6 +326,7 @@ class SimulationStagesMixin:
             language=request.language,
             actor_memory=self.actor_memory,
             simulation_mode=self.options.simulation_mode,
+            inventory=inventory,
             turns_per_beat=self.turns_per_beat,
             reaction_turns=REACTION_TURNS,
             coda_turns=CODA_TURNS,
@@ -305,6 +400,9 @@ class SimulationStagesMixin:
                     "memory_lengths": {
                         key: len(value.records) for key, value in engine.memories.items()
                     },
+                    "inventory": [item.model_dump(mode="json") for item in inventory.snapshot()]
+                    if inventory is not None
+                    else [],
                 },
             )
             self.repository.save_text(
@@ -336,6 +434,7 @@ class SimulationStagesMixin:
             settings=PerformanceSettings(
                 actor_memory=self.actor_memory,
                 simulation_mode=self.options.simulation_mode,
+                inventory=inventory is not None,
                 turns_per_beat=self.turns_per_beat,
                 check_every=CHECK_EVERY,
                 reaction_turns=REACTION_TURNS,
@@ -347,6 +446,8 @@ class SimulationStagesMixin:
             scenes=scenes,
             states=[engine.states[key] for key in sorted(engine.states)],
             warnings=list(engine.warnings),
+            props=list(props.props) if props is not None else [],
+            inventory=inventory.snapshot() if inventory is not None else [],
         )
         self.repository.save_json("performance.json", performance)
         self.repository.save_text(

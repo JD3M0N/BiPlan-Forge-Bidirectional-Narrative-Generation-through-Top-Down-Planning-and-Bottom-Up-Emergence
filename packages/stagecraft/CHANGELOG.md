@@ -1,5 +1,24 @@
 # Historial de cambios
 
+## 7.6.0
+
+La función simulada puede dar objetos a los personajes. `--inventory` (o `ASG_INVENTORY=true`)
+añade la etapa `props` entre casting y performance: el utilero reparte los `StoryObject` del
+mundo, que la función ignoraba, y los personales que definan a alguien. Apagado —el defecto— no
+cambia ningún prompt, esquema ni artefacto, y eso es lo que lo hace medible.
+
+- **El modelo propone y el código decide.** Un turno puede traer un `item_action` con un verbo y
+  el nombre del objeto; `stage/inventory.py` comprueba si lo lleva o lo tiene al alcance, y
+  rechaza en inglés ASCII con su código, que se reinyecta como el de cualquier otro turno.
+- **Un objeto solo lo percibe quien lo ve.** Un traspaso en susurro queda entre esas dos manos y
+  lo que alguien esconde no lo sabe nadie más, así que las visiones limitada y en primera persona
+  solo narran los objetos que su personaje presenció.
+- **`props.json`, `stage/inventory.jsonl` y `performance.json` en contrato 4**, con la utilería
+  inicial y final. `PIPELINE_VERSION` pasa a 7.6; las versiones 5.0 a 7.5 se siguen abriendo y se
+  emparejan como «sin inventario».
+- Nuevas métricas de utilería en `simulation_metrics.json` y `report-simulations`, **no medidas**
+  en un run sin inventario. Diseño y medición en [resumen.md](../../docs/resumen.md).
+
 ## 7.5.1
 
 Tras dos funciones Gemini emparejadas se conservan las cláusulas que faltan

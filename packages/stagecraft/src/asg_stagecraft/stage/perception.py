@@ -9,12 +9,18 @@ The rule is small enough to state in full: a public turn is perceived by everyon
 whisper only by its speaker and the characters it is addressed to, and a thought only by whoever
 thought it. Under ActorMemory.SHARED the first case widens to the whole cast, which is the
 control arm that isolates what the memory model itself contributes.
+
+An object move, when the inventory is on, is perceived on the same terms with one addition and
+one exception: whoever the object left or reached always perceives it, because a thing changing
+hands is felt by both hands, and concealing one is perceived by nobody but its holder. The
+witness list itself is computed in stage/inventory.py, which owns where each object is; what
+lives here is how such a move reads to one character.
 """
 
 from __future__ import annotations
 
 from ..formats import ActorMemory
-from .schemas import ActorTurnDraft, StageTurn
+from .schemas import ActorTurnDraft, ItemAction, StageTurn
 
 
 def witnesses(
@@ -31,9 +37,9 @@ def witnesses(
     """
     if turn.visibility == "whisper":
         addressed = [item for item in on_stage if item in set(turn.addressed_to)]
-        return _ordered(actor_id, addressed, on_stage)
+        return ordered_witnesses(actor_id, addressed, on_stage)
     audience = whole_cast if memory is ActorMemory.SHARED else on_stage
-    return _ordered(actor_id, audience, audience)
+    return ordered_witnesses(actor_id, audience, audience)
 
 
 def perceives(character_id: str, turn: StageTurn) -> bool:
@@ -55,11 +61,43 @@ def stage_direction(speaker: str, action: str, names: dict[str, str]) -> str:
     return f"{speaker} {action}"
 
 
+def item_line(action: ItemAction, names: dict[str, str], *, concealed_from: bool = False) -> str:
+    """Render one object move as a stage direction, in the fiction's own language.
+
+    Deliberately plain and derived, never authored: the actor already wrote what it does in its
+    action, and this line is the arbiter's record of what actually changed, so a reader, the
+    director and the narrator all see the same sentence.
+    """
+    who = names.get(action.target_id, action.target_id)
+    from_who = names.get(action.from_id, action.from_id)
+    item = f"«{action.item_name}»"
+    if action.verb == "give":
+        return f"[entrega {item} a {who}]" if who else f"[entrega {item}]"
+    if action.verb == "take":
+        return f"[toma {item} de {from_who}]" if from_who else f"[toma {item}]"
+    if action.verb == "drop":
+        return f"[deja {item}]"
+    if action.verb == "hide":
+        return f"[esconde {item}, sin que nadie lo vea]" if concealed_from else f"[esconde {item}]"
+    if action.verb == "show":
+        return f"[muestra {item} a {who}]" if who else f"[muestra {item}]"
+    if action.verb == "use":
+        return f"[usa {item} con {who}]" if who else f"[usa {item}]"
+    return ""
+
+
+def perceives_item(character_id: str, turn: StageTurn) -> bool:
+    """Say whether one character perceived the object move a turn carried, if it carried one."""
+    return bool(turn.item_action) and character_id in set(turn.item_action.witnesses)
+
+
 def visible_text(turn: StageTurn, character_id: str, names: dict[str, str]) -> str:
     """Render one turn as a given character perceived it, hiding what they could not know.
 
     A character reads its own thought and never anyone else's, which is what makes a scene
-    transcript differ between two actors who both stood through it.
+    transcript differ between two actors who both stood through it. An object move is held to
+    the same standard: a concealed one appears only to its holder, and a whispered hand-over
+    only to the two hands and whoever was whispered to.
     """
     if turn.kind == "world":
         return f"({turn.action})" if turn.action else ""
@@ -69,6 +107,11 @@ def visible_text(turn: StageTurn, character_id: str, names: dict[str, str]) -> s
         pieces.append(f"[pienso: {turn.thought}]")
     if turn.action:
         pieces.append(f"({stage_direction(speaker, turn.action, names)})")
+    if perceives_item(character_id, turn):
+        assert turn.item_action is not None
+        line = item_line(turn.item_action, names, concealed_from=turn.item_action.verb == "hide")
+        if line:
+            pieces.append(line)
     if turn.speech:
         target = ""
         if turn.visibility == "whisper":
@@ -78,10 +121,12 @@ def visible_text(turn: StageTurn, character_id: str, names: dict[str, str]) -> s
     return " ".join(pieces)
 
 
-def _ordered(actor_id: str, chosen: list[str], order: list[str]) -> list[str]:
+def ordered_witnesses(actor_id: str, chosen: list[str], order: list[str]) -> list[str]:
     """Return the speaker plus the chosen characters, deduplicated in the given order."""
     selected = set(chosen) | {actor_id}
-    result = [item for item in order if item in selected]
+    # dict.fromkeys so a caller may append the parties of an object move to the order it passes
+    # without having to check whether they were already standing there.
+    result = [item for item in dict.fromkeys(order) if item in selected]
     if actor_id not in result:
         result.insert(0, actor_id)
     return result

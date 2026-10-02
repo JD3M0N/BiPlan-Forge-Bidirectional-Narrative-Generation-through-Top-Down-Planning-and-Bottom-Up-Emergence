@@ -128,6 +128,26 @@ class SimulationMetrics(BaseModel):
     log_words: int = Field(default=0, ge=0)
     compression_ratio: float = Field(default=0.0, ge=0.0)
     dialogue_survival: float = Field(default=0.0, ge=0.0, le=1.0)
+    # Every inventory figure is None in a run without one, so a report says "no medida" rather
+    # than zero: a performance that handled no objects and one that could not is not the same.
+    inventory: bool = False
+    props: int | None = None
+    item_actions: int | None = None
+    # Keyed by verb, so a performance that only ever used objects reads differently from one
+    # that traded them. Absent verbs are simply missing from the mapping.
+    item_actions_by_verb: dict[str, int] | None = None
+    # Accepted object moves that took the actor two attempts. Not the arbiter's rejection count,
+    # which lives per code in rejected.jsonl: performance.json keeps only accepted turns.
+    item_repairs: int | None = None
+    # What share of the dressed stage was ever handled. Near 0 means the props were scenery.
+    props_used_ratio: float | None = None
+    hidden_item_actions: int | None = None
+    # Hand-overs whose witnesses were fewer than the characters on stage for that turn: the
+    # object traffic the rest of the cast could not see, which is what a point of view divides on.
+    secret_handoffs: int | None = None
+    # Mean share of the whole cast that perceived an object move, from 0 to 1. Low means objects
+    # moved privately, so two narrators of the same performance disagree about who holds what.
+    item_witness_share: float | None = None
     scene_metrics: list[SceneMetrics] = Field(default_factory=list)
     actor_metrics: list[ActorMetrics] = Field(default_factory=list)
 
@@ -212,7 +232,45 @@ def simulation_metrics(
         dialogue_survival=round(_dialogue_survival(all_turns, story), 4),
         scene_metrics=scene_metrics,
         actor_metrics=actor_metrics,
+        **_inventory_metrics(performance, scenes, all_turns),
     )
+
+
+def _inventory_metrics(
+    performance: PerformanceArtifact,
+    scenes: list[ScenePerformance],
+    all_turns: list[StageTurn],
+) -> dict:
+    """Measure the object traffic, or report every figure as unmeasured without an inventory."""
+    if not performance.settings.inventory:
+        return {"inventory": False}
+    moves = [turn.item_action for turn in all_turns if turn.item_action is not None]
+    # Everyone the performance put on stage, not only whoever took a turn: the denominator has
+    # to be the audience an object move could have had.
+    cast = {item for turn in all_turns for item in (turn.actor_id, *turn.witnesses)}
+    props = performance.props
+    handled = {item.item_id for item in moves}
+    shares = [len(set(item.witnesses)) / len(cast) for item in moves] if cast else []
+    secret = sum(
+        1
+        for scene in scenes
+        for turn in scene.turns
+        if turn.item_action is not None
+        and len(set(turn.item_action.witnesses)) < len(set(turn.witnesses))
+    )
+    return {
+        "inventory": True,
+        "props": len(props),
+        "item_actions": len(moves),
+        "item_actions_by_verb": dict(sorted(Counter(item.verb for item in moves).items())),
+        "item_repairs": sum(
+            1 for turn in all_turns if turn.attempts > 1 and turn.item_action is not None
+        ),
+        "props_used_ratio": round(len(handled) / len(props), 4) if props else 0.0,
+        "hidden_item_actions": sum(1 for item in moves if item.verb == "hide"),
+        "secret_handoffs": secret,
+        "item_witness_share": round(sum(shares) / len(shares), 4) if shares else 0.0,
+    }
 
 
 def _scene_metrics(scene: ScenePerformance, scripted: list[str]) -> SceneMetrics:

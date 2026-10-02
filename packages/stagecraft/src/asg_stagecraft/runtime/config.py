@@ -31,6 +31,7 @@ class Settings:
     narrative_voice: NarrativeVoice = NarrativeVoice.OMNISCIENT
     actor_memory: ActorMemory = ActorMemory.OWN
     simulation_mode: SimulationMode = SimulationMode.FIXED
+    inventory: bool = False
     turns_per_beat: int = 8
     # The performance may run on its own model, key and RPM: Gemini counts the free daily quota
     # per project and per model, and the actors spend most of a simulated run's calls. Empty (or
@@ -132,6 +133,7 @@ def load_settings(start: Path | None = None, *, require_api_key: bool = True) ->
         narrative_voice=_choice("ASG_NARRATIVE_VOICE", NarrativeVoice, NarrativeVoice.OMNISCIENT),
         actor_memory=_choice("ASG_ACTOR_MEMORY", ActorMemory, ActorMemory.OWN),
         simulation_mode=_choice("ASG_SIMULATION_MODE", SimulationMode, SimulationMode.FIXED),
+        inventory=_flag("ASG_INVENTORY", default=False),
         turns_per_beat=_integer("ASG_STAGE_TURNS_PER_BEAT", 8, minimum=2),
         stage_model=os.getenv("GEMINI_STAGE_MODEL", "").strip(),
         stage_api_key=os.getenv("GEMINI_STAGE_API_KEY", "").strip(),

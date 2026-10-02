@@ -28,14 +28,20 @@ class VoiceStrategy:
 
 
 def _omniscient(turns: list[StageTurn], narrator: str, focal: str) -> list[StageTurn]:
-    """Return everything, thoughts included: the narrator sees into everyone."""
+    """Return everything, thoughts and concealed objects included: this narrator sees all."""
     return list(turns)
 
 
 def _focalized(turns: list[StageTurn], narrator: str, focal: str) -> list[StageTurn]:
-    """Return everything public, keeping only the focal character's inner life."""
+    """Return everything public, keeping only the focal character's inner life.
+
+    An object somebody else put out of sight counts as inner life: the focal character did not
+    see it happen, so a narrator bound to them cannot report it.
+    """
     return [
-        turn if turn.actor_id == focal else turn.model_copy(update={"thought": ""})
+        turn
+        if turn.actor_id == focal
+        else turn.model_copy(update={"thought": "", **_withheld_item(turn, focal)})
         for turn in turns
     ]
 
@@ -45,13 +51,24 @@ def _first_person(turns: list[StageTurn], narrator: str, focal: str) -> list[Sta
 
     This is where the memory model pays off twice: a first-person chapter can only be written
     from turns its narrator actually perceived, and those are exactly the turns already recorded
-    in that character's stream.
+    in that character's stream. Objects follow the same boundary, which is the point of pairing
+    an inventory with a point of view: a hand-over nobody told this narrator about is not theirs
+    to narrate, so the reader learns who holds what only as the narrator does.
     """
     return [
-        turn if turn.actor_id == narrator else turn.model_copy(update={"thought": ""})
+        turn
+        if turn.actor_id == narrator
+        else turn.model_copy(update={"thought": "", **_withheld_item(turn, narrator)})
         for turn in turns
         if narrator in set(turn.witnesses)
     ]
+
+
+def _withheld_item(turn: StageTurn, character_id: str) -> dict[str, None]:
+    """Drop the object move of a turn whose own object move this character did not perceive."""
+    if turn.item_action is None or character_id in set(turn.item_action.witnesses):
+        return {}
+    return {"item_action": None}
 
 
 VOICES: dict[NarrativeVoice, VoiceStrategy] = {

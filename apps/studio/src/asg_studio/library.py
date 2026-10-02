@@ -22,6 +22,7 @@ from asg_stagecraft.formats import NarrativeVoice
 from asg_stagecraft.schemas import PlayScript
 from asg_stagecraft.stage.names import resolve_character
 from asg_stagecraft.stage.narration import scene_presence
+from asg_stagecraft.stage.perception import item_line
 from asg_stagecraft.stage.schemas import PerformanceArtifact
 from asg_stagecraft.stage.voices import VOICES, visible_turns
 from pydantic import ValidationError
@@ -324,6 +325,10 @@ def _turn_view(turn, names: dict[str, str], seen: dict | None) -> dict[str, Any]
         "addressed_to": [names.get(item, item) for item in turn.addressed_to],
         "visible": kept is not None,
         "thought_visible": bool(kept is not None and kept.thought),
+        # The object move as a sentence, plus whether this point of view perceived it: a
+        # concealed object, or one handed over in a whisper, is dimmed exactly like a thought.
+        "item": item_line(turn.item_action, names, concealed_from=True) if turn.item_action else "",
+        "item_visible": bool(kept is not None and kept.item_action),
     }
 
 

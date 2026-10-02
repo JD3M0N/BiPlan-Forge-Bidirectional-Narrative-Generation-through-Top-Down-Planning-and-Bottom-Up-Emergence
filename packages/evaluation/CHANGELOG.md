@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.9.0] - 2026-10-02
+
+- `pairing` gains the `inventory` axis ("Inventario de objetos") for simulated runs, read
+  from `performance.json`'s settings. No performance before Stagecraft 7.6 could track
+  objects, so a run that does not say is reported as running without one, which keeps the
+  whole earlier corpus pairable against a run that has an inventory.
+- `report-simulations` reports the prop figures of a performance that had an inventory
+  (`props`, `item_actions`, `item_repairs`, `props_used_ratio`, `hidden_item_actions`,
+  `secret_handoffs`, `item_witness_share`) and groups by `inventory`. A run without one
+  reports them as unmeasured, never as zero.
+
 ## [0.8.0] - 2026-09-28
 
 - `pairing` gains the `stage_model` axis ("Modelo de la función"), a pairing axis for simulated

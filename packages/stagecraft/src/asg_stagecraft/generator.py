@@ -112,6 +112,7 @@ class StoryGenerator:
         narration_tone: str = "",
         actor_memory: ActorMemory = ActorMemory.OWN,
         simulation_mode: SimulationMode = SimulationMode.FIXED,
+        inventory: bool = False,
         turns_per_beat: int = 8,
     ) -> None:
         """Configure a generator with its provider, output directory and run options."""
@@ -130,6 +131,7 @@ class StoryGenerator:
             narration_tone=narration_tone,
             actor_memory=actor_memory,
             simulation_mode=simulation_mode,
+            inventory=inventory,
             turns_per_beat=turns_per_beat,
         )
 

@@ -46,7 +46,7 @@ def test_every_default_shared_with_settings_agrees() -> None:
 
 def test_options_reject_unknown_fields_and_cannot_change() -> None:
     with pytest.raises(ValidationError):
-        GenerationOptions(inventory=True)
+        GenerationOptions(weather="lluvia")
     options = GenerationOptions()
     with pytest.raises(ValidationError):
         options.turns_per_beat = 3
@@ -99,8 +99,8 @@ def test_settings_supply_defaults_and_flags_override_them() -> None:
     assert options.narrative_guidance is False
     assert options.turns_per_beat == 5
     assert options.narrative_profile is None
-    with pytest.raises(TypeError, match="inventory"):
-        GenerationOptions.from_settings(settings, inventory=True)
+    with pytest.raises(TypeError, match="weather"):
+        GenerationOptions.from_settings(settings, weather="lluvia")
 
 
 def test_with_changes_revalidates_and_rejects_unknown_names() -> None:
@@ -108,8 +108,8 @@ def test_with_changes_revalidates_and_rejects_unknown_names() -> None:
     assert options.narrative_profile is NarrativeProfile.ESSENTIAL
     with pytest.raises(ValidationError):
         options.with_changes(turns_per_beat=0)
-    with pytest.raises(TypeError, match="inventory"):
-        options.with_changes(inventory=True)
+    with pytest.raises(TypeError, match="weather"):
+        options.with_changes(weather="lluvia")
 
 
 def test_the_facade_built_from_options_carries_them_unchanged(tmp_path) -> None:

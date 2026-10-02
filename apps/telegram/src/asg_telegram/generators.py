@@ -146,6 +146,13 @@ def _build_option_specs() -> tuple[OptionSpec, ...]:
             formats=_SIMULATED,
         ),
         OptionSpec(
+            "inventory",
+            "toggle",
+            _FIELDS["inventory"].title,
+            _FIELDS["inventory"].description,
+            formats=_SIMULATED,
+        ),
+        OptionSpec(
             "turns_per_beat",
             "integer",
             _FIELDS["turns_per_beat"].title,

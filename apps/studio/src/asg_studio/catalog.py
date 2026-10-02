@@ -55,7 +55,6 @@ def _help(name: str) -> str:
 
 
 PENDING_ROADMAP = {
-    "inventory": "Idea del TODO: «Un árbitro de acciones físicas» e «Inventario por personaje».",
     "full_memory": "Idea del TODO: «Memoria completa frente a memoria recuperada».",
     "plan_from": "MED-5: comparar formatos y métodos desde un mismo plan congelado.",
     "spoiler_safe": "SIM-13: el narrador omnisciente destripa el misterio.",
@@ -214,12 +213,13 @@ def _simulation_group() -> dict:
                 "min": 2,
                 "max": MAX_OFFERED_TURNS_PER_BEAT,
             },
-            _pending(
-                "inventory",
-                "Inventario de objetos",
-                "Quién tiene qué: dar, tomar y esconder objetos que solo percibe quien los ve.",
-                "La coherencia física de la función y la asimetría de información.",
-            ),
+            {
+                "key": "inventory",
+                "kind": "toggle",
+                "label": _title("inventory"),
+                "help": _help("inventory"),
+                "status": "available",
+            },
         ],
     }
 

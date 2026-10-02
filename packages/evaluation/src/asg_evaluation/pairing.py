@@ -44,6 +44,7 @@ AXES: tuple[Axis, ...] = (
     Axis("narrator", "Personaje de la visión", SIMULATED),
     Axis("narration_tone", "Tono del narrador", SIMULATED),
     Axis("actor_memory", "Memoria de los actores", SIMULATED),
+    Axis("inventory", "Inventario de objetos", SIMULATED),
     Axis("turns_per_beat", "Turnos por beat", SIMULATED),
     Axis("promise_ledger", "Ledger de promesas"),
     Axis("narrative_guidance", "Guía de esqueletos"),
@@ -195,6 +196,10 @@ def read_run_config(run_dir: str | Path) -> RunConfig:
     settings = performance.get("settings") if isinstance(performance.get("settings"), dict) else {}
     turns = number_field(settings, "turns_per_beat")
     put("turns_per_beat", int(turns) if turns is not None else None, "performance.json")
+    # No performance before 7.6 could track objects, so a run that does not say is a run without
+    # one, which keeps the whole earlier corpus pairable against a run that has an inventory.
+    if axes.get("story_format") in SIMULATED:
+        put("inventory", bool(settings.get("inventory")), "performance.json")
     if _before_73(pipeline_version):
         for key, value in _FIXED_BEFORE_73.items():
             put(key, value, "anterior a 7.3")

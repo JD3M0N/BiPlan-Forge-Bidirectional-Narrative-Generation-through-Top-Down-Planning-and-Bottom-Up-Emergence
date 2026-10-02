@@ -1253,6 +1253,16 @@ kbd {
   text-decoration: line-through;
 }
 
+.turn-item {
+  color: var(--accent);
+  font-style: italic;
+}
+
+.turn-item.is-hidden {
+  color: var(--faint);
+  text-decoration: line-through;
+}
+
 .table-wrap {
   overflow-x: auto;
   border: 1px solid var(--border);

@@ -99,6 +99,15 @@ def parser() -> argparse.ArgumentParser:
         help="Con --format simulated: fixed o adaptive para desviar hitos pendientes",
     )
     result.add_argument(
+        "--inventory",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Con --format simulated: da objetos a los personajes y arbitra en codigo quien "
+            "tiene que; --no-inventory es su brazo de control"
+        ),
+    )
+    result.add_argument(
         "--narrator",
         help=(
             "Con --voice limited o first_person: el personaje desde el que se narra, por su "
@@ -172,6 +181,7 @@ def build_options(args: argparse.Namespace, settings) -> GenerationOptions:
         "narration_tone": args.narration_tone,
         "actor_memory": args.actor_memory,
         "simulation_mode": args.simulation_mode,
+        "inventory": args.inventory,
         "turns_per_beat": args.turns_per_beat,
     }
     return base.with_changes(**{name: value for name, value in flags.items() if value is not None})

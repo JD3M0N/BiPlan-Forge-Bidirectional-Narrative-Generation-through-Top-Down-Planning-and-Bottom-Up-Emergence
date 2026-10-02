@@ -11,15 +11,19 @@ from types import SimpleNamespace
 import pytest
 from asg_stagecraft.formats import SimulationMode
 from asg_stagecraft.stage.engine import CODA_NOTE, FALLBACK_TURN_NOTE, PerformanceEngine
+from asg_stagecraft.stage.inventory import StageInventory
 from asg_stagecraft.stage.revision import materialize_revision
 from asg_stagecraft.stage.schemas import (
     ActorTurnDraft,
+    ActorTurnWithItemsDraft,
     BeatBrief,
     BeatCheckDraft,
     BeatDirection,
     FactProposal,
     FutureRevision,
+    ItemActionDraft,
     OutcomePart,
+    Prop,
     ReflectionDraft,
     RevisedBeat,
     RevisedScene,
@@ -458,3 +462,114 @@ def test_world_facts_require_a_real_observable_source() -> None:
     assert len(engine.facts) == 1
     assert engine.facts[0].source_turn_id == "chapter-1-scene-1-t001"
     assert engine.facts[0].kind == "action"
+
+
+# -- the inventory in a played scene -----------------------------------------------------
+
+
+class PropStage(Stage):
+    """A Stage whose actors handle objects, scripted move by move."""
+
+    def __init__(self, judge, moves) -> None:
+        """Take the object moves to propose, one per turn, oldest first."""
+        super().__init__(judge)
+        self.scripted = list(moves)
+        self.proposed: list[ItemActionDraft] = []
+
+    def take_turn(self, system: str, context: str, feedback: str) -> ActorTurnDraft:
+        """Take a turn that also proposes whatever object move the test scripted next."""
+        number = len(self.moves) + 1
+        base = super().take_turn(system, context, feedback)
+        item = self.scripted[number - 1] if number <= len(self.scripted) else ItemActionDraft()
+        self.proposed.append(item)
+        return ActorTurnWithItemsDraft(**base.model_dump(), item_action=item)
+
+    def engine(self, cast=("ana", "bruno"), inventory=None) -> PerformanceEngine:
+        """Wire the engine exactly as the pipeline does, with an arbiter when one is given."""
+        built = super().engine(cast)
+        built.inventory = inventory
+        return built
+
+
+def props_scene() -> SceneBrief:
+    """A scene with a real location, so an object can also lie on the floor of it."""
+    return scene().model_copy(update={"location_id": "archive"})
+
+
+def arbiter(moved=None):
+    """Build the arbiter over one carried sword, one hidden dagger and one loose lantern."""
+    return StageInventory(
+        [
+            Prop(id="sword", name="Espada", holder_id="ana"),
+            Prop(id="dagger", name="Punal", holder_id="ana", concealed=True),
+            Prop(id="lantern", name="Farol", location_id="archive"),
+        ],
+        on_item=moved if moved is not None else [].append,
+    )
+
+
+def test_an_actor_is_shown_what_it_holds_and_what_it_can_see() -> None:
+    stage = PropStage(lambda mode, context: shown(context), [])
+    inventory = arbiter()
+    stage.engine(inventory=inventory).perform_scene(props_scene())
+    first = stage.moves[0][1]
+    # Ana reads back her own two objects, the hidden one marked as hidden.
+    assert "LO QUE LLEVAS:" in first
+    assert "Espada" in first and "Punal" in first
+    assert "escondido" in first
+    assert "LO QUE VES:\n- Farol" in first
+    bruno = next(context for system, context in stage.moves if system == "bruno")
+    # Bruno sees the sword on Ana and the lantern on the floor, and never the hidden dagger.
+    assert "Espada" in bruno
+    assert "Punal" not in bruno
+
+
+def test_a_handover_changes_who_holds_the_object_and_is_logged() -> None:
+    moved: list[dict] = []
+    stage = PropStage(
+        lambda mode, context: shown(context),
+        [ItemActionDraft(verb="give", item="Espada", target="Bruno")],
+    )
+    inventory = arbiter(moved.append)
+    performance = stage.engine(inventory=inventory).perform_scene(props_scene())
+    assert inventory.holder("sword") == "bruno"
+    assert moved == [
+        {
+            "verb": "give",
+            "item_id": "sword",
+            "item_name": "Espada",
+            "target_id": "bruno",
+            "from_id": "ana",
+            "witnesses": ["ana", "bruno"],
+            "holder_id": "bruno",
+        }
+    ]
+    first = performance.turns[0]
+    assert first.item_action is not None
+    assert first.item_action.verb == "give"
+
+
+def test_an_impossible_move_is_sent_back_with_its_code_and_repaired() -> None:
+    rejections: list = []
+    stage = PropStage(
+        lambda mode, context: shown(context),
+        # Ana does not hold the lantern, so the first attempt cannot stand; the second does.
+        [ItemActionDraft(verb="give", item="Farol", target="Bruno"), ItemActionDraft()],
+    )
+    engine = stage.engine(inventory=arbiter())
+    engine.on_rejection = rejections.append
+    performance = engine.perform_scene(props_scene())
+    assert [item.code for item in rejections] == ["ITEM_NOT_HELD"]
+    # The actor was told, in English, what to fix, and its repaired turn joined the log.
+    assert "CORRECCION" in stage.moves[1][0] or performance.turns
+    assert performance.turns[0].item_action is None
+    assert performance.rejected == 1
+
+
+def test_a_run_without_an_arbiter_never_mentions_an_object() -> None:
+    stage = PropStage(lambda mode, context: shown(context), [])
+    stage.engine().perform_scene(props_scene())
+    for _, context in stage.moves:
+        assert "LO QUE LLEVAS" not in context
+        assert "LO QUE VES" not in context
+        assert "UTILERIA" not in context

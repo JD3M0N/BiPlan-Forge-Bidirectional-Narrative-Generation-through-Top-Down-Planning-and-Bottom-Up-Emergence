@@ -20,7 +20,7 @@ from .simulation_report import (
 )
 from .text import count_noun, format_number
 
-SUMMARY_AXES = ("voice", "memory", "profile", "version", "voice-memory", "mode")
+SUMMARY_AXES = ("voice", "memory", "profile", "version", "voice-memory", "mode", "inventory")
 # Fields that read as a proportion get more decimals; the rest are counts or averages.
 RATIO_FIELDS = frozenset(
     {
@@ -33,6 +33,8 @@ RATIO_FIELDS = frozenset(
         "compression_ratio",
         "dialogue_survival",
         "context_coverage",
+        "props_used_ratio",
+        "item_witness_share",
     }
 )
 

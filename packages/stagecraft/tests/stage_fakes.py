@@ -16,15 +16,19 @@ from asg_stagecraft.stage.schemas import (
     ActorDossier,
     ActorRelationship,
     ActorTurnDraft,
+    ActorTurnWithItemsDraft,
     BeatCheckDraft,
     BeatDirection,
     CastBibleDraft,
     FutureConflict,
     FutureRevision,
+    ItemActionDraft,
     KnowledgeGate,
     OutcomePart,
     PromiseStoryAuditDraft,
     PromiseStoryCheck,
+    PropDraft,
+    PropListDraft,
     ReflectionDraft,
     RelationshipState,
     RevisedScene,
@@ -81,6 +85,7 @@ def _lap_words(stem: str, lap: int, count: int) -> str:
 _CAST_IDS = re.compile(r"WRITE ONE DOSSIER FOR EACH OF THESE IDS: (.+)")
 _OPENING_CAST = re.compile(r"^- .+ \((\S+)\) quiere:", re.MULTILINE)
 _TURN_IDS = re.compile(r"^(\S+-scene-\d+-t\d+)", re.MULTILINE)
+_PROP_HOLDERS = re.compile(r"ONLY THESE IDS MAY HOLD AN OBJECT: (.+)")
 
 
 class StageFakeProvider(FakeProvider):
@@ -90,6 +95,7 @@ class StageFakeProvider(FakeProvider):
         self,
         *args,
         fail_casting_call: set[int] | None = None,
+        fail_props_call: set[int] | None = None,
         fail_actor_call: set[int] | None = None,
         fail_director=False,
         fail_narrator_call: set[int] | None = None,
@@ -103,6 +109,7 @@ class StageFakeProvider(FakeProvider):
         """Configure the stage responses and the failures a test wants to force."""
         super().__init__(*args, **kwargs)
         self.fail_casting_calls = set(fail_casting_call or ())
+        self.fail_props_calls = set(fail_props_call or ())
         self.fail_actor_calls = set(fail_actor_call or ())
         self.fail_narrator_calls = set(fail_narrator_call or ())
         self.fail_director = fail_director
@@ -113,6 +120,7 @@ class StageFakeProvider(FakeProvider):
         self.beat_needs_world = beat_needs_world
         self.check_modes: list[str] = []
         self.casting_number = 0
+        self.props_number = 0
         self.actor_number = 0
         self.director_number = 0
         self.narrator_number = 0
@@ -125,10 +133,15 @@ class StageFakeProvider(FakeProvider):
         if schema is CastBibleDraft:
             self.structured_calls.append((schema.__name__, system_instruction, prompt))
             return self._cast_bible(prompt)
-        if schema is ActorTurnDraft:
+        if schema is PropListDraft:
+            self.structured_calls.append((schema.__name__, system_instruction, prompt))
+            return self._props(prompt)
+        # issubclass, not identity: the inventory asks for the schema with an object field, and
+        # the double must answer whichever one the run requested.
+        if isinstance(schema, type) and issubclass(schema, ActorTurnDraft):
             self.structured_calls.append((schema.__name__, system_instruction, prompt))
             self.actor_contexts.append(prompt)
-            return self._turn(system_instruction, prompt)
+            return self._turn(system_instruction, prompt, items=schema is ActorTurnWithItemsDraft)
         if schema is BeatDirection:
             self.structured_calls.append((schema.__name__, system_instruction, prompt))
             return self._direction(prompt)
@@ -237,9 +250,65 @@ class StageFakeProvider(FakeProvider):
         ]
         return CastBibleDraft(dossiers=dossiers, knowledge_gates=gates)
 
+    # -- the props -----------------------------------------------------------------------
+
+    def _props(self, prompt: str) -> PropListDraft:
+        """Dress the stage with props derived from the cast the prompt names.
+
+        One carried in the open, one carried concealed and one lying in the location, so a run
+        exercises every branch of the arbiter: holding, hiding, taking from the floor.
+        """
+        self.props_number += 1
+        if self.quota_error_at_stage == "props":
+            raise GeminiDailyQuotaError("daily quota exhausted")
+        if self.props_number in self.fail_props_calls:
+            raise RuntimeError("prop master unavailable")
+        match = _PROP_HOLDERS.search(prompt)
+        ids = [item.strip() for item in match.group(1).split(",")] if match else ["ana"]
+        return PropListDraft(
+            props=[
+                PropDraft(
+                    name="Una llave de laton",
+                    appearance="pequena y gastada por el uso",
+                    holder_id=ids[0],
+                ),
+                PropDraft(
+                    name="Un cuaderno cosido",
+                    appearance="con la cubierta manchada",
+                    holder_id=ids[0],
+                    concealed=True,
+                ),
+                PropDraft(name="Un farol apagado", appearance="con el cristal roto"),
+            ]
+        )
+
     # -- the performance -----------------------------------------------------------------
 
-    def _turn(self, system_instruction: str, prompt: str) -> ActorTurnDraft:
+    def _draft(self, items: bool, *, prompt: str = "", **fields) -> ActorTurnDraft:
+        """Build a turn in whichever shape the run asked for, with an object move when it did."""
+        if not items:
+            return ActorTurnDraft(**fields)
+        return ActorTurnWithItemsDraft(**fields, item_action=self._item_action(prompt))
+
+    def _item_action(self, prompt: str) -> ItemActionDraft:
+        """Propose one object move derived from what this actor's own context listed.
+
+        Every proposal is built from the block the actor was shown, so it is always one the
+        arbiter should accept: a test that wants a rejection asks for it by name instead.
+        """
+        held = _listed(prompt, "LO QUE LLEVAS")
+        seen = _listed(prompt, "LO QUE VES")
+        others = _listed(prompt, "CONTIGO EN ESCENA")
+        step = self.actor_number % 4
+        if step == 1 and held:
+            return ItemActionDraft(verb="use", item=held[0])
+        if step == 2 and held and others:
+            return ItemActionDraft(verb="give", item=held[-1], target=others[0])
+        if step == 3 and seen:
+            return ItemActionDraft(verb="take", item=seen[0])
+        return ItemActionDraft()
+
+    def _turn(self, system_instruction: str, prompt: str, *, items: bool = False) -> ActorTurnDraft:
         """Answer one actor turn, honoring any failure the test injected."""
         self.actor_number += 1
         if self.quota_error_at_stage == "actor":
@@ -249,11 +318,11 @@ class StageFakeProvider(FakeProvider):
         speaker = system_instruction.split(".", 1)[0].replace("You are ", "").strip()
         if self.empty_turn_once and self.actor_number == 1:
             self.empty_turn_once = False
-            return ActorTurnDraft(thought="", action="", speech="", tactic="stall")
+            return self._draft(items, thought="", action="", speech="", tactic="stall")
         if self.repeat_turn_once and speaker in self._last_speech:
             repeated = self._last_speech[speaker]
             self.repeat_turn_once = False
-            return ActorTurnDraft(speech=repeated, action="", thought="", tactic="deny")
+            return self._draft(items, speech=repeated, action="", thought="", tactic="deny")
         # Every line is lexically distinct on purpose. A double that restated itself would be
         # rejected by the repetition rule, which is correct behaviour but would leave the happy
         # path untested: scenes would end after a single accepted turn.
@@ -267,7 +336,9 @@ class StageFakeProvider(FakeProvider):
             speech = f"{speech} {_lap_words('ronda', lap, 6)}"
         action = f"{action} {_lap_words('paso', lap, 2)}"
         self._last_speech[speaker] = speech
-        return ActorTurnDraft(thought=thought, action=action, speech=speech, tactic=tactic)
+        return self._draft(
+            items, thought=thought, action=action, speech=speech, tactic=tactic, prompt=prompt
+        )
 
     def _direction(self, prompt: str) -> BeatDirection:
         """Open a beat with the first character the brief lists on stage."""
@@ -325,6 +396,19 @@ class StageFakeProvider(FakeProvider):
             goal="averiguar quien mas lo sabe",
             importance=0.7,
         )
+
+
+def _listed(prompt: str, heading: str) -> list[str]:
+    """Read back the names one block of an actor's context listed, in order."""
+    block = prompt.split(heading + ":\n", 1)
+    if len(block) == 1:
+        return []
+    names = []
+    for line in block[1].splitlines():
+        if not line.startswith("- "):
+            break
+        names.append(line[2:].split(",", 1)[0].split(" (")[0].strip())
+    return names
 
 
 def _mode_of(system_instruction: str) -> str:

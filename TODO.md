@@ -1,15 +1,20 @@
 # Hoja de ruta
 
-**Estado medido el 2026-09-30 con `asg-stagecraft` 7.5.1 (pipeline 7.5; dos funciones reales completadas en 7.5).** La interfaz gráfica StageCraft (`asg-studio`) ya existe. Un solo generador, Stagecraft, con tres formatos: `narrative`, `script` y `simulated`
+**Estado medido el 2026-10-02 con `asg-stagecraft` 7.6.0 (pipeline 7.6; cuatro funciones reales completadas en 7.5 y 7.6).** La interfaz gráfica StageCraft (`asg-studio`) ya existe. Un solo generador, Stagecraft, con tres formatos: `narrative`, `script` y `simulated`, y la función simulada puede llevar inventario de objetos
 (ver [docs/resumen.md](docs/resumen.md)).
 
 | Corpus | Runs | Completados | Fallidos | Qué es |
 |---|---|---|---|---|
-| `Stories/Stagecraft/` | 14 | 10 | 4 | 7.0–7.5: trece simulados y una corrida narrativa de control |
+| `Stories/Stagecraft/` | 18 | 13 | 4 | 7.0–7.6: dieciséis simulados y una corrida narrativa de control; uno quedó en `running` al cancelarse a mano |
 | `Stories/Top-Down/` | 176 | 135 | 41 | 4.0–6.2, anteriores al renombrado; 18 sin versión |
 | `Stories/Bottom-Up/` | 6 | — | — | el escape room retirado en 7.1.1, más tres lotes de CSV |
 
 - **Validación real 7.5:** dos funciones `fixed`/`adaptive` desde el mismo plan congelado; ver [docs/resumen.md](docs/resumen.md). La revisión adaptativa falló con Gemini y se corrigieron sus objetivos parciales después del experimento.
+- **Validación real 7.6:** un par con y sin inventario desde ese mismo plan
+  (`20261002-150355` y `20261002-151512`). Las 21 menciones de un objeto del mundo en una
+  acción pasaron de 0 a 11 respaldadas por un movimiento arbitrado, y el árbitro rechazó un
+  `ITEM_NOT_HELD` que el brazo de control habría aceptado. n=1: prueba de mecanismo, no
+  medición de calidad. La medición es EXP-6.
 - **Evaluación humana: casi inexistente.** De 146 `evaluation.json`, uno solo tiene puntuaciones
   reales (`Top-Down/20260831-223547-el-rescate-de-luminaria`). Todo lo demás que se sabe de la
   calidad sale de métricas automáticas o de jueces LLM, y esos jueces aprueban casi todo (TD-1).
@@ -943,6 +948,38 @@ gratuita · *Depende de:* MED-5, MED-7
   `070539` y `072847`, las versiones nuevas representan exactamente su plan. En los otros dos
   prompts, 7.1.1 solo se puede volver a correr desde git: decidir antes el checkout etiquetado.
 
+### EXP-6 · Medir qué aporta el inventario de objetos
+
+*Área:* experimento · *Cuota:* ~200 llamadas por par de funciones rejugadas desde un plan ·
+*Depende de:* MED-1, MED-5
+
+- **Síntoma.** El inventario existe desde 7.6 con su brazo de control (`--no-inventory`) y solo
+  hay un par de funciones con él. Sin medición, la afirmación de que arbitrar los objetos mejora
+  la coherencia física es una opinión.
+  - En `Stories/Stagecraft/20260930-153026-la-sombra-del-volcan`, sin inventario, el Sello Real
+    Quebrado aparece como pergamino en manos de Elara en el capítulo 1 y en la túnica de Aldren
+    en el capítulo 3, sin que nadie lo haya entregado. Eso es lo que hay que contar en los dos
+    brazos.
+- **Qué hacer.**
+  - Dos brazos de n≥3 desde planes congelados (`--plan-from`), idénticos salvo `--inventory`.
+  - Contar en los dos, con los nombres de `world.json`: menciones de un objeto en la acción de
+    quien no lo lleva, y objetos que cambian de manos sin que haya un traspaso.
+  - Leer `props_used_ratio` para saber si los objetos fueron decorado, y `item_witness_share`
+    para saber si el tráfico fue privado.
+  - Comparar además una narración limitada de la misma función: lo que el lector sabe de quién
+    tiene qué debería diferir de la omnisciente.
+- **Hecho cuando.** Hay una cifra de incoherencia física por brazo, con n≥3, y una comparación a
+  ciegas de las historias.
+- **Ojo.**
+  - `--no-inventory` deja los prompts idénticos a 7.5, así que la ablación es limpia; pero el
+    brazo con inventario gasta una llamada más (el utilero) y sus actores reciben un esquema
+    con un campo extra. No mezclar sus runs con los de 7.5 en una misma media sin decirlo.
+  - **Dos huecos que el árbitro no cierra, vistos en el par de 7.6.** El `stage_event` del
+    director es texto libre y no se arbitra: uno dijo que el sello resbalaba de las manos de
+    Aldren cuando lo tenía Elara. Y un actor puede mencionar un objeto en su acción sin
+    declarar un movimiento (10 de 21 menciones). Contar las dos cosas en la medición, y
+    decidir si se arbitran o se aceptan.
+
 ### EXP-4 · Campaña de evaluación humana
 
 *Área:* experimento · *Cuota:* sin cuota · *Depende de:* EXP-1 y EXP-3 (para las historias)
@@ -1167,11 +1204,13 @@ La métrica 100-Endings (Sui et al. 2026) mide la tensión como la frecuencia co
 al predecir el final, frase a frase, y ordena bien lo que los jueces LLM ordenan mal. Cuesta muchas
 llamadas por historia: evaluar si compensa como complemento de la lectura a ciegas.
 
-### Un árbitro de acciones físicas
+### Un árbitro de acciones físicas más allá de los objetos
 
-En la función nadie comprueba lo físico: «aparta a Mara de un empujón» no tiene consecuencias, y una
-puerta se abre porque alguien lo dice. El Game Master de Concordia comprueba la plausibilidad de cada
-acción. Solo compensa si la lectura encuentra incoherencias físicas.
+Desde 7.6 los objetos se arbitran en código: quién lleva qué, quién lo ve y qué puede hacer con
+ello. Lo que sigue sin comprobarse es el resto de lo físico: «aparta a Mara de un empujón» no
+tiene consecuencias, y una puerta se abre porque alguien lo dice. El Game Master de Concordia
+juzga la plausibilidad de cualquier acción, no solo las que tocan un objeto. Solo compensa si la
+lectura encuentra incoherencias físicas que el inventario no cubre; medirlo es EXP-6.
 
 ### Probar si la taxonomía de arquetipos mejora las historias
 
@@ -1208,14 +1247,6 @@ así que cargarlo desde JSON es casi mecánico.
 Comparar el modelo actual de `locations` y `location_id` con relaciones y transiciones
 explícitas. Documentar el efecto en errores de continuidad y en coste, y adoptarlo solo si mejora
 algo medible.
-
-### Inventario por personaje
-
-Quién tiene qué en la función: dar, tomar y esconder objetos, y que un objeto solo lo perciba
-quien lo ve. Los `StoryObject` del mundo ya existen y la función los ignora. Va de la mano del
-árbitro de acciones físicas: sin nadie que compruebe lo físico, un inventario es solo texto.
-StageCraft ya lo muestra como opción pendiente; la receta para activarlo está en
-`apps/studio/README.md`.
 
 ### Ventana nativa para StageCraft
 

@@ -234,8 +234,8 @@ def test_unknown_option_keys_are_ignored(tmp_path, monkeypatch):
     captured: dict = {}
     _patch_facade(monkeypatch, tmp_path, captured)
     generator = generators_module.StagecraftGenerator()
-    normalized = generator.normalize_options({"inventory": True})
-    assert "inventory" not in normalized
+    normalized = generator.normalize_options({"weather": "lluvia"})
+    assert "weather" not in normalized
 
 
 def test_outline_reaches_the_pipeline_as_a_story_brief(tmp_path, monkeypatch):

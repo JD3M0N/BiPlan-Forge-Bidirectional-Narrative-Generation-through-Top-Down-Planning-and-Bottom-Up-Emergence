@@ -7,6 +7,7 @@ from asg_stagecraft.planning.profiles import NarrativeProfile
 from asg_stagecraft.schemas import (
     CharacterProfile,
     CharactersArtifact,
+    StoryObject,
 )
 from asg_stagecraft.stage import policy, voices
 from asg_stagecraft.stage.casting import (
@@ -16,9 +17,11 @@ from asg_stagecraft.stage.casting import (
     materialize_bible,
 )
 from asg_stagecraft.stage.fallback import narrate
+from asg_stagecraft.stage.inventory import StageInventory
 from asg_stagecraft.stage.memory import RECENT_REFLECTIONS, RETRIEVED_RECORDS, CharacterMemory
 from asg_stagecraft.stage.metrics import simulation_metrics
 from asg_stagecraft.stage.perception import visible_text, witnesses
+from asg_stagecraft.stage.props import fallback_props, materialize_props
 from asg_stagecraft.stage.render import actor_turn_context, scene_log
 from asg_stagecraft.stage.schemas import (
     ActorDossier,
@@ -27,9 +30,14 @@ from asg_stagecraft.stage.schemas import (
     BeatBrief,
     BeatRecord,
     CastBibleDraft,
+    ItemAction,
+    ItemActionDraft,
     KnowledgeGate,
     PerformanceArtifact,
     PerformanceSettings,
+    Prop,
+    PropDraft,
+    PropListDraft,
     SceneBrief,
     SceneCastBrief,
     ScenePerformance,
@@ -910,3 +918,319 @@ def test_world_events_are_nobody_s_turn_in_the_measurements() -> None:
     thunder = turn("ana", action="Se abre la puerta.").model_copy(update={"kind": "world"})
     metrics = measure([thunder, turn("bruno", speech="Quien anda ahi.", number=2)])
     assert [item.character_id for item in metrics.actor_metrics] == ["bruno"]
+
+
+# -- the inventory -----------------------------------------------------------------------
+
+
+def props_of(*entries) -> list[Prop]:
+    """Build props from (id, name, holder, location, concealed) tuples."""
+    return [
+        Prop(
+            id=item[0],
+            name=item[1],
+            holder_id=item[2],
+            location_id=item[3],
+            concealed=item[4],
+        )
+        for item in entries
+    ]
+
+
+SWORD = ("sword", "Espada de Aldren", "ana", "", False)
+DAGGER = ("dagger", "Punal corto", "ana", "", True)
+LANTERN = ("lantern", "Farol apagado", "", "archive", False)
+SEAL = ("seal", "Sello real", "bruno", "", False)
+
+
+def stage_inventory(*entries, memory=ActorMemory.OWN):
+    """Build an arbiter over the given props, recording every move it applies."""
+    moves: list[dict] = []
+    inventory = StageInventory(props_of(*entries), actor_memory=memory, on_item=moves.append)
+    return inventory, moves
+
+
+def arbitrate(inventory, verb, item, target="", *, actor="ana", on_stage=("ana", "bruno")):
+    """Put one proposed move to the arbiter, as the engine does once a turn has validated."""
+    return inventory.resolve(
+        ItemActionDraft(verb=verb, item=item, target=target),
+        actor_id=actor,
+        on_stage=list(on_stage),
+        location_id="archive",
+        names=NAMES,
+        visibility="public",
+        addressed_to=[],
+        whole_cast=list(NAMES),
+    )
+
+
+@pytest.mark.parametrize(
+    ("props", "verb", "item", "target", "code", "holder", "witnesses"),
+    [
+        # What the arbiter accepts, and where the object ends up.
+        ((SWORD,), "use", "Espada de Aldren", "", None, "ana", ["ana", "bruno"]),
+        ((SWORD,), "give", "Espada de Aldren", "Bruno", None, "bruno", ["ana", "bruno"]),
+        ((SWORD,), "drop", "Espada de Aldren", "", None, "", ["ana", "bruno"]),
+        # Hiding is perceived by its holder alone: that is what makes it hidden.
+        ((SWORD,), "hide", "Espada de Aldren", "", None, "ana", ["ana"]),
+        ((DAGGER,), "show", "Punal corto", "", None, "ana", ["ana", "bruno"]),
+        ((LANTERN,), "take", "Farol apagado", "", None, "ana", ["ana", "bruno"]),
+        # Something somebody else carries in the open can be taken off them.
+        ((SEAL,), "take", "Sello real", "Bruno", None, "ana", ["ana", "bruno"]),
+        # A single word of the name is enough, exactly as for an addressee.
+        ((SWORD,), "use", "espada", "", None, "ana", ["ana", "bruno"]),
+        # And what it refuses, with the code the audit files it under.
+        ((SWORD,), "use", "Corona de hierro", "", "UNKNOWN_ITEM", "ana", []),
+        ((SEAL,), "use", "Sello real", "", "ITEM_NOT_HELD", "bruno", []),
+        ((SWORD,), "give", "Espada de Aldren", "", "INVALID_ITEM_TARGET", "ana", []),
+        ((SWORD,), "give", "Espada de Aldren", "Ana", "INVALID_ITEM_TARGET", "ana", []),
+        ((SWORD,), "take", "Espada de Aldren", "", "ITEM_OUT_OF_REACH", "ana", []),
+    ],
+)
+def test_item_moves_are_arbitrated(props, verb, item, target, code, holder, witnesses) -> None:
+    inventory, moves = stage_inventory(*props)
+    if code:
+        with pytest.raises(TurnIssue) as error:
+            arbitrate(inventory, verb, item, target)
+        assert error.value.code == code
+        # Reinjected verbatim into the retry prompt, like every other stage message.
+        assert str(error.value).isascii()
+        assert not moves
+        return
+    action = arbitrate(inventory, verb, item, target)
+    assert action is not None
+    assert action.witnesses == witnesses
+    inventory.apply(action, actor_id="ana", location_id="archive")
+    assert inventory.holder(action.item_id) == holder
+    assert moves and moves[-1]["holder_id"] == holder
+
+
+def test_a_turn_that_handles_nothing_is_not_a_move() -> None:
+    inventory, moves = stage_inventory(SWORD)
+    assert arbitrate(inventory, "none", "") is None
+    assert not moves
+
+
+def test_a_concealed_object_is_invisible_to_everyone_but_its_holder() -> None:
+    inventory, _ = stage_inventory(DAGGER, LANTERN)
+    assert [item.id for item in inventory.held_by("ana")] == ["dagger"]
+    # Bruno sees the lantern on the floor and nothing of what Ana keeps out of sight.
+    assert [item.id for item in inventory.in_reach("bruno", ["ana", "bruno"], "archive")] == [
+        "lantern"
+    ]
+    # So Bruno cannot even name it: the arbiter answers as if it were not there.
+    with pytest.raises(TurnIssue) as error:
+        arbitrate(inventory, "take", "Punal corto", actor="bruno")
+    assert error.value.code == "UNKNOWN_ITEM"
+
+
+def test_hiding_then_showing_puts_an_object_back_within_reach() -> None:
+    inventory, _ = stage_inventory(SWORD)
+    inventory.apply(
+        arbitrate(inventory, "hide", "Espada de Aldren"), actor_id="ana", location_id="archive"
+    )
+    assert inventory.in_reach("bruno", ["ana", "bruno"], "archive") == []
+    inventory.apply(
+        arbitrate(inventory, "show", "Espada de Aldren"), actor_id="ana", location_id="archive"
+    )
+    assert [item.id for item in inventory.in_reach("bruno", ["ana", "bruno"], "archive")] == [
+        "sword"
+    ]
+
+
+def test_a_whispered_handover_is_a_secret_between_the_two_hands() -> None:
+    inventory, _ = stage_inventory(SWORD)
+    action = inventory.resolve(
+        ItemActionDraft(verb="give", item="Espada de Aldren", target="Bruno"),
+        actor_id="ana",
+        on_stage=["ana", "bruno", "cora"],
+        location_id="archive",
+        names=NAMES,
+        visibility="whisper",
+        addressed_to=["bruno"],
+        whole_cast=list(NAMES),
+    )
+    assert action is not None
+    assert action.witnesses == ["ana", "bruno"]
+
+
+def test_shared_memory_widens_an_object_move_but_never_a_concealment() -> None:
+    inventory, _ = stage_inventory(SWORD, DAGGER, memory=ActorMemory.SHARED)
+    public = arbitrate(inventory, "use", "Espada de Aldren", on_stage=("ana",))
+    assert public is not None
+    assert public.witnesses == ["ana", "bruno", "cora"]
+    hidden = arbitrate(inventory, "hide", "Punal corto", on_stage=("ana",))
+    assert hidden is not None
+    assert hidden.witnesses == ["ana"]
+
+
+def test_an_object_only_appears_in_the_log_of_whoever_perceived_it() -> None:
+    hidden = turn("ana", action="se guarda algo en el cinto").model_copy(
+        update={
+            "item_action": ItemAction(
+                verb="hide", item_id="dagger", item_name="Punal corto", witnesses=["ana"]
+            )
+        }
+    )
+    assert "Punal corto" in visible_text(hidden, "ana", NAMES)
+    assert "Punal corto" not in visible_text(hidden, "bruno", NAMES)
+
+
+def test_a_point_of_view_cannot_narrate_a_handover_it_did_not_see() -> None:
+    unseen = turn("bruno", speech="Toma.", number=2).model_copy(
+        update={
+            "item_action": ItemAction(
+                verb="give",
+                item_id="seal",
+                item_name="Sello real",
+                target_id="cora",
+                from_id="bruno",
+                witnesses=["bruno", "cora"],
+            )
+        }
+    )
+    scene = scene_with([turn("ana", speech="A."), unseen])
+    limited = voices.visible_turns(NarrativeVoice.LIMITED, scene, narrator="ana")
+    assert [item.item_action for item in limited if item.actor_id == "bruno"] == [None]
+    omniscient = voices.visible_turns(NarrativeVoice.OMNISCIENT, scene)
+    assert [item.item_action is not None for item in omniscient] == [False, True]
+
+
+def test_the_measurements_say_how_private_the_object_traffic_was() -> None:
+    carried = turn("ana", action="saca la espada").model_copy(
+        update={
+            "item_action": ItemAction(
+                verb="use",
+                item_id="sword",
+                item_name="Espada de Aldren",
+                witnesses=["ana", "bruno", "cora"],
+            )
+        }
+    )
+    secret = turn("ana", action="se guarda el punal", number=2).model_copy(
+        update={
+            "item_action": ItemAction(
+                verb="hide", item_id="dagger", item_name="Punal corto", witnesses=["ana"]
+            )
+        }
+    )
+    base = performance_of([carried, secret])
+    performance = base.model_copy(
+        update={
+            "settings": base.settings.model_copy(update={"inventory": True}),
+            "props": props_of(SWORD, DAGGER, LANTERN),
+        }
+    )
+    metrics = simulation_metrics(
+        profile=NarrativeProfile.ESSENTIAL,
+        performance=performance,
+        scripted_by_scene={},
+        memories={},
+        names=NAMES,
+        story="una dos tres",
+        narration_fallbacks=0,
+    )
+    assert metrics.inventory is True
+    assert metrics.props == 3
+    assert metrics.item_actions == 2
+    assert metrics.item_actions_by_verb == {"hide": 1, "use": 1}
+    assert metrics.hidden_item_actions == 1
+    assert metrics.secret_handoffs == 1
+    # Two of three props were handled, and one move of the two reached the whole cast.
+    assert metrics.props_used_ratio == round(2 / 3, 4)
+    assert metrics.item_witness_share == round((1.0 + 1 / 3) / 2, 4)
+
+
+def test_without_an_inventory_every_object_figure_is_unmeasured() -> None:
+    metrics = measure([turn("ana", speech="Nada de objetos.")])
+    assert metrics.inventory is False
+    for name in (
+        "props",
+        "item_actions",
+        "item_actions_by_verb",
+        "item_repairs",
+        "props_used_ratio",
+        "hidden_item_actions",
+        "secret_handoffs",
+        "item_witness_share",
+    ):
+        assert getattr(metrics, name) is None, name
+
+
+# -- dressing the stage ------------------------------------------------------------------
+
+
+def world_with_an_object():
+    """Return the test world plus one canonical object the plan could turn on."""
+    return make_world().model_copy(
+        update={
+            "objects": [
+                StoryObject(id="ledger", name="Libro de registro", description="un tomo pesado")
+            ]
+        }
+    )
+
+
+def test_a_world_object_the_prop_master_forgot_is_still_placed() -> None:
+    plan, _ = plan_and_cast()
+    props = materialize_props(
+        PropListDraft(props=[PropDraft(name="Unas gafas", holder_id="ana")]),
+        world=world_with_an_object(),
+        cast_ids=["ana"],
+        plan=plan,
+    )
+    placed = {item.id: item for item in props.props}
+    assert set(placed) == {"prop-1", "ledger"}
+    # Nobody is holding the forgotten object, so it lies somewhere real instead of nowhere.
+    assert placed["ledger"].location_id == "archive"
+    assert placed["ledger"].holder_id == ""
+
+
+@pytest.mark.parametrize(
+    ("proposed", "message"),
+    [
+        ([PropDraft(name="Un anillo", holder_id="fantasma")], "not in the cast"),
+        ([PropDraft(name="Un anillo", object_id="no_existe")], "do not exist"),
+        ([PropDraft(name="Un anillo", location_id="ninguna_parte")], "do not exist"),
+        ([PropDraft(name="Un anillo"), PropDraft(name="un  Anillo")], "share a name"),
+    ],
+)
+def test_props_the_performance_cannot_run_on_are_rejected(proposed, message) -> None:
+    plan, _ = plan_and_cast()
+    with pytest.raises(ValueError) as error:
+        materialize_props(
+            PropListDraft(props=proposed), world=make_world(), cast_ids=["ana"], plan=plan
+        )
+    assert message in str(error.value)
+    assert str(error.value).isascii()
+
+
+def test_props_with_one_correct_reading_are_corrected_rather_than_rejected() -> None:
+    plan, _ = plan_and_cast()
+    props = materialize_props(
+        PropListDraft(
+            props=[
+                # Concealed by nobody: it can only mean it is in plain sight.
+                PropDraft(name="Un farol", concealed=True),
+                # A third personal prop is more than one actor can play, so it is trimmed.
+                PropDraft(name="Primera cosa", holder_id="ana"),
+                PropDraft(name="Segunda cosa", holder_id="ana"),
+                PropDraft(name="Tercera cosa", holder_id="ana"),
+            ]
+        ),
+        world=make_world(),
+        cast_ids=["ana"],
+        plan=plan,
+    )
+    assert [item.name for item in props.props] == ["Un farol", "Primera cosa", "Segunda cosa"]
+    assert props.props[0].concealed is False
+    assert any("plain sight" in item for item in props.observations)
+    assert any("could play" in item for item in props.observations)
+
+
+def test_the_stage_can_be_dressed_from_the_world_alone() -> None:
+    plan, _ = plan_and_cast()
+    props = fallback_props(world_with_an_object(), plan)
+    assert props.fallback is True
+    assert [item.id for item in props.props] == ["ledger"]
+    assert props.props[0].location_id == "archive"

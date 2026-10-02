@@ -73,6 +73,56 @@ narrativa se adapta a actos).
   no se aplicaba, casi no había destinatarios, la nota del director se repetía). Separar por
   `pipeline_version`.
 
+## Inventario de objetos (7.6)
+
+`--inventory` (o `ASG_INVENTORY=true`) añade la etapa `props` entre casting y performance, y da
+objetos a los personajes. Apagado —el defecto— no cambia ningún prompt, esquema ni artefacto: un
+test lo comprueba sobre los dos brazos.
+
+- **El modelo propone, el código decide.** El actor escribe un `item_action` (verbo y el *nombre*
+  del objeto) y `stage/inventory.py` lo valida contra la verdad que él mismo guarda. El
+  `Inventory` de Concordia pregunta a un LLM qué cambió después de los hechos, así que no se puede
+  repetir; esto es determinista como `stage/memory.py`. La lección de Intra: la verdad del mundo
+  vive en código, nunca en el prompt.
+- **Seis verbos, una regla cada uno.** `use`, `give`, `drop`, `hide` y `show` exigen tenerlo en la
+  mano; `take` exige que esté a la vista (en el lugar, o en manos de alguien presente sin
+  esconder). Los rechazos van en inglés ASCII con su código (`UNKNOWN_ITEM`, `ITEM_NOT_HELD`,
+  `ITEM_OUT_OF_REACH`, `INVALID_ITEM_TARGET`) y se reinyectan como cualquier otro, igual que
+  `graph.py`.
+- **Un objeto solo lo percibe quien lo ve.** Los testigos de un movimiento son los del turno más
+  quien entrega y quien recibe; un traspaso en susurro solo lo ven esas manos; `hide` lo percibe
+  únicamente su portador. Con `--actor-memory shared` se amplía como cualquier turno, salvo
+  `hide`. Por eso el inventario amplía la asimetría de la que viven las visiones: una narración
+  limitada solo puede contar los traspasos que su personaje presenció.
+- **Nombres, nunca ids.** Al actor se le enseña `LO QUE LLEVAS` y `LO QUE VES`; el objeto se
+  resuelve por nombre completo o por una palabra que identifique uno solo, como un destinatario.
+  `props.json` guarda los ids y el actor no los ve.
+- **El utilero coloca, no decide consecuencias.** `PropMasterAgent` reparte los `StoryObject` del
+  mundo (todos entran) y añade los personales que definan a alguien; `stage/props.py` valida y
+  normaliza (coloca el objeto del mundo olvidado donde el plan lo usa primero, desesconde lo que
+  nadie lleva, recorta los personales que pasan de `MAX_PERSONAL_PROPS`, que nunca viaja a un
+  prompt). Si la etapa falla, `fallback_props` coloca los objetos del mundo y el run lo registra.
+- **El director ve la utilería, incluida la escondida,** y puede sugerir usarla; nunca la dicta.
+- **Qué se mide:** `props`, `item_actions`, `item_actions_by_verb`, `item_repairs`,
+  `props_used_ratio` (cerca de 0 = los objetos fueron decorado), `hidden_item_actions`,
+  `secret_handoffs` e `item_witness_share` (bajo = el tráfico de objetos fue privado, así que dos
+  narradores del mismo log discrepan sobre quién tiene qué). Sin inventario son **no medidas**,
+  nunca cero. Todas salen de `performance.json`, así que `recompute-simulation-metrics` las
+  reproduce.
+- **Lo que el árbitro no cubre.** El `stage_event` del director es texto libre y no pasa por él:
+  en la validación 7.6 cerró un beat diciendo que el sello «resbala de las manos de Aldren»
+  cuando la verdad del inventario lo tenía en las de Elara. Tampoco se arbitra la acción de un
+  actor que menciona un objeto sin declarar un movimiento (10 de 21 menciones en ese run). Las
+  dos quedan en la ficha EXP-6 y en la idea del árbitro de acciones físicas.
+- **Un rejuego viste el escenario otra vez.** `--plan-from` congela petición, mundo, personajes,
+  plan, guion y casting, pero no la utilería: la etapa `props` vuelve a correr, porque el run de
+  origen puede no tener ninguna (es el caso de todo el corpus anterior a 7.6). Son una llamada y
+  un eje más que vigilar al emparejar.
+- **Artefactos:** `props.json`, `stage/inventory.jsonl` (una línea por movimiento aplicado) y
+  `performance.json` en contrato 4, cuyos turnos pueden traer `item_action` y que guarda la
+  utilería inicial y final. El eje `inventory` de `pairing.py` lee `performance.json`, así que
+  todo el corpus anterior se empareja como «sin inventario».
+
 ## Validación real 7.5 (2026-09-30)
 
 Dos funciones desde el mismo plan de «La Sombra del Volcán» 7.4, con el mismo presupuesto:

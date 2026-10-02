@@ -56,6 +56,11 @@ YIELDING_TACTICS = frozenset({"reveal", "confess", "concede", "yield"})
 # and "thought" never leaves the character who thought it.
 MemoryKind = Literal["initial", "observed", "own_turn", "thought", "stage_event", "reflection"]
 
+# What a character may do with a physical object, when the inventory is on. Closed for the same
+# reason Tactic is: free text cannot be arbitrated in code, and every verb here has one rule
+# about who must hold the object and one about who gets to perceive the move.
+ItemVerb = Literal["none", "use", "give", "take", "drop", "hide", "show"]
+
 
 class SceneCastBrief(BaseModel):
     """One character on stage in a scene, with the objective the script gives them there."""
@@ -322,6 +327,133 @@ class CastBible(CastBibleDraft):
 
 
 # --------------------------------------------------------------------------------------
+# Props and the inventory
+# --------------------------------------------------------------------------------------
+
+
+class PropDraft(BaseModel):
+    """One object on stage as the prop master placed it, before stage/props.py judged it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    object_id: str = Field(
+        default="",
+        description=(
+            "The world object ID this prop is, when it is one of the objects listed under "
+            "WORLD. Empty for a personal object you are adding."
+        ),
+    )
+    name: str = Field(
+        min_length=1,
+        description=(
+            "In the fiction language: what the characters call this object, as it would be "
+            "named on stage. This is the only handle an actor ever gets for it."
+        ),
+    )
+    appearance: str = Field(
+        default="",
+        description=(
+            "In the fiction language: what anyone who sees it can tell at a glance, in a "
+            "clause. Empty when the name says everything."
+        ),
+    )
+    holder_id: str = Field(
+        default="",
+        description=(
+            "Character ID of whoever carries it when the curtain rises. Empty when it is not "
+            "on anyone, and then it lies in a location."
+        ),
+    )
+    location_id: str = Field(
+        default="",
+        description=(
+            "World location ID where it lies when nobody carries it. Ignored when holder_id is set."
+        ),
+    )
+    concealed: bool = Field(
+        default=False,
+        description=(
+            "True when its holder keeps it out of sight, so the others cannot see or take it "
+            "until it is shown. Only an object with a holder can be concealed."
+        ),
+    )
+
+
+class PropListDraft(BaseModel):
+    """Every object the performance may handle, as the prop master proposed it."""
+
+    props: list[PropDraft] = Field(default_factory=list)
+
+
+class Prop(PropDraft):
+    """One object stage/props.py accepted, with the identity the arbiter tracks it by."""
+
+    # Minted here, never authored: a world object keeps its own ID and a personal one is
+    # numbered, so two props can share a name and still be told apart in the log.
+    id: str = Field(pattern=ID_PATTERN)
+
+
+class PropList(BaseModel):
+    """The dressed stage: props.json.
+
+    What the arbiter starts from. Holder and location are the opening truth only; from the
+    first turn on, StageInventory owns where each prop is.
+    """
+
+    props: list[Prop] = Field(default_factory=list)
+    observations: list[str] = Field(default_factory=list)
+    fallback: bool = False
+
+
+class ItemActionDraft(BaseModel):
+    """What an actor proposes to do with an object this turn, by name."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    verb: ItemVerb = Field(
+        default="none",
+        description=(
+            "'none' for a turn that handles no object - most turns. 'use' to put one to work, "
+            "'give' to hand it to someone, 'take' to pick one up or take it off someone, "
+            "'drop' to leave it, 'hide' to put yours out of sight, 'show' to bring it back "
+            "into view."
+        ),
+    )
+    item: str = Field(
+        default="",
+        description=(
+            "The name of the object, as it appears under LO QUE LLEVAS or LO QUE VES. Empty "
+            "only when verb is 'none'."
+        ),
+    )
+    target: str = Field(
+        default="",
+        description=(
+            "For 'give', the name of whoever receives it, as listed under CONTIGO EN ESCENA. "
+            "For 'take', whoever you take it from, when you take it off someone. Empty "
+            "otherwise."
+        ),
+    )
+
+
+class ItemAction(BaseModel):
+    """One object move the arbiter accepted, resolved to identities and witnesses.
+
+    What the actor wrote was names; what the log keeps is IDs, exactly as with addressed_to.
+    ``item_name`` rides along so a reader, a prompt or a narrator never has to join this
+    against props.json.
+    """
+
+    verb: ItemVerb
+    item_id: str = Field(pattern=ID_PATTERN)
+    item_name: str = Field(min_length=1)
+    target_id: str = ""
+    # Whoever held the object before this move: the giver, or whoever it was taken from.
+    from_id: str = ""
+    witnesses: list[str] = Field(default_factory=list)
+
+
+# --------------------------------------------------------------------------------------
 # The performance
 # --------------------------------------------------------------------------------------
 
@@ -384,6 +516,23 @@ class ActorTurnDraft(BaseModel):
     )
 
 
+class ActorTurnWithItemsDraft(ActorTurnDraft):
+    """One turn from an actor who may handle objects: the inventory's response schema.
+
+    A separate model on purpose. The schema of every structured call crosses to the provider,
+    so asking for an object field in a run without an inventory would change every actor
+    request in the corpus; this one is only ever requested when the option is on.
+    """
+
+    item_action: ItemActionDraft = Field(
+        default_factory=ItemActionDraft,
+        description=(
+            "What you do with an object this turn. Leave verb as 'none' unless handling one is "
+            "the move. Your action must say in words what you do with it."
+        ),
+    )
+
+
 class StageTurn(ActorTurnDraft):
     """One turn stage/validation.py already accepted, with the facts the engine derived.
 
@@ -408,6 +557,8 @@ class StageTurn(ActorTurnDraft):
     direction_note: str = ""
     retrieved_memory_ids: list[str] = Field(default_factory=list)
     attempts: int = Field(default=1, ge=1)
+    # None in every run without an inventory, and in a turn that handled no object.
+    item_action: ItemAction | None = None
 
 
 class TurnRejection(BaseModel):
@@ -426,6 +577,10 @@ class TurnRejection(BaseModel):
         "ACTOR_CALL_FAILED",
         "INVALID_WHISPER",
         "OUT_OF_FICTION",
+        "UNKNOWN_ITEM",
+        "ITEM_NOT_HELD",
+        "ITEM_OUT_OF_REACH",
+        "INVALID_ITEM_TARGET",
     ]
     issue: str
     turn: dict | None = None
@@ -705,6 +860,7 @@ class PerformanceSettings(BaseModel):
 
     actor_memory: ActorMemory
     simulation_mode: SimulationMode = SimulationMode.FIXED
+    inventory: bool = False
     turns_per_beat: int = Field(ge=2)
     check_every: int = Field(ge=1)
     reaction_turns: int = Field(default=2, ge=0)
@@ -723,12 +879,16 @@ class PerformanceArtifact(BaseModel):
 
     # 2: achieved is derived from the director's clauses, gates say how they come out, and
     # every director call is logged. A 7.0 run still reads as contract 1.
-    contract_version: str = "3"
+    # 4: a turn may carry an item_action, and props record where every object began and ended.
+    contract_version: str = "4"
     language: str
     settings: PerformanceSettings
     scenes: list[ScenePerformance] = Field(default_factory=list)
     states: list[CharacterState] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    # Both empty without an inventory: where every prop started, and where it ended up.
+    props: list[Prop] = Field(default_factory=list)
+    inventory: list[Prop] = Field(default_factory=list)
 
 
 class PromiseStoryCheck(BaseModel):

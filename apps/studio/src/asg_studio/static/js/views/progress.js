@@ -31,6 +31,7 @@ const STAGE_TO_STEP = {
   revision: "writing",
   adaptation: "writing",
   casting: "casting",
+  props: "casting",
   performance: "performance",
   narration: "narration",
   story: "story",

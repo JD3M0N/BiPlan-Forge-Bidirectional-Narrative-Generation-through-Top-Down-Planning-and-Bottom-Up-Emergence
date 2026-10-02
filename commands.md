@@ -15,7 +15,8 @@ Añade `--help` a cualquiera para ver todas sus opciones.
 
 - `generate-story [prompt]`: genera una historia (pide el prompt si no se da). Opciones útiles:
   `--format {narrative,script,simulated}`, `--profile {essential,developed,expansive}`,
-  `--voice`, `--narrator`, `--actor-memory {own,shared}`, `--no-audio`, `--brief`, `--options`.
+  `--voice`, `--narrator`, `--actor-memory {own,shared}`, `--inventory`, `--no-audio`,
+  `--brief`, `--options`.
 - `compare-story-runs <run>...`: compara 2 o más runs y saca un informe HTML.
 - `audit-stage-run <run>`: un juez LLM revisa un run simulado (filtraciones de conocimiento y
   fidelidad de la narración). Gasta cuota.

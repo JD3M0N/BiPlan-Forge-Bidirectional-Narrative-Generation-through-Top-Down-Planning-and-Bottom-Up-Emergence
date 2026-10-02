@@ -17,6 +17,7 @@ const AXIS_LABELS = {
   narrator: "Personaje de la visión",
   narration_tone: "Tono del narrador",
   actor_memory: "Memoria de los actores",
+  inventory: "Inventario de objetos",
   turns_per_beat: "Turnos por beat",
   promise_ledger: "Ledger de promesas",
   narrative_guidance: "Guía de esqueletos",
@@ -227,6 +228,12 @@ export function renderReader(container, collection, runId) {
                   "div",
                   {},
                   turn.action ? h("span", { class: "turn-action", text: `(${turn.action}) ` }) : null,
+                  turn.item
+                    ? h("span", {
+                        class: `turn-item${data.voice && !turn.item_visible ? " is-hidden" : ""}`,
+                        text: `${turn.item} `,
+                      })
+                    : null,
                   turn.speech ? h("span", { text: turn.speech }) : null,
                   turn.thought
                     ? h("span", {

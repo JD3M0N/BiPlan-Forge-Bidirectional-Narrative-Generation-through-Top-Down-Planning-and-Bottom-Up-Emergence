@@ -136,7 +136,7 @@ Dentro de `stagecraft`, los módulos van por subpaquete:
 | `planning/` | perfiles, grafo, esqueletos, promesas, reparación |
 | `writing/` | auditoría, evidencia de artesanía, ensamblado, aceptación |
 | `script/` | validación, render y etapas del guion |
-| `stage/` | la función simulada |
+| `stage/` | la función simulada y el árbitro del inventario |
 | `tools/` | los comandos: `generate`, `compare`, `recovery`, `audit_stage`, `recompute` |
 
 En la raíz quedan la fachada y el contrato: `__init__`, `version`, `formats`, `options`,
@@ -168,7 +168,7 @@ El flujo es `StoryGenerator` (fachada pública en `generator.py`) → `StoryPipe
 - analysis, architecture, world, characters, planning, plan_review, promises;
 - drafting, critique, revision;
 - adaptation, solo en el método adaptado del guion;
-- casting, performance, narration, solo en el formato simulado;
+- casting, props, performance, narration, solo en el formato simulado;
 - story, audio.
 
 Cada etapa llama a un agente de `agents/` y persiste su artefacto antes de seguir. Lo que hace
@@ -274,7 +274,7 @@ A esa lista, el guion y el simulado añaden los suyos.
   `report-story-craft` las recalcula desde `story.md`, así que también mide los runs anteriores
   a 6.5.0, que no las traen.
 
-`version.py` fija `PIPELINE_VERSION` (7.5) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.5).
+`version.py` fija `PIPELINE_VERSION` (7.6) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.6).
 `StoryRun` se niega a abrir un run incompleto o de una versión no soportada. Si cambias el
 conjunto de artefactos o su significado, sube la versión en vez de romper los runs ya generados:
 son datos de la tesis. Una limpieza que no toca artefactos sube solo el parche de
@@ -362,10 +362,23 @@ que saber antes de tocar `stage/`:
   en ellos.
 - **El narrador cura, no transcribe.** Puede cortar, fundir y reordenar dentro de un capítulo,
   pero no puede inventar un beat. Donde el plan y el log no coincidan, manda el log.
-- **El respaldo es contrato.** Si el casting o la narración no pueden correr, `stage/casting.py`
-  y `stage/fallback.py` derivan un resultado determinista. El run lo registra y sigue.
+- **El respaldo es contrato.** Si el casting, la utilería o la narración no pueden correr,
+  `stage/casting.py`, `stage/props.py` y `stage/fallback.py` derivan un resultado determinista.
+  El run lo registra y sigue.
 - **Ninguna cifra viaja a un prompt**, como en el resto del pipeline, y un test lo comprueba
   sobre las etapas nuevas.
+- **El inventario es opcional y el código es el árbitro** (7.6). `inventory=True` añade la etapa
+  `props` entre casting y performance.
+  - El actor propone un `item_action` (verbo y **nombre** del objeto) y `stage/inventory.py`
+    decide: `use`, `give`, `drop`, `hide` y `show` exigen tenerlo; `take`, que esté al alcance.
+    Rechaza en inglés ASCII con código, y se reinyecta como cualquier otro turno.
+  - **Un objeto solo lo percibe quien lo ve:** los testigos del turno más quien entrega y quien
+    recibe; un traspaso en susurro queda entre esas manos; `hide` solo lo sabe su portador. Eso
+    amplía la asimetría de la que viven las visiones.
+  - `stage/props.py` normaliza más de lo que rechaza, y `MAX_PERSONAL_PROPS` vive ahí, nunca en
+    un prompt. Los ids de objeto no entran en el contexto del actor: solo nombres.
+  - Apagado no cambia **nada**: ni prompt, ni esquema, ni etapa, ni artefacto. Un test compara
+    los dos brazos, y es lo que hace que la opción sea medible.
 
 ### evaluation: informes que solo leen
 
@@ -421,9 +434,9 @@ que saber antes de tocar `stage/`:
 - `asg-studio` sirve en `127.0.0.1:8765` una app FastAPI y una página en HTML, CSS y módulos ES
   sin paso de build. Detalle en [apps/studio/README.md](apps/studio/README.md).
 - **Las opciones se pintan desde `catalog.py`.** Las etiquetas vienen del generador
-  (`formats.py`, perfiles, voces de `asg_core`); las opciones **pendientes** (inventario y
-  otras del roadmap) viven solo ahí, con su ficha. Un test cruza cada `kind` del catálogo con su
-  renderizador en `static/js/ui.js`.
+  (`formats.py`, perfiles, voces de `asg_core`); las opciones **pendientes** (las que el
+  roadmap aún no construye) viven solo ahí, con su ficha. Un test cruza cada `kind` del
+  catálogo con su renderizador en `static/js/ui.js`.
 - **La cola tiene un solo hilo** (`jobs.py`) y un generador nuevo por trabajo. Se cancela con
   `should_cancel`.
 - **Nunca escribe ni borra en `Stories/`.** La biblioteca y la comparación leen con los lectores
@@ -531,6 +544,11 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
   en `revealed_by`, con `how`, y **no** en `known_by`. El primer run real los confundió y le dio
   al detective la solución de partida. `stage/casting.py` lo rechaza desde 7.1; no relajes esa
   validación para que pase un casting.
+- **El esquema del turno con objetos solo se pide con el inventario activo.**
+  `ActorTurnWithItemsDraft` es un modelo aparte de `ActorTurnDraft` a propósito: el esquema
+  cruza al proveedor, así que un campo de objeto presente pero sin usar cambiaría todas las
+  peticiones de actor del corpus. Si añades otro camino que pida un turno, elige el esquema
+  según si hay árbitro, nunca añadas el campo al modelo base.
 - **Dos cifras de `simulation_metrics.json` que se leyeron al revés una vez.**
   - `repetition_ratio` solo mira el **habla**, palabra a palabra. No ve paráfrasis ni gestos;
     para eso está `action_repetition_ratio`.
