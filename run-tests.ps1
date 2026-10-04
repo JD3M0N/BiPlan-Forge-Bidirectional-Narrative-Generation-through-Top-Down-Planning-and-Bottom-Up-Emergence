@@ -4,9 +4,11 @@
 
 .DESCRIPTION
     Es el único comando para correr los tests de este repositorio: local, en
-    `quality.ps1` y en CI. Redirige el temporal de pytest al `.cache` del
-    repositorio, porque el temporal por defecto de Windows falla con
-    PermissionError en algunos entornos de sandbox. Filtra las líneas de
+    `quality.ps1` y en CI. Fija el temporal de pytest en `%TEMP%\asg-pytest-tmp`,
+    porque el `pytest-of-<usuario>` por defecto falla con PermissionError en
+    algunos entornos de sandbox; si ese directorio no se puede escribir, usa
+    `.cache\pytest-tmp`. El `conftest.py` de la raíz anula `os.fsync`, que en el
+    disco del repositorio cuesta ~125 ms por escritura. Filtra las líneas de
     progreso ("....F..  [ 42%]") para que una vuelta limpia quede en una sola
     línea; si algo falla, se quedan los FAILED y sus tracebacks cortos.
 
@@ -27,8 +29,23 @@ if (-not (Test-Path -LiteralPath $python)) {
     Write-Host "Aviso: no encontré .venv, uso el python del PATH." -ForegroundColor Yellow
 }
 
-$basetemp = Join-Path $PSScriptRoot ".cache\pytest-tmp"
-New-Item -ItemType Directory -Force -Path $basetemp | Out-Null
+function Test-WritableDirectory([string]$Path) {
+    try {
+        New-Item -ItemType Directory -Force -Path $Path -ErrorAction Stop | Out-Null
+        $probe = Join-Path $Path ".probe"
+        Set-Content -LiteralPath $probe -Value "" -ErrorAction Stop
+        Remove-Item -LiteralPath $probe -Force -ErrorAction Stop
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+$basetemp = Join-Path ([System.IO.Path]::GetTempPath()) "asg-pytest-tmp"
+if (-not (Test-WritableDirectory $basetemp)) {
+    $basetemp = Join-Path $PSScriptRoot ".cache\pytest-tmp"
+    New-Item -ItemType Directory -Force -Path $basetemp | Out-Null
+}
 
 $progressLine = '^[\.sxXFE]+\s*(\[\s*\d+%\])?\s*$'
 

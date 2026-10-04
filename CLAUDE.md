@@ -71,8 +71,9 @@ Comandos (opciones completas en [commands.md](commands.md)):
   directo, ni un archivo suelto, ni `-k`: correr un subconjunto no dice si el cambio rompió algo
   en otro paquete, y cada vuelta extra gasta contexto sin ganar nada que la vuelta completa no
   diera ya. `run-tests.ps1` tarda menos de un minuto.
-- Redirige el temporal de pytest a `.cache/pytest-tmp`, porque el temporal por defecto de Windows
-  falla con `PermissionError` en algunos entornos de sandbox.
+- Fija el temporal de pytest en `%TEMP%\asg-pytest-tmp` (o en `.cache/pytest-tmp` si no se puede
+  escribir), porque el `pytest-of-<usuario>` por defecto falla con `PermissionError` en algunos
+  entornos de sandbox.
 - Filtra las líneas de progreso: si todo pasa, la salida es una sola línea; si algo falla, quedan
   los `FAILED` y sus tracebacks cortos, nada más.
 - `quality.ps1` y `.github/workflows/quality.yml` lo llaman tal cual: local y CI corren
@@ -512,6 +513,10 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
 
 ## Trampas conocidas
 
+- **El `conftest.py` de la raíz anula `os.fsync` en toda la suite.** La producción hace fsync en
+  cada artefacto, manifiesto y línea JSONL, y en el disco E: cada uno cuesta ~125 ms frente a menos
+  de 1 ms en C:. Con fsync y el temporal en E:, la suite pasaba de 1 min a más de 40. No lo quites,
+  y no dejes el temporal en E: si `%TEMP%` funciona: SQLite sincroniza el disco por su cuenta.
 - **`tests/test_source_documentation.py` solo exige que haya texto en inglés.** Desde 7.2.0
   resuelve sus rutas desde el propio archivo y falla si no encuentra módulos, así que ya no pasa
   en vacío desde otro directorio. Pero acepta docstrings plantilla («Represent X data and
