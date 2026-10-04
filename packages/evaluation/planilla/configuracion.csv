@@ -1,0 +1,15 @@
+id,parametro,campo,niveles,nivel_base,formatos,eje_emparejamiento,nota
+C02,Formato,story_format,baseline | narrative | script | simulated,simulated,todos,no (brazo),La línea base (MED-8) es una sola llamada con el prompt original.
+C03,Método del guion,script_method,native | adapted,native,script,no (brazo),El simulado siempre usa el nativo.
+C04,Perfil,narrative_profile,essential | developed | expansive,essential,todos,sí,Se varía solo en su propia fila de la matriz; nunca se mezcla en un par.
+C05,Ledger de promesas,promise_ledger,true | false,true,todos,no (brazo),Apagado cambia la escritura del plan: el brazo se genera desde cero.
+C06,Guía de esqueletos,narrative_guidance,true | false,true,todos,no (brazo),Igual que el ledger: desde cero.
+C07,Visión,narrative_voice,omniscient | limited | first_person,omniscient,simulated,no (brazo),compression_ratio y dialogue_survival solo se comparan dentro de una misma visión.
+C08,Personaje de la visión,narrator,nombre del reparto,(ninguno),simulated,no (brazo),"Solo con limited o first_person; si no existe, narra con [NARRATOR_FALLBACK]."
+C09,Tono del narrador,narration_tone,(neutro) | sombrío | humorístico,(neutro),simulated,no (brazo),El tutor lo pone como ejemplo de nivel a variar [02:23].
+C10,Memoria de los actores,actor_memory,own | shared,own,simulated,no (brazo),shared es el brazo de control de EXP-2; nunca se ha corrido.
+C11,Modo de la función,simulation_mode,fixed | adaptive,fixed,simulated,no (brazo),"La revisión adaptativa falló con Gemini en 7.5; se mide como brazo, no como base."
+C12,Inventario,inventory,true | false,true,simulated,no (brazo),Apagado no cambia nada del resto: la ablación es limpia (EXP-6).
+C13,Turnos por beat,turns_per_beat,4 | 8 | 12,8,simulated,no (brazo),8 es el defecto de ASG_STAGE_TURNS_PER_BEAT.
+C14,Modelo,model,el de GEMINI_MODEL,gemini-3.5-flash-lite,todos,sí,Fijo en toda la matriz.
+C15,Modelo de la función,stage_model,el de GEMINI_STAGE_MODEL,gemini-3.1-flash-lite,simulated,sí,Fijo en toda la matriz.

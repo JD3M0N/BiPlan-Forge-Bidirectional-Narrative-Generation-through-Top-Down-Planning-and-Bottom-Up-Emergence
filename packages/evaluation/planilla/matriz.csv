@@ -1,0 +1,20 @@
+celda,obras,formato,factor,nivel,como_se_genera,historias,llamadas_principal_por_historia,llamadas_funcion_por_historia,llamadas_principal_total,llamadas_funcion_total,nota
+M01,01 fantasía; 03 misterio; 04 drama,simulated,base: todo activado,—,desde cero; es el plan fuente de las réplicas,3,20,100,60,300,
+M02,01 fantasía; 03 misterio; 04 drama,baseline,formato,baseline,un solo prompt con el original_prompt,3,1,0,3,0,
+M03,01 fantasía; 03 misterio; 04 drama,narrative,formato,narrative,desde cero (MED-5 aún no reutiliza el plan fuera del simulado),3,16,0,48,0,
+M04,01 fantasía; 03 misterio; 04 drama,script,formato,script nativo,desde cero,3,15,0,45,0,
+M05,01 fantasía; 03 misterio; 04 drama,script,método del guion,adapted,desde cero,3,20,0,60,0,
+M06,01 fantasía; 03 misterio; 04 drama,simulated,visión,limited,--plan-from M01,3,5,95,15,285,"Visión y tono solo cambian la narración, pero --plan-from repite la función: la diferencia mezcla función y narración."
+M07,01 fantasía; 03 misterio; 04 drama,simulated,visión,first_person,--plan-from M01,3,5,95,15,285,"Visión y tono solo cambian la narración, pero --plan-from repite la función: la diferencia mezcla función y narración."
+M08,01 fantasía; 03 misterio; 04 drama,simulated,tono,sombrío,--plan-from M01,3,5,95,15,285,"Visión y tono solo cambian la narración, pero --plan-from repite la función: la diferencia mezcla función y narración."
+M09,01 fantasía; 03 misterio; 04 drama,simulated,tono,humorístico,--plan-from M01,3,5,95,15,285,"Visión y tono solo cambian la narración, pero --plan-from repite la función: la diferencia mezcla función y narración."
+M10,01 fantasía; 03 misterio; 04 drama,simulated,memoria,shared,--plan-from M01,3,5,95,15,285,
+M11,01 fantasía; 03 misterio; 04 drama,simulated,inventario,false,--plan-from M01,3,5,95,15,285,
+M12,01 fantasía; 03 misterio; 04 drama,simulated,modo,adaptive,--plan-from M01,3,5,95,15,285,
+M13,01 fantasía; 03 misterio; 04 drama,simulated,turnos por beat,4,--plan-from M01,3,5,70,15,210,
+M14,01 fantasía; 03 misterio; 04 drama,simulated,turnos por beat,12,--plan-from M01,3,5,120,15,360,
+M15,01 fantasía; 03 misterio; 04 drama,simulated,ledger,false,desde cero,3,20,100,60,300,
+M16,01 fantasía; 03 misterio; 04 drama,simulated,guía de esqueletos,false,desde cero,3,20,100,60,300,
+M17,01 fantasía; 03 misterio; 04 drama,simulated,perfil,developed,desde cero,3,22,130,66,390,
+M18,01 fantasía; 03 misterio; 04 drama,simulated,perfil,expansive,desde cero,3,25,160,75,480,
+TOTAL,,,,,,54,,,612,4335,"Con ~500 peticiones diarias por modelo (cifra inferida): unos 9 días del modelo de la función y 1 del principal, sin repeticiones."

@@ -106,7 +106,11 @@ La tesis se cierra con experimentos medidos y evaluados por personas. Para llega
    de 7.2; SIM-14 y SIM-15 salieron de ese mismo par.
 3. **Matrices emparejadas**, con MED-3 y MED-5.
 4. **Los experimentos**: EXP-1, EXP-2, EXP-3 y EXP-5.
-5. **La evaluación humana** de esas historias, con EXP-4.
+5. **La evaluación** según la metodología del tutor
+   ([packages/evaluation/METODOLOGIA.md](packages/evaluation/METODOLOGIA.md)): los instrumentos
+   MED-8 (línea base), MED-9 (extractor de rasgos) y MED-10 (tabla por historia); después, la
+   evaluación humana por pares (EXP-4), el juez aprendido (EXP-7) y el ranking del corpus
+   (EXP-8).
 
 ING-2 abarata todo lo que reescribe prompts (SIM-1, SIM-2, SIM-6, SIM-15, TD-2, TD-4), así que
 conviene hacerlo antes o a la vez. El resto de ING y OPS puede avanzar en paralelo y sin cuota.
@@ -153,6 +157,10 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   mismo: un juez prefiere sus propias generaciones, y aquí Gemini juzga a Gemini; y los jueces al
   uso puntúan historias de LLM por encima de relatos del *New Yorker* (ver
   [docs/resumen.md](docs/resumen.md), §9).
+- **La calidad la deciden personas, por pares.** La evaluación de la tesis sigue
+  [packages/evaluation/METODOLOGIA.md](packages/evaluation/METODOLOGIA.md): rasgos contables con
+  cita, tres criterios humanos por pares a ciegas y un juez aprendido de esos pares. Las seis
+  métricas de 1 a 10 de `evaluation.json` son un instrumento heredado, no la medida.
 - **Por escrito.** El resultado va con cifras y comandos en el doc del formato
   (`docs/resumen.md` o `docs/resumen.md`), no aquí.
 
@@ -500,6 +508,51 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
 ---
 
 ## Pendiente
+
+### MED-8 · Línea base de un solo prompt
+
+*Área:* medición · *Cuota:* ~1 llamada por historia · *Depende de:* nada
+
+- **Síntoma.** El tutor pide comparar con historias generadas «directamente por un prompt»
+  (audio, [03:02]), igual que la versión monolítica de la tesis de Roger. No existe ese
+  generador.
+- **Qué hacer.** Un comando que pida a `GEMINI_MODEL` una historia con el mismo
+  `original_prompt` en una sola llamada, sin pipeline, y escriba `Stories/Baseline/<run>/` con
+  `request.json`, `story.md`, `metadata.json` (`story_format: baseline`) y `llm_usage.json`. El
+  enfoque se infiere de la carpeta: «Baseline».
+- **Hecho cuando.** Hay una línea base por obra de la matriz, y los informes de `evaluation` la
+  leen como un enfoque más.
+
+### MED-9 · Extractor de rasgos con cita verificada
+
+*Área:* medición · *Cuota:* 2–3 llamadas por historia · *Depende de:* nada
+
+- **Síntoma.** Los rasgos R y X de `packages/evaluation/planilla/rasgos.csv` no los cuenta nadie.
+  Son los que el tutor pide que un modelo «extraiga» (audio, [00:22]).
+- **Qué hacer.**
+  - Un comando en `stagecraft/tools/`, con el patrón de `audit_stage.py`: lee `story.md` y las
+    definiciones de `rasgos.csv`, y escribe `<run>/features/features.json` sin tocar el
+    manifiesto.
+  - Cada recuento lleva sus citas. El código descarta las que no están literalmente en el texto.
+  - Los recuentos que crecen con la longitud se normalizan por 1000 palabras.
+- **Hecho cuando.**
+  - Corre sobre todo el corpus.
+  - En los runs simulados, los recuentos se contrastan con su `validable_contra` del log.
+  - Una segunda extracción de 20 historias da la estabilidad (test-retest).
+  - Hay una muestra de contradicciones (X20) revisada a mano.
+- **Ojo.** Pide recuentos, nunca notas de calidad. Gemini lee texto de Gemini.
+
+### MED-10 · Tabla de rasgos por historia
+
+*Área:* medición · *Cuota:* sin cuota · *Depende de:* MED-9 para las capas R y X
+
+- **Síntoma.** Las cifras de cada historia están repartidas entre tres informes y veinte
+  artefactos, y la «tablita» del tutor no existe.
+- **Qué hacer.** Un informe `report-features` en `evaluation` que escriba un CSV con la cabecera
+  de `plantilla_historia.csv`, con las capas T, R, X, P, K y C, leídas con los lectores
+  tolerantes de `artifacts.py`. Lo que un run no registró sale como no medido, nunca como cero.
+- **Hecho cuando.** Hay una fila por historia del corpus y cada columna con `estado=existe` en
+  `rasgos.csv` sale llena donde su formato aplica.
 
 ### MED-5 · Comparar formatos y métodos desde un mismo plan congelado
 
@@ -980,27 +1033,64 @@ gratuita · *Depende de:* MED-5, MED-7
     declarar un movimiento (10 de 21 menciones). Contar las dos cosas en la medición, y
     decidir si se arbitran o se aceptan.
 
-### EXP-4 · Campaña de evaluación humana
+### EXP-4 · Evaluación humana por pares a ciegas
 
-*Área:* experimento · *Cuota:* sin cuota · *Depende de:* EXP-1 y EXP-3 (para las historias)
+*Área:* experimento · *Cuota:* sin cuota · *Depende de:* MED-8 y las celdas de la matriz
+horizontal que entren en el pool
 
 - **Síntoma.**
-  - **No hay evaluación humana.** De 146 `evaluation.json`, uno solo tiene puntuaciones reales;
-    los demás, incluidos todos los de Stagecraft y Bottom-Up, son plantillas.
-  - **Todas las cifras de calidad** del proyecto son automáticas o de jueces LLM, y esos jueces
-    aprueban casi todo (TD-1).
-  - **El informe no mide acuerdo.** `report-evaluations` da media, desviación y varianza, pero
-    no el acuerdo entre evaluadores.
+  - **No hay evaluación humana.** De 154 `evaluation.json`, uno solo tiene puntuaciones reales;
+    los demás son plantillas.
+  - **El instrumento que hay no sirve para la tesis.** Puntúa seis métricas de 1 a 10, el
+    esquema heredado de la tesis de Roger, cuyos dos radares «difieren ligeramente». El tutor lo
+    descarta: «ese 8 no significa nada» (audio, [03:41]).
+  - `compare-story-runs` pone historias lado a lado, pero no registra ningún voto.
+- **Qué hacer.** El protocolo de §5 de
+  [packages/evaluation/METODOLOGIA.md](packages/evaluation/METODOLOGIA.md):
+  - de 5 a 10 historias por evaluador, al azar, a ciegas y con línea base, en sesiones de 5;
+  - pares con un solo criterio por pregunta y elección forzada, con las tres preguntas literales
+    de `packages/evaluation/planilla/criterios_humanos.csv`;
+  - el registro, con el formato de `plantilla_pares.csv` y `plantilla_evaluadores.csv`, nunca
+    dentro de un run;
+  - una herramienta que sortee los pares y guarde los votos; puede extender `compare-story-runs`;
+  - en `evaluation`, Bradley-Terry por criterio con intervalos por bootstrap, más el acuerdo:
+    porcentaje por par, α de Krippendorff y W de Kendall, con y sin el autor.
+- **Hecho cuando.** Cada historia del pool tiene el número de comparaciones por criterio que fije
+  el protocolo, y el informe da las tres puntuaciones (H01–H03) con su intervalo y el acuerdo
+  entre evaluadores.
+- **Ojo.** No reutilizar `evaluation.json` para los pares: su formato rechaza campos nuevos y sus
+  plantillas están en 153 runs.
+
+### EXP-7 · El juez aprendido de los pares humanos
+
+*Área:* experimento · *Cuota:* sin cuota · *Depende de:* EXP-4 y MED-10
+
+- **Síntoma.** No hay forma de puntuar las historias que nadie leyó. Los jueces LLM de calidad no
+  sirven: TTCW da una correlación ≈0 con los expertos, y aquí Gemini juzgaría a Gemini.
+- **Qué hacer.** El §6 de la metodología:
+  - scikit-learn como dependencia de `evaluation`;
+  - una regresión logística por pares y por criterio, sobre las diferencias de los rasgos
+    `núcleo` estandarizados;
+  - validación dejando una historia fuera;
+  - control con perturbaciones (escenas barajadas, pago final borrado, visión cambiada a mitad);
+  - publicar los pesos.
+- **Hecho cuando.** El informe da, por criterio, la precisión por pares y la τ de Kendall fuera de
+  la muestra, los pesos, y si las historias perturbadas bajan.
+- **Ojo.** Con 10 historias y 27 rasgos, el ajuste dentro de la muestra es perfecto por
+  construcción: solo cuenta la cifra fuera de la muestra. La lista núcleo se fija antes de ver
+  las preferencias.
+
+### EXP-8 · Ranking del corpus y análisis de las diez mejores
+
+*Área:* experimento · *Cuota:* sin cuota · *Depende de:* EXP-7
+
+- **Síntoma.** Hay 157 historias y una matriz por generar, y ningún orden entre ellas.
 - **Qué hacer.**
-  - Escribir un protocolo:
-    - qué historias: las de EXP-1 y EXP-3, emparejadas;
-    - cuántos evaluadores;
-    - presentación a ciegas y en orden aleatorio;
-    - las seis métricas de `packages/evaluation/README.md`.
-  - Añadir a `report-evaluations` el acuerdo entre evaluadores (por ejemplo, alfa de
-    Krippendorff) y la comparación por pares. Esta parte no espera a las matrices.
-- **Hecho cuando.** Cada historia de las matrices tiene el número de evaluaciones completas que
-  fije el protocolo, y el informe da el acuerdo entre evaluadores.
+  - Puntuar con el juez todas las historias completadas (J01–J04).
+  - Leer las 10 mejores y escribir qué tienen y qué no: rasgos, configuración y proceso.
+  - Leer el análisis horizontal con la misma tabla.
+- **Hecho cuando.** El ranking y el análisis están escritos en la metodología, con las versiones
+  que no se comparan marcadas.
 
 ### MED-6 · Inventario del corpus
 

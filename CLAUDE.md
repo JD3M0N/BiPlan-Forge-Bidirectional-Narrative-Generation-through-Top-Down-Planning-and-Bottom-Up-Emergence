@@ -382,6 +382,12 @@ que saber antes de tocar `stage/`:
 
 ### evaluation: informes que solo leen
 
+- **La metodología de evaluación de la tesis está en
+  [packages/evaluation/METODOLOGIA.md](packages/evaluation/METODOLOGIA.md)**, fiel al audio del
+  tutor: rasgos contables con cita (la planilla `packages/evaluation/planilla/`), pares humanos a
+  ciegas en tres criterios y un juez aprendido. Las seis métricas 1-10 de `evaluation.json` son
+  un instrumento heredado. Los CSV de la planilla son la fuente: tras editarlos, regenerar el
+  Excel con `python packages/evaluation/planilla/build_planilla.py`.
 - `report-evaluations`, `report-story-craft` y `report-simulations` comparten los lectores
   tolerantes de `artifacts.py`: un artefacto ausente, roto o de otro tipo cuenta como ausente,
   nunca como fallo.
@@ -585,6 +591,8 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
   simulada, validación 7.5). Junto a él, en `docs/`, los dos PDF fuente de la tesis: Roger Fuentes
   y *Sanderson Craft*. El catálogo de prompts se retiró; el prompt canónico vive en
   `test_gemini_live.py`.
+- [packages/evaluation/METODOLOGIA.md](packages/evaluation/METODOLOGIA.md): cómo se evalúa la
+  tesis, con su planilla de rasgos y su estado del arte.
 - [packages/evaluation/README.md](packages/evaluation/README.md): el formato de
   `evaluation.json`, las seis métricas humanas y los tres informes.
 - [commands.md](commands.md): los comandos, en una línea cada uno.

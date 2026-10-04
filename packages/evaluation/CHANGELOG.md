@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+- Added `METODOLOGIA.md`: the thesis evaluation method from the tutor's instructions (countable
+  story features, blind pairwise human judgments on three criteria, a single-prompt baseline, and
+  a judge learned from those pairs), with the state of the art it rests on. The six 1-10 metrics
+  of `evaluation.json` stay as a legacy instrument.
+- Added `planilla/`: the CSV sources (features, human criteria, configuration, generation matrix,
+  templates, bibliography) and `build_planilla.py`, which rebuilds `planilla_evaluacion.xlsx` and
+  the per-story template from them using only the standard library. No package code changed.
+
 ## [0.9.0] - 2026-10-02
 
 - `pairing` gains the `inventory` axis ("Inventario de objetos") for simulated runs, read

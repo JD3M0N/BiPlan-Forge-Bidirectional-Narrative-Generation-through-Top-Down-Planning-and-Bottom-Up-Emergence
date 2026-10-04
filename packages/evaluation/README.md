@@ -4,7 +4,15 @@ Guarda las evaluaciones humanas de cada historia y resume el corpus con tres inf
 JSON y Markdown del disco: nunca importa el pipeline, así que un run se puede estudiar mucho
 después de que el código que lo escribió haya cambiado.
 
+La evaluación de la tesis sigue [METODOLOGIA.md](METODOLOGIA.md): rasgos contables extraídos
+de cada historia, tres criterios humanos por pares a ciegas y un juez aprendido de esos pares. Lo
+que se mide está en la planilla [planilla/](planilla/) (CSV y `planilla_evaluacion.xlsx`).
+
 ## Evaluación humana
+
+> Las seis métricas de 1 a 10 de esta sección son el instrumento heredado de la tesis de Roger
+> Fuentes. Siguen funcionando, pero no son la medida de la tesis: ver
+> [METODOLOGIA.md](METODOLOGIA.md), §1.
 
 Cada carpeta con una historia terminada (`story.md`) lleva un `evaluation.json`. Las
 puntuaciones son enteros de **1 a 10**, donde 1 es el resultado más bajo y 10 el más alto:

@@ -1,0 +1,44 @@
+id,referencia,año,enlace,verificacion,que_aporta,que_se_adopta
+B01,Audio del tutor (Piad): indicaciones sobre la evaluación,2026,docs/audio_2026-10-03_14-09-35.ogg (local),fuente primaria,"Toda la metodología: rasgos contables, pares humanos, línea base, juez aprendido, ranking.",Todo
+B02,"Piad Morffis, A. El Método Sanderson (sanderson-craft.pdf), 3.8 Flash Fiction Evaluation Rubric y 3.3 Characters",2026,docs/sanderson-craft.pdf (local),fuente primaria,Rúbrica de 20 dimensiones; tres ejes del personaje.,Capa R de rasgos; definiciones de los criterios humanos.
+B03,"Fuentes Rodríguez, R. Generación de Historias mediante Simulación basada en Agentes Conversacionales (tesis, cap. 4)",2025,docs/Roger Fuentes Rodríguez.pdf (local),fuente primaria,"12 voluntarios, escala 1-10 tipo UEQ, línea base monolítica; radares casi iguales.",La línea base monolítica; se cambia la escala por pares.
+B04,Chhun et al. Of Human Criteria and Automatic Metrics (HANNA). COLING,2022,https://aclanthology.org/2022.coling-1.509/,verificado,Seis criterios humanos; las métricas automáticas clásicas correlacionan poco.,El esquema heredado de evaluation.json.
+B05,"Chhun, Suchanek y Clavel. Do Language Models Enjoy Their Own Stories? TACL 12",2024,https://aclanthology.org/2024.tacl-1.62/,verificado,"Jueces LLM: buenos a nivel de sistema, débiles por historia; las guías detalladas no ayudan.",No pedir calidad al LLM por historia.
+B06,Chakrabarty et al. Art or Artifice? (TTCW). CHI,2024,https://dl.acm.org/doi/10.1145/3613904.3642731,verificado,14 tests binarios; un LLM aplicándolos correlaciona ~0 con expertos.,Rasgos binarios o contables; el LLM no juzga calidad.
+B07,Huot et al. Agents' Room: Narrative Generation through Multi-step Collaboration. ICLR,2025,https://arxiv.org/abs/2410.02603,verificado; revisar cifras en el PDF,"Plot, Creativity, Development: pares de expertos, sesiones de 5, Bradley-Terry; repetición de trigramas.","Los tres criterios del tutor, sesiones cortas, Bradley-Terry, T08."
+B08,Gurung y Lapata. Learning to Reason for Long-Form Story Generation,2025,https://arxiv.org/abs/2503.22828,verificado,Estudio humano pequeño por pares con Bradley-Terry.,Precedente de un estudio pequeño.
+B09,Fein et al. LitBench. EACL,2026,https://aclanthology.org/2026.eacl-long.362/,verificado,Mejor juez directo: 73 % de acuerdo; Bradley-Terry entrenado con pares: 78 %.,Respaldo del juez aprendido del tutor.
+B10,Chiang y Lee. Can Large Language Models Be an Alternative to Human Evaluations? ACL,2023,https://aclanthology.org/2023.acl-long.870/,verificado,"Profesores con α de 0,05-0,33 en Likert.",Por qué no Likert.
+B11,"Novikova, Dušek y Rieser. RankME. NAACL",2018,https://aclanthology.org/N18-2012/,verificado,Ordenar es más fiable que puntuar.,Por qué pares.
+B12,van der Lee et al. Best practices for the human evaluation of automatically generated text. INLG,2019,https://aclanthology.org/W19-8643/,verificado,Al menos 3 evaluadores; informar acuerdo y perfil; preferir ordenar.,Protocolo humano.
+B13,van der Lee et al. Human evaluation of automatically generated text. Computer Speech & Language 67,2021,https://doi.org/10.1016/j.csl.2020.101151,verificado,Guía actualizada de buenas prácticas.,Protocolo humano.
+B14,"Amidei, Piwek y Willis. The use of rating and Likert scales in NLG human evaluation tasks. INLG",2019,https://aclanthology.org/W19-8648/,verificado,Problemas de las escalas Likert.,Por qué no Likert.
+B15,Howcroft et al. Twenty Years of Confusion in Human Evaluation. INLG,2020,https://aclanthology.org/2020.inlg-1.23/,verificado,El 65 % no publica la pregunta exacta.,Publicar la pregunta literal (criterios_humanos.csv).
+B16,Card et al. With Little Power Comes Great Responsibility. EMNLP,2020,https://aclanthology.org/2020.emnlp-main.745/,verificado,Los estudios humanos típicos no tienen potencia.,Declarar el estudio exploratorio.
+B17,Boubdir et al. Elo Uncovered. GEM,2023,https://aclanthology.org/2023.gem-1.28/,verificado; revisar el enlace,Elo depende del orden y es inestable con pocos sistemas.,"Bradley-Terry, no Elo."
+B18,Chiang et al. Chatbot Arena. ICML,2024,https://arxiv.org/abs/2403.04132,verificado,Bradley-Terry con intervalos.,Agregación de pares.
+B19,"Marco, Gonzalo y Fresno. The Reader is the Metric. Findings of ACL",2025,https://arxiv.org/abs/2506.03310,verificado,Dos perfiles de lector con preferencias distintas.,Registrar el perfil del evaluador.
+B20,Marco et al. Pron vs Prompt. EMNLP,2024,https://arxiv.org/abs/2407.01119,verificado,La brecha entre LLM y autor es mayor en español.,Evaluadores hispanohablantes.
+B21,"Panickssery, Bowman y Feng. LLM Evaluators Recognize and Favor Their Own Generations. NeurIPS",2024,https://arxiv.org/abs/2404.13076,verificado,Sesgo de autopreferencia.,"Gemini solo cuenta, con cita verificada."
+B22,Zheng et al. Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena. NeurIPS,2023,https://arxiv.org/abs/2306.05685,verificado,"Sesgos de posición, verbosidad y autopreferencia.",Izquierda y derecha al azar; controlar la longitud (T01).
+B23,Jung et al. Style over Story,2025,https://arxiv.org/abs/2510.02025,verificado; revisar cifras en el PDF,Los LLM prefieren el estilo a la trama y los personajes.,No usar un juez LLM de calidad.
+B24,"Tutone, Franceschelli y Musolesi. The Limits of Automatic Evaluation of Creativity in LLMs",2026,https://arxiv.org/abs/2608.23705,verificado,Métricas automáticas ~0 con humanos en creatividad.,La calidad la ponen los humanos.
+B25,Li et al. Lost in Stories: Consistency Bugs in Long Story Generation (ConStory-Bench). Findings of ACL,2026,https://aclanthology.org/2026.findings-acl.410/,verificado,"Contradicciones en 5 tipos, cada una con cita.",X20 y el contrato de cita del extractor.
+B26,"Ahuja, Sclar y Tsvetkov. Finding Flawed Fictions. COLM",2025,https://arxiv.org/abs/2504.11900,verificado,Los LLM detectan mal los huecos de trama.,Revisar a mano una muestra de X20.
+B27,"Ma, Huang y Lin. DramaBench",2025,https://arxiv.org/abs/2512.19012,verificado,Conflicto y consistencia de personaje en guiones.,X06 y X09.
+B28,Tu et al. CharacterEval. ACL,2024,https://aclanthology.org/2024.acl-long.638/,verificado,Consistencia del personaje.,X09.
+B29,Samuel et al. PersonaGym. Findings of EMNLP,2025,https://arxiv.org/abs/2407.18416,verificado; revisar cifras en el PDF,Fidelidad a la persona.,X09.
+B30,Ahn et al. TimeChara. Findings of ACL,2024,https://aclanthology.org/2024.findings-acl.197/,verificado,Alucinación de conocimiento del personaje.,X28.
+B31,Park et al. Generative Agents. UIST,2023,https://arxiv.org/abs/2304.03442,verificado,Credibilidad por ranking humano y tasa de alucinación.,X28; ordenar en lugar de puntuar.
+B32,Kim et al. FANToM. EMNLP,2023,https://aclanthology.org/2023.emnlp-main.890/,verificado,Teoría de la mente con información asimétrica.,X26.
+B33,Zhou et al. SOTOPIA. ICLR,2024,https://arxiv.org/abs/2310.11667,verificado,Dimensión «secret».,X13.
+B34,Yun et al. Codified Foreshadowing-Payoff Text Generation,2026,https://arxiv.org/abs/2601.07033,verificado,Tasa de pagos de lo anticipado.,"X23, X24 y el PPP."
+B35,Tian et al. Are Large Language Models Capable of Generating Human-Level Narratives? EMNLP,2024,https://aclanthology.org/2024.emnlp-main.978/,verificado,Arcos y puntos de giro.,X15.
+B36,Harel-Canada et al. Measuring Psychological Depth in Language Models. EMNLP,2024,https://aclanthology.org/2024.emnlp-main.953/,verificado,"Profundidad psicológica; α humano de 0,72.",X22; definición de H02.
+B37,EQ-Bench Creative Writing v3 y Longform (Paech),2025,https://eqbench.com/about.html,"verificado (web, sin revisión por pares)",Muletillas de LLM y degradación entre capítulos.,T09 y T10.
+B38,Guan et al. OpenMEVA. ACL,2021,https://aclanthology.org/2021.acl-long.500/,verificado,Validar métricas con perturbaciones.,Control con historias rotas en EXP-7.
+B39,Yang et al. DOC: Improving Long Story Coherence With Detailed Outline Control. ACL,2023,https://aclanthology.org/2023.acl-long.190/,verificado,Pares humanos sobre pasajes alineados por el esquema.,Idea para comparar pasajes del mismo plan.
+B40,Yang y Jin. What Makes a Good Story and How Can We Measure It? (survey),2024,https://arxiv.org/abs/2408.14622,verificado,Taxonomía de criterios y métricas.,Marco del estado del arte.
+B41,Shimorina y Belz. The Human Evaluation Datasheet (HEDS). HumEval,2022,https://aclanthology.org/2022.humeval-1.6/,verificado; revisar el enlace,Ficha estándar de evaluación humana.,Anexo de la tesis.
+B42,Šeļa et al. Distinción de voces de personajes por estilometría,2023,,sin verificar: la cita viene de TODO.md MED-7,Distinción de voces sin LLM.,R14 y MED-7.
+B43,"McCarthy y Jarvis. MTLD, vocd-D, and HD-D. Behavior Research Methods 42",2010,https://doi.org/10.3758/BRM.42.2.381,verificado,Diversidad léxica robusta a la longitud.,T07.
