@@ -17,18 +17,30 @@ jobs:
   quality:
     name: quality
     runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: repo
     steps:
+      # The repository name is repeated in the default Windows workspace path.
+      # Enable long paths before fetch and keep the checkout under a short name.
+      - name: Enable long paths in Git
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+        run: git config --global core.longpaths true
+
       - uses: actions/checkout@v4
+        with:
+          path: repo
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
-            packages/*/pyproject.toml
-            apps/*/pyproject.toml
+            repo/requirements.txt
+            repo/requirements-dev.txt
+            repo/packages/*/pyproject.toml
+            repo/apps/*/pyproject.toml
 
       - name: Instalar el monorepo
         id: install
