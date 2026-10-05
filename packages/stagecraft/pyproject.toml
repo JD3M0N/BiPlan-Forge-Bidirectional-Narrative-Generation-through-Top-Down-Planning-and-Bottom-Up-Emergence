@@ -10,13 +10,15 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "asg-core>=0.6.0",
-  "asg-evaluation>=0.7.0",
+  "asg-evaluation>=1.0.0",
   "google-genai>=1.0,<2",
   "pydantic>=2.7,<3",
   "python-dotenv>=1.0,<2",
 ]
 
 [project.scripts]
+extract-story-features = "asg_stagecraft.tools.extract_features:main"
+generate-baseline = "asg_stagecraft.tools.baseline:main"
 generate-story = "asg_stagecraft.tools.generate:main"
 compare-story-runs = "asg_stagecraft.tools.compare:main"
 recover-story-runs = "asg_stagecraft.tools.recovery:main"

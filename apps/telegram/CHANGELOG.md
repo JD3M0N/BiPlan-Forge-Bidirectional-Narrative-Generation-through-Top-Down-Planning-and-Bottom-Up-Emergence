@@ -1,5 +1,11 @@
 # Historial de cambios
 
+## Sin publicar: estudio final
+
+- `/evaluar`, `/aportar` y `/pausa` al configurar `ASG_EVALUATION_STUDY`.
+- Sesiones a ciegas, perfil lector, abstenciones y progreso persistido fuera del estado de generación.
+- Inscripción de la aportación vinculada al trabajo reservado; se conservan `/newstory` y `/settings`.
+
 ## [3.1.0] - 2026-09-28
 
 - La cabecera de la consola del operador añade la fila «Modelo de la función» cuando la función

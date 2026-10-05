@@ -9,6 +9,7 @@ dist/
 build/
 .venv/
 Stories/
+Evaluations/
 docs/*
 !docs/resumen.md
 .cache/

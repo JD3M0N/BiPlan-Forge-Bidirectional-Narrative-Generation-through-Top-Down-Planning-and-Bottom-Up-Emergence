@@ -98,6 +98,15 @@
 
 La tesis se cierra con experimentos medidos y evaluados por personas. Para llegar ahí:
 
+**Auditoría de evaluación 2026-10-05.** Antes del piloto hay que corregir recuentos y
+desgloses por personaje (MED-9), integrar las extracciones del estudio con los informes (MED-10)
+y asegurar la compatibilidad del protocolo del juez (EXP-7). Después: revisión humana de
+extracciones, piloto y estudio real (EXP-4), validación del juez y ranking con diez análisis
+cualitativos (EXP-8). La comparación de aportaciones con opciones libres describe asociaciones;
+una comparación controlada de parametrizaciones necesita diseño y presupuesto propios. Las
+755 pruebas pasadas, dos omitidas y la demo de once historias con 180 respuestas ficticias
+corresponden a la validación técnica previa: no prueban generalización ni cierran estos pendientes.
+
 1. **Instrumentos fiables**, con MED-1, MED-2 y MED-7. Sin ellos una matriz muere a medias, como
    murió `054422`, o mide cosas que no son lo que dicen. MED-7 fija además la línea base de la
    actuación antes de cambiarla.
@@ -511,6 +520,10 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
 
 ### MED-8 · Línea base de un solo prompt
 
+**Actualización 2026-10-04:** infraestructura implementada y demostrable sin red; consultar
+[ESTUDIO_FINAL.md](packages/evaluation/ESTUDIO_FINAL.md). La descripción siguiente conserva
+el diagnóstico inicial. Queda pendiente la ejecución con corpus definitivo y lectores reales.
+
 *Área:* medición · *Cuota:* ~1 llamada por historia · *Depende de:* nada
 
 - **Síntoma.** El tutor pide comparar con historias generadas «directamente por un prompt»
@@ -525,34 +538,61 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
 
 ### MED-9 · Extractor de rasgos con cita verificada
 
-*Área:* medición · *Cuota:* 2–3 llamadas por historia · *Depende de:* nada
+**Auditoría 2026-10-05:** el extractor existe; quedan correcciones de recuento y validación
+semántica. Protocolo vigente: [ESTUDIO_FINAL.md](packages/evaluation/ESTUDIO_FINAL.md).
 
-- **Síntoma.** Los rasgos R y X de `packages/evaluation/planilla/rasgos.csv` no los cuenta nadie.
-  Son los que el tutor pide que un modelo «extraiga» (audio, [00:22]).
+*Área:* medición · *Cuota:* correcciones sin cuota; revisión y test-retest con presupuesto
+por fijar · *Depende de:* nada para las correcciones
+
+- **Síntoma.**
+  - En `packages/evaluation/src/asg_evaluation/features.py`, `_observations` deduplica por
+    pasajes citados sin distinguir el fenómeno. La auditoría reprodujo dos componentes de R12
+    (deseo y necesidad) sustentados por una misma cita: el resultado fue 1, no 2.
+  - `scene_features` publica participación máxima y entropía, pero no los porcentajes por
+    personaje pedidos en el audio [00:34]. X08 (réplicas) y X11 (personajes que mienten) no se
+    extraen por defecto; tampoco se publica el desglose de diálogo por hablante [00:53].
 - **Qué hacer.**
-  - Un comando en `stagecraft/tools/`, con el patrón de `audit_stage.py`: lee `story.md` y las
-    definiciones de `rasgos.csv`, y escribe `<run>/features/features.json` sin tocar el
-    manifiesto.
-  - Cada recuento lleva sus citas. El código descarta las que no están literalmente en el texto.
-  - Los recuentos que crecen con la longitud se normalizan por 1000 palabras.
-- **Hecho cuando.**
-  - Corre sobre todo el corpus.
-  - En los runs simulados, los recuentos se contrastan con su `validable_contra` del log.
-  - Una segunda extracción de 20 historias da la estabilidad (test-retest).
-  - Hay una muestra de contradicciones (X20) revisada a mano.
-- **Ojo.** Pide recuentos, nunca notas de calidad. Gemini lee texto de Gemini.
+  - Distinguir ocurrencias repetidas de fenómenos distintos que comparten evidencia; conservar
+    la eliminación de duplicados reales.
+  - Publicar participación por personaje y diálogo por hablante con recuentos, denominadores
+    y evidencias. Incluir X08 y X11 como auxiliares sin ampliar las 27 entradas del juez.
+  - Mantener reparación acotada de citas inválidas y estado incompleto si falla: nunca convertir
+    un fallo de evidencia en cero.
+  - Revisar manualmente una muestra, incluidas contradicciones, ceros y fenómenos omitidos;
+    medir estabilidad mediante test-retest y contrastar con logs cuando describan lo mismo.
+- **Hecho cuando.** Pruebas verifican R12 con hechos distintos en una cita, duplicados reales
+  y desgloses por personaje; la revisión humana y el test-retest publican resultados sobre la
+  muestra acordada antes del estudio.
+- **Ojo.** Una cita literal no garantiza una interpretación correcta. El log no es un límite
+  numérico universal para la prosa. La demo ficticia no valida la calidad del extractor.
 
 ### MED-10 · Tabla de rasgos por historia
 
-*Área:* medición · *Cuota:* sin cuota · *Depende de:* MED-9 para las capas R y X
+**Auditoría 2026-10-05:** el informe existe, pero no reutiliza directamente las extracciones
+del estudio congelado.
 
-- **Síntoma.** Las cifras de cada historia están repartidas entre tres informes y veinte
-  artefactos, y la «tablita» del tutor no existe.
-- **Qué hacer.** Un informe `report-features` en `evaluation` que escriba un CSV con la cabecera
-  de `plantilla_historia.csv`, con las capas T, R, X, P, K y C, leídas con los lectores
-  tolerantes de `artifacts.py`. Lo que un run no registró sale como no medido, nunca como cero.
-- **Hecho cuando.** Hay una fila por historia del corpus y cada columna con `estado=existe` en
-  `rasgos.csv` sale llena donde su formato aplica.
+*Área:* medición · *Cuota:* sin cuota · *Depende de:* MED-9 para la fiabilidad de R y X
+
+- **Síntoma.**
+  - El estudio guarda `features/<id>.json`, mientras `read_features` en
+    `packages/evaluation/src/asg_evaluation/feature_report.py` busca
+    `<run>/features/features.json`.
+  - En `.cache/evaluation-demo-final/` se comprobaron once extracciones completas, pero
+    ninguna reconocida por el lector habitual; R02 aparecía como ausente.
+  - `demo.py` construye en memoria las filas para el juez y el ranking. Su informe horizontal
+    lee los runs por separado, por lo que no prueba la integración de las mediciones semánticas.
+- **Qué hacer.**
+  - Conectar los informes con las extracciones y procedencia de las instantáneas del estudio,
+    sin volver a llamar al proveedor ni modificar los artefactos originales.
+  - Probar la demo mediante los comandos públicos de extracción, tabla, informe horizontal,
+    entrenamiento y ranking, usando el proveedor ficticio.
+  - Conservar estados, unidades, valores brutos, normalizados y evidencias; un dato ausente
+    continúa siendo no medido, nunca cero.
+- **Hecho cuando.** Las once historias ficticias aparecen con sus mediciones semánticas en la
+  tabla y el informe horizontal, coinciden con las extracciones congeladas y su reutilización
+  no realiza nuevas llamadas.
+- **Ojo.** Las agrupaciones de aportaciones con opciones libres describen asociaciones.
+  No sustituyen la comparación controlada de parametrizaciones mencionada en [02:07–02:23].
 
 ### MED-5 · Comparar formatos y métodos desde un mismo plan congelado
 
@@ -1035,62 +1075,84 @@ gratuita · *Depende de:* MED-5, MED-7
 
 ### EXP-4 · Evaluación humana por pares a ciegas
 
-*Área:* experimento · *Cuota:* sin cuota · *Depende de:* MED-8 y las celdas de la matriz
-horizontal que entren en el pool
+**Auditoría 2026-10-05:** SQLite, el flujo de Telegram y la agregación están implementados;
+todavía no se ha realizado el piloto ni el estudio humano.
 
-- **Síntoma.**
-  - **No hay evaluación humana.** De 154 `evaluation.json`, uno solo tiene puntuaciones reales;
-    los demás son plantillas.
-  - **El instrumento que hay no sirve para la tesis.** Puntúa seis métricas de 1 a 10, el
-    esquema heredado de la tesis de Roger, cuyos dos radares «difieren ligeramente». El tutor lo
-    descarta: «ese 8 no significa nada» (audio, [03:41]).
-  - `compare-story-runs` pone historias lado a lado, pero no registra ningún voto.
-- **Qué hacer.** El protocolo de §5 de
-  [packages/evaluation/METODOLOGIA.md](packages/evaluation/METODOLOGIA.md):
-  - de 5 a 10 historias por evaluador, al azar, a ciegas y con línea base, en sesiones de 5;
-  - pares con un solo criterio por pregunta y elección forzada, con las tres preguntas literales
-    de `packages/evaluation/planilla/criterios_humanos.csv`;
-  - el registro, con el formato de `plantilla_pares.csv` y `plantilla_evaluadores.csv`, nunca
-    dentro de un run;
-  - una herramienta que sortee los pares y guarde los votos; puede extender `compare-story-runs`;
-  - en `evaluation`, Bradley-Terry por criterio con intervalos por bootstrap, más el acuerdo:
-    porcentaje por par, α de Krippendorff y W de Kendall, con y sin el autor.
-- **Hecho cuando.** Cada historia del pool tiene el número de comparaciones por criterio que fije
-  el protocolo, y el informe da las tres puntuaciones (H01–H03) con su intervalo y el acuerdo
-  entre evaluadores.
-- **Ojo.** No reutilizar `evaluation.json` para los pares: su formato rechaza campos nuevos y sus
-  plantillas están en 153 runs.
+*Área:* experimento · *Cuota:* votar no consume cuota; generación y extracción requieren
+presupuesto · *Depende de:* versión definitiva, MED-8, correcciones de MED-9 y MED-10
+
+- **Síntoma.** La demo contiene once historias y 180 respuestas ficticias. Comprueba mecanismos,
+  no preferencias humanas ni validez de las mediciones. Las notas históricas 1–10 pertenecen a
+  otro instrumento y no sustituyen este estudio (audio [03:41–04:16]).
+- **Qué hacer.**
+  - Revisar manualmente extracciones y realizar un piloto de entrega ciega, lectura, preguntas,
+    abstenciones, exposición previa, pausa y reanudación.
+  - Ejecutar el protocolo de [ESTUDIO_FINAL.md](packages/evaluation/ESTUDIO_FINAL.md):
+    aproximadamente 6–8 lectores, cinco relatos seleccionados (dos directos y tres del sistema)
+    más una aportación reemplazable por participante antes de congelar.
+  - Congelar el conjunto antes de votar; hasta diez historias desconocidas por lector en dos
+    sesiones de hasta cinco, con un criterio por pregunta y respuestas A/B o abstención.
+  - Publicar cobertura prevista y efectiva, abstenciones, acuerdo e intervalos por lector,
+    con y sin el autor. No inventar un ranking global si el grafo queda desconectado.
+- **Hecho cuando.** El piloto está documentado y el estudio real publica las tres preferencias
+  con su cobertura y limitaciones. La falta de cobertura queda explícita si no permite ordenar.
+- **Ojo.** Prompts y opciones libres permiten asociaciones, no aislar causalmente un parámetro.
+  La comparación controlada de parametrizaciones requiere su propio diseño y presupuesto.
+  Conservar los `evaluation.json` históricos; los pares viven en la base del estudio.
 
 ### EXP-7 · El juez aprendido de los pares humanos
 
-*Área:* experimento · *Cuota:* sin cuota · *Depende de:* EXP-4 y MED-10
+**Auditoría 2026-10-05:** existen tres regresiones logísticas y validación fuera de muestra;
+falta asegurar la compatibilidad del protocolo de extracción y validar con preferencias reales.
 
-- **Síntoma.** No hay forma de puntuar las historias que nadie leyó. Los jueces LLM de calidad no
-  sirven: TTCW da una correlación ≈0 con los expertos, y aquí Gemini juzgaría a Gemini.
-- **Qué hacer.** El §6 de la metodología:
-  - scikit-learn como dependencia de `evaluation`;
-  - una regresión logística por pares y por criterio, sobre las diferencias de los rasgos
-    `núcleo` estandarizados;
-  - validación dejando una historia fuera;
-  - control con perturbaciones (escenas barajadas, pago final borrado, visión cambiada a mitad);
-  - publicar los pesos.
-- **Hecho cuando.** El informe da, por criterio, la precisión por pares y la τ de Kendall fuera de
-  la muestra, los pesos, y si las historias perturbadas bajan.
-- **Ojo.** Con 10 historias y 27 rasgos, el ajuste dentro de la muestra es perfecto por
-  construcción: solo cuenta la cifra fuera de la muestra. La lista núcleo se fija antes de ver
-  las preferencias.
+*Área:* experimento · *Cuota:* entrenamiento sin cuota · *Depende de:* EXP-4 y MED-10;
+la corrección de compatibilidad se puede hacer ahora con datos ficticios
+
+- **Síntoma.**
+  - `train_judge` en `packages/evaluation/src/asg_evaluation/judge.py` comprueba texto y
+    catálogo; no exige un protocolo homogéneo de versión del extractor, prompt y modelo.
+  - El lector del ranking tampoco vincula esas versiones con las utilizadas al entrenar.
+    Se pueden aceptar medidas obtenidas con procedimientos distintos.
+  - Los tres jueces entrenados con votos ficticios no demuestran generalización.
+- **Qué hacer.**
+  - Vincular el modelo aprendido al catálogo, versión del extractor, versión del prompt y
+    modelo proveedor; detectar protocolos incompatibles al entrenar y al puntuar.
+  - Mantener las 27 entradas textuales, L2 sin intercepto y preprocesamiento ajustado solo con
+    historias de entrenamiento. Conservar exclusión de todos los votos que toquen historias
+    retenidas y validación por familias de premisa.
+  - Evaluar con votos reales frente a azar y longitud sola; publicar pesos, versiones, cobertura
+    de predicciones, acierto y concordancia fuera de muestra.
+  - Informar perturbaciones sin exigir que todas empeoren los tres criterios.
+- **Hecho cuando.** Pruebas rechazan protocolos incompatibles y conservan las garantías contra
+  filtraciones; el informe experimental publica generalización y limitaciones con datos reales.
+- **Ojo.** Un buen ajuste dentro de muestra no acredita calidad. Si el juez no generaliza, sigue
+  siendo un resultado experimental válido y debe presentarse como tal.
 
 ### EXP-8 · Ranking del corpus y análisis de las diez mejores
 
-*Área:* experimento · *Cuota:* sin cuota · *Depende de:* EXP-7
+**Auditoría 2026-10-05:** existen el ranking y las fichas, pero falta cerrar el recorrido público
+con las extracciones del estudio y realizar el análisis cualitativo real.
 
-- **Síntoma.** Hay 157 historias y una matriz por generar, y ningún orden entre ellas.
+*Área:* experimento · *Cuota:* ranking sin cuota con extracciones compatibles · *Depende de:*
+MED-10 y EXP-7
+
+- **Síntoma.**
+  - Al aplicar el recorrido habitual del ranking a los runs de `.cache/evaluation-demo-final/`,
+    las once historias fueron excluidas por extracción ausente u obsoleta, pese a tener
+    extracciones completas en la carpeta del estudio. Es el desacoplamiento de MED-10.
+  - La demo construye las filas en memoria; las fichas de las diez mejores tienen campos vacíos.
 - **Qué hacer.**
-  - Puntuar con el juez todas las historias completadas (J01–J04).
-  - Leer las 10 mejores y escribir qué tienen y qué no: rasgos, configuración y proceso.
-  - Leer el análisis horizontal con la misma tabla.
-- **Hecho cuando.** El ranking y el análisis están escritos en la metodología, con las versiones
-  que no se comparan marcadas.
+  - Verificar el ranking mediante el flujo público reutilizando mediciones existentes, sin
+    nuevas llamadas ni unión manual de filas.
+  - Aplicar el juez al corpus real elegible y publicar tres rankings principales y el combinado
+    auxiliar con normalización fijada al entrenar; detallar versiones, formatos y exclusiones.
+  - Leer diez historias seleccionadas por el ranking y completar sus fortalezas, debilidades,
+    evidencias, configuración y proceso; enlazar el análisis horizontal.
+- **Hecho cuando.** Cierre técnico: las once historias ficticias compatibles se ordenan desde
+  los comandos públicos. Cierre experimental: corpus real ordenado y diez análisis cualitativos
+  cumplimentados, con limitaciones y exclusiones explícitas.
+- **Ojo.** No usar el juez para seleccionar automáticamente qué generar: el tutor lo deja
+  fuera de esta tesis [06:21–07:43].
 
 ### MED-6 · Inventario del corpus
 

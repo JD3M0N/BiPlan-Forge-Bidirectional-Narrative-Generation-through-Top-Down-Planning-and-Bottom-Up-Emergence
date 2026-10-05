@@ -381,7 +381,7 @@ que saber antes de tocar `stage/`:
   - Apagado no cambia **nada**: ni prompt, ni esquema, ni etapa, ni artefacto. Un test compara
     los dos brazos, y es lo que hace que la opción sea medible.
 
-### evaluation: informes que solo leen
+### evaluation: estudios persistentes e informes
 
 - **La metodología de evaluación de la tesis está en
   [packages/evaluation/METODOLOGIA.md](packages/evaluation/METODOLOGIA.md)**, fiel al audio del

@@ -1,8 +1,11 @@
 # ASG Evaluation
 
-Guarda las evaluaciones humanas de cada historia y resume el corpus con tres informes. Solo lee
-JSON y Markdown del disco: nunca importa el pipeline, así que un run se puede estudiar mucho
-después de que el código que lo escribió haya cambiado.
+Gestiona estudios por pares en SQLite, extrae rasgos con evidencias y aprende tres jueces de
+preferencias. Conserva los lectores y los informes históricos. Nunca importa el pipeline.
+
+La guía ejecutable está en [ESTUDIO_FINAL.md](ESTUDIO_FINAL.md): protocolo, comandos, bot,
+demostración sin red, extracción, auditoría, validación y ranking. El sistema está preparado;
+el corpus definitivo, el piloto y el estudio humano todavía están pendientes.
 
 La evaluación de la tesis sigue [METODOLOGIA.md](METODOLOGIA.md): rasgos contables extraídos
 de cada historia, tres criterios humanos por pares a ciegas y un juez aprendido de esos pares. Lo

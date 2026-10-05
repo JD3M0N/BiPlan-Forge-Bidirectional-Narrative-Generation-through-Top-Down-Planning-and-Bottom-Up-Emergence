@@ -4,16 +4,33 @@ build-backend = "hatchling.build"
 
 [project]
 name = "asg-evaluation"
-version = "0.9.0"
+version = "1.0.0"
 description = "Human evaluations and corpus reports for ASG stories"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["asg-core>=0.6.0"]
+dependencies = [
+  "asg-core>=0.6.0",
+  "pydantic>=2.7,<3",
+  "numpy>=1.26,<3",
+  "scipy>=1.11,<2",
+  "scikit-learn>=1.5,<2",
+]
 
 [project.scripts]
+evaluation-study = "asg_evaluation.study_cli:main"
+report-features = "asg_evaluation.feature_cli:main"
+report-preferences = "asg_evaluation.learning_cli:human_main"
+fit-preference-judge = "asg_evaluation.learning_cli:train_main"
+rank-stories = "asg_evaluation.learning_cli:rank_main"
+evaluation-demo = "asg_evaluation.demo:main"
+audit-feature-extraction = "asg_evaluation.feature_audit:main"
 report-evaluations = "asg_evaluation.cli:main"
 report-story-craft = "asg_evaluation.craft_cli:main"
 report-simulations = "asg_evaluation.simulation_cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/asg_evaluation"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"planilla/rasgos.csv" = "asg_evaluation/data/rasgos.csv"
+"planilla/criterios_humanos.csv" = "asg_evaluation/data/criterios_humanos.csv"

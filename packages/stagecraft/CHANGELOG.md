@@ -1,5 +1,12 @@
 # Historial de cambios
 
+## Sin publicar: herramientas de evaluación
+
+- `extract-story-features` conecta el proveedor configurado con el extractor independiente;
+  admite historias individuales, lotes y textos congelados del estudio, además de `--dry-run`.
+- `generate-baseline` prepara una generación directa de una sola llamada, con procedencia y consumo.
+- No se cambia el pipeline ni la simulación ni se genera el corpus experimental.
+
 ## 7.6.0
 
 La función simulada puede dar objetos a los personajes. `--inventory` (o `ASG_INVENTORY=true`)

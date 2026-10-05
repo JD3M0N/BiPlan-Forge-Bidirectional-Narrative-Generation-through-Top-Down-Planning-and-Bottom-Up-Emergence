@@ -727,6 +727,12 @@ class TelegramStoryBot(GenerationCoordinator):
 
     async def _begin_evaluation(self, context, chat_id: int, user, story_directory: Path) -> None:
         """Initialize evaluation state after a successful story delivery."""
+        if self.study:
+            context.user_data.clear()
+            await context.bot.send_message(
+                chat_id=chat_id, text="La evaluación del estudio se realiza por pares con /evaluar."
+            )
+            return
         context.user_data.update(
             state=ConversationState.EVALUATING,
             story_directory=str(story_directory),

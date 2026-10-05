@@ -50,6 +50,7 @@ class GenerationCoordinator(TelegramDelivery):
         self.delivery_semaphore = asyncio.Semaphore(1)
         self.generation_semaphore = asyncio.Semaphore(1)
         self._memory_options: dict[int, dict[str, OptionValue]] = {}
+        self.study = None
 
     # --- per-user option preferences ------------------------------------
 
@@ -245,6 +246,8 @@ class GenerationCoordinator(TelegramDelivery):
                 "Usa /cancel si quieres reemplazarla."
             )
             return None
+        if self.study:
+            self.study.repository.bind_contribution(str(update.effective_user.id), result.job.id)
         await self._refresh_queue(context.application)
         return result.job.id
 
@@ -374,6 +377,10 @@ class GenerationCoordinator(TelegramDelivery):
             return
         if job_id and self.queue:
             self.queue.set_run_dir(job_id, str(story_directory))
+        if self.study:
+            await self._record_study_generation(
+                context, chat_id, user, job_id, Path(story_directory)
+            )
         self._log_generation_complete(user, story_directory)
         summary = self.generator.summarize(Path(story_directory))
         await self._report_run_metadata(
@@ -391,6 +398,21 @@ class GenerationCoordinator(TelegramDelivery):
             job_id,
             summary,
         )
+
+    async def _record_study_generation(self, context, chat_id, user, job_id, directory) -> None:
+        """Record a contribution before delivery, keeping enrollment failures recoverable."""
+        try:
+            enrolled = await asyncio.to_thread(
+                self.study.repository.complete_generation, str(user.id), job_id, directory
+            )
+            if enrolled:
+                await context.bot.send_message(
+                    chat_id=chat_id, text="Tu aportación al estudio está guardada."
+                )
+        except ValueError as exc:
+            await context.bot.send_message(
+                chat_id=chat_id, text=f"No se inscribió la aportación: {exc}"
+            )
 
     async def _generate_story(self, prompt, options, user, job_id, report_progress, should_cancel):
         """Invoke the configured generator through the application contract."""

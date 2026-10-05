@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0] - 2026-10-04
+
+- Versioned SQLite studies, immutable corpus snapshots, reproducible blind assignments,
+  idempotent votes, exposure exclusions and pseudonymous exports.
+- Evidence-backed extraction of 27 core text features, optional secondary features, resumable
+  batches, archived repeated measurements, review worksheets and unified feature reports.
+- Regularized Bradley–Terry, participant bootstrap, three pairwise logistic judges with
+  story/family holdout validation, length controls and transparent JSON coefficients.
+- Offline synthetic end-to-end demonstration and an executable study guide in ESTUDIO_FINAL.md.
+  Real corpus generation, human collection and empirical validation remain future work.
+
 ## [Unreleased]
 
 - Added `METODOLOGIA.md`: the thesis evaluation method from the tutor's instructions (countable

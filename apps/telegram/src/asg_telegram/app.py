@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
+from pathlib import Path
 
+from asg_evaluation.study import StudyRepository
 from telegram import Update
 from telegram.error import TelegramError
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
@@ -15,6 +18,7 @@ from .contract import GeneratorUnavailable
 from .generators import create_generator
 from .handlers import TelegramStoryBot
 from .queue import QueueRepository
+from .study import StudyConversation
 
 LOGGER = logging.getLogger(__name__)
 
@@ -27,6 +31,15 @@ def build_application(token: str, bot: TelegramStoryBot, *, on_ready=None) -> Ap
     async def post_init(application) -> None:
         """Restore persisted queue state and greet the operator after start-up."""
         await bot.restore_queue(application)
+        study_commands = (
+            [
+                ("evaluar", "Participar en la evaluación"),
+                ("aportar", "Crear mi aportación al estudio"),
+                ("pausa", "Pausar la evaluación"),
+            ]
+            if bot.study
+            else []
+        )
         try:
             await application.bot.set_my_commands(
                 [
@@ -35,6 +48,7 @@ def build_application(token: str, bot: TelegramStoryBot, *, on_ready=None) -> Ap
                     ("cancel", "Cancelar la solicitud o evaluación actual"),
                     ("help", "Ver los comandos disponibles"),
                 ]
+                + study_commands
             )
         except TelegramError as exc:
             LOGGER.warning("No se pudieron publicar los comandos del bot: %s", exc)
@@ -67,6 +81,11 @@ def build_application(token: str, bot: TelegramStoryBot, *, on_ready=None) -> Ap
     application.add_handler(CommandHandler("settings", bot.settings))
     application.add_handler(CommandHandler("opciones", bot.settings))
     application.add_handler(CommandHandler("cancel", bot.cancel))
+    if bot.study:
+        application.add_handler(CommandHandler("evaluar", bot.study.evaluate))
+        application.add_handler(CommandHandler("aportar", bot.study.contribute))
+        application.add_handler(CommandHandler("pausa", bot.study.pause))
+        application.add_handler(CallbackQueryHandler(bot.study.callback, pattern=r"^study:"))
     application.add_handler(CallbackQueryHandler(bot.choose_format, pattern=r"^format:[a-z0-9-]+$"))
     application.add_handler(
         CallbackQueryHandler(bot.choose_mode, pattern=r"^mode:(free|guided|options)$")
@@ -103,6 +122,16 @@ def main(argv: list[str] | None = None) -> int:
             generator,
             QueueRepository(settings.project_root / "Stories" / "telegram_queue.sqlite3"),
         )
+        study_path = os.getenv("ASG_EVALUATION_STUDY", "").strip()
+        if study_path:
+            path = Path(study_path)
+            if not path.is_absolute():
+                path = settings.project_root / path
+            if not path.is_file():
+                raise ValueError("Crea el estudio antes de configurar ASG_EVALUATION_STUDY.")
+            repository = StudyRepository(path)
+            repository.info()
+            bot.study = StudyConversation(repository, bot)
     except (TelegramConfigurationError, ValueError, GeneratorUnavailable) as exc:
         LOGGER.error("%s", exc)
         return 2

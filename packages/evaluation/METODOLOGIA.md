@@ -2,8 +2,9 @@
 
 Cómo se evalúan las historias de Stagecraft en la tesis. El documento sigue las indicaciones del
 tutor (audio del 2026-10-03) y su rúbrica, y las contrasta con la literatura reciente. La planilla
-con todo lo que se mide está en [planilla/](planilla/). Los pasos que faltan por construir son
-fichas del [TODO.md](../../TODO.md).
+con todo lo que se mide está en [planilla/](planilla/). La implementación y el protocolo
+operativo vigente están en [ESTUDIO_FINAL.md](ESTUDIO_FINAL.md). Las herramientas están listas;
+el corpus definitivo y la ejecución experimental siguen pendientes.
 
 ## 1. De dónde sale
 
@@ -158,11 +159,11 @@ Solo entran al juez los rasgos marcados `núcleo`: 27, dentro de la horquilla de
 
 ### El extractor
 
-Usa Gemini, el proveedor del proyecto (ficha MED-9).
+Usa el proveedor configurado, mediante el adaptador de Stagecraft (ficha MED-9).
 
 - **Entrada:** `story.md` y las definiciones de `rasgos.csv`.
 - **Salida:** cada recuento con las citas literales que lo sustentan. Una cita que no aparece en el
-  texto se descarta, y el recuento se rehace sin ella.
+  texto provoca una reparación acotada; si falla, el resultado es incompleto, nunca cero.
 - **Normalización:** los recuentos que crecen con la longitud se dan por 1000 palabras (columna
   `unidad`). Las palabras (T01) entran al juez como covariable, para que su peso quede a la vista.
 - **Validación:**
@@ -175,62 +176,37 @@ Usa Gemini, el proveedor del proyecto (ficha MED-9).
 
 ## 4. Análisis horizontal
 
-Se parte de una configuración base «con todas las cosas activadas» y se cambia **un factor cada
-vez**.
+El estudio principal compara las cinco historias seleccionadas y las aportaciones de lectores
+con prompts y opciones libres. Se describen asociaciones entre configuración, rasgos y costes,
+separando versiones. No se atribuyen causalmente las diferencias a un parámetro.
 
-- Los factores y sus niveles están en [planilla/configuracion.csv](planilla/configuracion.csv).
-- El diseño concreto, con su coste, está en [planilla/matriz.csv](planilla/matriz.csv):
-  - tres obras del catálogo retirado de prompts: 01 fantasía, 03 misterio y 04 drama (`git show
-    baa016f^:docs/prompts_top_down.md`);
-  - 18 celdas por obra, contando la línea base y los otros formatos;
-  - unas 600 llamadas del modelo principal y 4300 del de la función, sin repeticiones.
-- Se aplican las reglas de emparejamiento de `pairing.py`: misma obra, mismo modelo, mismo modelo
-  de la función y mismo perfil.
-- Las réplicas del formato simulado reutilizan el plan de la celda base con `--plan-from`, para
-  que la diferencia no venga del plan.
-- **Ojo:** la visión y el tono solo cambian la narración, pero `--plan-from` repite la función
-  entera. En esas celdas la diferencia mezcla función y narración.
-
-EXP-1, EXP-2, EXP-3, EXP-5 y EXP-6 son celdas de esta matriz: se leen con la misma tabla de
-rasgos.
-
-Una diferencia se interpreta con la cautela del Protocolo de medición: dos corridas del mismo
-prompt llegaron a diferir 16 puntos.
+La matriz de [planilla/matriz.csv](planilla/matriz.csv) queda como diseño posible posterior,
+sujeto a presupuesto y generador definitivo. No se genera en esta implementación. Para una
+comparación controlada futura se usarán las reglas de emparejamiento de `pairing.py`.
 
 ## 5. Evaluación humana
 
-- **Qué historias.**
-  - El pool son historias de las celdas de la matriz más las de la línea base (MED-8), de las
-    mismas obras.
-  - Cada evaluador recibe de 5 a 10 al azar.
-  - Las sesiones son cortas, de 5 historias, como en Agents' Room. Con 10 historias, son dos
-    sesiones.
-- **A ciegas.** Ni el formato ni la configuración se muestran. El orden y el lado (izquierda o
-  derecha) se sortean.
-- **Las preguntas** son las tres del tutor, literales ([planilla/criterios_humanos.csv](planilla/criterios_humanos.csv)).
-  - Cada par se pregunta por **un solo criterio**, como lo secuencia el tutor, para no arrastrar
-    la impresión de un criterio a otro (efecto halo).
-  - La elección es forzada: no hay empate. Es la pregunta del tutor («¿cuál te gusta más?»), aunque
-    la literatura suele admitir «parecidas».
-- **Quién evalúa.**
-  - El autor y al menos dos personas más, si se puede (van der Lee 2019), hispanohablantes
-    (Marco et al. 2024).
-  - El perfil de cada evaluador se registra en `plantilla_evaluadores.csv`, porque los lectores
-    expertos y los no expertos prefieren cosas distintas (Marco et al. 2025).
-  - El acuerdo se informa con y sin el autor.
-- **El registro** es un juicio por fila, con el formato de
-  [planilla/plantilla_pares.csv](planilla/plantilla_pares.csv).
-- **La agregación** usa Bradley-Terry por criterio, con intervalos por bootstrap. No se usa Elo:
-  depende del orden de las comparaciones y es inestable con pocos sistemas (Boubdir 2023).
-- **El acuerdo** se mide con:
-  - el porcentaje de acuerdo por par;
-  - el α de Krippendorff nominal sobre los pares repetidos;
-  - la W de Kendall sobre los rankings.
+El protocolo es aproximadamente 6–8 lectores y 11–13 historias: cinco seleccionadas
+(dos directas, tres del sistema) más una aportación reemplazable por lector. Primero se recoge,
+después se congela el conjunto y finalmente se vota. No se evalúan historias propias o conocidas.
 
-  La literatura de historias da entre 0,2 y 0,5, y se informa tal cual salga. El estudio se
-  declara exploratorio, porque no tiene potencia para diferencias pequeñas (Card 2020).
-- **El informe** sigue la ficha HEDS (Shimorina y Belz 2022) y publica la pregunta exacta de cada
-  criterio (Howcroft 2020).
+Cada lector recibe hasta diez historias en dos sesiones de hasta cinco, con sorteo reproducible,
+cobertura equilibrada y posiciones A/B compensadas. Se busca que cada historia se compare con
+otras dos por criterio en cada sesión y que existan pares compartidos entre lectores. Se presenta
+una pregunta y un criterio cada vez, con las formulaciones de la planilla.
+
+Se admite A, B o «No puedo decidir». La abstención se registra y no es empate ni victoria.
+Se informa cobertura prevista, votos efectivos y abstenciones por separado. No se calcula un
+ranking humano global si el grafo de comparaciones queda desconectado.
+
+La agregación usa Bradley–Terry regularizado por criterio e intervalos por bootstrap de lectores.
+El acuerdo se calcula sobre los mismos pares y criterios, mediante proporción de acuerdo y alfa
+nominal, con y sin el autor. No se reconstruyen rankings individuales completos para calcular W
+de Kendall a partir de comparaciones parciales. El estudio es exploratorio y no tiene potencia
+para diferencias pequeñas.
+
+El registro persistente usa SQLite fuera de los runs, con seudónimos en las exportaciones.
+La guía [ESTUDIO_FINAL.md](ESTUDIO_FINAL.md) especifica estados, comandos, exclusiones y reanudación.
 
 ## 6. El juez aprendido
 
@@ -251,8 +227,8 @@ Por cada criterio se ajusta una regresión logística por pares (ficha EXP-7):
   - la precisión por pares;
   - la τ de Kendall frente al orden Bradley-Terry humano.
 - Hay además un **control con perturbaciones** (OpenMEVA): historias rotas a propósito, con
-  escenas barajadas, el pago final borrado o la visión cambiada a mitad, tienen que bajar en el
-  ranking.
+  escenas barajadas, el pago final borrado o la visión cambiada a mitad. Se publican los cambios;
+  no se exige que toda perturbación empeore todos los criterios.
 - Los pesos se publican. Un juez que solo premia la longitud o el diálogo se ve a simple vista.
 
 ## 7. Ranking del corpus y análisis de las mejores
@@ -260,7 +236,8 @@ Por cada criterio se ajusta una regresión logística por pares (ficha EXP-7):
 El juez puntúa todas las historias completadas de `Stories/`: el corpus histórico más la matriz
 (ficha EXP-8).
 
-- J04 es el puesto por la media de los tres criterios estandarizados.
+- Los tres rankings son principales. J04 es auxiliar: media con pesos iguales y normalización
+  fijada al entrenar, nunca reajustada sobre el corpus nuevo.
 - El análisis cualitativo lee las 10 mejores y mira qué tienen y qué no: sus rasgos, su
   configuración y su proceso.
 - Los runs de versiones que no se comparan se marcan. Por ejemplo, las funciones 7.0 y 7.1 frente
