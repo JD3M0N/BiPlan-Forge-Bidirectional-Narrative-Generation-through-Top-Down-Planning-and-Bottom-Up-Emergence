@@ -43,6 +43,14 @@ def questions() -> dict[str, str]:
     }
 
 
+def guidance() -> dict[str, str]:
+    """Return what a reader should look at for each comparison criterion."""
+    return {
+        row["id"]: row["que_mirar"]
+        for row in csv.DictReader(io.StringIO(resource_text("criterios_humanos.csv")))
+    }
+
+
 def digest(value: object) -> str:
     """Hash a canonical JSON value, without depending on dictionary order."""
     return hashlib.sha256(

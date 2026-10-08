@@ -1,7 +1,10 @@
 # ASG Telegram
 
-Bot de Telegram para generar historias con los modelos ASG y registrar la
-evaluación humana inmediatamente después.
+Bot de Telegram de la fase de experimentación (EXP-4). Guía a cada participante del estudio
+por pares a ciegas: entra con una clave, acepta participar, indica su perfil lector, crea su
+**historia base** (su aportación a la muestra) y, cuando se abre la votación, compara relatos
+de dos en dos. El protocolo está en
+[ESTUDIO_FINAL.md](../../packages/evaluation/ESTUDIO_FINAL.md).
 
 ## Configuración
 
@@ -11,12 +14,17 @@ evaluación humana inmediatamente después.
 
 ```dotenv
 TELEGRAM_BOT_TOKEN=token_entregado_por_BotFather
+TELEGRAM_ACCESS_KEY=clave_que_entregas_a_los_participantes
+ASG_EVALUATION_STUDY=Evaluations/tesis-final/study.sqlite3
 STORY_GENERATOR=stagecraft
 GEMINI_API_KEY=tu_clave
 GEMINI_MODEL=gemini-3.5-flash-lite
 GEMINI_STAGE_MODEL=gemini-3.1-flash-lite
 TTS_FALLBACK_VOICE=
 ```
+
+`TELEGRAM_ACCESS_KEY` y `ASG_EVALUATION_STUDY` son obligatorias: sin ellas el bot no arranca
+(código 2). La base del estudio debe existir antes (`evaluation-study create`).
 
 `GEMINI_STAGE_MODEL` es opcional: manda los actores y el director de escena de las
 historias simuladas a otro modelo, que tiene su propio cupo diario gratuito, y deja el de
@@ -37,7 +45,7 @@ En Windows, `asg-telegram` abre el bot en una consola independiente con su propi
 título, y devuelve inmediatamente el control a la consola original. Al arrancar, la
 nueva ventana muestra una cabecera con el bot, el modelo (y el de la función, si tiene
 uno propio), la cuota y las opciones por defecto, y después un registro compacto en color: una línea por comando, selección,
-paso de generación, entrega y evaluación de cada usuario, incluido el progreso del
+paso de generación, entrega y acceso de cada usuario, incluido el progreso del
 pipeline. Si el bot no puede arrancar o se detiene por un error, la ventana no se
 cierra: espera a que se presione Enter, para que el error quede a la vista.
 
@@ -48,6 +56,30 @@ asg-telegram-run
 ```
 
 El proceso utiliza polling y no requiere dominio ni webhook.
+
+### Recorrido del participante
+
+`/start` responde siempre con el paso en que está la persona y lo que sigue. El paso se calcula
+de la cola y de la base del estudio, así que sobrevive a los reinicios del bot.
+
+1. **Clave.** Sin acceso, el bot solo acepta la clave. Tras cinco intentos fallidos bloquea
+   quince minutos. El mensaje con la clave se borra del chat.
+2. **Consentimiento.** Explica qué se le pedirá y con qué garantías (seudónimo, abstención,
+   pausa). Sin aceptar no se registra nada.
+3. **Perfil lector.** Ocasional, habitual o con formación literaria.
+4. **Historia base.** Durante la recogida, `/newstory` solo ofrece los formatos en prosa
+   (narrativa y simulada) y reserva la historia como aportación. Hasta que queda inscrita,
+   `/newstory` y `/settings` no permiten nada más. `/aportar` la reemplaza mientras la recogida
+   siga abierta. El investigador, inscrito con `--author`, no la necesita.
+5. **Uso libre.** Con la base inscrita, cualquier formato, también guion. Esas historias no
+   entran en la muestra.
+6. **Votación.** Al abrirse (`evaluation-study start`), el bot avisa una sola vez a cada
+   participante. Cada pregunta muestra el criterio, su guía `que_mirar` y el progreso. `/pausa`
+   y `/evaluar` paran y reanudan.
+7. **Cierre.** Al cerrar el estudio, el bot agradece la participación.
+
+Los avisos de fase (recogida, votación y cierre) salen de una revisión cada minuto y se
+registran en la cola, así que un reinicio no los repite.
 
 ### Configurar una historia
 
@@ -67,9 +99,9 @@ El proceso utiliza polling y no requiere dominio ni webhook.
 
 Las historias se generan de una en una, pero se entregan también de una en una para no
 saturar la conexión con Telegram. La entrega usa el orden `story.md`, `story.mp3` (si
-la opción de audio del run estaba activada), fragmentos formateados y evaluación. Tanto
-el documento como el audio se reintentan ante fallos temporales. Si la síntesis o el
-envío del MP3 falla, el bot informa al usuario y continúa con el texto y la evaluación.
+la opción de audio del run estaba activada), fragmentos formateados y el siguiente paso del
+recorrido. Tanto el documento como el audio se reintentan ante fallos temporales. Si la
+síntesis o el envío del MP3 falla, el bot informa al usuario y continúa con el texto.
 
 ## Cambiar el generador
 

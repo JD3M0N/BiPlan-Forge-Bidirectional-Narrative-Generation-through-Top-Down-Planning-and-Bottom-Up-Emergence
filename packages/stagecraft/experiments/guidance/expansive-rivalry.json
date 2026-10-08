@@ -1,0 +1,15 @@
+{
+  "original_prompt": "Dos ciudades rivales negocian el agua durante una sequía. Una ingeniera y un agricultor de bandos opuestos descubren que las dos soluciones propuestas perjudican a una tercera comunidad.",
+  "processed_prompt": "Two rival cities negotiate water during a drought. An engineer and a farmer on opposite sides discover that both proposed solutions harm a third community.",
+  "title": "El agua de las dos ciudades",
+  "language": "Spanish",
+  "genre": "Political drama",
+  "tone": "hopeful but costly",
+  "narrative_profile": "expansive",
+  "premise": "Two rival cities negotiate water during a drought. An engineer and a farmer on opposite sides discover that both proposed solutions harm a third community.",
+  "constraints": [
+    "No military coup or single villain who resolves the conflict by disappearing.",
+    "The third community participates in the final decision."
+  ],
+  "creative_directions": []
+}

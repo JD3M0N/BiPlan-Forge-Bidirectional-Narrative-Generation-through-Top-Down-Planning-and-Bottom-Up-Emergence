@@ -1,0 +1,15 @@
+{
+  "original_prompt": "Una presa descubre una ruta para salir de una isla, pero usarla deja a su compañera sin agua. Debe buscar una salida sin sacrificarla.",
+  "processed_prompt": "A prisoner finds a route off an island, but taking it deprives her cellmate of water. She must find a way out without sacrificing her companion.",
+  "title": "La salida compartida",
+  "language": "Spanish",
+  "genre": "Suspense",
+  "tone": "intimate",
+  "narrative_profile": "essential",
+  "premise": "A prisoner finds a route off an island, but taking it deprives her cellmate of water. She must find a way out without sacrificing her companion.",
+  "constraints": [
+    "The cellmate survives.",
+    "No romance."
+  ],
+  "creative_directions": []
+}

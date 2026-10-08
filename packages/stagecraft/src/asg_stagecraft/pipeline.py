@@ -27,12 +27,16 @@ from .agents import (
 from .brief import StoryBrief, cast_repair_feedback, missing_cast
 from .formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
 from .options import GenerationOptions
+from .planning.catalog_types import GuidanceStrategy
 from .planning.graph import (
     materialize_plan,
     relevant_prior_events,
     validate_profile_structure,
     validate_story_plan,
 )
+from .planning.guidance_composition import compose_patterns
+from .planning.guidance_models import CompositionArtifact, CompositionFailure
+from .planning.guidance_retrieval import retrieve_patterns
 from .planning.profiles import NarrativeProfile
 from .planning.promise_brief import critic_obligations, event_index, rendered_ledger
 from .planning.promises import materialize_ledger
@@ -524,7 +528,9 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
         self.repository.metadata.narrative_profile = request.narrative_profile
         self.repository.complete_stage("analysis")
 
-    def _build_blueprint(self, request: StoryRequest) -> NarrativeBlueprint | None:
+    def _build_blueprint(
+        self, request: StoryRequest
+    ) -> NarrativeBlueprint | CompositionArtifact | None:
         """Propose optional structural inspiration without ever failing the run."""
         assert self.repository is not None
         if not self.narrative_guidance:
@@ -533,6 +539,20 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
 
         def build_blueprint():
             """Read the bound request against the plot skeleton catalog."""
+            if self.options.guidance_strategy == GuidanceStrategy.COMPOSITIONAL_V2:
+                retrieval = retrieve_patterns(request, self.provider)
+                self.repository.save_json("narrative_retrieval.json", retrieval)
+                if retrieval.degraded:
+                    self.repository.add_warning(
+                        "La recuperación narrativa falló; "
+                        "la historia continúa sin guía de patrones; "
+                        "ver narrative_retrieval.json."
+                    )
+                composed = compose_patterns(request, retrieval, self.provider)
+                if isinstance(composed, CompositionFailure):
+                    self.repository.save_json("narrative_composition_error.json", composed)
+                    raise ValueError("narrative composition failed after one repair")
+                return composed
             return StoryArchitectAgent(self.provider).run(request)
 
         try:
@@ -546,6 +566,8 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
             return None
         self.repository.save_json("narrative_blueprint.json", blueprint)
         self.repository.complete_stage("architecture")
+        if isinstance(blueprint, CompositionArtifact) and blueprint.abstained:
+            return None
         return blueprint
 
     def _build_world(self, request: StoryRequest) -> WorldArtifact:
@@ -566,7 +588,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
         self,
         request: StoryRequest,
         world: WorldArtifact,
-        blueprint: NarrativeBlueprint | None = None,
+        blueprint: NarrativeBlueprint | CompositionArtifact | None = None,
     ) -> CharactersArtifact:
         """Generate and persist the story character artifact."""
         assert self.repository is not None
@@ -614,7 +636,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
         request: StoryRequest,
         world: WorldArtifact,
         characters: CharactersArtifact,
-        blueprint: NarrativeBlueprint | None = None,
+        blueprint: NarrativeBlueprint | CompositionArtifact | None = None,
     ) -> StoryPlan:
         """Generate, validate, critique, and optionally refine the story plan."""
         assert self.repository is not None
@@ -693,7 +715,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
         world: WorldArtifact,
         characters: CharactersArtifact,
         original_plan: StoryPlan,
-        blueprint: NarrativeBlueprint | None = None,
+        blueprint: NarrativeBlueprint | CompositionArtifact | None = None,
     ) -> StoryPlan:
         """Apply one bounded plan-critique round without risking a valid plan."""
         assert self.repository is not None

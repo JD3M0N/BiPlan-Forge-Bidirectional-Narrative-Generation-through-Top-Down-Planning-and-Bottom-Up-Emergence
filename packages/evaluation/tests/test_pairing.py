@@ -130,3 +130,18 @@ def test_a_figure_a_run_never_recorded_is_none_not_zero(tmp_path) -> None:
     values = run_measurements(run_72(tmp_path, "old"))
     assert values["beats_forced"] is None
     assert values["story_words"] is None
+
+
+def test_guidance_strategy_is_an_axis_only_when_both_guides_are_enabled(tmp_path) -> None:
+    old = run_73(tmp_path, "old")
+    new = run_73(tmp_path, "new", metadata={"pipeline_version": "7.8"})
+    path = new / "generation_options.json"
+    options = json.loads(path.read_text(encoding="utf-8"))
+    options["guidance_strategy"] = "compositional_v2"
+    write(path, options)
+    pairing = pair_runs([old, new])
+    assert pairing.differing_axes == ["guidance_strategy"]
+    assert pairing.clean
+    options["narrative_guidance"] = False
+    write(path, options)
+    assert pair_runs([old, new]).differing_axes == ["narrative_guidance"]

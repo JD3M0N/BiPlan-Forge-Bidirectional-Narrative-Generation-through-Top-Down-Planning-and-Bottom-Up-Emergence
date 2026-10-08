@@ -10,6 +10,7 @@ from .brief import StoryBrief
 from .formats import ActorMemory, NarrativeVoice, ScriptMethod, SimulationMode, StoryFormat
 from .options import GenerationOptions
 from .pipeline import StoryPipeline
+from .planning.catalog_types import GuidanceStrategy
 from .planning.profiles import NarrativeProfile
 from .runtime.errors import RunArtifactError
 from .runtime.progress import PipelineEventCallback, ProgressCallback
@@ -101,6 +102,7 @@ class StoryGenerator:
         output_root: Path,
         *,
         narrative_guidance: bool = True,
+        guidance_strategy: GuidanceStrategy = GuidanceStrategy.HYBRID_V1,
         narrative_profile: NarrativeProfile | None = None,
         audio: bool = True,
         audio_voice: str = "",
@@ -120,6 +122,7 @@ class StoryGenerator:
         self.output_root = Path(output_root)
         self.options = GenerationOptions(
             narrative_guidance=narrative_guidance,
+            guidance_strategy=guidance_strategy,
             narrative_profile=narrative_profile,
             audio=audio,
             audio_voice=audio_voice,

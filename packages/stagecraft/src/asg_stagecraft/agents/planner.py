@@ -1,5 +1,6 @@
 """DAG planning and bounded plan refinement."""
 
+from ..planning.guidance_models import CompositionArtifact
 from ..planning.profiles import (
     MIN_EVENTS_PER_CHAPTER,
     profile_chapter_band,
@@ -29,7 +30,7 @@ class PlotPlannerAgent(Agent[StoryPlanDraft]):
         characters: CharactersArtifact,
         repair_feedback: str = "",
         plan_review: PlanReview | None = None,
-        blueprint: NarrativeBlueprint | None = None,
+        blueprint: NarrativeBlueprint | CompositionArtifact | None = None,
     ) -> StoryPlanDraft:
         """Run the PlotPlannerAgent workflow."""
         low, high = profile_chapter_band(request.narrative_profile)

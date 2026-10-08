@@ -1335,6 +1335,22 @@ def test_analyst_prompt_separates_explicit_constraints_and_inferences() -> None:
     assert "constraints contain only explicit requirements" in call[1]
     assert "working title" in call[1]
     assert "when ambiguous use developed" in call[1]
+    audit = [item for item in provider.structured_calls if item[0] == "StoryRequest"][1]
+    assert json.loads(audit[2])["original"] == raw
+    assert json.loads(audit[2])["extraction"]["premise"] == analyzed.premise
+
+
+def test_analyst_uses_fidelity_correction_before_returning_request() -> None:
+    invented = make_request().model_copy(update={"premise": "Their late mother owned the bakery."})
+    corrected = make_request().model_copy(update={"premise": "Their mother owns the bakery."})
+
+    class AuditingProvider(FakeProvider):
+        def generate_structured(self, **kwargs):
+            super().generate_structured(**kwargs)
+            return invented if len(self.structured_calls) == 1 else corrected
+
+    result = AnalystAgent(AuditingProvider()).run("Two sisters empty their mother's bakery.")
+    assert result.premise == corrected.premise
 
 
 def test_developed_plan_below_event_floor_is_replanned(tmp_path) -> None:

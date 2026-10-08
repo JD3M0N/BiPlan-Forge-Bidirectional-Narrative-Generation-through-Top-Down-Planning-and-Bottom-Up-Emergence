@@ -220,6 +220,25 @@ este pipeline distinto de «pedirle una historia al modelo»:
   `promise_ledger=False` en la fachada) salta la etapa entera. Es el brazo de control, y
   `promise_audit.json` da la cifra.
 
+### Guía narrativa experimental (7.8)
+
+`GenerationOptions.guidance_strategy` conserva `hybrid_v1` por defecto y ofrece
+`compositional_v2` por API/CLI. `narrative_guidance=False` omite ambas estrategias.
+Las opciones experimentales sin control visual se declaran en `API_ONLY_OPTIONS`.
+
+- El catálogo de 34 patrones vive en `planning/data/skeletons.json`; `catalog.py` lo carga,
+  valida y calcula su hash. `catalog_types.py` contiene los roles sin depender de `schemas`.
+- `guidance_retrieval.py` recupera por relevancia semántica, con desempate estable por catálogo y abstención
+  ante fallo semántico; `guidance_composition.py` valida referencias y alcance contextual. Cada etapa
+  admite una reparación. Cuota, configuración y cancelación se propagan.
+- `guidance_render.py` produce bloques distintos para personajes y planificación; el blueprint
+  v2 guarda los textos exactos. Los críticos y escritores no reciben la guía.
+- La abstención es válida y guarda bloques vacíos. Un fallo de composición guarda diagnóstico
+  y continúa sin guía; la recuperación se persiste antes de componer.
+- `plan-guidance-experiment` prepara el piloto de 9 o la matriz de 36, sin proveedor ni cuota.
+  Solicitudes y protocolo en `packages/stagecraft/experiments/guidance/`. La mejora literaria
+  sigue pendiente de evaluación humana; no cambiar el predeterminado por resultados de tests.
+
 ### Top-Down: salida en guion teatral, dos métodos, un solo contrato
 
 `ASG_STORY_FORMAT=script` (o `--format script`) pide un guion por escenas en vez de prosa;
@@ -417,6 +436,19 @@ que saber antes de tocar `stage/`:
 
 ### Telegram: el bot no conoce el pipeline
 
+- **Desde 4.0.0 es solo el bot del experimento (EXP-4).** No arranca sin `TELEGRAM_ACCESS_KEY` ni
+  `ASG_EVALUATION_STUDY`, y la evaluación 1–10 ya no existe en él.
+  - `access.py` es un `TypeHandler` en el grupo −1: quien no tiene la clave no llega a ningún
+    handler. Nunca registres el texto que escribe un usuario sin acceso: puede ser la clave.
+  - `guide.py` deriva el paso de cada persona de la cola (`access`) y de la base del estudio,
+    **nunca de `user_data`**, y guarda todos los textos del recorrido. Un paso nuevo es una
+    entrada de `Step` y su texto en `render`, no una rama suelta en los handlers.
+  - La historia base es la aportación de `StudyRepository`: mientras `Status.contributing`,
+    `/newstory` solo ofrece `PROSE_FORMATS`. Un fallo llama a `release_contribution`; si no, la
+    reserva queda atada a un trabajo muerto y `bind_contribution` no vuelve a enlazarla.
+  - `announcer.py` revisa la fase cada minuto y avisa una vez por persona y fase (tabla
+    `announcements`).
+  - Sin `guide` (los tests de conversación), los handlers se comportan como antes, sin puertas.
 - `contract.py` define, del lado de la aplicación, el `Protocol` `StoryGeneratorAdapter` y sus
   tipos (`GenerationProgress`, `RunSummary`, `GenerationFailure`, `OptionSpec`, `StoryOutline`,
   `BriefSpec`, `GeneratorUnavailable`).
@@ -441,7 +473,8 @@ que saber antes de tocar `stage/`:
   progreso: `generation.py` construye `lambda: queue.cancellation_requested(job_id)` y el
   adaptador traduce `RunCancelledError` a `GenerationCancelled`.
 - `queue.py` es una cola FIFO SQLite durable (`Stories/telegram_queue.sqlite3`) con migración de
-  esquema (v4 añade `options`, `brief` y la tabla `user_options`) y cancelación, y
+  esquema (v4 añade `options`, `brief` y la tabla `user_options`; v5, `access`,
+  `access_attempts` y `announcements`) y cancelación, y
   `generation.py` la coordina con la entrega.
 - `console.py` y `terminal.py` dan la consola del operador: una cabecera con el bot, las
   versiones, el modelo y la cuota, y un registro de una línea por evento. La ventana que abre

@@ -12,6 +12,7 @@ from ..brief import StoryBrief
 from ..formats import ActorMemory, NarrativeVoice, ScriptMethod, SimulationMode, StoryFormat
 from ..generator import StoryGenerator
 from ..options import GenerationOptions
+from ..planning.catalog_types import GuidanceStrategy
 from ..planning.profiles import NarrativeProfile
 from ..runtime.config import load_settings
 from ..runtime.errors import ASGError
@@ -156,6 +157,18 @@ def parser() -> argparse.ArgumentParser:
             "flags mandan sobre ellas"
         ),
     )
+    result.add_argument(
+        "--guidance-strategy",
+        type=GuidanceStrategy,
+        choices=list(GuidanceStrategy),
+        help="Guía narrativa: hybrid_v1 (control) o compositional_v2 (experimental)",
+    )
+    result.add_argument(
+        "--narrative-guidance",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Activa la guía; --no-narrative-guidance omite ambas estrategias",
+    )
     return result
 
 
@@ -172,6 +185,8 @@ def build_options(args: argparse.Namespace, settings) -> GenerationOptions:
     )
     flags = {
         "narrative_profile": args.profile,
+        "guidance_strategy": args.guidance_strategy,
+        "narrative_guidance": args.narrative_guidance,
         "audio": False if args.no_audio else None,
         "audio_voice": args.audio_voice,
         "story_format": args.story_format or (StoryFormat.SIMULATED if args.plan_from else None),

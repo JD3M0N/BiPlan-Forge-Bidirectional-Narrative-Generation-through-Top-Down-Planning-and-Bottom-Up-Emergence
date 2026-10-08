@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "asg-telegram"
-version = "3.1.0"
+version = "4.0.0"
 description = "Telegram bot for generating and evaluating ASG stories"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "asg-core>=0.5.1",
-  "asg-evaluation>=1.0.0",
+  "asg-evaluation>=1.2.0",
   "asg-stagecraft>=7.4.0",
   "colorama>=0.4.6",
   "python-dotenv>=1.0,<2",

@@ -99,6 +99,9 @@ def test_the_narration_flags_reach_the_run_options() -> None:
             "5",
             "--audio-voice",
             "es-CU-BelkysNeural",
+            "--guidance-strategy",
+            "compositional_v2",
+            "--no-narrative-guidance",
         ]
     )
     options = build_options(args, settings())
@@ -108,6 +111,8 @@ def test_the_narration_flags_reach_the_run_options() -> None:
     assert options.narration_tone == "como un guerrero samurai"
     assert options.turns_per_beat == 5
     assert options.audio_voice == "es-CU-BelkysNeural"
+    assert options.guidance_strategy == "compositional_v2"
+    assert options.narrative_guidance is False
 
 
 def test_a_recorded_options_file_replays_a_run_and_flags_still_win(tmp_path) -> None:

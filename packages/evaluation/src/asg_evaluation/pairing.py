@@ -48,6 +48,7 @@ AXES: tuple[Axis, ...] = (
     Axis("turns_per_beat", "Turnos por beat", SIMULATED),
     Axis("promise_ledger", "Ledger de promesas"),
     Axis("narrative_guidance", "Guía de esqueletos"),
+    Axis("guidance_strategy", "Estrategia de guía"),
     Axis("audio_voice", "Voz del audio"),
 )
 AXIS_LABELS = {axis.key: axis.label for axis in AXES}
@@ -152,6 +153,12 @@ def _before_73(pipeline_version: str | None) -> bool:
     return (major, minor) < (7, 3)
 
 
+def _legacy_guidance(pipeline_version: str | None) -> str | None:
+    """Identify the only strategy available in earlier skeleton-guidance contracts."""
+    versions = {"6.0", "6.1", "6.2", "7.0", "7.1", "7.2", "7.3", "7.4", "7.5", "7.6", "7.7"}
+    return "hybrid_v1" if pipeline_version in versions else None
+
+
 def read_run_config(run_dir: str | Path) -> RunConfig:
     """Describe the axes of one run, from generation_options.json or the older artifacts."""
     run_dir = Path(run_dir)
@@ -190,6 +197,7 @@ def read_run_config(run_dir: str | Path) -> RunConfig:
     for key in (axis.key for axis in AXES):
         if key in options:
             put(key, options[key], "generation_options.json")
+    put("guidance_strategy", _legacy_guidance(pipeline_version), "contrato anterior a 7.8")
     put("narrative_profile", text_field(metadata, "narrative_profile"), "metadata.json")
     put("narrative_profile", text_field(request, "narrative_profile"), "request.json")
     put("story_format", text_field(metadata, "story_format") or "narrative", "metadata.json")
@@ -254,6 +262,8 @@ def run_measurements(run_dir: str | Path) -> dict[str, float | None]:
 
 def _applies(axis: Axis, config: RunConfig) -> bool:
     """Say whether an axis means anything for one run's format."""
+    if axis.key == "guidance_strategy" and config.axes.get("narrative_guidance") is False:
+        return False
     return axis.formats is None or config.axes.get("story_format") in axis.formats
 
 

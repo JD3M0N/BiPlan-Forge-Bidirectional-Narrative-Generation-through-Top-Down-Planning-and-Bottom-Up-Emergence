@@ -1,0 +1,15 @@
+{
+  "original_prompt": "Dos hermanos distanciados vuelven al cine familiar antes de su demolición. No consiguen salvarlo, pero deben decidir juntos qué conservar.",
+  "processed_prompt": "Two estranged siblings return to their family cinema before its demolition. They cannot save the building and must decide together what to preserve.",
+  "title": "La última función",
+  "language": "Spanish",
+  "genre": "Family drama",
+  "tone": "restrained",
+  "narrative_profile": "essential",
+  "premise": "Two estranged siblings return to their family cinema before its demolition. They cannot save the building and must decide together what to preserve.",
+  "constraints": [
+    "The cinema is demolished.",
+    "No financial windfall or miraculous rescue."
+  ],
+  "creative_directions": []
+}

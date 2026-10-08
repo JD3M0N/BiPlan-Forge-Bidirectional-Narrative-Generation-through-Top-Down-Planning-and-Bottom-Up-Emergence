@@ -3,19 +3,28 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
-import os
-from pathlib import Path
 
 from asg_evaluation.study import StudyRepository
 from telegram import Update
 from telegram.error import TelegramError
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    MessageHandler,
+    TypeHandler,
+    filters,
+)
 
+from .access import AccessGate
+from .announcer import PhaseAnnouncer
 from .config import TelegramConfigurationError, load_settings
 from .console import configure_console_logging, log_user_action, print_banner
 from .contract import GeneratorUnavailable
 from .generators import create_generator
+from .guide import ParticipantGuide
 from .handlers import TelegramStoryBot
 from .queue import QueueRepository
 from .study import StudyConversation
@@ -24,6 +33,17 @@ LOGGER = logging.getLogger(__name__)
 
 __all__ = ["build_application", "main"]
 
+COMMANDS = [
+    ("start", "Ver en qué paso estás y qué sigue"),
+    ("newstory", "Crear una historia"),
+    ("aportar", "Crear o reemplazar tu historia base"),
+    ("evaluar", "Empezar o continuar la evaluación"),
+    ("pausa", "Pausar la evaluación"),
+    ("settings", "Configurar las opciones de generación"),
+    ("cancel", "Cancelar la solicitud en curso"),
+    ("help", "Ver los comandos disponibles"),
+]
+
 
 def build_application(token: str, bot: TelegramStoryBot, *, on_ready=None) -> Application:
     """Build and register the complete python-telegram-bot application."""
@@ -31,30 +51,21 @@ def build_application(token: str, bot: TelegramStoryBot, *, on_ready=None) -> Ap
     async def post_init(application) -> None:
         """Restore persisted queue state and greet the operator after start-up."""
         await bot.restore_queue(application)
-        study_commands = (
-            [
-                ("evaluar", "Participar en la evaluación"),
-                ("aportar", "Crear mi aportación al estudio"),
-                ("pausa", "Pausar la evaluación"),
-            ]
-            if bot.study
-            else []
-        )
         try:
-            await application.bot.set_my_commands(
-                [
-                    ("newstory", "Crear una historia"),
-                    ("settings", "Configurar las opciones"),
-                    ("cancel", "Cancelar la solicitud o evaluación actual"),
-                    ("help", "Ver los comandos disponibles"),
-                ]
-                + study_commands
-            )
+            await application.bot.set_my_commands(COMMANDS)
         except TelegramError as exc:
             LOGGER.warning("No se pudieron publicar los comandos del bot: %s", exc)
+        if bot.guide is not None:
+            bot.announcer_task = asyncio.create_task(PhaseAnnouncer(bot.guide).run(application.bot))
         if on_ready is not None:
             me = await application.bot.get_me()
             on_ready(me.username)
+
+    async def post_stop(application) -> None:
+        """Stop the phase announcer before the application shuts down."""
+        task = getattr(bot, "announcer_task", None)
+        if task is not None:
+            task.cancel()
 
     async def post_shutdown(application) -> None:
         """Record that the bot stopped, so the console shows a clean ending."""
@@ -72,9 +83,12 @@ def build_application(token: str, bot: TelegramStoryBot, *, on_ready=None) -> Ap
         .pool_timeout(10)
         .concurrent_updates(True)
         .post_init(post_init)
+        .post_stop(post_stop)
         .post_shutdown(post_shutdown)
         .build()
     )
+    if bot.gate is not None:
+        application.add_handler(TypeHandler(Update, bot.gate.guard), group=-1)
     application.add_handler(CommandHandler("start", bot.start))
     application.add_handler(CommandHandler("help", bot.help))
     application.add_handler(CommandHandler("newstory", bot.new_story))
@@ -86,21 +100,14 @@ def build_application(token: str, bot: TelegramStoryBot, *, on_ready=None) -> Ap
         application.add_handler(CommandHandler("aportar", bot.study.contribute))
         application.add_handler(CommandHandler("pausa", bot.study.pause))
         application.add_handler(CallbackQueryHandler(bot.study.callback, pattern=r"^study:"))
+    if bot.guide:
+        application.add_handler(CallbackQueryHandler(bot.guide.callback, pattern=r"^guide:"))
     application.add_handler(CallbackQueryHandler(bot.choose_format, pattern=r"^format:[a-z0-9-]+$"))
     application.add_handler(
         CallbackQueryHandler(bot.choose_mode, pattern=r"^mode:(free|guided|options)$")
     )
     application.add_handler(CallbackQueryHandler(bot.option_callback, pattern=r"^opt:"))
     application.add_handler(CallbackQueryHandler(bot.brief_callback, pattern=r"^brief:"))
-    application.add_handler(
-        CallbackQueryHandler(
-            bot.score,
-            pattern=(
-                r"^score:(coherence|pacing|creativity|engagement|relevance|"
-                r"satisfaction):(?:10|[1-9])$"
-            ),
-        )
-    )
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, bot.text_input))
     application.add_error_handler(bot.on_error)
     return application
@@ -122,23 +129,22 @@ def main(argv: list[str] | None = None) -> int:
             generator,
             QueueRepository(settings.project_root / "Stories" / "telegram_queue.sqlite3"),
         )
-        study_path = os.getenv("ASG_EVALUATION_STUDY", "").strip()
-        if study_path:
-            path = Path(study_path)
-            if not path.is_absolute():
-                path = settings.project_root / path
-            if not path.is_file():
-                raise ValueError("Crea el estudio antes de configurar ASG_EVALUATION_STUDY.")
-            repository = StudyRepository(path)
-            repository.info()
-            bot.study = StudyConversation(repository, bot)
+        repository = StudyRepository(settings.study_path)
+        study = repository.info()
+        bot.study = StudyConversation(repository, bot)
+        bot.guide = ParticipantGuide(bot)
+        bot.gate = AccessGate(bot.queue, settings.access_key, bot.guide)
     except (TelegramConfigurationError, ValueError, GeneratorUnavailable) as exc:
         LOGGER.error("%s", exc)
         return 2
 
     def announce(username: str) -> None:
         """Print the start-up banner once the bot's own identity is known."""
-        rows = (("Bot", f"@{username}"),) + generator.startup_details()
+        rows = (
+            ("Bot", f"@{username}"),
+            ("Estudio", f"{study['id']} · fase {study['state']}"),
+            ("Acceso", "clave compartida (TELEGRAM_ACCESS_KEY)"),
+        ) + generator.startup_details()
         print_banner("ASG Telegram", rows)
         LOGGER.info("Iniciando bot con el generador %s", generator.display_name)
 

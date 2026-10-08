@@ -1,0 +1,15 @@
+{
+  "original_prompt": "Una restauradora organiza la recuperación de una pieza robada de su comunidad, custodiada en un museo. El equipo discrepa sobre a quién devolverla. Nadie traiciona al grupo.",
+  "processed_prompt": "A conservator plans to recover an object stolen from her community and held in a museum. The crew disagrees about its rightful recipient. Nobody betrays the group.",
+  "title": "La pieza prestada",
+  "language": "Spanish",
+  "genre": "Heist",
+  "tone": "tense",
+  "narrative_profile": "developed",
+  "premise": "A conservator plans to recover an object stolen from her community and held in a museum. The crew disagrees about its rightful recipient. Nobody betrays the group.",
+  "constraints": [
+    "No betrayal within the crew.",
+    "The dispute over ownership must matter to the resolution."
+  ],
+  "creative_directions": []
+}

@@ -1,69 +1,9 @@
-"""Evaluation metrics text and Telegram-safe story composition."""
+"""Telegram-safe composition of story text into HTML message chunks."""
 
 from __future__ import annotations
 
 import html
 import re
-from dataclasses import dataclass
-
-
-@dataclass(frozen=True)
-class MetricExplanation:
-    """Represent MetricExplanation data and behavior."""
-
-    name: str
-    description: str
-    low: str
-    high: str
-
-    def message(self) -> str:
-        """Handle the message operation for MetricExplanation."""
-        return (
-            f"<b>{html.escape(self.name)}</b>\n"
-            f"{html.escape(self.description)}\n\n"
-            f"1 — {html.escape(self.low)}\n"
-            f"10 — {html.escape(self.high)}"
-        )
-
-
-METRIC_EXPLANATIONS = {
-    "coherence": MetricExplanation(
-        "Coherencia",
-        "Conexión lógica entre los eventos y progresión causal sin huecos.",
-        "Incoherente",
-        "Totalmente coherente",
-    ),
-    "pacing": MetricExplanation(
-        "Ritmo",
-        "Equilibrio entre inicio, nudo y desenlace, información y tensión.",
-        "Muy desequilibrado",
-        "Excelente y bien dosificado",
-    ),
-    "creativity": MetricExplanation(
-        "Creatividad",
-        "Originalidad, ideas valiosas y elementos inesperados.",
-        "Nada original",
-        "Muy original",
-    ),
-    "engagement": MetricExplanation(
-        "Interés",
-        "Capacidad de mantener tu atención y generar impacto emocional.",
-        "No mantiene el interés",
-        "Muy cautivadora",
-    ),
-    "relevance": MetricExplanation(
-        "Relevancia",
-        "Fidelidad a la solicitud original y al tema pedido.",
-        "No corresponde al prompt",
-        "Completamente fiel al prompt",
-    ),
-    "satisfaction": MetricExplanation(
-        "Satisfacción",
-        "Valoración global de cuánto cumplió la historia tus expectativas.",
-        "Insatisfecho",
-        "Muy satisfecho",
-    ),
-}
 
 HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$")
 

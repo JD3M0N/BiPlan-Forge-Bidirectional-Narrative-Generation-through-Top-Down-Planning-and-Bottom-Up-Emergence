@@ -1,0 +1,15 @@
+{
+  "original_prompt": "Una expedición llega a una ciudad donde los mapas son contratos. Para volver debe cumplir promesas hechas a grupos enfrentados. Los habitantes no son monstruos ni malvados por naturaleza.",
+  "processed_prompt": "An expedition reaches a city where maps are contracts. To return home it must fulfill promises made to competing groups. The inhabitants are not monsters or inherently evil.",
+  "title": "Las cartas de regreso",
+  "language": "Spanish",
+  "genre": "Speculative adventure",
+  "tone": "wonder and unease",
+  "narrative_profile": "expansive",
+  "premise": "An expedition reaches a city where maps are contracts. To return home it must fulfill promises made to competing groups. The inhabitants are not monsters or inherently evil.",
+  "constraints": [
+    "The inhabitants are not inherently evil.",
+    "The return depends on negotiated obligations, not defeating a monster."
+  ],
+  "creative_directions": []
+}

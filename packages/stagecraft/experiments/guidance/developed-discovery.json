@@ -1,0 +1,15 @@
+{
+  "original_prompt": "Una científica descubre mediciones falsas en su instituto. Su mentora depende del proyecto para mantener abierto el laboratorio. Sin romance ni triángulos amorosos.",
+  "processed_prompt": "A scientist discovers fabricated measurements at her institute. Her mentor depends on the project to keep the laboratory open. There is no romance or love triangle.",
+  "title": "El dato ausente",
+  "language": "Spanish",
+  "genre": "Scientific drama",
+  "tone": "ambivalent",
+  "narrative_profile": "developed",
+  "premise": "A scientist discovers fabricated measurements at her institute. Her mentor depends on the project to keep the laboratory open. There is no romance or love triangle.",
+  "constraints": [
+    "No romance or love triangle.",
+    "The evidence is established through scientific work, not a spontaneous confession."
+  ],
+  "creative_directions": []
+}

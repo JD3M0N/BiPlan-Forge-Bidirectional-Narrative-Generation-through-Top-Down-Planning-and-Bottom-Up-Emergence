@@ -2,10 +2,11 @@
 
 import json
 from abc import ABC, abstractmethod
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel
 
+from ..planning.guidance_models import CompositionArtifact
 from ..planning.profiles import profile_guidance
 from ..planning.skeletons import blueprint_guidance
 from ..runtime.provider import LanguageModelProvider
@@ -32,7 +33,9 @@ def json_text(value: Any) -> str:
 
 def story_specification_header(
     request: StoryRequest,
-    blueprint: NarrativeBlueprint | None = None,
+    blueprint: NarrativeBlueprint | CompositionArtifact | None = None,
+    *,
+    audience: Literal["characters", "planning"] = "planning",
 ) -> str:
     """Return the shared STORY SPECIFICATION + NARRATIVE PROFILE CONTRACT header."""
     header = (
@@ -41,6 +44,9 @@ def story_specification_header(
     )
     if blueprint is None:
         return header
+    if isinstance(blueprint, CompositionArtifact):
+        block = blueprint.character_block if audience == "characters" else blueprint.planning_block
+        return f"{header}\n\n{block}" if block else header
     return f"{header}\n\n{blueprint_guidance(blueprint)}"
 
 

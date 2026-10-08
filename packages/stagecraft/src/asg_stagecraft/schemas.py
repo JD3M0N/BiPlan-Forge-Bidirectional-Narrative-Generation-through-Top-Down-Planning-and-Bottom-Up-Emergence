@@ -8,10 +8,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from .formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
+from .planning.catalog_types import ID_PATTERN, FunctionalRole
 from .planning.profiles import NarrativeProfile
 from .version import GENERATOR_NAME, GENERATOR_VERSION, PIPELINE_VERSION
-
-ID_PATTERN = r"^[a-z0-9][a-z0-9_-]*$"
 
 
 class StoryRequest(BaseModel):
@@ -20,15 +19,31 @@ class StoryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     original_prompt: str
-    processed_prompt: str = ""
+    processed_prompt: str = Field(
+        default="",
+        description=(
+            "Faithful English paraphrase of explicit facts only; preserve "
+            "uncertainty and restriction scope. No invented relationships, "
+            "causes or endings."
+        ),
+    )
     title: str = Field(min_length=1)
     language: str = "Spanish"
     genre: str
     tone: str
     narrative_profile: NarrativeProfile
-    premise: str
+    premise: str = Field(
+        description=(
+            "Core conflict grounded only in explicit user facts, without resolving uncertainties."
+        )
+    )
     constraints: list[str] = Field(default_factory=list)
-    creative_directions: list[str] = Field(default_factory=list)
+    creative_directions: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional inferred creative proposals, never user requirements or established facts."
+        ),
+    )
 
     def agent_spec(self) -> dict:
         """Return trusted downstream data without replaying the raw prompt."""
@@ -144,8 +159,6 @@ class CharacterProfile(BaseModel):
             return ""
         normalized = value.strip().casefold().replace(" ", "_").replace("-", "_")
         if info.field_name == "functional_role" and normalized:
-            from .planning.skeletons import FunctionalRole
-
             if normalized not in {role.value for role in FunctionalRole}:
                 return ""
         return normalized

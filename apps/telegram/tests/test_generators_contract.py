@@ -4,6 +4,7 @@ from unittest.mock import create_autospec
 import pytest
 from asg_stagecraft import GenerationOptions, StoryBrief, StoryGenerator
 from asg_stagecraft.formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
+from asg_stagecraft.options import API_ONLY_OPTIONS
 from asg_stagecraft.planning.profiles import NarrativeProfile
 from asg_stagecraft.runtime.config import Settings
 from asg_stagecraft.runtime.errors import PlotValidationError, RunCancelledError
@@ -210,7 +211,9 @@ def test_option_specs_cover_every_generation_options_field_except_the_preset(tmp
     captured: dict = {}
     _patch_facade(monkeypatch, tmp_path, captured)
     keys = {spec.key for spec in generators_module.StagecraftGenerator().option_specs}
-    fields = set(GenerationOptions.model_fields) - {"story_format", "script_method"}
+    fields = (
+        set(GenerationOptions.model_fields) - {"story_format", "script_method"} - API_ONLY_OPTIONS
+    )
     assert keys == fields | {"format"}
 
 

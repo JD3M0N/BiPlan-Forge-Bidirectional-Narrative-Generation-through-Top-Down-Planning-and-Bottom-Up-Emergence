@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .artifacts import load_json_object
-from .catalog import catalog_snapshot, digest
+from .catalog import catalog_snapshot, digest, guidance
 from .study_design import coverage, make_assignments
 
 SCHEMA_VERSION = 2
@@ -248,6 +248,7 @@ class StudyRepository:
             assignments = make_assignments(stories, readers, exposures, info["seed"])
             snapshot = {
                 "catalog": catalog_snapshot(),
+                "guidance": guidance(),
                 "seed": info["seed"],
                 "required_version": info["required_version"],
                 "stories": [
@@ -476,6 +477,58 @@ class StudyRepository:
                 "participant=(SELECT id FROM participants WHERE external_id=?)",
                 (job_id, str(external_id)),
             )
+
+    def release_contribution(self, external_id: str, job_id: str) -> None:
+        """Unbind a reservation whose job failed, so the next attempt can claim it."""
+        with self.transaction() as db:
+            db.execute(
+                "UPDATE contributions SET job_id=NULL WHERE pending=1 AND job_id=? AND "
+                "participant=(SELECT id FROM participants WHERE external_id=?)",
+                (job_id, str(external_id)),
+            )
+
+    def find_participant(self, external_id: str) -> dict | None:
+        """Look up a participant without registering one."""
+        with self.transaction() as db:
+            row = db.execute(
+                "SELECT * FROM participants WHERE external_id=?", (str(external_id),)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def contribution(self, participant: str) -> dict:
+        """Report whether a contribution is enrolled and whether another one is reserved."""
+        with self.transaction() as db:
+            enrolled = db.execute(
+                "SELECT 1 FROM stories WHERE owner=? AND curated=0", (participant,)
+            ).fetchone()
+            pending = db.execute(
+                "SELECT 1 FROM contributions WHERE participant=? AND pending=1", (participant,)
+            ).fetchone()
+        return {"enrolled": bool(enrolled), "pending": bool(pending)}
+
+    def progress(self, participant: str) -> dict:
+        """Count answered and planned active questions, overall and per session."""
+        with self.transaction() as db:
+            rows = db.execute(
+                "SELECT a.session, COUNT(*) AS total, COUNT(v.assignment) AS answered "
+                "FROM assignments a LEFT JOIN votes v ON v.assignment=a.id "
+                "WHERE a.participant=? AND a.void=0 GROUP BY a.session",
+                (participant,),
+            ).fetchall()
+        return {
+            "answered": sum(row["answered"] for row in rows),
+            "total": sum(row["total"] for row in rows),
+            "sessions": len(rows),
+            "answered_by_session": {row["session"]: row["answered"] for row in rows},
+        }
+
+    def participant_ids(self) -> list[str]:
+        """List the external identifiers of participants with a reader profile."""
+        with self.transaction() as db:
+            rows = db.execute(
+                "SELECT external_id FROM participants WHERE profile<>'' AND external_id IS NOT NULL"
+            ).fetchall()
+        return [row[0] for row in rows]
 
     def complete_generation(self, external_id: str, job_id: str | None, directory: Path) -> bool:
         """Record exposure and enroll only the job explicitly reserved for contribution."""

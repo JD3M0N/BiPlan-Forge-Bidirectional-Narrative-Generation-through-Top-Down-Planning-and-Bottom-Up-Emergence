@@ -17,6 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
+plan-guidance-experiment = "asg_stagecraft.tools.guidance_experiment:main"
 extract-story-features = "asg_stagecraft.tools.extract_features:main"
 generate-baseline = "asg_stagecraft.tools.baseline:main"
 generate-story = "asg_stagecraft.tools.generate:main"

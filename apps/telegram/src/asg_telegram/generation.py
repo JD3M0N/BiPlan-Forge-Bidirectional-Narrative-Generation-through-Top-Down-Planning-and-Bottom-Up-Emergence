@@ -22,6 +22,7 @@ from .contract import (
     format_progress,
 )
 from .delivery import DEFAULT_DOCUMENT_CAPTION, TelegramDelivery
+from .guide import BASE_RETRY
 from .queue import QueueRepository
 from .states import ConversationState
 
@@ -51,6 +52,8 @@ class GenerationCoordinator(TelegramDelivery):
         self.generation_semaphore = asyncio.Semaphore(1)
         self._memory_options: dict[int, dict[str, OptionValue]] = {}
         self.study = None
+        self.guide = None
+        self.gate = None
 
     # --- per-user option preferences ------------------------------------
 
@@ -377,8 +380,9 @@ class GenerationCoordinator(TelegramDelivery):
             return
         if job_id and self.queue:
             self.queue.set_run_dir(job_id, str(story_directory))
+        enrolled = False
         if self.study:
-            await self._record_study_generation(
+            enrolled = await self._record_study_generation(
                 context, chat_id, user, job_id, Path(story_directory)
             )
         self._log_generation_complete(user, story_directory)
@@ -397,22 +401,28 @@ class GenerationCoordinator(TelegramDelivery):
             Path(story_directory),
             job_id,
             summary,
+            enrolled=enrolled,
         )
 
-    async def _record_study_generation(self, context, chat_id, user, job_id, directory) -> None:
-        """Record a contribution before delivery, keeping enrollment failures recoverable."""
+    async def _record_study_generation(self, context, chat_id, user, job_id, directory) -> bool:
+        """Record exposure and enroll a reserved base story, keeping failures retryable."""
+        repository = self.study.repository
         try:
-            enrolled = await asyncio.to_thread(
-                self.study.repository.complete_generation, str(user.id), job_id, directory
+            return await asyncio.to_thread(
+                repository.complete_generation, str(user.id), job_id, directory
             )
-            if enrolled:
-                await context.bot.send_message(
-                    chat_id=chat_id, text="Tu aportación al estudio está guardada."
-                )
-        except ValueError as exc:
-            await context.bot.send_message(
-                chat_id=chat_id, text=f"No se inscribió la aportación: {exc}"
+        except (ValueError, OSError) as exc:
+            LOGGER.warning("No se inscribió la historia base de %s: %s", user.id, exc)
+            if job_id:
+                repository.release_contribution(str(user.id), job_id)
+            await self._safe_notice(
+                context,
+                chat_id,
+                f"La historia se generó, pero no pude inscribirla como tu historia base: {exc}\n"
+                "Te la entrego igualmente. Para aportar otra, usa /aportar.",
+                user,
             )
+            return False
 
     async def _generate_story(self, prompt, options, user, job_id, report_progress, should_cancel):
         """Invoke the configured generator through the application contract."""
@@ -484,6 +494,10 @@ class GenerationCoordinator(TelegramDelivery):
             )
         context.user_data.clear()
         message = error.public_message() if recognized else self._unexpected_message(job_id)
+        if self.study and job_id:
+            self.study.repository.release_contribution(str(user.id), job_id)
+        if self.guide and self.guide.status(user.id).contributing:
+            message = f"{message}\n\n{BASE_RETRY}"
         await self._safe_notice(context, chat_id, message, user)
 
     @staticmethod
@@ -565,8 +579,10 @@ class GenerationCoordinator(TelegramDelivery):
         story_directory: Path,
         job_id: str | None,
         summary,
+        *,
+        enrolled: bool = False,
     ) -> None:
-        """Serialize story delivery and hand a success to evaluation handlers."""
+        """Serialize story delivery, then tell the user what comes next."""
         context.user_data["state"] = ConversationState.DELIVERING
         log_user_action(
             LOGGER,
@@ -598,7 +614,7 @@ class GenerationCoordinator(TelegramDelivery):
                         user,
                     )
                     return
-                await self._begin_evaluation(context, chat_id, user, story_directory)
+                await self._after_delivery(context, chat_id, user, enrolled)
                 if job_id and self.queue:
                     self.queue.finish(job_id, "completed")
         except Exception:
@@ -606,10 +622,7 @@ class GenerationCoordinator(TelegramDelivery):
                 LOGGER,
                 user_id=user.id,
                 username=user.username or user.full_name,
-                action=(
-                    "La historia fue generada, pero ocurrió un error "
-                    "durante la entrega o el inicio de la evaluación"
-                ),
+                action=("La historia fue generada, pero ocurrió un error durante la entrega"),
                 category="error",
                 level=logging.ERROR,
                 exc_info=True,
@@ -628,8 +641,8 @@ class GenerationCoordinator(TelegramDelivery):
                 if job and job.status == "running":
                     self.queue.finish(job_id, "failed", error_code="DELIVERY_FAILED")
 
-    async def _begin_evaluation(self, context, chat_id: int, user, story_directory: Path) -> None:
-        """Start evaluation after delivery; concrete handlers must implement it."""
+    async def _after_delivery(self, context, chat_id: int, user, enrolled: bool) -> None:
+        """Guide the user after delivery; concrete handlers must implement it."""
         raise NotImplementedError
 
     async def _refresh_queue(self, application, *, include_running: bool = False) -> None:

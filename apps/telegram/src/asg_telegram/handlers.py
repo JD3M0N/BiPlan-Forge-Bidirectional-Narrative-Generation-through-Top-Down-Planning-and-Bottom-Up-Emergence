@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from pathlib import Path
 from types import SimpleNamespace
 
-from asg_evaluation import METRICS, add_evaluation
+from asg_evaluation.study import PROSE_FORMATS
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
@@ -15,6 +13,7 @@ from telegram.ext import ContextTypes
 from .console import log_user_action
 from .contract import OptionSpec, OptionValue, StoryGeneratorAdapter
 from .generation import GenerationCoordinator
+from .guide import OUTSIDE_SAMPLE
 from .panel import (
     choice_keyboard,
     describe_options,
@@ -26,7 +25,6 @@ from .panel import (
     text_keyboard,
     text_prompt,
 )
-from .prompts import METRIC_EXPLANATIONS
 from .queue import QueueRepository
 from .states import ConversationState
 from .wizard import (
@@ -44,7 +42,6 @@ from .wizard import (
 )
 
 LOGGER = logging.getLogger(__name__)
-MAX_EVALUATION_RETRIES = 3
 EXAMPLE_PROMPT = (
     "Escribe un relato de ciencia ficción de unas 1800 palabras sobre una "
     "cartógrafa que descubre un mensaje en las estrellas. Tono melancólico "
@@ -75,8 +72,13 @@ def _mode_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def _format_keyboard(spec: OptionSpec, values: dict) -> InlineKeyboardMarkup:
-    """Build the output-format selection keyboard, marking the remembered choice."""
+def _format_keyboard(
+    spec: OptionSpec, values: dict, *, prose_only: bool = False
+) -> InlineKeyboardMarkup:
+    """Build the output-format keyboard, marking the remembered choice.
+
+    A base story only offers the prose formats the study admits.
+    """
     return InlineKeyboardMarkup(
         [
             [
@@ -86,31 +88,9 @@ def _format_keyboard(spec: OptionSpec, values: dict) -> InlineKeyboardMarkup:
                 )
             ]
             for choice in spec.choices
+            if not prose_only or choice.value in PROSE_FORMATS
         ]
     )
-
-
-def _score_keyboard(metric: str) -> InlineKeyboardMarkup:
-    """Build a two-row keyboard containing scores one through ten."""
-    rows = [
-        [
-            InlineKeyboardButton(str(score), callback_data=f"score:{metric}:{score}")
-            for score in range(start, min(start + 5, 11))
-        ]
-        for start in (1, 6)
-    ]
-    return InlineKeyboardMarkup(rows)
-
-
-def _score_summary(scores: dict[str, int]) -> str:
-    """List every recorded metric score as one bulleted Spanish line each."""
-    return "\n".join(f"• {metric}: {scores[metric]}/10" for metric in METRICS)
-
-
-def _evaluator_name(user) -> str:
-    """Build the persisted evaluator identifier for a Telegram user."""
-    readable = user.username or user.full_name or "sin nombre"
-    return f"telegram:{user.id} ({readable})"
 
 
 class TelegramStoryBot(GenerationCoordinator):
@@ -129,8 +109,12 @@ class TelegramStoryBot(GenerationCoordinator):
     # --- basic commands ----------------------------------------------------
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Welcome a user and advertise the primary commands."""
+        """Tell the user where they stand in the study and what comes next."""
         _user_log(update, "ejecutó /start")
+        if self.guide:
+            context.user_data.clear()
+            await self.guide.show(update, context)
+            return
         await update.effective_message.reply_text(
             "¡Hola! Puedo crear historias con el enfoque "
             f"{self.generator.display_name} y luego recoger tu evaluación.\n\n"
@@ -141,6 +125,9 @@ class TelegramStoryBot(GenerationCoordinator):
     async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Display the supported bot commands."""
         _user_log(update, "ejecutó /help")
+        if self.guide:
+            await self.guide.help(update, context)
+            return
         await update.effective_message.reply_text(
             "/newstory — crear una historia\n"
             "/settings — configurar formato, visión, memoria, audio y más\n"
@@ -164,7 +151,17 @@ class TelegramStoryBot(GenerationCoordinator):
                 "Ya estoy generando una historia para ti. Espera a que termine."
             )
             return
+        contributing = False
+        if self.guide:
+            status = self.guide.status(user_id)
+            if not status.can_generate:
+                await self.guide.show(update, context)
+                return
+            contributing = status.contributing
+            if contributing and not status.pending:
+                self.study.repository.request_contribution(status.participant)
         context.user_data.clear()
+        context.user_data["contributing"] = contributing
         options, was_reset = self.effective_options(user_id)
         if was_reset:
             await update.effective_message.reply_text(
@@ -172,8 +169,10 @@ class TelegramStoryBot(GenerationCoordinator):
             )
         context.user_data["state"] = ConversationState.CHOOSE_FORMAT
         await update.effective_message.reply_text(
-            "¿Qué quieres generar?",
-            reply_markup=_format_keyboard(self._spec("format"), options),
+            "¿En qué formato quieres tu historia base?"
+            if contributing
+            else "¿Qué quieres generar?",
+            reply_markup=_format_keyboard(self._spec("format"), options, prose_only=contributing),
         )
 
     async def choose_format(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -187,6 +186,11 @@ class TelegramStoryBot(GenerationCoordinator):
         spec = self._spec("format")
         if value not in {choice.value for choice in spec.choices}:
             await query.edit_message_text("Formato desconocido.")
+            return
+        if context.user_data.get("contributing") and value not in PROSE_FORMATS:
+            await query.edit_message_text(
+                "La historia base debe estar en prosa. Usa /newstory para elegir otro formato."
+            )
             return
         _user_log(update, f"seleccionó el formato {value}")
         try:
@@ -287,11 +291,8 @@ class TelegramStoryBot(GenerationCoordinator):
             await self._launch_generation(update, context, text.strip())
         elif state == ConversationState.GUIDED:
             await self._guided_input(update, context, text)
-        elif state == ConversationState.EVALUATING:
-            _user_log(update, "envió texto durante la evaluación")
-            await update.effective_message.reply_text(
-                "Selecciona una puntuación usando los botones del 1 al 10."
-            )
+        elif self.guide and state is None:
+            await self.guide.show(update, context)
         else:
             await update.effective_message.reply_text("Usa /newstory para crear una historia.")
 
@@ -300,6 +301,9 @@ class TelegramStoryBot(GenerationCoordinator):
     async def settings(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Open the options panel as a fresh message."""
         _user_log(update, "ejecutó /settings")
+        if self.guide and not self.guide.status(update.effective_user.id).can_generate:
+            await self.guide.show(update, context)
+            return
         context.user_data["panel_return"] = "menu"
         options, was_reset = self.effective_options(update.effective_user.id)
         if was_reset:
@@ -383,6 +387,13 @@ class TelegramStoryBot(GenerationCoordinator):
         spec = self._spec(key)
         if spec is None or int(extra) >= len(spec.choices):
             await query.answer("Esa opción ya no existe.", show_alert=True)
+            return
+        if (
+            key == "format"
+            and context.user_data.get("contributing")
+            and spec.choices[int(extra)].value not in PROSE_FORMATS
+        ):
+            await query.answer("La historia base debe estar en prosa.", show_alert=True)
             return
         try:
             self.change_option(query.from_user.id, key, spec.choices[int(extra)].value)
@@ -723,102 +734,15 @@ class TelegramStoryBot(GenerationCoordinator):
         )
         await self._launch_generation(fake_update, context, outline)
 
-    # --- evaluation ------------------------------------------------------
+    # --- after delivery -------------------------------------------------
 
-    async def _begin_evaluation(self, context, chat_id: int, user, story_directory: Path) -> None:
-        """Initialize evaluation state after a successful story delivery."""
-        if self.study:
-            context.user_data.clear()
-            await context.bot.send_message(
-                chat_id=chat_id, text="La evaluación del estudio se realiza por pares con /evaluar."
-            )
-            return
-        context.user_data.update(
-            state=ConversationState.EVALUATING,
-            story_directory=str(story_directory),
-            metric_index=0,
-            scores={},
-            evaluator=_evaluator_name(user),
-        )
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=(
-                "Ahora evalúa la historia. Cada parámetro se puntúa del "
-                "1 (mínimo) al 10 (máximo). Usa /cancel si quieres abandonar."
-            ),
-        )
-        await self._ask_metric(context, chat_id)
-
-    async def _ask_metric(self, context, chat_id: int) -> None:
-        """Send the explanation and score keyboard for the current metric."""
-        metric = METRICS[context.user_data["metric_index"]]
-        explanation = METRIC_EXPLANATIONS[metric].message()
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=f"{explanation}\n\nElige una puntuación:",
-            parse_mode=ParseMode.HTML,
-            reply_markup=_score_keyboard(metric),
-        )
-
-    async def score(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Validate one score and advance or persist the evaluation."""
-        query = update.callback_query
-        if context.user_data.get("state") != ConversationState.EVALUATING:
-            await query.answer()
-            await query.edit_message_text("Esta evaluación ya no está activa.")
-            return
-        _, metric, raw_score = query.data.split(":")
-        expected = METRICS[context.user_data["metric_index"]]
-        if metric != expected:
-            await query.answer("Esa pregunta ya fue respondida.", show_alert=True)
-            return
-        score = int(raw_score)
-        if not 1 <= score <= 10:
-            await query.answer("La puntuación debe estar entre 1 y 10.", show_alert=True)
-            return
-        await query.answer()
-        _user_log(update, f"puntuó {metric} con {score}/10")
-        context.user_data["scores"][metric] = score
-        explanation = METRIC_EXPLANATIONS[metric].message()
-        await query.edit_message_text(
-            f"{explanation}\n\nPuntuación elegida: <b>{score}/10</b>",
-            parse_mode=ParseMode.HTML,
-        )
-        context.user_data["metric_index"] += 1
-        if context.user_data["metric_index"] < len(METRICS):
-            await self._ask_metric(context, update.effective_chat.id)
-            return
-        await self._save_evaluation(update, context)
-
-    async def _save_evaluation(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Persist a complete evaluation and reset the user conversation."""
-        scores = dict(context.user_data["scores"])
-        story_directory = context.user_data["story_directory"]
-        evaluator = context.user_data["evaluator"]
-        try:
-            await asyncio.to_thread(add_evaluation, story_directory, evaluator, scores)
-        except Exception:
-            LOGGER.exception("No se pudo guardar una evaluación")
-            attempts = context.user_data.get("save_attempts", 0) + 1
-            if attempts >= MAX_EVALUATION_RETRIES:
-                context.user_data.clear()
-                await update.effective_message.reply_text(
-                    "No pude guardar la evaluación tras varios intentos. Estas fueron tus "
-                    f"puntuaciones:\n{_score_summary(scores)}\n\nAvisa al operador y usa "
-                    "/newstory cuando quieras continuar."
-                )
-                return
-            context.user_data["save_attempts"] = attempts
-            await update.effective_message.reply_text(
-                "No pude guardar la evaluación. Intenta responder de nuevo."
-            )
-            context.user_data["metric_index"] = len(METRICS) - 1
-            context.user_data["scores"].pop(METRICS[-1], None)
-            await self._ask_metric(context, update.effective_chat.id)
-            return
-        summary = _score_summary(scores)
+    async def _after_delivery(self, context, chat_id: int, user, enrolled: bool) -> None:
+        """Close the conversation and explain whether the story joined the study."""
         context.user_data.clear()
-        _user_log(update, "completó y guardó la evaluación")
-        await update.effective_message.reply_text(
-            f"¡Gracias! Evaluación guardada:\n{summary}\n\nUsa /newstory para crear otra historia."
-        )
+        if self.guide is None:
+            return
+        if enrolled:
+            await self.guide.send(context.bot, chat_id, user.id)
+            return
+        if not self.guide.status(user.id).contributing:
+            await context.bot.send_message(chat_id=chat_id, text=OUTSIDE_SAMPLE)

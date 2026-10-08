@@ -1037,7 +1037,10 @@ gratuita · *Depende de:* MED-5, MED-7
 ### EXP-4 · Evaluación humana por pares a ciegas
 
 **Auditoría 2026-10-05:** SQLite, el flujo de Telegram y la agregación están implementados;
-todavía no se ha realizado el piloto ni el estudio humano.
+todavía no se ha realizado el piloto ni el estudio humano. **2026-10-08:** el bot (`asg-telegram`
+4.0.0) ya es el del experimento: clave compartida, consentimiento, perfil, historia base
+obligatoria antes del uso libre, guía `que_mirar` en cada pregunta y avisos de fase. Falta el
+piloto.
 
 *Área:* experimento · *Cuota:* votar no consume cuota; generación y extracción requieren
 presupuesto · *Depende de:* versión definitiva, MED-8 y la revisión de MED-9
@@ -1309,24 +1312,14 @@ lectura encuentra incoherencias físicas que el inventario no cubre; medirlo es 
 
 ### Probar si la taxonomía de arquetipos mejora las historias
 
-El mecanismo está construido y es auditable:
+La versión 7.8 conserva `hybrid_v1` y añade `compositional_v2`: recuperación semántica con
+validación, composición flexible, abstención y bloques de guía persistidos. Las pruebas locales
+verifican contratos, no superioridad literaria. El experimento sigue pendiente.
 
-- 34 esqueletos etiquetados por capa;
-- un ranking léxico mezclado con una llamada semántica;
-- un `narrative_blueprint.json` por run.
-
-Con la guía apagada, `ASG_NARRATIVE_GUIDANCE=false`, los prompts quedan idénticos a la línea
-base, así que la ablación es limpia. Pero el experimento sigue sin hacerse: el único par con y sin
-guía es n=1 y anterior a esa corrección.
-
-### Externalizar el catálogo de esqueletos
-
-`skeletons.py` tiene 1.485 líneas: unas 1.289 son las 34 entradas literales del catálogo
-(`PLOT_SKELETONS`) y la lógica real ocupa unas 90. `PlotSkeleton` ya es un modelo Pydantic,
-así que cargarlo desde JSON es casi mecánico.
-
-- **A favor:** un diff limpio al añadir esqueletos, y editar el corpus sin tocar Python.
-- **En contra:** se pierde el chequeo en tiempo de edición.
+`plan-guidance-experiment` congela el piloto de 9 historias o la matriz de 36 sin consumir cuota.
+Las seis solicitudes y el protocolo viven en `packages/stagecraft/experiments/guidance/`.
+Antes de generar: revisar las solicitudes y aprobar el presupuesto concreto. Después: comparación
+humana a ciegas de creatividad, personajes e interés, con réplicas y el mismo modelo por brazo.
 
 ### Unificar los contratos de prompt duplicados
 

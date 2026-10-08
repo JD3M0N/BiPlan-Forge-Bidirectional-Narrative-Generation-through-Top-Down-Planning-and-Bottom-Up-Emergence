@@ -25,11 +25,15 @@ from .formats import (
     StoryFormat,
     voice_choice,
 )
+from .planning.catalog_types import GuidanceStrategy
 from .planning.profiles import NarrativeProfile
 
 # The label an interface shows for turns_per_beat's upper bound. The field itself has no ``le``,
 # so a CLI or .env value above it still validates: this is only what a picker offers.
 MAX_OFFERED_TURNS_PER_BEAT = 16
+
+# Experimental options available through the facade and CLI, but not visual controls.
+API_ONLY_OPTIONS = frozenset({"guidance_strategy"})
 
 # The choice an interface shows for an empty audio_voice, which lets the story's language decide.
 AUTOMATIC_AUDIO_VOICE_LABEL = "Automática (según el idioma)"
@@ -52,6 +56,11 @@ class GenerationOptions(BaseModel):
         default=True,
         title="Guía de esqueletos",
         description="Inspira el plan con esqueletos de trama clásicos.",
+    )
+    guidance_strategy: GuidanceStrategy = Field(
+        default=GuidanceStrategy.HYBRID_V1,
+        title="Estrategia de guía",
+        description="Híbrida conserva el control; compositiva propone patrones según la premisa.",
     )
     promise_ledger: bool = Field(
         default=True,

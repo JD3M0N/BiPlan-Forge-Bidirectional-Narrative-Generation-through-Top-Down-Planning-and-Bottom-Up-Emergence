@@ -1,5 +1,6 @@
 """Compact cast construction."""
 
+from ..planning.guidance_models import CompositionArtifact
 from ..planning.skeletons import functional_role_vocabulary
 from ..schemas import CharactersArtifact, NarrativeBlueprint, StoryRequest, WorldArtifact
 from .base import Agent, json_text, story_specification_header
@@ -14,7 +15,7 @@ class CharacterDesignerAgent(Agent[CharactersArtifact]):
         self,
         request: StoryRequest,
         world: WorldArtifact,
-        blueprint: NarrativeBlueprint | None = None,
+        blueprint: NarrativeBlueprint | CompositionArtifact | None = None,
         feedback: str = "",
     ) -> CharactersArtifact:
         """Design the cast; feedback, only on a repair, names what the last cast left out."""
@@ -40,7 +41,8 @@ class CharacterDesignerAgent(Agent[CharactersArtifact]):
                 "Return artifact content in English."
             ),
             prompt=(
-                f"{story_specification_header(request, blueprint)}\n\nWORLD:\n{json_text(world)}"
+                f"{story_specification_header(request, blueprint, audience='characters')}"
+                f"\n\nWORLD:\n{json_text(world)}"
                 f"{feedback}"
             ),
             schema=CharactersArtifact,

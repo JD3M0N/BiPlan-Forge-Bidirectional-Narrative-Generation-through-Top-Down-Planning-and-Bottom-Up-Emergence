@@ -9,11 +9,11 @@ import uuid
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
 CANCELLABLE_STATUSES = ("queued", "recovery_pending")
 MINIMUM_SAMPLES_FOR_ESTIMATE = 3
@@ -39,6 +39,26 @@ _USER_OPTIONS_SCHEMA = """CREATE TABLE IF NOT EXISTS user_options (
     options TEXT NOT NULL,
     updated_at TEXT NOT NULL
 )"""
+
+_ACCESS_SCHEMA = (
+    """CREATE TABLE IF NOT EXISTS access (
+    user_id INTEGER PRIMARY KEY,
+    granted_at TEXT NOT NULL,
+    consented_at TEXT,
+    declined_at TEXT
+)""",
+    """CREATE TABLE IF NOT EXISTS access_attempts (
+    user_id INTEGER PRIMARY KEY,
+    failures INTEGER NOT NULL DEFAULT 0,
+    locked_until TEXT
+)""",
+    """CREATE TABLE IF NOT EXISTS announcements (
+    user_id INTEGER NOT NULL,
+    phase TEXT NOT NULL,
+    sent_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, phase)
+)""",
+)
 
 # Columns introduced after the first unversioned schema, added by migration.
 _ADDED_COLUMNS = (
@@ -121,6 +141,8 @@ class QueueRepository:
             return
         db.execute(_SCHEMA)
         db.execute(_USER_OPTIONS_SCHEMA)
+        for statement in _ACCESS_SCHEMA:
+            db.execute(statement)
         present = {row["name"] for row in db.execute("PRAGMA table_info(jobs)")}
         for column, definition in _ADDED_COLUMNS:
             if column not in present:
@@ -367,3 +389,87 @@ class QueueRepository:
         """Forget a user's stored option overrides."""
         with self._lock, self._connect() as db:
             db.execute("DELETE FROM user_options WHERE user_id=?", (user_id,))
+
+    # --- access and announcements -----------------------------------------
+
+    def access(self, user_id: int) -> dict | None:
+        """Return a user's access record, or None when they never gave the key."""
+        with self._lock, self._connect() as db:
+            row = db.execute("SELECT * FROM access WHERE user_id=?", (user_id,)).fetchone()
+        return dict(row) if row else None
+
+    def grant(self, user_id: int) -> None:
+        """Authorize a user permanently and forget their failed attempts."""
+        with self._lock, self._connect() as db:
+            db.execute(
+                "INSERT OR IGNORE INTO access(user_id, granted_at) VALUES(?,?)",
+                (user_id, datetime.now(UTC).isoformat()),
+            )
+            db.execute("DELETE FROM access_attempts WHERE user_id=?", (user_id,))
+
+    def locked_until(self, user_id: int) -> datetime | None:
+        """Return when a user's lockout ends, or None when they may try the key."""
+        with self._lock, self._connect() as db:
+            row = db.execute(
+                "SELECT locked_until FROM access_attempts WHERE user_id=?", (user_id,)
+            ).fetchone()
+        if not row or not row["locked_until"]:
+            return None
+        until = datetime.fromisoformat(row["locked_until"])
+        return until if until > datetime.now(UTC) else None
+
+    def record_failure(self, user_id: int, *, limit: int, lock: timedelta) -> int:
+        """Count one wrong key and return the attempts left, locking at zero.
+
+        Reaching the limit starts a lockout and resets the counter, so the
+        user gets a fresh set of attempts once it expires.
+        """
+        with self._lock, self._connect() as db:
+            row = db.execute(
+                "SELECT failures FROM access_attempts WHERE user_id=?", (user_id,)
+            ).fetchone()
+            failures = (row["failures"] if row else 0) + 1
+            locked = None
+            if failures >= limit:
+                locked = (datetime.now(UTC) + lock).isoformat()
+                failures = 0
+            db.execute(
+                """INSERT INTO access_attempts(user_id, failures, locked_until) VALUES(?,?,?)
+                    ON CONFLICT(user_id) DO UPDATE SET
+                        failures=excluded.failures, locked_until=excluded.locked_until""",
+                (user_id, failures, locked),
+            )
+        return 0 if locked else limit - failures
+
+    def set_consent(self, user_id: int, accepted: bool) -> None:
+        """Record an authorized user's latest answer to the participation consent."""
+        now = datetime.now(UTC).isoformat()
+        with self._lock, self._connect() as db:
+            db.execute(
+                "UPDATE access SET consented_at=?, declined_at=? WHERE user_id=?",
+                (now if accepted else None, None if accepted else now, user_id),
+            )
+
+    def consented_ids(self) -> list[int]:
+        """List the users who hold the key and accepted to participate."""
+        with self._lock, self._connect() as db:
+            rows = db.execute(
+                "SELECT user_id FROM access WHERE consented_at IS NOT NULL ORDER BY granted_at"
+            ).fetchall()
+        return [row[0] for row in rows]
+
+    def announced(self, user_id: int, phase: str) -> bool:
+        """Report whether a user was already told about a study phase."""
+        with self._lock, self._connect() as db:
+            row = db.execute(
+                "SELECT 1 FROM announcements WHERE user_id=? AND phase=?", (user_id, phase)
+            ).fetchone()
+        return row is not None
+
+    def mark_announced(self, user_id: int, phase: str) -> None:
+        """Remember that a user already knows about a study phase."""
+        with self._lock, self._connect() as db:
+            db.execute(
+                "INSERT OR IGNORE INTO announcements(user_id, phase, sent_at) VALUES(?,?,?)",
+                (user_id, phase, datetime.now(UTC).isoformat()),
+            )

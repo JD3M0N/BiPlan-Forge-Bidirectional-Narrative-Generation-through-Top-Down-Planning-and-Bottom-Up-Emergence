@@ -1,4 +1,28 @@
+# 7.8.2
+
+- Preserve explicit facts and uncertainty in analyst extraction; verify the draft against the original in a second extraction call and keep inventions in optional creative directions.
+- Repair retrieval constraint errors with contextual diagnostics and persist rejected structured drafts.
+- Abstain without a composition call when semantic retrieval fails; lexical matches no longer decide v2 rankings.
+
 # Historial de cambios
+
+## 7.8.1
+
+- El esquema enviado al modelo exige `connection` no vacío en cada selección nueva. Los
+  blueprints v2 anteriores siguen siendo legibles, incluso con conexión principal vacía.
+- La reparación contextual incluye el borrador rechazado y localiza el campo que debe corregirse.
+
+
+## 7.8.0
+
+- Guía experimental `compositional_v2` en dos etapas: recuperación semántica validada y
+  composición contextual con abstención y reparación acotada. `hybrid_v1` sigue por defecto.
+- Catálogo de 34 patrones externalizado sin cambiar contenido ni orden; roles independientes.
+- Artefactos `narrative_retrieval.json` y blueprint v2 con instantánea, hash y bloques exactos
+  para personajes y planificación. Lectura de contratos anteriores conservada.
+- CLI `--guidance-strategy` y `--no-narrative-guidance`; comparación distingue estrategias.
+- `plan-guidance-experiment` prepara 9 o 36 trabajos emparejados sin llamar al proveedor.
+
 
 ## Sin publicar: herramientas de evaluación
 

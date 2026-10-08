@@ -2,7 +2,13 @@ import pytest
 from asg_stagecraft import GenerationOptions
 from asg_stagecraft.brief import MAX_CAST
 from asg_stagecraft.formats import FORMAT_COST_HINTS, NarrativeVoice
-from asg_studio.catalog import SET_BY_PRESET, available_keys, catalog_document, pending_keys
+from asg_stagecraft.options import API_ONLY_OPTIONS
+from asg_studio.catalog import (
+    SET_BY_PRESET,
+    available_keys,
+    catalog_document,
+    pending_keys,
+)
 from pydantic import ValidationError
 
 
@@ -14,8 +20,8 @@ def test_every_available_control_sets_a_real_option() -> None:
     fields = set(GenerationOptions.model_fields)
     keys = available_keys(document()) - {"output"}
     assert keys <= fields
-    # Every option a run can take is either a control or set by the format preset.
-    assert fields - keys == SET_BY_PRESET
+    # Experimental strategies stay in the API/CLI until narrative evaluation is complete.
+    assert fields - keys == SET_BY_PRESET | API_ONLY_OPTIONS
 
 
 def test_pending_controls_are_not_options_and_are_rejected() -> None:

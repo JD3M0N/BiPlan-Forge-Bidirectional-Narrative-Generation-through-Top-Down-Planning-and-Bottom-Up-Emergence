@@ -7,7 +7,7 @@ from asg_core import AudioGenerationError
 from asg_telegram import delivery as delivery_module
 from asg_telegram import generation as generation_module
 from asg_telegram.contract import GenerationEvent, GenerationProgress
-from asg_telegram.handlers import TelegramStoryBot, _evaluator_name
+from asg_telegram.handlers import TelegramStoryBot
 from telegram.error import BadRequest, TimedOut
 from telegram_fakes import FailingGenerator, FakeGenerator
 
@@ -47,6 +47,18 @@ class FakeBot:
         self.edits.append(kwargs)
 
 
+def spy_after_delivery(handler) -> list:
+    """Record each user whose delivery reached its final step."""
+    finished = []
+
+    async def after_delivery(context, chat_id, user, enrolled):
+        """Append the user instead of guiding them."""
+        finished.append(user.id)
+
+    handler._after_delivery = after_delivery
+    return finished
+
+
 def make_story(tmp_path, text="# Historia\n\nContenido"):
     directory = tmp_path / "story"
     directory.mkdir(parents=True)
@@ -65,10 +77,11 @@ def make_story(tmp_path, text="# Historia\n\nContenido"):
     return directory
 
 
-def test_generation_delivers_messages_document_and_starts_evaluation(tmp_path):
+def test_generation_delivers_messages_document_and_finishes(tmp_path):
     story = make_story(tmp_path)
     generator = FakeGenerator(story)
     handler = TelegramStoryBot(generator)
+    finished = spy_after_delivery(handler)
     fake_bot = FakeBot()
     context = SimpleNamespace(bot=fake_bot, user_data={})
     user = SimpleNamespace(id=10, username="ana", full_name="Ana")
@@ -90,10 +103,8 @@ def test_generation_delivers_messages_document_and_starts_evaluation(tmp_path):
     assert fake_bot.events[:3] == ["document", "audio", "fragment"]
     assert (story / "story.md").read_text(encoding="utf-8") == ("# Historia\n\nContenido")
     assert fake_bot.messages[0]["parse_mode"] == "HTML"
-    assert context.user_data["state"] == "evaluating"
-    assert context.user_data["story_directory"] == str(story)
+    assert finished == [user.id]
     assert user.id not in handler.active_users
-    assert "<b>Coherencia</b>" in fake_bot.messages[-1]["text"]
 
 
 def test_generation_edits_one_progress_message_until_complete(tmp_path):
@@ -157,7 +168,7 @@ def test_generation_is_not_blocked_by_a_hanging_progress_edit(tmp_path):
     assert bot.documents
 
 
-def test_generation_reports_quality_warnings_and_still_evaluates(tmp_path):
+def test_generation_reports_quality_warnings_and_still_finishes(tmp_path):
     """A plain metadata warning and a structured revision-report warning both reach the user."""
     simple = make_story(tmp_path / "simple")
     (simple / "metadata.json").write_text(
@@ -165,6 +176,7 @@ def test_generation_reports_quality_warnings_and_still_evaluates(tmp_path):
         encoding="utf-8",
     )
     handler = TelegramStoryBot(FakeGenerator(simple))
+    finished = spy_after_delivery(handler)
     bot = FakeBot()
     context = SimpleNamespace(bot=bot, user_data={})
     user = SimpleNamespace(id=12, username="ana", full_name="Ana")
@@ -172,7 +184,7 @@ def test_generation_reports_quality_warnings_and_still_evaluates(tmp_path):
         handler._generate_and_deliver(context=context, chat_id=20, user=user, prompt="Historia")
     )
     assert any("mejor borrador" in message["text"] for message in bot.messages)
-    assert context.user_data["state"] == "evaluating"
+    assert finished == [user.id]
     assert bot.documents
 
     structured = make_story(tmp_path / "structured")
@@ -238,21 +250,6 @@ def test_generation_reports_actionable_safe_error() -> None:
     assert "run-seguro" in notice
     assert "GEMINI_API_KEY" not in notice
     assert "planning:" in bot.edits[-1]["text"]
-
-
-def test_evaluation_is_stored_under_a_stable_evaluator_id(tmp_path):
-    """The evaluator id shown to the user is exactly what evaluation storage persists."""
-    from asg_evaluation import METRICS, add_evaluation
-
-    user = SimpleNamespace(id=123, username="lectora", full_name="Ana Pérez")
-    evaluator = _evaluator_name(user)
-    assert evaluator == "telegram:123 (lectora)"
-
-    story = make_story(tmp_path)
-    scores = dict.fromkeys(METRICS, 8)
-    add_evaluation(story, evaluator, scores)
-    document = json.loads((story / "evaluation.json").read_text(encoding="utf-8"))
-    assert document["evaluations"][0] == {"user": evaluator, **scores}
 
 
 class RetryingDocumentBot(FakeBot):
@@ -391,10 +388,11 @@ def test_audio_is_skipped_when_the_run_had_it_off(tmp_path):
     assert bot.audios == []
 
 
-def test_audio_failure_never_blocks_evaluation_regardless_of_cause(tmp_path, monkeypatch):
-    """A rejected audio and a failed audio generation both still let the user evaluate."""
+def test_audio_failure_never_blocks_delivery_regardless_of_cause(tmp_path, monkeypatch):
+    """A rejected audio and a failed audio generation both still finish the delivery."""
     rejected = make_story(tmp_path / "rejected")
     handler = TelegramStoryBot(FakeGenerator(rejected))
+    finished = spy_after_delivery(handler)
     bot = RetryingAudioBot([BadRequest("audio rechazado")])
     context = SimpleNamespace(bot=bot, user_data={})
     user = SimpleNamespace(id=1, username="ana", full_name="Ana")
@@ -403,7 +401,7 @@ def test_audio_failure_never_blocks_evaluation_regardless_of_cause(tmp_path, mon
     )
     assert bot.audio_attempts == 1
     assert any("Telegram no pudo recibir el MP3" in message["text"] for message in bot.messages)
-    assert context.user_data["state"] == "evaluating"
+    assert finished == [user.id]
 
     failed = make_story(tmp_path / "failed")
     (failed / "story.mp3").unlink()
@@ -414,6 +412,7 @@ def test_audio_failure_never_blocks_evaluation_regardless_of_cause(tmp_path, mon
 
     monkeypatch.setattr(delivery_module, "create_story_audio", fail_audio)
     handler = TelegramStoryBot(FakeGenerator(failed))
+    finished = spy_after_delivery(handler)
     bot = FakeBot()
     context = SimpleNamespace(bot=bot, user_data={})
     asyncio.run(
@@ -421,7 +420,7 @@ def test_audio_failure_never_blocks_evaluation_regardless_of_cause(tmp_path, mon
     )
     assert not bot.audios
     assert any("no pude crear su audio" in message["text"] for message in bot.messages)
-    assert context.user_data["state"] == "evaluating"
+    assert finished == [user.id]
 
 
 class FragmentTimeoutBot(FakeBot):
@@ -461,6 +460,7 @@ def test_fragment_timeout_falls_back_to_file_without_retry(tmp_path):
 def test_deliveries_are_serialized_between_users(tmp_path):
     story = make_story(tmp_path)
     handler = TelegramStoryBot(FakeGenerator(story))
+    finished = spy_after_delivery(handler)
     active = 0
     maximum = 0
 
@@ -488,8 +488,7 @@ def test_deliveries_are_serialized_between_users(tmp_path):
 
     asyncio.run(run_both())
     assert maximum == 1
-    assert first.user_data["state"] == "evaluating"
-    assert second.user_data["state"] == "evaluating"
+    assert sorted(finished) == [1, 2]
 
 
 def test_pipeline_events_are_logged_without_editing_chat(tmp_path, monkeypatch):
