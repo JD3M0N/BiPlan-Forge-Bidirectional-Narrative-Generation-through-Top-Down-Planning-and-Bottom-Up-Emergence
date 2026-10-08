@@ -121,6 +121,9 @@ Los fallos de evidencia permiten una reparación acotada; después se conservan 
 Los lotes completos sobreviven a interrupciones. Texto, catálogo, prompt y modelo forman la
 identidad de caché. `--force` repite la extracción y archiva la anterior en `*.history/`.
 `--selection all` añade rasgos secundarios; R14 usa atribución de voz entre hablantes elegibles.
+X08 (réplicas) y X11 (personajes que mienten) se extraen siempre como auxiliares, fuera del
+juez. X02 publica en `breakdown` el porcentaje de escenas de cada personaje, y X08 las
+réplicas de cada hablante.
 
 Para comparar dos mediciones del mismo texto, pasar `--second OTRA_EXTRACCION.json` a
 `audit-feature-extraction`. La ficha de revisión incluye evidencias, ceros y huecos para registrar
@@ -134,6 +137,10 @@ Para un corpus externo, `extract-story-features --root RUTA` escribe archivos de
 report-features RUTA --json tabla.json --csv tabla.csv --horizontal horizontal.json --axis C02
 ```
 
+Con `--study Evaluations/tesis-final/study.sqlite3`, la tabla y el ranking reutilizan las
+extracciones del estudio congelado cuando el texto del run coincide con su instantánea, sin
+volver a llamar al proveedor.
+
 La tabla mantiene campos ausentes en artefactos antiguos como no medidos. El informe horizontal
 agrupa configuraciones y versiones e informa medianas, rangos y tamaños de grupo. No convierte
 las opciones libres de los participantes en un experimento causal.
@@ -143,7 +150,7 @@ las opciones libres de los participantes en un experimento causal.
 ```powershell
 report-preferences Evaluations/tesis-final/study.sqlite3 --output preferencias.json --bootstrap 1000
 fit-preference-judge Evaluations/tesis-final/study.sqlite3 --output juez.json
-rank-stories juez.json RUTA_CORPUS --output ranking.json
+rank-stories juez.json RUTA_CORPUS --output ranking.json --study Evaluations/tesis-final/study.sqlite3
 ```
 
 Bradley–Terry regularizado se ajusta por criterio. No se publica un orden global humano cuando
@@ -159,7 +166,9 @@ de entrenamiento. Se compara con azar y con longitud sola. Las probabilidades fu
 se agregan antes de construir el ranking de validación: no se mezclan puntuaciones de pliegues
 con escalas distintas. Se informa cobertura de predicciones, acierto y concordancia Kendall.
 
-El modelo JSON publica pesos, versiones, huellas, escala fijada en entrenamiento y limitaciones.
+El modelo JSON publica pesos, versiones, huellas, escala fijada en entrenamiento y limitaciones,
+y el protocolo de extracción (versión del extractor, del prompt y modelo). El entrenamiento
+rechaza extracciones con protocolos mezclados, y el ranking excluye las de otro protocolo.
 Los tres rankings son principales; la media de sus puntuaciones estandarizadas es auxiliar.
 El ranking posterior excluye textos incompatibles o extracciones incompletas, y prepara diez
 fichas cualitativas en Markdown. Con `--perturbations CASOS.json`, el entrenamiento también

@@ -1,11 +1,16 @@
 """Statistical integrity of preference aggregation and held-out preprocessing."""
 
+import json
 from itertools import combinations
 
 import numpy as np
 import pytest
-from asg_evaluation.judge import _validate, fit_linear, predict
+from asg_evaluation.demo import run_demo
+from asg_evaluation.feature_report import read_features, study_extractions
+from asg_evaluation.judge import _validate, fit_linear, predict, rank_features, train_judge
+from asg_evaluation.learning_cli import load_study_features
 from asg_evaluation.preferences import agreement, bradley_terry, decided_votes
+from asg_evaluation.study import StudyRepository
 
 
 def sample():
@@ -65,3 +70,28 @@ def test_abstention_does_not_connect_graph_and_agreement_normalizes_orientation(
     assert result["status"] == "insufficient" and result["ranking"] == []
     result = agreement(votes)
     assert result["agreement"] == 1.0
+
+
+def test_public_commands_reuse_study_extractions_and_reject_mixed_protocols(tmp_path):
+    output = tmp_path / "demo"
+    summary = run_demo(output)
+    ranking = json.loads((output / "ranking.json").read_text(encoding="utf-8"))
+    table = json.loads((output / "table.json").read_text(encoding="utf-8"))
+    assert ranking["excluded"] == [] and len(ranking["rankings"]["H01"]) == summary["stories"]
+    assert all(row["features"]["R02"]["status"] == "measured" for row in table["stories"])
+    repository = StudyRepository(output / "study.sqlite3")
+    features = load_study_features(repository)
+    story = next(iter(features))
+    features[story]["identity"]["model"] = "other-model"
+    with pytest.raises(ValueError, match="protocolos"):
+        train_judge(repository.export(), features)
+    sidecar = output / "features" / f"{story}.json"
+    sidecar.write_text(json.dumps(features[story]), encoding="utf-8")
+    extractions = study_extractions(output / "study.sqlite3")
+    rows = [
+        read_features(p.parent, extractions=extractions)
+        for p in (output / "runs").rglob("story.md")
+    ]
+    judge = json.loads((output / "judge.json").read_text(encoding="utf-8"))
+    excluded = rank_features(judge, rows)["excluded"]
+    assert [e["reason"] for e in excluded] == ["Protocolo de extracción distinto"]

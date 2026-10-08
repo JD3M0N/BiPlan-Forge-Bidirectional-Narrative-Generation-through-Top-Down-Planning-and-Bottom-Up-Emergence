@@ -15,7 +15,12 @@ from sklearn.linear_model import LogisticRegression
 from .catalog import CRITERIA, catalog_snapshot, core_ids, digest
 from .preferences import bradley_terry, decided_votes
 
-MODEL_VERSION = 1
+MODEL_VERSION = 2
+
+
+def protocol(identity: dict) -> dict:
+    """Return the extraction procedure that must match between training and scoring."""
+    return {key: identity.get(key) for key in ("version", "prompt_version", "model")}
 
 
 def feature_vector(report: dict, fields: list[str]) -> list[float | None]:
@@ -170,6 +175,12 @@ def train_judge(dataset: dict, features: dict[str, dict]) -> dict:
             for k in fields
         ):
             raise ValueError("Completa la extracción de los 27 rasgos antes de entrenar.")
+    protocols = [protocol(features[s["id"]].get("identity", {})) for s in stories]
+    if any(p != protocols[0] for p in protocols):
+        raise ValueError(
+            "Las extracciones usan protocolos distintos (versión, prompt o modelo); "
+            "repítelas con uno solo antes de entrenar."
+        )
     snapshot = dataset["study"].get("snapshot")
     if not snapshot or snapshot["catalog"]["sha256"] != catalog_snapshot()["sha256"]:
         raise ValueError("El estudio debe estar congelado con este catálogo.")
@@ -179,6 +190,7 @@ def train_judge(dataset: dict, features: dict[str, dict]) -> dict:
         "schema_version": MODEL_VERSION,
         "catalog_hash": catalog_snapshot()["sha256"],
         "study_hash": snapshot["sha256"],
+        "extraction_protocol": protocols[0] if protocols else None,
         "data_hash": digest({"votes": dataset["votes"], "features": features}),
         "sklearn_version": sklearn.__version__,
         "status": "exploratory",
@@ -218,7 +230,11 @@ def rank_features(judge: dict, rows: list[dict]) -> dict:
     rankings = {c: [] for c in CRITERIA}
     excluded, combined, scored = [], [], []
     for row in rows:
-        reason = _ineligible(row)
+        reason = _ineligible(row) or (
+            "Protocolo de extracción distinto"
+            if protocol(row.get("extraction_identity", {})) != judge.get("extraction_protocol")
+            else ""
+        )
         if reason:
             excluded.append({"story": row["story"], "reason": reason})
             continue

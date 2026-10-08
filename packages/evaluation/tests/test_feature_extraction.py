@@ -11,12 +11,14 @@ from asg_evaluation.features import (
     FeatureFinding,
     Findings,
     Occurrence,
+    Presence,
     Quote,
     Scene,
     Segmentation,
     aggregate_finding,
     extract_features,
     paragraphs,
+    scene_features,
 )
 
 
@@ -43,6 +45,31 @@ def test_literal_evidence_duplicates_and_empty_denominators():
         )
         with pytest.raises(ValueError):
             aggregate_finding(wrong, blocks, partition, 10, set())
+    same_quote = [
+        Occurrence(scene=0, label=label, explanation="Same passage", evidence=evidence[:1])
+        for label, evidence in (("want", occurrence.evidence), ("need", occurrence.evidence))
+    ]
+    r12 = FeatureFinding(feature="R12", complete=True, occurrences=same_quote)
+    assert aggregate_finding(r12, blocks, partition, 10, set())["value"] == 2
+    lines = [o.model_copy(update={"label": "Ada"}) for o in same_quote]
+    lines.append(same_quote[1].model_copy(update={"label": "Bea"}))
+    x08 = aggregate_finding(
+        FeatureFinding(feature="X08", complete=True, occurrences=lines),
+        blocks,
+        partition,
+        1000,
+        set(),
+    )
+    assert {k: v["raw"] for k, v in x08["breakdown"].items()} == {"Ada": 1, "Bea": 1}
+    cast = Segmentation(
+        scenes=[
+            Scene(
+                first=0, last=0, characters=[Presence(name="Ada", evidence=lines[0].evidence[0])]
+            ),
+            Scene(first=1, last=1),
+        ]
+    )
+    assert scene_features(cast)["X02"]["breakdown"]["Ada"]["value"] == 0.5
     payoff = FeatureFinding(feature="X24", complete=True)
     assert aggregate_finding(payoff, blocks, partition, 10, set())["status"] == "not_applicable"
     incomplete = payoff.model_copy(update={"complete": False})
@@ -66,10 +93,10 @@ def test_extraction_resumes_reuses_cache_and_invalidates_changed_text(tmp_path):
     assert "segmentation" in checkpoint and not checkpoint["complete"]
     provider = SyntheticProvider()
     report = extract_features(text, provider, model="fake", output=output)
-    assert provider.calls == 1
-    assert report["complete"] and set(core_ids()) <= set(report["features"])
+    assert provider.calls == 2  # only the two batches after the checkpoint
+    assert report["complete"] and set(core_ids()) | {"X08", "X11"} <= set(report["features"])
     assert extract_features(text, provider, model="fake", output=output) == report
-    assert provider.calls == 1
+    assert provider.calls == 2
     table = read_features(run)
     assert table["features"]["P01"]["value"] is None
     assert table["extraction_compatible"]

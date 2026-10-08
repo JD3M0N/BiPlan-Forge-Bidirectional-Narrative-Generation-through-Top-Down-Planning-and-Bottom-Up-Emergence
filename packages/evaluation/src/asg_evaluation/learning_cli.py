@@ -10,7 +10,7 @@ from pathlib import Path
 from asg_core import atomic_write_json, atomic_write_text, use_utf8_output
 
 from .artifacts import load_json_object
-from .feature_report import read_features
+from .feature_report import read_features, study_extractions
 from .judge import perturbation_report, rank_features, train_judge
 from .preferences import human_report
 from .study import StudyRepository
@@ -73,11 +73,18 @@ def rank_main(argv: list[str] | None = None) -> int:
     parser.add_argument("model", type=Path)
     parser.add_argument("root", type=Path)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--study", type=Path, help="Reutilizar las extracciones de un estudio congelado"
+    )
     args = parser.parse_args(argv)
     use_utf8_output()
     try:
         judge = load_json_object(args.model)
-        rows = [read_features(p.parent) for p in sorted(args.root.rglob("story.md"))]
+        extractions = study_extractions(args.study) if args.study else None
+        rows = [
+            read_features(p.parent, extractions=extractions)
+            for p in sorted(args.root.rglob("story.md"))
+        ]
         report = rank_features(judge, rows)
         atomic_write_json(args.output, report)
         lines = ["# Análisis cualitativo de las diez primeras", "", "Ranking exploratorio.", ""]

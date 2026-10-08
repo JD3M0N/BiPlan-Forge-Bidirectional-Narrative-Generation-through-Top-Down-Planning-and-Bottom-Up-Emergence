@@ -10,7 +10,7 @@ from pathlib import Path
 from asg_core import atomic_write_csv, atomic_write_json, use_utf8_output
 
 from .catalog import catalog
-from .feature_report import horizontal_report, read_features
+from .feature_report import horizontal_report, read_features, study_extractions
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -22,7 +22,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--csv", type=Path)
     parser.add_argument("--horizontal", type=Path)
     parser.add_argument("--axis", default="C02")
+    parser.add_argument(
+        "--study", type=Path, help="Reutilizar las extracciones de un estudio congelado"
+    )
     args = parser.parse_args(argv)
+    try:
+        extractions = study_extractions(args.study) if args.study else None
+    except (OSError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     paths = (
         [args.root / "story.md"]
         if (args.root / "story.md").is_file()
@@ -31,7 +39,7 @@ def main(argv: list[str] | None = None) -> int:
     rows, errors = [], []
     for path in paths:
         try:
-            rows.append(read_features(path.parent))
+            rows.append(read_features(path.parent, extractions=extractions))
         except (OSError, ValueError, TypeError) as exc:
             errors.append({"story": str(path.parent), "error": type(exc).__name__})
     if args.json:

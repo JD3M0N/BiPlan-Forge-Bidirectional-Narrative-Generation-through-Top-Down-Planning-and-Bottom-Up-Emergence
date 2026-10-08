@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
 import re
 from pathlib import Path
 
 from asg_core import atomic_write_json, atomic_write_text, use_utf8_output
 
-from .feature_report import horizontal_report, read_features
+from . import feature_cli, learning_cli
+from .artifacts import load_json_object
 from .features import (
     FeatureFinding,
     Findings,
@@ -20,7 +23,7 @@ from .features import (
     Segmentation,
     extract_features,
 )
-from .judge import rank_features, train_judge
+from .judge import train_judge
 from .preferences import human_report
 from .study import StudyRepository
 
@@ -144,31 +147,9 @@ def run_demo(output: Path, *, bootstrap: int = 20) -> dict:
         features[story["id"]] = report
     human = human_report(dataset, bootstrap=bootstrap)
     judge = train_judge(dataset, features)
-    rows = []
-    for story in dataset["stories"]:
-        report = features[story["id"]]
-        row = {
-            "story": story["id"],
-            "status": "completed",
-            "format": story["provenance"]["metadata"]["story_format"],
-            "generator_version": "DEMO-1",
-            "pipeline_version": "demo",
-            "extraction_compatible": True,
-            "features": report["features"],
-        }
-        rows.append(row)
-    ranking = rank_features(judge, rows)
-    for name, data in (
-        ("study.json", dataset),
-        ("human.json", human),
-        ("judge.json", judge),
-        ("ranking.json", ranking),
-    ):
+    for name, data in (("study.json", dataset), ("human.json", human), ("judge.json", judge)):
         atomic_write_json(output / name, {**data, "synthetic": True})
-    process_rows = [read_features(p.parent) for p in sorted((output / "runs").rglob("story.md"))]
-    atomic_write_json(
-        output / "horizontal.json", {**horizontal_report(process_rows), "synthetic": True}
-    )
+    _public_reports(output)
     summary = {
         "synthetic": True,
         "stories": len(dataset["stories"]),
@@ -185,6 +166,35 @@ def run_demo(output: Path, *, bootstrap: int = 20) -> dict:
         "experimental. El proveedor es local y no utiliza la red.\n",
     )
     return summary
+
+
+def _public_reports(output: Path) -> None:
+    """Build the table, horizontal report and ranking through the operator commands."""
+    runs, db = str(output / "runs"), str(output / "study.sqlite3")
+    with contextlib.redirect_stdout(io.StringIO()):
+        feature_cli.main(
+            [
+                runs,
+                "--study",
+                db,
+                "--json",
+                str(output / "table.json"),
+                "--horizontal",
+                str(output / "horizontal.json"),
+            ]
+        )
+        learning_cli.rank_main(
+            [
+                str(output / "judge.json"),
+                runs,
+                "--study",
+                db,
+                "--output",
+                str(output / "ranking.json"),
+            ]
+        )
+    for name in ("table.json", "horizontal.json", "ranking.json"):
+        atomic_write_json(output / name, {**load_json_object(output / name), "synthetic": True})
 
 
 def main(argv: list[str] | None = None) -> int:

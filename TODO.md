@@ -98,14 +98,15 @@
 
 La tesis se cierra con experimentos medidos y evaluados por personas. Para llegar ahí:
 
-**Auditoría de evaluación 2026-10-05.** Antes del piloto hay que corregir recuentos y
-desgloses por personaje (MED-9), integrar las extracciones del estudio con los informes (MED-10)
-y asegurar la compatibilidad del protocolo del juez (EXP-7). Después: revisión humana de
-extracciones, piloto y estudio real (EXP-4), validación del juez y ranking con diez análisis
-cualitativos (EXP-8). La comparación de aportaciones con opciones libres describe asociaciones;
-una comparación controlada de parametrizaciones necesita diseño y presupuesto propios. Las
-755 pruebas pasadas, dos omitidas y la demo de once historias con 180 respuestas ficticias
-corresponden a la validación técnica previa: no prueban generalización ni cierran estos pendientes.
+**Auditoría de evaluación 2026-10-05.** Las correcciones sin cuota están cerradas: recuentos y
+desgloses por personaje (MED-9), informes que reutilizan las extracciones del estudio (antes
+MED-10) y protocolo de extracción homogéneo en el juez (EXP-7). Antes del piloto queda la
+revisión humana y el test-retest del extractor (MED-9). Después: piloto y estudio real (EXP-4),
+validación del juez con votos reales (EXP-7) y ranking con diez análisis cualitativos (EXP-8).
+La comparación de aportaciones con opciones libres describe asociaciones; una comparación
+controlada de parametrizaciones necesita diseño y presupuesto propios. La demo de once historias
+con 180 respuestas ficticias prueba que las piezas se conectan por los comandos públicos, no
+generalización.
 
 1. **Instrumentos fiables**, con MED-1, MED-2 y MED-7. Sin ellos una matriz muere a medias, como
    murió `054422`, o mide cosas que no son lo que dicen. MED-7 fija además la línea base de la
@@ -117,7 +118,7 @@ corresponden a la validación técnica previa: no prueban generalización ni cie
 4. **Los experimentos**: EXP-1, EXP-2, EXP-3 y EXP-5.
 5. **La evaluación** según la metodología del tutor
    ([packages/evaluation/METODOLOGIA.md](packages/evaluation/METODOLOGIA.md)): los instrumentos
-   MED-8 (línea base), MED-9 (extractor de rasgos) y MED-10 (tabla por historia); después, la
+   MED-8 (línea base) y MED-9 (extractor de rasgos); después, la
    evaluación humana por pares (EXP-4), el juez aprendido (EXP-7) y el ranking del corpus
    (EXP-8).
 
@@ -538,61 +539,21 @@ el diagnóstico inicial. Queda pendiente la ejecución con corpus definitivo y l
 
 ### MED-9 · Extractor de rasgos con cita verificada
 
-**Auditoría 2026-10-05:** el extractor existe; quedan correcciones de recuento y validación
-semántica. Protocolo vigente: [ESTUDIO_FINAL.md](packages/evaluation/ESTUDIO_FINAL.md).
+*Área:* medición · *Cuota:* revisión y test-retest con presupuesto por fijar · *Depende de:*
+versión definitiva del generador
 
-*Área:* medición · *Cuota:* correcciones sin cuota; revisión y test-retest con presupuesto
-por fijar · *Depende de:* nada para las correcciones
-
-- **Síntoma.**
-  - En `packages/evaluation/src/asg_evaluation/features.py`, `_observations` deduplica por
-    pasajes citados sin distinguir el fenómeno. La auditoría reprodujo dos componentes de R12
-    (deseo y necesidad) sustentados por una misma cita: el resultado fue 1, no 2.
-  - `scene_features` publica participación máxima y entropía, pero no los porcentajes por
-    personaje pedidos en el audio [00:34]. X08 (réplicas) y X11 (personajes que mienten) no se
-    extraen por defecto; tampoco se publica el desglose de diálogo por hablante [00:53].
+- **Síntoma.** El extractor (`packages/evaluation/src/asg_evaluation/features.py`, protocolo 2)
+  verifica que cada cita es literal, pero nadie ha comprobado todavía que sus interpretaciones
+  sean correctas ni que sean estables: la demo ficticia no valida su calidad.
 - **Qué hacer.**
-  - Distinguir ocurrencias repetidas de fenómenos distintos que comparten evidencia; conservar
-    la eliminación de duplicados reales.
-  - Publicar participación por personaje y diálogo por hablante con recuentos, denominadores
-    y evidencias. Incluir X08 y X11 como auxiliares sin ampliar las 27 entradas del juez.
-  - Mantener reparación acotada de citas inválidas y estado incompleto si falla: nunca convertir
-    un fallo de evidencia en cero.
-  - Revisar manualmente una muestra, incluidas contradicciones, ceros y fenómenos omitidos;
-    medir estabilidad mediante test-retest y contrastar con logs cuando describan lo mismo.
-- **Hecho cuando.** Pruebas verifican R12 con hechos distintos en una cita, duplicados reales
-  y desgloses por personaje; la revisión humana y el test-retest publican resultados sobre la
-  muestra acordada antes del estudio.
+  - Revisar a mano una muestra con `audit-feature-extraction`, incluidas contradicciones, ceros
+    y fenómenos omitidos.
+  - Medir la estabilidad repitiendo la extracción (`--force`, `--second`) en un subconjunto.
+  - Contrastar con los logs de la función cuando describan lo mismo.
+- **Hecho cuando.** La revisión humana y el test-retest publican resultados sobre la muestra
+  acordada antes del estudio.
 - **Ojo.** Una cita literal no garantiza una interpretación correcta. El log no es un límite
-  numérico universal para la prosa. La demo ficticia no valida la calidad del extractor.
-
-### MED-10 · Tabla de rasgos por historia
-
-**Auditoría 2026-10-05:** el informe existe, pero no reutiliza directamente las extracciones
-del estudio congelado.
-
-*Área:* medición · *Cuota:* sin cuota · *Depende de:* MED-9 para la fiabilidad de R y X
-
-- **Síntoma.**
-  - El estudio guarda `features/<id>.json`, mientras `read_features` en
-    `packages/evaluation/src/asg_evaluation/feature_report.py` busca
-    `<run>/features/features.json`.
-  - En `.cache/evaluation-demo-final/` se comprobaron once extracciones completas, pero
-    ninguna reconocida por el lector habitual; R02 aparecía como ausente.
-  - `demo.py` construye en memoria las filas para el juez y el ranking. Su informe horizontal
-    lee los runs por separado, por lo que no prueba la integración de las mediciones semánticas.
-- **Qué hacer.**
-  - Conectar los informes con las extracciones y procedencia de las instantáneas del estudio,
-    sin volver a llamar al proveedor ni modificar los artefactos originales.
-  - Probar la demo mediante los comandos públicos de extracción, tabla, informe horizontal,
-    entrenamiento y ranking, usando el proveedor ficticio.
-  - Conservar estados, unidades, valores brutos, normalizados y evidencias; un dato ausente
-    continúa siendo no medido, nunca cero.
-- **Hecho cuando.** Las once historias ficticias aparecen con sus mediciones semánticas en la
-  tabla y el informe horizontal, coinciden con las extracciones congeladas y su reutilización
-  no realiza nuevas llamadas.
-- **Ojo.** Las agrupaciones de aportaciones con opciones libres describen asociaciones.
-  No sustituyen la comparación controlada de parametrizaciones mencionada en [02:07–02:23].
+  numérico universal para la prosa.
 
 ### MED-5 · Comparar formatos y métodos desde un mismo plan congelado
 
@@ -1079,7 +1040,7 @@ gratuita · *Depende de:* MED-5, MED-7
 todavía no se ha realizado el piloto ni el estudio humano.
 
 *Área:* experimento · *Cuota:* votar no consume cuota; generación y extracción requieren
-presupuesto · *Depende de:* versión definitiva, MED-8, correcciones de MED-9 y MED-10
+presupuesto · *Depende de:* versión definitiva, MED-8 y la revisión de MED-9
 
 - **Síntoma.** La demo contiene once historias y 180 respuestas ficticias. Comprueba mecanismos,
   no preferencias humanas ni validez de las mediciones. Las notas históricas 1–10 pertenecen a
@@ -1102,55 +1063,37 @@ presupuesto · *Depende de:* versión definitiva, MED-8, correcciones de MED-9 y
 
 ### EXP-7 · El juez aprendido de los pares humanos
 
-**Auditoría 2026-10-05:** existen tres regresiones logísticas y validación fuera de muestra;
-falta asegurar la compatibilidad del protocolo de extracción y validar con preferencias reales.
+*Área:* experimento · *Cuota:* entrenamiento sin cuota · *Depende de:* EXP-4
 
-*Área:* experimento · *Cuota:* entrenamiento sin cuota · *Depende de:* EXP-4 y MED-10;
-la corrección de compatibilidad se puede hacer ahora con datos ficticios
-
-- **Síntoma.**
-  - `train_judge` en `packages/evaluation/src/asg_evaluation/judge.py` comprueba texto y
-    catálogo; no exige un protocolo homogéneo de versión del extractor, prompt y modelo.
-  - El lector del ranking tampoco vincula esas versiones con las utilizadas al entrenar.
-    Se pueden aceptar medidas obtenidas con procedimientos distintos.
-  - Los tres jueces entrenados con votos ficticios no demuestran generalización.
+- **Síntoma.** `train_judge` (`packages/evaluation/src/asg_evaluation/judge.py`) ya exige un
+  protocolo de extracción homogéneo y valida fuera de muestra, pero los tres jueces solo se han
+  entrenado con votos ficticios: no demuestran generalización.
 - **Qué hacer.**
-  - Vincular el modelo aprendido al catálogo, versión del extractor, versión del prompt y
-    modelo proveedor; detectar protocolos incompatibles al entrenar y al puntuar.
-  - Mantener las 27 entradas textuales, L2 sin intercepto y preprocesamiento ajustado solo con
-    historias de entrenamiento. Conservar exclusión de todos los votos que toquen historias
-    retenidas y validación por familias de premisa.
-  - Evaluar con votos reales frente a azar y longitud sola; publicar pesos, versiones, cobertura
-    de predicciones, acierto y concordancia fuera de muestra.
+  - Entrenar con los votos reales, manteniendo las 27 entradas textuales, L2 sin intercepto,
+    preprocesamiento ajustado solo con historias de entrenamiento y validación por historias y
+    por familias de premisa.
+  - Publicar frente a azar y a longitud sola: pesos, versiones, cobertura de predicciones,
+    acierto y concordancia fuera de muestra.
   - Informar perturbaciones sin exigir que todas empeoren los tres criterios.
-- **Hecho cuando.** Pruebas rechazan protocolos incompatibles y conservan las garantías contra
-  filtraciones; el informe experimental publica generalización y limitaciones con datos reales.
+- **Hecho cuando.** El informe experimental publica generalización y limitaciones con datos
+  reales.
 - **Ojo.** Un buen ajuste dentro de muestra no acredita calidad. Si el juez no generaliza, sigue
   siendo un resultado experimental válido y debe presentarse como tal.
 
 ### EXP-8 · Ranking del corpus y análisis de las diez mejores
 
-**Auditoría 2026-10-05:** existen el ranking y las fichas, pero falta cerrar el recorrido público
-con las extracciones del estudio y realizar el análisis cualitativo real.
-
 *Área:* experimento · *Cuota:* ranking sin cuota con extracciones compatibles · *Depende de:*
-MED-10 y EXP-7
+EXP-7
 
-- **Síntoma.**
-  - Al aplicar el recorrido habitual del ranking a los runs de `.cache/evaluation-demo-final/`,
-    las once historias fueron excluidas por extracción ausente u obsoleta, pese a tener
-    extracciones completas en la carpeta del estudio. Es el desacoplamiento de MED-10.
-  - La demo construye las filas en memoria; las fichas de las diez mejores tienen campos vacíos.
+- **Síntoma.** `rank-stories --study` ya ordena por los comandos públicos las once historias de
+  la demo, pero las fichas de las diez mejores salen vacías y no hay corpus real extraído.
 - **Qué hacer.**
-  - Verificar el ranking mediante el flujo público reutilizando mediciones existentes, sin
-    nuevas llamadas ni unión manual de filas.
   - Aplicar el juez al corpus real elegible y publicar tres rankings principales y el combinado
     auxiliar con normalización fijada al entrenar; detallar versiones, formatos y exclusiones.
   - Leer diez historias seleccionadas por el ranking y completar sus fortalezas, debilidades,
     evidencias, configuración y proceso; enlazar el análisis horizontal.
-- **Hecho cuando.** Cierre técnico: las once historias ficticias compatibles se ordenan desde
-  los comandos públicos. Cierre experimental: corpus real ordenado y diez análisis cualitativos
-  cumplimentados, con limitaciones y exclusiones explícitas.
+- **Hecho cuando.** Corpus real ordenado y diez análisis cualitativos cumplimentados, con
+  limitaciones y exclusiones explícitas.
 - **Ojo.** No usar el juez para seleccionar automáticamente qué generar: el tutor lo deja
   fuera de esta tesis [06:21–07:43].
 

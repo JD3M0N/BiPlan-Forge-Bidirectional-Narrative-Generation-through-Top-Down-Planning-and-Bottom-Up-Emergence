@@ -164,6 +164,9 @@ Usa el proveedor configurado, mediante el adaptador de Stagecraft (ficha MED-9).
 - **Entrada:** `story.md` y las definiciones de `rasgos.csv`.
 - **Salida:** cada recuento con las citas literales que lo sustentan. Una cita que no aparece en el
   texto provoca una reparación acotada; si falla, el resultado es incompleto, nunca cero.
+- **Desgloses:** la participación (X02) se publica también por personaje, y el diálogo (X08)
+  por hablante, como pide el audio [00:34–00:53]. X08 y X11 se extraen siempre, como
+  auxiliares fuera del juez.
 - **Normalización:** los recuentos que crecen con la longitud se dan por 1000 palabras (columna
   `unidad`). Las palabras (T01) entran al juez como covariable, para que su peso quede a la vista.
 - **Validación:**
@@ -316,7 +319,7 @@ de la tesis.
 |---|---|---|
 | Línea base de un solo prompt | MED-8 | ~1 llamada por historia |
 | Extractor de rasgos con cita verificada | MED-9 | 2–3 llamadas por historia |
-| Tabla de rasgos por historia | MED-10 | sin cuota |
+| Tabla de rasgos por historia | MED-10 (cerrada en `asg-evaluation` 1.1.0) | sin cuota |
 | Generar la matriz horizontal | MED-3, MED-5 y las EXP de formato | ver `matriz.csv` |
 | Evaluación humana por pares | EXP-4 | sin cuota |
 | Juez aprendido | EXP-7 | sin cuota |

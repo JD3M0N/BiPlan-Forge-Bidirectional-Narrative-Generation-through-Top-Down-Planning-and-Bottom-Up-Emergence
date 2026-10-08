@@ -51,11 +51,11 @@ La guía completa y el orden de operaciones están en
 - `evaluation-study --db RUTA`: create, participant, add, collect, freeze, start, close, status, export.
 - `evaluation-demo CARPETA_NUEVA`: demostración íntegra ficticia, sin red.
 - `extract-story-features --study DB` o `--root RUTA`: núcleo de rasgos; `--dry-run`, `--selection all`, `--force`.
-- `report-features RUTA --json tabla.json --csv tabla.csv --horizontal horizontal.json`.
+- `report-features RUTA --json tabla.json --csv tabla.csv --horizontal horizontal.json`; `--study DB` reutiliza las extracciones del estudio.
 - `audit-feature-extraction ARCHIVO --output revision.json`: evidencias; `--second` para test-retest.
 - `report-preferences DB --output informe.json`: Bradley–Terry, acuerdo e intervalos por lector.
 - `fit-preference-judge DB --output juez.json`: tres jueces y validación fuera de muestra.
-- `rank-stories juez.json RUTA --output ranking.json`: rankings y ficha de diez historias.
+- `rank-stories juez.json RUTA --output ranking.json`: rankings y ficha de diez historias; `--study DB` reutiliza las extracciones del estudio.
 - `generate-baseline "PREMISA" --output CARPETA_NUEVA`: generación directa, consume cuota.
 
 Telegram: `ASG_EVALUATION_STUDY` activa `/evaluar`, `/aportar` y `/pausa`.

@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.0] - 2026-10-05
+
+- Extraction protocol 2 (`EXTRACTION_VERSION` 2, prompt `evidence-2`): duplicates are now
+  dropped only when label and evidence coincide, so R12's want and need on one quote count 2.
+  X02 publishes per-character participation (`breakdown`), X08 per-speaker dialogue, and X08
+  and X11 are always extracted as auxiliary fields; the judge keeps its 27 inputs. Earlier
+  extractions become incompatible and are archived on re-extraction.
+- `report-features` and `rank-stories` take `--study DB` and reuse the frozen study's
+  extractions by text hash, without provider calls. `evaluation-demo` now builds its table,
+  horizontal report and ranking through those public commands.
+- Judges (model schema 2) record their `extraction_protocol` (extractor version, prompt
+  version and model). Training rejects mixed protocols and ranking excludes rows measured
+  with another one.
+
 ## [1.0.0] - 2026-10-04
 
 - Versioned SQLite studies, immutable corpus snapshots, reproducible blind assignments,

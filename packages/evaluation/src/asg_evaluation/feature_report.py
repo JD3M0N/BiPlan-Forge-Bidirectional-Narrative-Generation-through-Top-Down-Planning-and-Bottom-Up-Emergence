@@ -13,6 +13,7 @@ from .catalog import catalog, catalog_snapshot, digest
 from .features import deterministic_features, entropy, measurement
 from .pairing import read_run_config
 from .simulation_report import _agent_costs, read_simulation
+from .study import StudyRepository
 
 DIRECT = {
     "P09": ("promise_audit", "fulfilled_ratio"),
@@ -222,17 +223,37 @@ def process_features(directory: Path) -> dict:
     }
 
 
-def read_features(directory: str | Path) -> dict:
+def study_extractions(db: str | Path) -> dict[str, dict]:
+    """Index a frozen study's feature sidecars by text hash, read-only and without calls."""
+    db = Path(db)
+    if not db.is_file():
+        raise ValueError("No existe la base del estudio.")
+    return {
+        story["text_hash"]: report
+        for story in StudyRepository(db).export()["stories"]
+        if (report := load_json_object(db.parent / "features" / f"{story['id']}.json"))
+    }
+
+
+def _compatible(report: dict, text_hash: str) -> bool:
+    """Accept an extraction only for this exact text and the current catalog."""
+    identity = report.get("identity", {})
+    return (
+        identity.get("text_hash") == text_hash
+        and identity.get("catalog_hash") == catalog_snapshot()["sha256"]
+    )
+
+
+def read_features(directory: str | Path, *, extractions: dict[str, dict] | None = None) -> dict:
     """Merge recomputed text counts, compatible extractions and tolerant process readers."""
     directory = Path(directory)
     text = (directory / "story.md").read_text(encoding="utf-8")
+    text_hash = digest(text)
     result = {key: measurement(status="missing") for key in catalog()}
     extracted = load_json_object(directory / "features" / "features.json")
-    identity = extracted.get("identity", {})
-    compatible = (
-        identity.get("text_hash") == digest(text)
-        and identity.get("catalog_hash") == catalog_snapshot()["sha256"]
-    )
+    if not _compatible(extracted, text_hash):
+        extracted = (extractions or {}).get(text_hash, {})
+    compatible = _compatible(extracted, text_hash)
     if compatible:
         result.update(extracted.get("features", {}))
     result.update(deterministic_features(text))
@@ -244,12 +265,13 @@ def read_features(directory: str | Path) -> dict:
     return {
         "story": str(directory),
         "run_id": directory.name,
-        "text_hash": digest(text),
+        "text_hash": text_hash,
         "status": config.status,
         "generator_version": config.generator_version,
         "pipeline_version": config.pipeline_version,
         "format": config.axes.get("story_format"),
         "extraction_compatible": compatible,
+        "extraction_identity": extracted.get("identity", {}) if compatible else {},
         "features": result,
     }
 
