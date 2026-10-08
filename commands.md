@@ -23,6 +23,10 @@ Añade `--help` a cualquiera para ver todas sus opciones.
 - `recompute-simulation-metrics <run>`: recalcula las métricas de un run simulado desde disco.
   No gasta cuota ni toca el original.
 - `recover-story-runs`: lista, cierra o descarta runs que quedaron atascados en `running`.
+- `llm-budget`: panel de cuotas. Por proveedor, lo gastado contra su tope (Gemini suma sus dos
+  modelos: x/1000) y cuándo reinicia; por modelo, peticiones, tokens, RPM y si está agotado; y
+  cuántas historias caben aún, con la media de los últimos runs. Lee el libro de la cadena y los
+  `llm_calls.jsonl` de los runs. No gasta cuota.
 
 ## Informes (evaluation)
 

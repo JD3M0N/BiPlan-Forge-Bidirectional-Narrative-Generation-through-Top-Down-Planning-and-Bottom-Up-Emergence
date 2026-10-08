@@ -44,7 +44,7 @@ tests usan proveedores falsos.
 Comandos (opciones completas en [commands.md](commands.md)):
 
 - `generate-story`, `compare-story-runs`, `recover-story-runs`, `audit-stage-run`,
-  `recompute-simulation-metrics` (Stagecraft).
+  `recompute-simulation-metrics`, `llm-budget` (Stagecraft).
 - `report-evaluations`, `report-story-craft`, `report-simulations` (evaluation).
 - `asg-console`, `asg-telegram`, `asg-telegram-run`, `asg-studio` (apps).
 
@@ -275,7 +275,7 @@ A esa lista, el guion y el simulado añaden los suyos.
   `report-story-craft` las recalcula desde `story.md`, así que también mide los runs anteriores
   a 6.5.0, que no las traen.
 
-`version.py` fija `PIPELINE_VERSION` (7.6) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.6).
+`version.py` fija `PIPELINE_VERSION` (7.7) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.7).
 `StoryRun` se niega a abrir un run incompleto o de una versión no soportada. Si cambias el
 conjunto de artefactos o su significado, sube la versión en vez de romper los runs ya generados:
 son datos de la tesis. Una limpieza que no toca artefactos sube solo el parche de
@@ -313,6 +313,20 @@ esquema Pydantic, y `generate_text`) e implementa `GeminiProvider`. Lo que impor
     ve uno solo. Ningún agente ni doble de test sabe del reparto.
   - `metadata.json` lo registra en `stage_model`, que es `None` si la función usó `model`. El eje
     `stage_model` de `evaluation/pairing.py` impide emparejar funciones de modelos distintos.
+- **La cadena de proveedores** (7.7), `ASG_LLM_CHAIN=gemini,groq,mistral`.
+  - `FailoverProvider` prueba sus ranuras (proveedor y modelo; Groq da una por modelo) en orden.
+    Si una da un 429 diario o mensual (`ProviderDailyQuotaError`), la misma llamada se repite en
+    la siguiente.
+  - `runtime/budget.py` es el libro: SQLite en `.cache/llm_budget.sqlite3`, compartido entre
+    procesos. Salta una ranura agotada sin gastar la petición, con una ventana por proveedor.
+    Los topes son configuración, nunca constantes. `llm-budget` lo muestra.
+  - `OpenAICompatibleProvider` habla con Groq y Mistral sobre httpx. Comparte con
+    `GeminiProvider` la base `_RecordingProvider`, que reintenta, valida y registra.
+  - `metadata.json` guarda `models_used`. Un run que saltó de modelo tiene el eje `model`
+    compuesto y no se empareja con uno puro.
+  - Con cadena, `GEMINI_STAGE_MODEL` no enruta la función: es la segunda ranura de Gemini, justo
+    tras la principal, y todas las llamadas siguen un solo orden (3.5 → 3.1 → Groq → Mistral).
+  - Con la cadena vacía no cambia nada.
 
 Los tests inyectan un `FakeProvider` (ver `packages/stagecraft/tests/test_generator_v5.py`), que es
 la forma canónica de probar el pipeline. Se le pasa una secuencia de respuestas estructuradas y

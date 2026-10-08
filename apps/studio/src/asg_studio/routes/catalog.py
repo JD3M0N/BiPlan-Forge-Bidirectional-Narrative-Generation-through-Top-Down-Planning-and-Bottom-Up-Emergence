@@ -38,7 +38,7 @@ def health(request: Request) -> dict:
     return {
         "name": "StageCraft",
         "generator_version": __version__,
-        "key_present": bool(settings and settings.api_key),
+        "key_present": bool(settings and getattr(settings, "has_credentials", settings.api_key)),
         "model": getattr(settings, "model", None),
         "stage_model": settings.effective_stage_model if splits else None,
         "demo": request.app.state.demo,

@@ -16,6 +16,7 @@ from ..formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
 from ..schemas import ErrorReport, GeneratorVersionArtifact, LLMUsageRecord, RunMetadata
 from ..version import PIPELINE_VERSION
 from .errors import ASGError
+from .provider import COUNT_TOKENS_OPERATION
 
 
 class ArtifactRepository:
@@ -115,6 +116,10 @@ class ArtifactRepository:
     def append_llm_call(self, record: LLMUsageRecord) -> None:
         """Append one model call to llm_calls.jsonl, keeping it manifest-tracked."""
         self.append_jsonl("llm_calls.jsonl", record)
+        answered = record.status == "succeeded" and record.operation != COUNT_TOKENS_OPERATION
+        if answered and record.model not in self.metadata.models_used:
+            self.metadata.models_used = sorted({*self.metadata.models_used, record.model})
+            self._write_metadata()
 
     def append_jsonl(self, filename: str, value: BaseModel | dict) -> None:
         """Append one JSON record to a line-delimited artifact, keeping it manifest-tracked.

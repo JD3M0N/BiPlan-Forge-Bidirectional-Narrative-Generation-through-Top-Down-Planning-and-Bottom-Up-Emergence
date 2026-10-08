@@ -23,6 +23,7 @@ generate-story = "asg_stagecraft.tools.generate:main"
 compare-story-runs = "asg_stagecraft.tools.compare:main"
 recover-story-runs = "asg_stagecraft.tools.recovery:main"
 audit-stage-run = "asg_stagecraft.tools.audit_stage:main"
+llm-budget = "asg_stagecraft.tools.budget:main"
 recompute-simulation-metrics = "asg_stagecraft.tools.recompute:main"
 
 [tool.hatch.version]

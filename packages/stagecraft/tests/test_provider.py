@@ -1,17 +1,20 @@
 import json
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import asg_stagecraft.runtime.provider as provider_module
 import pytest
+from asg_stagecraft.runtime.budget import QuotaLedger, QuotaSlot, window_bounds
 from asg_stagecraft.runtime.errors import (
     EmptyResponseError,
     GeminiBillingQuotaError,
     GeminiDailyQuotaError,
+    ProviderDailyQuotaError,
     ProviderError,
     StructuredResponseError,
 )
 from asg_stagecraft.runtime.provider import GeminiProvider, _gemini_response_schema
-from asg_stagecraft.schemas import StoryRequest
+from asg_stagecraft.schemas import LLMUsageRecord, StoryRequest
 
 # The 429 body Gemini returned in the three corpus runs filed as billing limits: its text asks
 # to check "plan and billing details", but its quota ID is the free tier's daily request cap.
@@ -442,3 +445,248 @@ def test_each_model_and_key_has_its_own_rpm_window(monkeypatch) -> None:
     assert first._limiter is not other_key._limiter
     # The registry names a key by its fingerprint, never by the key itself.
     assert not any("key-one" in key or "key-two" in key for key in provider_module._LIMITERS)
+
+
+@pytest.mark.parametrize(
+    ("window", "moment", "label", "reset"),
+    [
+        ("pacific_day", "2026-10-08T06:59", "2026-10-07", "2026-10-08T07:00"),
+        ("pacific_day", "2026-12-01T08:00", "2026-12-01", "2026-12-02T08:00"),
+        # 1 November 2026 ends daylight time: the next midnight is an hour later in UTC.
+        ("pacific_day", "2026-11-01T08:00", "2026-11-01", "2026-11-02T08:00"),
+        ("utc_day", "2026-10-08T23:59", "2026-10-08", "2026-10-09T00:00"),
+        ("utc_month", "2026-12-15T12:00", "2026-12", "2027-01-01T00:00"),
+    ],
+    ids=["gemini-pdt", "gemini-pst", "gemini-dst-ends", "groq-day", "mistral-month"],
+)
+def test_each_quota_window_resets_when_its_provider_does(window, moment, label, reset) -> None:
+    def utc(text):
+        return datetime.fromisoformat(text).replace(tzinfo=UTC)
+
+    assert window_bounds(window, utc(moment)) == (label, utc(reset))
+
+
+class QuotaFake:
+    """Answer with its own name, or report its daily quota spent, recording like a provider."""
+
+    def __init__(self, model_name: str, *, spent: bool = False) -> None:
+        self.model_name = model_name
+        self.spent = spent
+        self.calls = 0
+        self.usage_records = []
+
+    def generate_text(self, **kwargs):
+        self.calls += 1
+        if self.spent:
+            raise ProviderDailyQuotaError("cupo agotado", details={"retry_delay": None})
+        self.usage_records.append(
+            LLMUsageRecord(
+                call_id="c",
+                operation="text",
+                stage="planning",
+                attempt=1,
+                status="succeeded",
+                model=self.model_name,
+                timestamp=datetime.now(UTC),
+                total_tokens=10,
+            )
+        )
+        return self.model_name
+
+
+@pytest.mark.parametrize(
+    ("first_spent", "first_cap", "second_spent", "expected"),
+    [
+        (True, 0, False, "second"),
+        (False, 1, False, "second"),
+        (True, 0, True, None),
+    ],
+    ids=["declared-by-a-429", "known-from-the-ledger", "whole-chain-spent"],
+)
+def test_the_chain_moves_on_when_a_slot_is_spent(
+    tmp_path, first_spent, first_cap, second_spent, expected
+) -> None:
+    ledger = QuotaLedger(tmp_path / "budget.sqlite3")
+    slots = [QuotaSlot("gemini", "first", max_tokens=first_cap), QuotaSlot("groq", "second")]
+    fakes = [QuotaFake("first", spent=first_spent), QuotaFake("second", spent=second_spent)]
+    chain = provider_module.FailoverProvider(list(zip(slots, fakes, strict=True)), ledger)
+    notices = []
+    chain.wait_callback = lambda seconds, reason: notices.append(reason)
+    ask = {"system_instruction": "s", "prompt": "p", "profile": "prose"}
+    if expected is None:
+        with pytest.raises(ProviderDailyQuotaError, match="cadena"):
+            chain.generate_text(**ask)
+        return
+    assert chain.generate_text(**ask) == expected
+    assert [record.model for record in chain.usage_records] == ["second"]
+    assert ledger.usage(slots[1]) == (1, 10)
+    # A cap the ledger already knows costs no request; a 429 is remembered until the reset.
+    assert fakes[0].calls == (1 if first_spent else 0)
+    if first_spent:
+        assert ledger.exhausted_until(slots[0]) == ledger.resets_at(slots[0])
+        assert notices == ["gemini:first agotado; sigo con groq:second"]
+        assert chain.generate_text(**ask) == "second" and fakes[0].calls == 1
+
+
+class FakeHTTP:
+    """Stand in for httpx.Client, replying with (status, payload) pairs in order."""
+
+    def __init__(self, replies) -> None:
+        self.replies = list(replies)
+        self.bodies = []
+
+    def post(self, path, json):
+        self.bodies.append(json)
+        status, payload = self.replies.pop(0)
+        text = payload if isinstance(payload, str) else ""
+        return SimpleNamespace(status_code=status, headers={}, text=text, json=lambda: payload)
+
+
+def completion(content: str) -> dict:
+    return {
+        "choices": [{"message": {"content": content}}],
+        "usage": {
+            "prompt_tokens": 20,
+            "completion_tokens": 10,
+            "total_tokens": 30,
+            "completion_tokens_details": {"reasoning_tokens": 5},
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    ("replies", "formats"),
+    [
+        ([(200, completion(valid_story_request_json()))], ["json_schema"]),
+        (
+            [
+                (400, "response_format json_schema is not supported with this model"),
+                (200, completion(valid_story_request_json())),
+            ],
+            ["json_schema", "json_object"],
+        ),
+        ([(429, "Rate limit reached on tokens per day (TPD): Limit 200000")], ["json_schema"]),
+    ],
+    ids=["json-schema", "falls-back-to-json-object", "daily-cap-is-not-retried"],
+)
+def test_an_openai_compatible_provider_returns_validated_json(replies, formats) -> None:
+    provider = provider_module.OpenAICompatibleProvider.__new__(
+        provider_module.OpenAICompatibleProvider
+    )
+    provider.model_name = "openai/gpt-oss-120b"
+    provider.provider_label = "Groq"
+    provider.max_retries = 2
+    provider._client = FakeHTTP(replies)
+    ask = {"system_instruction": "s", "prompt": "p", "schema": StoryRequest, "profile": "planning"}
+    if replies[-1][0] == 429:
+        with pytest.raises(ProviderDailyQuotaError):
+            provider.generate_structured(**ask)
+    else:
+        assert provider.generate_structured(**ask).title == "Título"
+        record = provider.usage_records[-1]
+        assert (record.total_tokens, record.thoughts_tokens) == (30, 5)
+    bodies = provider._client.bodies
+    assert [body["response_format"]["type"] for body in bodies] == formats
+    assert "additionalProperties" not in json.dumps(bodies[0]["response_format"])
+    if "json_object" in formats:
+        assert "JSON schema" in bodies[-1]["messages"][0]["content"]
+
+
+class RecordingCompatible:
+    """Stand in for OpenAICompatibleProvider, keeping what the factory built it with."""
+
+    def __init__(self, api_key, model_name, base_url, **kwargs):
+        self.model_name = model_name
+
+
+CHAIN_ENV = {
+    "GEMINI_API_KEY": "g",
+    "GEMINI_MODEL": "gemini-3.5-flash-lite",
+    "GROQ_API_KEY": "q",
+    "GROQ_MODELS": "openai/gpt-oss-120b,openai/gpt-oss-20b",
+    "MISTRAL_API_KEY": "m",
+}
+GROQ_AND_MISTRAL = [
+    "groq:openai/gpt-oss-120b",
+    "groq:openai/gpt-oss-20b",
+    "mistral:mistral-small-latest",
+]
+
+
+@pytest.mark.parametrize(
+    ("chain", "stage_model", "slots"),
+    [
+        ("groq,mistral", "", GROQ_AND_MISTRAL),
+        # Every call, the performance included, spends 3.5 first, then 3.1, then the rest.
+        (
+            "gemini, groq, mistral",
+            "gemini-3.1-flash-lite",
+            ["gemini:gemini-3.5-flash-lite", "gemini:gemini-3.1-flash-lite", *GROQ_AND_MISTRAL],
+        ),
+    ],
+    ids=["no-gemini-needs-no-gemini-key", "second-gemini-model-comes-before-groq"],
+)
+def test_the_factory_builds_the_chain_from_the_environment(
+    monkeypatch, tmp_path, chain, stage_model, slots
+):
+    from asg_stagecraft.runtime.config import load_settings
+
+    (tmp_path / "packages").mkdir()
+    (tmp_path / "Stories").mkdir()
+    monkeypatch.setattr(provider_module, "GeminiProvider", RecordingGemini)
+    monkeypatch.setattr(provider_module, "OpenAICompatibleProvider", RecordingCompatible)
+    for name in ("GEMINI_STAGE_API_KEY", "GEMINI_STAGE_RPM_LIMIT", "MISTRAL_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in {**CHAIN_ENV, "ASG_LLM_CHAIN": chain}.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("GEMINI_STAGE_MODEL", stage_model)
+    if "gemini" not in chain:
+        monkeypatch.delenv("GEMINI_API_KEY")
+    provider = provider_module.provider_from_settings(load_settings(tmp_path))
+    assert isinstance(provider, provider_module.FailoverProvider)
+    assert [slot.key for slot, _ in provider.entries] == slots
+    assert provider.ledger.path == tmp_path / ".cache" / "llm_budget.sqlite3"
+
+
+def test_the_quota_panel_adds_up_each_provider_from_logs_and_ledger(tmp_path) -> None:
+    from asg_stagecraft.runtime.config import ChainEntry, Settings
+    from asg_stagecraft.tools.budget import report
+
+    runs = tmp_path / "Stories" / "Stagecraft"
+    calls = [
+        ("g-main", "succeeded", None, "2026-10-08T15:00:00+00:00"),
+        ("g-stage", "succeeded", None, "2026-10-08T15:01:00+00:00"),
+        ("g-main", "failed", "500", "2026-10-08T15:02:00+00:00"),
+        # A 429 consumed nothing, and yesterday's call belongs to a window already reset.
+        ("g-main", "failed", "429", "2026-10-08T15:03:00+00:00"),
+        ("g-main", "succeeded", None, "2026-10-07T12:00:00+00:00"),
+    ]
+    lines = [
+        {"model": m, "status": s, "error_code": e, "timestamp": t, "total_tokens": 100}
+        for m, s, e, t in calls
+    ]
+    run = runs / "20261008-run"
+    run.mkdir(parents=True)
+    (run / "llm_calls.jsonl").write_text(
+        "\n".join(json.dumps(line) for line in lines), encoding="utf-8"
+    )
+    (run / "metadata.json").write_text('{"status": "completed"}', encoding="utf-8")
+    (run / "llm_usage.json").write_text('{"calls": 3, "total_tokens": 300}', encoding="utf-8")
+    groq = QuotaSlot("groq", "q", max_requests=1000, max_tokens=200_000)
+    settings = Settings(
+        api_key="k",
+        model="g-main",
+        stage_model="g-stage",
+        output_root=runs,
+        budget_path=tmp_path / "budget.sqlite3",
+        chain=(
+            ChainEntry(QuotaSlot("gemini", "", "pacific_day", max_requests=500)),
+            ChainEntry(groq, "k", "https://example.invalid", 30, "Groq"),
+        ),
+    )
+    QuotaLedger(settings.budget_path).mark_exhausted(groq)
+    panel = report(settings, now=datetime(2026, 10, 8, 18, tzinfo=UTC))
+    gemini = next(line for line in panel if line.startswith("Gemini"))
+    assert "3/1.000 peticiones hoy · quedan 997" in gemini
+    assert any(line.strip().startswith("q ") and "AGOTADO" in line for line in panel)
+    assert panel[-1] == "Caben aprox.: Gemini 332 · Groq 0."

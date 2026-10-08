@@ -33,8 +33,17 @@ def test_settings_never_carry_legacy_length_budget_fields(tmp_path, monkeypatch)
         ({"ASG_STORY_FORMAT": "screenplay"}, "ASG_STORY_FORMAT"),
         ({"ASG_SCRIPT_METHOD": "improvised"}, "ASG_SCRIPT_METHOD"),
         ({"GEMINI_STAGE_RPM_LIMIT": "many"}, "GEMINI_STAGE_RPM_LIMIT"),
+        ({"ASG_LLM_CHAIN": "gemini,groq", "GROQ_API_KEY": None}, "GROQ_API_KEY"),
+        ({"ASG_LLM_CHAIN": "gemini,openrouter"}, "ASG_LLM_CHAIN"),
     ],
-    ids=["missing-api-key", "invalid-story-format", "invalid-script-method", "invalid-stage-rpm"],
+    ids=[
+        "missing-api-key",
+        "invalid-story-format",
+        "invalid-script-method",
+        "invalid-stage-rpm",
+        "chain-provider-without-key",
+        "unknown-chain-provider",
+    ],
 )
 def test_a_bad_environment_variable_names_itself(tmp_path, monkeypatch, env, match) -> None:
     root = project(tmp_path)
@@ -116,6 +125,8 @@ def test_a_blank_number_keeps_its_default(tmp_path, monkeypatch) -> None:
     settings = load_settings(root)
     assert settings.stage_rpm_limit == 0
     assert settings.rpm_limit == 15
+    # Per model: with GEMINI_STAGE_MODEL the Gemini total the quota panel shows is 1000.
+    assert settings.gemini_daily_requests == 500
 
 
 def test_repository_versions_new_runs_to_match_the_installed_package(tmp_path) -> None:

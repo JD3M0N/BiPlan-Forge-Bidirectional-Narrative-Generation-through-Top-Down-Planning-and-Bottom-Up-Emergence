@@ -118,7 +118,13 @@ class GeminiTPMError(ProviderError):
     code = "GEMINI_TPM_EXHAUSTED"
 
 
-class GeminiDailyQuotaError(ProviderError):
+class ProviderDailyQuotaError(ProviderError):
+    """Signal a provider whose daily or monthly allowance is spent, so a chain can move on."""
+
+    code = "PROVIDER_DAILY_QUOTA_EXHAUSTED"
+
+
+class GeminiDailyQuotaError(ProviderDailyQuotaError):
     """Represent GeminiDailyQuotaError data and behavior."""
 
     code = "GEMINI_DAILY_QUOTA_EXHAUSTED"
@@ -137,6 +143,6 @@ NON_DEGRADABLE_ERRORS = (
     ConfigurationError,
     GeminiRPMError,
     GeminiTPMError,
-    GeminiDailyQuotaError,
+    ProviderDailyQuotaError,
     GeminiBillingQuotaError,
 )

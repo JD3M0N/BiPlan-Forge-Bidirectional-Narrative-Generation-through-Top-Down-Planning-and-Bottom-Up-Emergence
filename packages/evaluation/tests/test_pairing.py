@@ -1,5 +1,6 @@
 import json
 
+import pytest
 from asg_evaluation.pairing import pair_runs, read_run_config, run_measurements
 
 
@@ -91,18 +92,31 @@ def test_a_performance_without_its_own_model_ran_on_the_main_one(tmp_path) -> No
     assert newer.axes["stage_model"] == "m"
 
 
-def test_actors_on_another_model_are_never_a_clean_pair(tmp_path) -> None:
-    same = run_73(tmp_path, "a")
-    other = run_73(
-        tmp_path,
-        "b",
-        metadata={"pipeline_version": "7.4", "stage_model": "gemini-3.1-flash-lite"},
-    )
+@pytest.mark.parametrize(
+    ("metadata", "axis", "warning"),
+    [
+        (
+            {"pipeline_version": "7.4", "stage_model": "gemini-3.1-flash-lite"},
+            "stage_model",
+            "actores usan modelos distintos",
+        ),
+        # 7.7: a provider chain failed over mid-run, so the run is named by both models.
+        (
+            {"pipeline_version": "7.7", "models_used": ["m", "openai/gpt-oss-120b"]},
+            "model",
+            "Usan modelos distintos",
+        ),
+    ],
+    ids=["actors-on-another-model", "run-that-failed-over"],
+)
+def test_runs_on_other_models_are_never_a_clean_pair(tmp_path, metadata, axis, warning) -> None:
+    same = run_73(tmp_path, "a", metadata={"models_used": ["m"]})
+    other = run_73(tmp_path, "b", metadata=metadata)
     pairing = pair_runs([same, other])
-    # The only difference, but a pairing axis: a clean pair needs the same actors' model.
-    assert pairing.differing_axes == ["stage_model"]
+    # The only difference, but a pairing axis: a clean pair needs the same models.
+    assert pairing.differing_axes == [axis]
     assert not pairing.clean
-    assert any("actores usan modelos distintos" in item for item in pairing.warnings)
+    assert any(warning in item for item in pairing.warnings)
 
 
 def test_a_narrative_run_has_no_performance_model(tmp_path) -> None:

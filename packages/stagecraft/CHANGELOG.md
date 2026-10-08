@@ -7,6 +7,39 @@
 - `generate-baseline` prepara una generación directa de una sola llamada, con procedencia y consumo.
 - No se cambia el pipeline ni la simulación ni se genera el corpus experimental.
 
+## 7.7.1
+
+- `llm-budget` es un panel de cuotas: totales por proveedor (Gemini suma el cupo de sus dos
+  modelos), desglose por modelo con tokens, RPM y estado, y cuántas historias caben con la media
+  de los últimos runs. Lo gastado sale del libro y de los `llm_calls.jsonl` de los runs, así que
+  también cuenta los runs hechos sin cadena. Funciona con o sin `ASG_LLM_CHAIN`.
+- `GEMINI_DAILY_REQUESTS` vale 500 por defecto, por modelo.
+- Con cadena, todas las llamadas (también las de la función) siguen un solo orden: el modelo
+  principal de Gemini, después `GEMINI_STAGE_MODEL`, después Groq y Mistral.
+
+## 7.7.0
+
+Una cadena de proveedores para que el cupo gratuito de Gemini no corte los lotes.
+`ASG_LLM_CHAIN=gemini,groq,mistral` ordena los proveedores; cuando uno agota su cupo diario o
+mensual, la llamada en curso se repite en el siguiente y el run sigue. Sin la variable no cambia
+nada: el mismo proveedor, los mismos prompts y ningún libro.
+
+- **Proveedor OpenAI-compatible** (`OpenAICompatibleProvider`, sobre httpx) para Groq y Mistral:
+  la salida estructurada pide `json_schema` y, si el modelo la rechaza, repite en `json_object`
+  con el esquema en la instrucción de sistema. Comparte con `GeminiProvider` una base que
+  reintenta, valida y registra cada llamada.
+- **Libro de presupuesto** (`runtime/budget.py`): SQLite en `.cache/llm_budget.sqlite3`, seguro
+  entre procesos. Cuenta peticiones y tokens por ranura (proveedor y modelo) y ventana (día del
+  Pacífico para Gemini, día UTC para Groq, mes para Mistral), y recuerda la ranura que un 429
+  declaró agotada hasta su reinicio, para no gastar otra petición en descubrirlo. Los topes son
+  configuración. `llm-budget` lo muestra.
+- **`metadata.json` añade `models_used`**: los modelos que contestaron alguna llamada. Un run que
+  saltó de proveedor queda con el eje `model` compuesto en `evaluation/pairing.py` y nunca se
+  empareja con uno de un solo modelo. `PIPELINE_VERSION` pasa a 7.7; las anteriores se siguen
+  abriendo.
+- `ProviderDailyQuotaError` (`PROVIDER_DAILY_QUOTA_EXHAUSTED`) es la cuota agotada de cualquier
+  proveedor; `GeminiDailyQuotaError` hereda de él y conserva su código.
+
 ## 7.6.0
 
 La función simulada puede dar objetos a los personajes. `--inventory` (o `ASG_INVENTORY=true`)

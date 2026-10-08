@@ -1,14 +1,34 @@
 """Configuration loading for Stagecraft 7.x."""
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from asg_core import find_project_root
 from dotenv import load_dotenv
 
 from ..formats import ActorMemory, NarrativeVoice, ScriptMethod, SimulationMode, StoryFormat
+from .budget import QuotaSlot
 from .errors import ConfigurationError
+
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+MISTRAL_BASE_URL = "https://api.mistral.ai/v1"
+CHAIN_PROVIDERS = ("gemini", "groq", "mistral")
+
+
+@dataclass(frozen=True)
+class ChainEntry:
+    """One slot of the provider chain: its quota slot, credentials, endpoint and pace.
+
+    A Gemini entry leaves model and key empty: they are read from the settings when the chain
+    is resolved, so --model and GEMINI_* keep applying to it.
+    """
+
+    slot: QuotaSlot
+    api_key: str = ""
+    base_url: str = ""
+    rpm_limit: int = 15
+    label: str = "Gemini"
 
 
 @dataclass(frozen=True)
@@ -39,6 +59,74 @@ class Settings:
     stage_model: str = ""
     stage_api_key: str = ""
     stage_rpm_limit: int = 0
+    # The ordered provider chain (ASG_LLM_CHAIN) and the ledger that keeps its spending.
+    # Empty means the single Gemini provider every run before 7.7 used.
+    chain: tuple[ChainEntry, ...] = ()
+    budget_path: Path | None = None
+    # Gemini's free daily requests, per model: two models (GEMINI_STAGE_MODEL) double the total.
+    gemini_daily_requests: int = 500
+
+    def resolved_chain(self) -> tuple[ChainEntry, ...]:
+        """Return the chain with each Gemini slot bound to the main model, key and pace."""
+        return tuple(
+            replace(
+                entry,
+                slot=replace(entry.slot, model=self.model),
+                api_key=self.api_key,
+                rpm_limit=self.rpm_limit,
+            )
+            if entry.slot.provider == "gemini"
+            else entry
+            for entry in self.chain
+        )
+
+    @property
+    def stage_chain_entry(self) -> ChainEntry | None:
+        """Return the slot of the second Gemini model (GEMINI_STAGE_MODEL), if there is one."""
+        gemini = next((e for e in self.chain if e.slot.provider == "gemini"), None)
+        if gemini is None or not self.splits_stage:
+            return None
+        return replace(
+            gemini,
+            slot=replace(gemini.slot, model=self.effective_stage_model),
+            api_key=self.effective_stage_api_key,
+            rpm_limit=self.effective_stage_rpm_limit,
+        )
+
+    def quota_entries(self) -> list[ChainEntry]:
+        """Return every slot a run may spend on, the second Gemini model right after the first.
+
+        Without a chain these are the Gemini models a run uses, so the quota panel also serves
+        a setup that never fails over.
+        """
+        if self.chain:
+            entries = list(self.resolved_chain())
+            stage = self.stage_chain_entry
+        else:
+            gemini = QuotaSlot(
+                "gemini", self.model, "pacific_day", max_requests=self.gemini_daily_requests
+            )
+            entries = [ChainEntry(gemini, self.api_key, rpm_limit=self.rpm_limit)]
+            stage = (
+                ChainEntry(
+                    replace(gemini, model=self.effective_stage_model),
+                    self.effective_stage_api_key,
+                    rpm_limit=self.effective_stage_rpm_limit,
+                )
+                if self.splits_stage
+                else None
+            )
+        if stage is not None and stage.slot.key not in {entry.slot.key for entry in entries}:
+            gemini = next(i for i, entry in enumerate(entries) if entry.slot.provider == "gemini")
+            entries.insert(gemini + 1, stage)
+        return entries
+
+    @property
+    def has_credentials(self) -> bool:
+        """Say whether some provider has the key it needs to generate."""
+        return bool(self.api_key) or any(
+            entry.api_key for entry in self.chain if entry.slot.provider != "gemini"
+        )
 
     @property
     def effective_stage_model(self) -> str:
@@ -66,9 +154,10 @@ class Settings:
 
     def model_summary(self, *, simulated: bool) -> str:
         """Name the model a run uses, and the performance's own when a simulated run has one."""
+        main = " → ".join(e.slot.key for e in self.resolved_chain()) or self.model
         if simulated and self.splits_stage:
-            return f"{self.model} (función: {self.effective_stage_model})"
-        return self.model
+            return f"{main} (función: {self.effective_stage_model})"
+        return main
 
 
 def _integer(name: str, default: int, *, minimum: int = 0) -> int:
@@ -113,8 +202,10 @@ def load_settings(start: Path | None = None, *, require_api_key: bool = True) ->
     """
     root = find_project_root(start)
     load_dotenv(root / ".env")
+    chain = _chain(require_api_key=require_api_key)
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not api_key and require_api_key:
+    needs_gemini = not chain or any(entry.slot.provider == "gemini" for entry in chain)
+    if not api_key and require_api_key and needs_gemini:
         raise ConfigurationError("Falta GEMINI_API_KEY. Añádela al archivo .env de la raíz.")
     return Settings(
         api_key=api_key,
@@ -138,4 +229,55 @@ def load_settings(start: Path | None = None, *, require_api_key: bool = True) ->
         stage_model=os.getenv("GEMINI_STAGE_MODEL", "").strip(),
         stage_api_key=os.getenv("GEMINI_STAGE_API_KEY", "").strip(),
         stage_rpm_limit=_integer("GEMINI_STAGE_RPM_LIMIT", 0),
+        chain=chain,
+        gemini_daily_requests=_integer("GEMINI_DAILY_REQUESTS", 500),
+        budget_path=root / ".cache" / "llm_budget.sqlite3",
     )
+
+
+def _key(name: str, *, required: bool) -> str:
+    """Read the API key a chain provider needs, naming the variable when it is missing."""
+    value = os.getenv(name, "").strip()
+    if not value and required:
+        raise ConfigurationError(f"ASG_LLM_CHAIN usa un proveedor sin clave: falta {name}.")
+    return value
+
+
+def _chain(*, require_api_key: bool) -> tuple[ChainEntry, ...]:
+    """Read ASG_LLM_CHAIN into ordered slots; Groq contributes one slot per model."""
+    raw = os.getenv("ASG_LLM_CHAIN", "")
+    names = [name.strip().casefold() for name in raw.split(",") if name.strip()]
+    entries: list[ChainEntry] = []
+    for name in names:
+        if name not in CHAIN_PROVIDERS:
+            allowed = ", ".join(CHAIN_PROVIDERS)
+            raise ConfigurationError(f"ASG_LLM_CHAIN solo admite: {allowed}.")
+        if name == "gemini":
+            slot = QuotaSlot(
+                "gemini", "", "pacific_day", max_requests=_integer("GEMINI_DAILY_REQUESTS", 500)
+            )
+            entries.append(ChainEntry(slot))
+        elif name == "groq":
+            key = _key("GROQ_API_KEY", required=require_api_key)
+            models = os.getenv("GROQ_MODELS", "") or "openai/gpt-oss-120b,openai/gpt-oss-20b"
+            for model in (item.strip() for item in models.split(",") if item.strip()):
+                slot = QuotaSlot(
+                    "groq",
+                    model,
+                    "utc_day",
+                    max_requests=_integer("GROQ_DAILY_REQUESTS", 1000),
+                    max_tokens=_integer("GROQ_DAILY_TOKENS", 200_000),
+                )
+                rpm = _integer("GROQ_RPM_LIMIT", 30, minimum=1)
+                entries.append(ChainEntry(slot, key, GROQ_BASE_URL, rpm, "Groq"))
+        else:
+            key = _key("MISTRAL_API_KEY", required=require_api_key)
+            model = os.getenv("MISTRAL_MODEL", "").strip() or "mistral-small-latest"
+            slot = QuotaSlot(
+                "mistral", model, "utc_month", max_tokens=_integer("MISTRAL_MONTHLY_TOKENS", 0)
+            )
+            rpm = _integer("MISTRAL_RPM_LIMIT", 30, minimum=1)
+            entries.append(ChainEntry(slot, key, MISTRAL_BASE_URL, rpm, "Mistral"))
+    if len({entry.slot.key for entry in entries}) != len(entries):
+        raise ConfigurationError("ASG_LLM_CHAIN repite un proveedor.")
+    return tuple(entries)

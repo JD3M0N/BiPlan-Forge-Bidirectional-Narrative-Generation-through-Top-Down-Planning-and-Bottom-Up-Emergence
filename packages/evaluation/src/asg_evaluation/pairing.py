@@ -176,6 +176,16 @@ def read_run_config(run_dir: str | Path) -> RunConfig:
 
     work = _work(run_dir, request)
     put("work", work, "brief.json" if work and work.startswith("ficha") else "request.json")
+    # A provider chain can fail over mid-run (7.7): a run whose answering models, without the
+    # performance's own, are more than one is named by all of them, so it never pairs with a
+    # single-model run.
+    used = metadata.get("models_used")
+    if isinstance(used, list):
+        main_models = sorted(
+            {str(item) for item in used} - {text_field(metadata, "stage_model") or ""}
+        )
+        if len(main_models) > 1:
+            put("model", "+".join(main_models), "metadata.json")
     put("model", text_field(metadata, "model"), "metadata.json")
     for key in (axis.key for axis in AXES):
         if key in options:

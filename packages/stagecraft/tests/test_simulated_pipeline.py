@@ -449,6 +449,7 @@ def test_the_performance_can_run_on_a_model_of_its_own(tmp_path) -> None:
     metadata = read_json(run, "metadata.json")
     assert metadata["status"] == "completed"
     assert (metadata["model"], metadata["stage_model"]) == ("main-model", "stage-model")
+    assert metadata["models_used"] == ["main-model", "stage-model"]
     lines = (run.run_dir / "llm_calls.jsonl").read_text(encoding="utf-8").splitlines()
     calls = [json.loads(line) for line in lines]
     assert {item["model"] for item in calls if item["stage"] == "performance"} == {"stage-model"}
@@ -461,6 +462,7 @@ def test_a_run_without_a_performance_names_no_performance_model(tmp_path) -> Non
     run = StoryGenerator(routed, tmp_path).generate(make_request())
     metadata = read_json(run, "metadata.json")
     assert (metadata["model"], metadata["stage_model"]) == ("main-model", None)
+    assert metadata["models_used"] == ["main-model"]
     assert routed.stage.structured_calls == []
 
 

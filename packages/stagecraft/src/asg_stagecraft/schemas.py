@@ -857,3 +857,7 @@ class RunMetadata(BaseModel):
     # key or pace of its own (GEMINI_STAGE_*, 7.4). None means the performance ran on `model`, as
     # every run before 7.4 did; llm_calls.jsonl names the model of each call.
     stage_model: str | None = None
+    # Every model that answered at least one call, sorted (7.7). A provider chain can fail over
+    # mid-run, so a run whose list, without stage_model, has more than one model mixed models
+    # and is never paired with a single-model run.
+    models_used: list[str] = Field(default_factory=list)
