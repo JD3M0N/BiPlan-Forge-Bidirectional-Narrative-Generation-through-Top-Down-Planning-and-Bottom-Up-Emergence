@@ -1,10 +1,27 @@
 # Historial de cambios
 
-## Sin publicar: estudio final
+## [4.0.0] - 2026-10-08
 
-- `/evaluar`, `/aportar` y `/pausa` al configurar `ASG_EVALUATION_STUDY`.
-- Sesiones a ciegas, perfil lector, abstenciones y progreso persistido fuera del estado de generación.
-- Inscripción de la aportación vinculada al trabajo reservado; se conservan `/newstory` y `/settings`.
+El bot pasa a ser el del experimento (EXP-4). Rompe compatibilidad: ya no arranca fuera de un
+estudio y se retira la evaluación 1–10.
+
+- **Acceso con clave.** `TELEGRAM_ACCESS_KEY` es obligatoria. Una puerta (`access.py`) corre antes
+  que cualquier handler: quien no tiene acceso solo puede escribir la clave. Tras cinco fallos
+  queda bloqueado quince minutos. El mensaje con la clave se borra del chat.
+- **Recorrido guiado** (`guide.py`). Cada paso se deriva de la cola y de la base del estudio,
+  nunca de `user_data`, así que sobrevive a los reinicios: presentación y consentimiento, perfil
+  lector, historia base, uso libre, votación y cierre. `/start` siempre dice dónde está la persona
+  y qué sigue. Todos los textos están en un solo módulo.
+- **Historia base obligatoria.** Durante la recogida, `/newstory` y `/settings` no se abren hasta
+  que el participante inscribe su aportación, que solo puede ser en prosa (narrativa o
+  simulada). Un fallo de generación libera la reserva para el siguiente intento. El investigador
+  (`--author`) no la necesita.
+- **Evaluación explicada.** Cada pregunta muestra la guía `que_mirar` del criterio, el progreso
+  («Pregunta 7 de 30 · Sesión 1 de 2») y un aviso al empezar la segunda sesión.
+- **Avisos de fase** (`announcer.py`). Cada minuto revisa la fase del estudio y avisa una sola vez
+  a cada destinatario cuando se abre la recogida, la votación o el cierre.
+- `ASG_EVALUATION_STUDY` es obligatoria. La cola sube al esquema 5 (`access`, `access_attempts`,
+  `announcements`). Se retiran `score`, `METRIC_EXPLANATIONS` y el estado `EVALUATING`.
 
 ## [3.1.0] - 2026-09-28
 

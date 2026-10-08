@@ -14,4 +14,3 @@ class ConversationState(StrEnum):
     GUIDED = "guided"
     GENERATING = "generating"
     DELIVERING = "delivering"
-    EVALUATING = "evaluating"

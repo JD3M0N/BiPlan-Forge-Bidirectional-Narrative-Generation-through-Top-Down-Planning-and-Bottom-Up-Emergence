@@ -1037,7 +1037,10 @@ gratuita · *Depende de:* MED-5, MED-7
 ### EXP-4 · Evaluación humana por pares a ciegas
 
 **Auditoría 2026-10-05:** SQLite, el flujo de Telegram y la agregación están implementados;
-todavía no se ha realizado el piloto ni el estudio humano.
+todavía no se ha realizado el piloto ni el estudio humano. **2026-10-08:** el bot (`asg-telegram`
+4.0.0) ya es el del experimento: clave compartida, consentimiento, perfil, historia base
+obligatoria antes del uso libre, guía `que_mirar` en cada pregunta y avisos de fase. Falta el
+piloto.
 
 *Área:* experimento · *Cuota:* votar no consume cuota; generación y extracción requieren
 presupuesto · *Depende de:* versión definitiva, MED-8 y la revisión de MED-9

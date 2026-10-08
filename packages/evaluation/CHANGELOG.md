@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.0] - 2026-10-08
+
+- `StudyRepository` gains `find_participant`, `contribution` (enrolled and pending),
+  `release_contribution` (frees a reservation whose job failed, so a retry can claim it),
+  `progress` (answered and planned questions, per session) and `participant_ids`.
+- `catalog.guidance()` reads `que_mirar` from `criterios_humanos.csv`, and `freeze` stores it in
+  the study snapshot next to the catalog. The catalog hash is unchanged, so existing extraction
+  caches stay valid.
+
 ## [1.1.0] - 2026-10-05
 
 - Extraction protocol 2 (`EXTRACTION_VERSION` 2, prompt `evidence-2`): duplicates are now

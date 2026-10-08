@@ -1,22 +1,7 @@
 import html
 import re
 
-from asg_telegram.prompts import METRIC_EXPLANATIONS, telegram_story_chunks
-
-
-def test_all_evaluation_metrics_have_spanish_explanations():
-    assert set(METRIC_EXPLANATIONS) == {
-        "coherence",
-        "pacing",
-        "creativity",
-        "engagement",
-        "relevance",
-        "satisfaction",
-    }
-    assert all(
-        explanation.name and explanation.description and explanation.low and explanation.high
-        for explanation in METRIC_EXPLANATIONS.values()
-    )
+from asg_telegram.prompts import telegram_story_chunks
 
 
 def test_telegram_story_formats_headings_and_escapes_html():

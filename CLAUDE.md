@@ -417,6 +417,19 @@ que saber antes de tocar `stage/`:
 
 ### Telegram: el bot no conoce el pipeline
 
+- **Desde 4.0.0 es solo el bot del experimento (EXP-4).** No arranca sin `TELEGRAM_ACCESS_KEY` ni
+  `ASG_EVALUATION_STUDY`, y la evaluación 1–10 ya no existe en él.
+  - `access.py` es un `TypeHandler` en el grupo −1: quien no tiene la clave no llega a ningún
+    handler. Nunca registres el texto que escribe un usuario sin acceso: puede ser la clave.
+  - `guide.py` deriva el paso de cada persona de la cola (`access`) y de la base del estudio,
+    **nunca de `user_data`**, y guarda todos los textos del recorrido. Un paso nuevo es una
+    entrada de `Step` y su texto en `render`, no una rama suelta en los handlers.
+  - La historia base es la aportación de `StudyRepository`: mientras `Status.contributing`,
+    `/newstory` solo ofrece `PROSE_FORMATS`. Un fallo llama a `release_contribution`; si no, la
+    reserva queda atada a un trabajo muerto y `bind_contribution` no vuelve a enlazarla.
+  - `announcer.py` revisa la fase cada minuto y avisa una vez por persona y fase (tabla
+    `announcements`).
+  - Sin `guide` (los tests de conversación), los handlers se comportan como antes, sin puertas.
 - `contract.py` define, del lado de la aplicación, el `Protocol` `StoryGeneratorAdapter` y sus
   tipos (`GenerationProgress`, `RunSummary`, `GenerationFailure`, `OptionSpec`, `StoryOutline`,
   `BriefSpec`, `GeneratorUnavailable`).
@@ -441,7 +454,8 @@ que saber antes de tocar `stage/`:
   progreso: `generation.py` construye `lambda: queue.cancellation_requested(job_id)` y el
   adaptador traduce `RunCancelledError` a `GenerationCancelled`.
 - `queue.py` es una cola FIFO SQLite durable (`Stories/telegram_queue.sqlite3`) con migración de
-  esquema (v4 añade `options`, `brief` y la tabla `user_options`) y cancelación, y
+  esquema (v4 añade `options`, `brief` y la tabla `user_options`; v5, `access`,
+  `access_attempts` y `announcements`) y cancelación, y
   `generation.py` la coordina con la entrega.
 - `console.py` y `terminal.py` dan la consola del operador: una cabecera con el bot, las
   versiones, el modelo y la cuota, y un registro de una línea por evento. La ventana que abre

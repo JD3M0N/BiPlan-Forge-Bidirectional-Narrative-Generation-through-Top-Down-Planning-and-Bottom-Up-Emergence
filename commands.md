@@ -62,4 +62,4 @@ La guía completa y el orden de operaciones están en
 - `rank-stories juez.json RUTA --output ranking.json`: rankings y ficha de diez historias; `--study DB` reutiliza las extracciones del estudio.
 - `generate-baseline "PREMISA" --output CARPETA_NUEVA`: generación directa, consume cuota.
 
-Telegram: `ASG_EVALUATION_STUDY` activa `/evaluar`, `/aportar` y `/pausa`.
+Telegram: el bot exige `ASG_EVALUATION_STUDY` y `TELEGRAM_ACCESS_KEY`. Guía a cada participante desde la clave hasta su historia base y la votación (`/start`, `/aportar`, `/evaluar`, `/pausa`).

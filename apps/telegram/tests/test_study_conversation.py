@@ -1,10 +1,12 @@
 """Blind delivery and durable resumption without Telegram network calls."""
 
 import asyncio
+import html
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from asg_evaluation.catalog import guidance
 from asg_evaluation.demo import prepare_demo
 from asg_evaluation.study import StudyRepository
 from asg_telegram.study import StudyConversation
@@ -34,6 +36,9 @@ def test_blind_delivery_and_restart_ignore_generation_user_data(tmp_path):
         repository.info()["snapshot"]["catalog"]["questions"][question["criterion"]]
         in prompt["text"]
     )
+    assert html.escape(guidance()[question["criterion"]]) in prompt["text"]
+    total = repository.progress(reader)["total"]
+    assert f"Pregunta 1 de {total}" in prompt["text"]
     labels = [b.text for row in prompt["reply_markup"].inline_keyboard for b in row]
     assert labels == ["A", "B", "No puedo decidir"]
     stranger = repository.export()["participants"][1]["id"]

@@ -64,11 +64,15 @@ evaluation-study --db Evaluations/tesis-final/study.sqlite3 create tesis-final -
 evaluation-study --db Evaluations/tesis-final/study.sqlite3 collect
 ```
 
-Configurar `ASG_EVALUATION_STUDY=Evaluations/tesis-final/study.sqlite3` en el entorno del bot.
-`/evaluar` registra el perfil; `/aportar` reserva la siguiente generación como aportación. Los
-comandos `/newstory` y `/settings` siguen disponibles. La reserva se vincula al identificador
-persistente del trabajo, por lo que otra generación no debe ocupar su lugar. Una aportación
-fallida o en formato guion no se inscribe; se puede repetir `/aportar`.
+Configurar `ASG_EVALUATION_STUDY=Evaluations/tesis-final/study.sqlite3` y `TELEGRAM_ACCESS_KEY`
+en el entorno del bot; sin ellas no arranca. Cada participante entra con la clave, acepta
+participar y registra su perfil. Durante la recogida, su primera historia es la **historia
+base** (su aportación): `/newstory` solo ofrece prosa y no permite otra cosa hasta inscribirla.
+`/aportar` la reemplaza. La reserva se vincula al identificador persistente del trabajo, por lo
+que otra generación no ocupa su lugar; si la generación falla, la reserva se libera para el
+siguiente intento. El bot avisa una sola vez a cada participante cuando se abren la recogida y
+la votación, y cuando se cierra el estudio. El recorrido completo está en
+[apps/telegram/README.md](../../apps/telegram/README.md).
 
 El investigador puede registrar lectores y relatos desde la CLI. `participant` devuelve el
 seudónimo que acepta `--owner`; usarlo también en los relatos seleccionados que el investigador

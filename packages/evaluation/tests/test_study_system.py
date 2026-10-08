@@ -64,6 +64,9 @@ def test_votes_survive_restart_and_concurrent_repeated_callbacks(study):
         restarted.vote(stranger["id"], question["id"], "A")
     data = restarted.export()
     assert len(data["votes"]) == 1
+    progress = restarted.progress(reader["id"])
+    assert progress["answered"] == 1 == progress["answered_by_session"][question["session"]]
+    assert progress["sessions"] == len(progress["answered_by_session"])
     coverage = data["coverage"][question["criterion"]]
     assert coverage["abstentions"] == 1
     assert sum(coverage["comparisons"].values()) == 0
@@ -105,12 +108,17 @@ def test_contribution_is_unique_replaceable_and_bound_to_the_reserved_job(tmp_pa
     repository.create("test", required_version="DEMO-1")
     repository.transition("collection")
     reader = repository.participant("telegram-user", profile="regular")
+    assert repository.contribution(reader["id"]) == {"enrolled": False, "pending": False}
     repository.request_contribution(reader["id"])
+    repository.bind_contribution("telegram-user", "failed")
+    repository.release_contribution("telegram-user", "failed")
     repository.bind_contribution("telegram-user", "reserved")
+    assert repository.contribution(reader["id"]) == {"enrolled": False, "pending": True}
     unrelated = synthetic_run(tmp_path / "unrelated", 1)
     assert not repository.complete_generation("telegram-user", "other", unrelated)
     first = synthetic_run(tmp_path / "first", 2)
     assert repository.complete_generation("telegram-user", "reserved", first)
+    assert repository.contribution(reader["id"]) == {"enrolled": True, "pending": False}
     story_id = repository.export()["stories"][0]["id"]
     repository.request_contribution(reader["id"])
     repository.bind_contribution("telegram-user", "second")

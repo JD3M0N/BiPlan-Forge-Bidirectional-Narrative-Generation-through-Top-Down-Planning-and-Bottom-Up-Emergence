@@ -335,7 +335,7 @@ def test_choose_format_then_free_mode_reaches_the_generator(tmp_path):
     assert len(tasks) == 1
     asyncio.run(tasks[0])
     assert generator.calls[0]["options"]["format"] == "simulated"
-    assert context.user_data["state"] == ConversationState.EVALUATING
+    assert "state" not in context.user_data
 
 
 def test_options_panel_toggle_and_choice_persist_and_are_scoped_to_the_format(tmp_path):
@@ -451,7 +451,7 @@ def test_guided_brief_with_two_cast_members_reaches_the_generator(tmp_path):
     request = generator.calls[0]["request"]
     assert isinstance(request, StoryOutline)
     assert [member.name for member in request.cast] == ["Ana", "Beto"]
-    assert context.user_data["state"] == ConversationState.EVALUATING
+    assert "state" not in context.user_data
 
 
 def test_the_plot_cannot_be_skipped(tmp_path):
