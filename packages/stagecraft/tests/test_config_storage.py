@@ -149,6 +149,42 @@ def test_repository_versions_new_runs_to_match_the_installed_package(tmp_path) -
     assert __version__ == GENERATOR_VERSION == version("asg-stagecraft")
 
 
+def test_the_manifest_hashes_every_artifact_exactly_as_it_lies_on_disk(tmp_path) -> None:
+    repository = ArtifactRepository(tmp_path, "model", "Historia")
+    repository.save_text("story.md", "# Historia\n\nTexto.   ")
+    repository.save_data("chapters/chapter_1.json", {"title": "Uno"})
+    (repository.run_dir / "story.mp3").write_bytes(b"\x00\xffID3")
+    repository.register_existing("story.mp3")
+    repository.append_jsonl("llm_calls.jsonl", {"n": 1})
+    repository.complete_stage("story")
+    manifest = json.loads(
+        (repository.run_dir / "pipeline_manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["completed_stages"] == ["story"]
+    assert "pipeline_manifest.json" not in manifest["artifacts"]
+    for name in ("story.md", "chapters/chapter_1.json", "story.mp3", "llm_calls.jsonl"):
+        content = (repository.run_dir / name).read_bytes()
+        assert manifest["artifacts"][name] == {
+            "sha256": hashlib.sha256(content).hexdigest(),
+            "bytes": len(content),
+        }
+    # metadata.json is rewritten after the manifest entry of the last stage, and must match too.
+    metadata = (repository.run_dir / "metadata.json").read_bytes()
+    assert manifest["artifacts"]["metadata.json"]["sha256"] == hashlib.sha256(metadata).hexdigest()
+
+
+def test_an_unclassified_failure_is_reported_without_its_message(tmp_path) -> None:
+    repository = ArtifactRepository(tmp_path, "model", "Historia")
+    repository.fail(KeyError("api-key-in-a-message"), stage="drafting")
+    metadata = json.loads((repository.run_dir / "metadata.json").read_text(encoding="utf-8"))
+    report_text = (repository.run_dir / "error_report.json").read_text(encoding="utf-8")
+    report = json.loads(report_text)
+    assert metadata["status"] == "failed"
+    assert (metadata["error_code"], metadata["error_stage"]) == ("UNEXPECTED_ERROR", "drafting")
+    assert report["details"] == {"exception_type": "KeyError"}
+    assert "api-key-in-a-message" not in report_text
+
+
 def test_appending_a_line_never_rereads_the_log(tmp_path, monkeypatch) -> None:
     """ING-4: every turn reread and rewrote turns.jsonl whole, quadratic in a run's length."""
     repository = ArtifactRepository(tmp_path, "model", "Historia")

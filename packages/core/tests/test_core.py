@@ -19,12 +19,14 @@ from asg_core import (
     create_unique_directory,
     file_lock,
     find_project_root,
+    format_progress,
     markdown_to_speech_text,
     slugify,
     stories_path,
 )
 from asg_core import audio as audio_module
 from asg_core import files as files_module
+from asg_core.progress import Progress
 
 
 def test_find_project_root_and_story_path(tmp_path):
@@ -129,6 +131,24 @@ def test_atomic_csv_writer_puts_the_header_first_and_quotes_like_csv(tmp_path):
 
     assert path.read_bytes() == b'a,b\r\n1,"x,y"\r\n2,\r\n'
     assert not list(tmp_path.glob("*.tmp"))
+
+
+@pytest.mark.parametrize(
+    ("percent", "expected"),
+    [
+        (0, "[░░░░░░░░░░] 0% — Planificando"),
+        (45, "[████░░░░░░] 45% — Planificando"),
+        (100, "[██████████] 100% — Planificando"),
+    ],
+)
+def test_progress_bar_fills_by_whole_tenths(percent, expected):
+    class Update:
+        def __init__(self, value: int) -> None:
+            self.percent = value
+            self.description = "Planificando"
+
+    update: Progress = Update(percent)
+    assert format_progress(update) == expected
 
 
 def test_markdown_is_cleaned_for_narration():

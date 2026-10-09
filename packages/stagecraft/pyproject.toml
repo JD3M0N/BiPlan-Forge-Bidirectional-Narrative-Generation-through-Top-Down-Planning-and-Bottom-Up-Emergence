@@ -9,7 +9,7 @@ description = "Hybrid automatic story generation: top-down planning, bottom-up p
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-  "asg-core>=0.6.0",
+  "asg-core>=0.7.0",
   "asg-evaluation>=1.0.0",
   "google-genai>=1.0,<2",
   "pydantic>=2.7,<3",

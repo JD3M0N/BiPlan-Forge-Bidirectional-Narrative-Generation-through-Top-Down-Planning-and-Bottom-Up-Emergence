@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.7.0] - 2026-10-09
+
+- Added `format_progress` and its `Progress` protocol: the one progress bar the Stagecraft CLI,
+  the console and the Telegram bot print, which the bot used to carry as its own copy (ING-6).
+
 ## [0.6.0] - 2026-09-27
 
 - `create_story_audio` and `create_story_audio_sync` accept a `voice`: the story is read with that

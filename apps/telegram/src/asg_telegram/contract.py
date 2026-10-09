@@ -263,10 +263,3 @@ class StoryGeneratorAdapter(Protocol):
     def summarize(self, run_dir: Path) -> RunSummary:
         """Read a finished run and describe it for the chat."""
         ...
-
-
-def format_progress(update: GenerationProgress, width: int = 10) -> str:
-    """Render a compact, chat-friendly progress bar."""
-    filled = min(width, update.percent * width // 100)
-    bar = "█" * filled + "░" * (width - filled)
-    return f"[{bar}] {update.percent}% — {update.description}"

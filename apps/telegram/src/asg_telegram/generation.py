@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
 
+from asg_core import format_progress
 from telegram.error import BadRequest, TelegramError
 
 from .console import log_user_action
@@ -19,7 +20,6 @@ from .contract import (
     OptionValue,
     StoryGeneratorAdapter,
     StoryOutline,
-    format_progress,
 )
 from .delivery import DEFAULT_DOCUMENT_CAPTION, TelegramDelivery
 from .guide import BASE_RETRY

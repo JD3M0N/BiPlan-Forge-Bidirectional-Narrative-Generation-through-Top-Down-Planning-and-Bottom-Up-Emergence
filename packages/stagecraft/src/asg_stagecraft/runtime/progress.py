@@ -5,6 +5,16 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from asg_core import format_progress
+
+__all__ = [
+    "PipelineEvent",
+    "PipelineEventCallback",
+    "ProgressCallback",
+    "ProgressUpdate",
+    "format_progress",
+]
+
 
 @dataclass(frozen=True, slots=True)
 class ProgressUpdate:
@@ -37,11 +47,3 @@ class PipelineEvent:
 
 
 PipelineEventCallback = Callable[[PipelineEvent], None]
-
-
-def format_progress(update: ProgressUpdate, width: int = 10) -> str:
-    """Render a compact, terminal- and chat-friendly progress bar."""
-
-    filled = min(width, update.percent * width // 100)
-    bar = "█" * filled + "░" * (width - filled)
-    return f"[{bar}] {update.percent}% — {update.description}"

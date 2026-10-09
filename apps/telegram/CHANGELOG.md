@@ -1,5 +1,10 @@
 # Historial de cambios
 
+## [4.0.1] - 2026-10-09
+
+- La barra de progreso es la de `asg_core.format_progress`: el bot ya no lleva su propia copia.
+  Exige `asg-core>=0.7.0`.
+
 ## [4.0.0] - 2026-10-08
 
 El bot pasa a ser el del experimento (EXP-4). Rompe compatibilidad: ya no arranca fuera de un

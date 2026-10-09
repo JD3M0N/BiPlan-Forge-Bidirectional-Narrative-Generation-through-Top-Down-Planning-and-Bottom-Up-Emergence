@@ -22,6 +22,7 @@ from .craft import (
 from .files import artifact_json, atomic_write_csv, atomic_write_json, atomic_write_text
 from .locks import file_lock
 from .paths import create_unique_directory, find_project_root, slugify, stories_path
+from .progress import Progress, format_progress
 
 __all__ = [
     "NARRATION_VOICES",
@@ -30,6 +31,7 @@ __all__ = [
     "AudioGenerationError",
     "CraftMetrics",
     "NarrationVoice",
+    "Progress",
     "artifact_json",
     "atomic_write_csv",
     "atomic_write_json",
@@ -42,6 +44,7 @@ __all__ = [
     "create_voice_sample_sync",
     "file_lock",
     "find_project_root",
+    "format_progress",
     "markdown_to_speech_text",
     "prose_paragraphs",
     "slugify",
