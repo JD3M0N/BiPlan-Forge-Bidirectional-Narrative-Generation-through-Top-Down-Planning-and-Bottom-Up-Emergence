@@ -16,7 +16,8 @@ Añade `--help` a cualquiera para ver todas sus opciones.
 - `generate-story [prompt]`: genera una historia (pide el prompt si no se da). Opciones útiles:
   `--format {narrative,script,simulated}`, `--profile {essential,developed,expansive}`,
   `--voice`, `--narrator`, `--actor-memory {own,shared}`, `--inventory`, `--no-audio`,
-  `--brief`, `--options`.
+  `--brief`, `--options`. Se niega a arrancar (código 3) si la cuota de hoy no alcanza para una
+  historia media de ese formato; `--force` la lanza igual.
 - `compare-story-runs <run>...`: compara 2 o más runs y saca un informe HTML.
 - `audit-stage-run <run>`: un juez LLM revisa un run simulado (filtraciones de conocimiento y
   fidelidad de la narración). Gasta cuota.
@@ -33,6 +34,7 @@ Añade `--help` a cualquiera para ver todas sus opciones.
 - `report-evaluations`: resume las evaluaciones humanas (media y desviación por métrica).
 - `report-story-craft`: mide la artesanía de la prosa (diálogo, frases, párrafos) desde `story.md`.
 - `report-simulations`: resume las métricas de las funciones simuladas por voz, memoria y versión.
+- `report-llm-usage`: reparte llamadas, tokens y latencia de cada run por agente y etapa.
 
 ## Interfaces
 

@@ -7,6 +7,10 @@ from asg_evaluation import METRICS, add_evaluation, discover_stories
 
 from .types import InputFn, OutputFn
 
+# Corpora kept as research data but no longer offered for scoring: Bottom-Up runs are raw action
+# logs from the retired escape room, not stories.
+RETIRED_CORPORA = frozenset({"Bottom-Up"})
+
 
 class EvaluationMenu:
     """Collect and persist one complete human story evaluation."""
@@ -20,7 +24,11 @@ class EvaluationMenu:
         """Select a story, collect scores, and persist the evaluation."""
         root = find_project_root()
         stories_root = root / "Stories"
-        stories = discover_stories(stories_root)
+        stories = [
+            story
+            for story in discover_stories(stories_root)
+            if story.relative_to(stories_root).parts[0] not in RETIRED_CORPORA
+        ]
         if not stories:
             self.output("No hay historias disponibles para evaluar.")
             return

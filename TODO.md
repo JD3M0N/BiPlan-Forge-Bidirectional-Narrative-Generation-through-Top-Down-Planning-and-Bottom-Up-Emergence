@@ -1,11 +1,14 @@
 # Hoja de ruta
 
-**Estado medido el 2026-10-02 con `asg-stagecraft` 7.6.0 (pipeline 7.6; cuatro funciones reales completadas en 7.5 y 7.6).** La interfaz gráfica StageCraft (`asg-studio`) ya existe. Un solo generador, Stagecraft, con tres formatos: `narrative`, `script` y `simulated`, y la función simulada puede llevar inventario de objetos
-(ver [docs/resumen.md](docs/resumen.md)).
+**Estado medido el 2026-10-09 con `asg-stagecraft` 7.8.3 (pipeline 7.8).** Un solo generador,
+Stagecraft, con tres formatos: `narrative`, `script` y `simulated`. La función simulada puede
+llevar inventario de objetos, la guía narrativa tiene una estrategia experimental
+(`compositional_v2`) y la interfaz gráfica StageCraft (`asg-studio`) ya existe (ver
+[docs/resumen.md](docs/resumen.md)).
 
 | Corpus | Runs | Completados | Fallidos | Qué es |
 |---|---|---|---|---|
-| `Stories/Stagecraft/` | 18 | 13 | 4 | 7.0–7.6: dieciséis simulados y una corrida narrativa de control; uno quedó en `running` al cancelarse a mano |
+| `Stories/Stagecraft/` | 25 | 20 | 4 | 7.0–7.8: diecisiete simulados y ocho narrativos; uno quedó en `running` al cancelarse a mano |
 | `Stories/Top-Down/` | 176 | 135 | 41 | 4.0–6.2, anteriores al renombrado; 18 sin versión |
 | `Stories/Bottom-Up/` | 6 | — | — | el escape room retirado en 7.1.1, más tres lotes de CSV |
 
@@ -39,8 +42,8 @@
   - la memoria sin tope y las réplicas propias releídas (SIM-9);
   - los destinatarios imposibles y las notas repetidas (SIM-10);
   - el log incompleto (SIM-3, cerrada);
-  - la cuota diaria tomada por facturación (MED-1, en parte);
-  - la telemetría (MED-2, en parte);
+  - la cuota diaria tomada por facturación (MED-1, cerrada en 7.8.3);
+  - la telemetría (MED-2, cerrada en 7.8.3);
   - los runs fallidos que no decían dónde murieron (MED-4, cerrada);
   - el gate de documentación que pasaba en vacío (ING-1, en parte);
   - el anexado cuadrático (ING-4, cerrada);
@@ -64,12 +67,13 @@
   memoria anterior (medianas de 18 a 29 recuerdos por turno, máximos de 52 a 72, frente a los 8
   del diseño) y casi nunca tenían destinatario. Sus métricas recalculadas con el código de 7.2
   están en `simulation_metrics.recomputed.json`.
-- **Dos documentos nuevos fundamentan la tesis y ordenan el trabajo de la función:**
-  - [docs/resumen.md](docs/resumen.md): por qué mezclar Top-Down y Bottom-Up;
-  - [docs/resumen.md](docs/resumen.md): diagnóstico de la actuación en los
-    runs 7.1 y mejoras con su respaldo.
-
-  De ahí salieron SIM-9 a SIM-13, MED-7 y EXP-5; SIM-9 y SIM-10 están cerradas.
+- **[docs/resumen.md](docs/resumen.md) fundamenta la tesis y ordena el trabajo de la función:**
+  por qué mezclar Top-Down y Bottom-Up, y el diagnóstico de la actuación en los runs 7.1 con sus
+  mejoras y su respaldo. De ahí salieron SIM-9 a SIM-13, MED-7 y EXP-5; SIM-9 y SIM-10 están
+  cerradas.
+- **Cerradas el 2026-10-09 sin cuota:** MED-1 (comprobación previa de la cuota y libro de
+  cuotas también sin cadena), MED-2 (`report-llm-usage`), ING-6, ING-7 (decisión: se conserva
+  `topological_order`) y SIM-15, que se fundió en SIM-2.
 
 ## Cómo leer esto
 
@@ -108,12 +112,12 @@ controlada de parametrizaciones necesita diseño y presupuesto propios. La demo 
 con 180 respuestas ficticias prueba que las piezas se conectan por los comandos públicos, no
 generalización.
 
-1. **Instrumentos fiables**, con MED-1, MED-2 y MED-7. Sin ellos una matriz muere a medias, como
-   murió `054422`, o mide cosas que no son lo que dicen. MED-7 fija además la línea base de la
-   actuación antes de cambiarla.
-2. **Una función y unos jueces que no mientan**, con SIM-1, SIM-2, SIM-14, SIM-15, TD-1 y TD-2.
+1. **Instrumentos fiables**, con MED-7 (MED-1 y MED-2 ya están cerradas). Sin ellos una matriz
+   muere a medias, como murió `054422`, o mide cosas que no son lo que dicen. MED-7 fija además
+   la línea base de la actuación antes de cambiarla.
+2. **Una función y unos jueces que no mientan**, con SIM-1, SIM-2, SIM-14, TD-1 y TD-2.
    Medir hoy mediría los defectos, no los formatos. SIM-9 y SIM-10 ya están cerradas con el par
-   de 7.2; SIM-14 y SIM-15 salieron de ese mismo par.
+   de 7.2; SIM-14 y la parte del mundo de SIM-2 salieron de ese mismo par.
 3. **Matrices emparejadas**, con MED-3 y MED-5.
 4. **Los experimentos**: EXP-1, EXP-2, EXP-3 y EXP-5.
 5. **La evaluación** según la metodología del tutor
@@ -122,7 +126,7 @@ generalización.
    evaluación humana por pares (EXP-4), el juez aprendido (EXP-7) y el ranking del corpus
    (EXP-8).
 
-ING-2 abarata todo lo que reescribe prompts (SIM-1, SIM-2, SIM-6, SIM-15, TD-2, TD-4), así que
+ING-2 abarata todo lo que reescribe prompts (SIM-1, SIM-2, SIM-6, TD-2, TD-4), así que
 conviene hacerlo antes o a la vez. El resto de ING y OPS puede avanzar en paralelo y sin cuota.
 
 El porqué de esta ruta, con sus fuentes, está en [docs/resumen.md](docs/resumen.md); el
@@ -177,57 +181,6 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
 ---
 
 ## Lo siguiente
-
-### MED-1 · Nada presupuesta la cuota diaria
-
-*Área:* medición · *Cuota:* sin cuota · *Depende de:* —
-
-- **Síntoma.** La clasificación ya está arreglada en 7.2.0: una cuota agotada se clasifica por
-  `quota_id` y `metric`, y el texto solo cuenta como último recurso. Los tres «límites de
-  facturación» del corpus eran la cuota diaria gratuita. Lo que queda:
-  - **Nada cuenta la cuota del día.** `runtime/quota.py` solo tiene ventanas de 60 s (RPM y TPM):
-    no hay contador diario ni estimación previa.
-    - `054422` murió en la llamada 94 del run, ya dentro de la función.
-    - `060405` se lanzó 5 s después y cayó en su primera llamada.
-    - El `retry_delay` de unos 55 s que devuelve la API para un tope diario engaña.
-  - **La auditoría gasta a escondidas.** `audit-stage-run` gasta una llamada por escena y otra por
-    capítulo (unas 36 en las cuatro auditorías hechas), y no aparecen en ningún
-    `llm_calls.jsonl`.
-- **Qué hacer.**
-  - Un contador diario por modelo, persistido fuera de los runs y reiniciado a medianoche del
-    Pacífico, que alimenten el proveedor y la auditoría.
-  - Una estimación de llamadas por formato y perfil (las medianas del protocolo). Con ella,
-    `generate-story` se niega a arrancar si el run no cabe, salvo que se fuerce a propósito.
-- **Hecho cuando.**
-  - Un run lanzado sin cupo se detiene antes de la primera llamada y dice cuándo vuelve la cuota.
-  - La auditoría cuenta en el presupuesto.
-- **Ojo.** El contador es una estimación local: otra máquina con la misma clave gasta sin avisar.
-  La API sigue siendo la autoridad; el contador solo evita lanzar a ciegas.
-
-### MED-2 · Nadie lee todavía el coste por agente
-
-*Área:* medición · *Cuota:* sin cuota (se comprueba con el par de SIM-1) · *Depende de:* —
-
-- **Síntoma.** La telemetría ya mide lo que dice desde 7.2.0:
-  - los intentos de una llamada comparten `call_id`;
-  - cada registro lleva la latencia de su intento y la espera previa;
-  - `stage` es la etapa del pipeline y `agent` el agente;
-  - `count_tokens` va aparte;
-  - el bot vacía los registros de cada trabajo.
-
-  `report-story-craft` lee `failed_calls` de un run anterior como «no medido». Pero ningún informe
-  usa aún `agent`, y un run real no lo ha estrenado.
-- **Qué hacer.**
-  - Un informe en `evaluation`, que solo lee disco, que reparta llamadas, tokens y latencia por
-    agente y etapa desde `llm_calls.jsonl`.
-  - Comprobarlo en el par de SIM-1.
-- **Medido en 7.2.** Las tres comprobaciones del «Hecho cuando» pasan ya en los dos runs, leídas
-  a mano de `llm_calls.jsonl`: `failed_calls` es 0 con 2 intentos 504 en cada uno, la suma de
-  latencias (726 y 572 s) cabe en el reloj (951 y 825 s), y el reparto por agente sale del propio
-  archivo (el actor se lleva 71 de 110 llamadas y 123k de 260k tokens en `163733`). Lo que falta es
-  el **informe** en `evaluation`, que nadie ha escrito.
-- **Hecho cuando.** El informe de `evaluation` reparte llamadas, tokens y latencia por agente y
-  etapa, y lee como «no medido» lo que un run anterior no registró.
 
 ### MED-7 · Métricas de actuación leídas del log
 
@@ -324,9 +277,17 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   - **Beats aceptados con poca prueba.** En `070539`, `chapter_2-scene-1` cerró con dos réplicas
     de Mara en 3 turnos. El hallazgo de la anotación alterada que da título al evento nunca ocurre
     en escena.
-  - **Un evento del mundo reveló una compuerta dos eventos antes de tiempo.** En `072847`,
-    `chapter_1-scene-2`: «…revela las firmas alteradas del registro», que estaba programada como
-    deducción de Mara en el evento 4.
+  - **El mundo adelanta compuertas y entrega la trama.** Los `stage_event` hacen más de lo que
+    la escalera les pide:
+    - En `072847`, `chapter_1-scene-2`: «…revela las firmas alteradas del registro», que estaba
+      programada como deducción de Mara en el evento 4.
+    - En `163733` (7.2), el evento del capítulo 1 «hizo saltar el pestillo oxidado de la puerta
+      interior», que es la compuerta anclada en `event_5`. De paso destruyó la prueba del cuarto
+      cerrado: Mara dedujo después que «la ráfaga lo forzó desde fuera» y exculpó al
+      contrabandista, contra la solución real de la obra.
+    - En `213245` (7.2), un repartidor trajo un sobre «que detalla la quiebra simulada por Víctor
+      Cárdenas para vengarse de la casa de subastas»: el motivo del misterio, por correo. El juez
+      lo archivó como `invented_event` de severidad 4.
   - **Las notas van en inglés.** Lo están 17 de 23 en `070539` y 27 de 31 en `072847`, y la nota
     de coda está fija en inglés en `stage/engine.py` («The matter is settled now…»). Los actores
     traducen la nota a pensamiento: «point directly to the conflicting times…» se vuelve «Apunto
@@ -340,17 +301,21 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
 - **Qué hacer.**
   - Congelar las cláusulas en la primera lectura del beat y guardarlas en `director.jsonl`.
   - Escribir en el idioma de la ficción las notas, la coda, y la emoción y la meta de la reflexión.
-  - Rechazar un `stage_event` que revele una compuerta cuyo evento no ha llegado.
+  - Rechazar un `stage_event` que revele una compuerta cuyo evento no ha llegado, con el mismo
+    mecanismo de reintento que el resto.
+  - Fijar en el contrato del `stage_event` que el mundo entrega **una** cláusula que falta, nunca
+    un motivo, una identidad ni una confesión ajena: lo que se sabe se sigue jugando en escena.
   - Que el casting no programe como confesión una compuerta que la petición exige deducir.
 - **Medido en 7.2.** Nada de esto se ha arreglado, y el par de 7.2 lo confirma con sus cifras:
   14 de 33 y 14 de 39 notas en inglés, 5 estados de actor mezclando idiomas en `213245`, cláusulas
-  rehechas en 2 y 4 beats, y una compuerta revelada por el mundo antes de su evento (esa parte
-  tiene ya su propia ficha con la evidencia, SIM-15). `thought_ratio` bajó a 0,91 y 0,92, y los
+  rehechas en 2 y 4 beats, y una compuerta revelada por el mundo antes de su evento (arriba, con
+  su evidencia). `thought_ratio` bajó a 0,91 y 0,92, y los
   pensamientos de plan siguen en el 44 % y el 64 %.
 - **Hecho cuando.** En el par de SIM-1:
   - las cláusulas de cada beat son las mismas en todas sus lecturas;
   - ninguna nota ni ningún estado de actor está en inglés;
-  - ninguna compuerta se revela antes de su evento;
+  - ninguna compuerta se revela antes de su evento, y ningún evento del mundo aporta un hecho que
+    no sea la cláusula que faltaba;
   - `thought_ratio` se ha vuelto a medir, sin exigirle todavía un valor (eso es SIM-6).
 
 ### SIM-14 · Un actor se sale de la ficción y el log lo acepta
@@ -375,30 +340,6 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   run nuevo trae en su log una línea ajena al mundo de la ficción.
 - **Ojo.** El detector va en `stage/validation.py`, donde ninguna cifra viaja al prompt. Vigilar el
   falso positivo: una réplica corta con un nombre propio extranjero no es un turno roto.
-
-### SIM-15 · El mundo entrega la trama y adelanta las compuertas
-
-*Área:* función simulada · *Cuota:* se valida con el par siguiente · *Depende de:* SIM-2
-
-- **Síntoma.** Los `stage_event` de los dos runs 7.2 hacen más de lo que la escalera les pide.
-  - **Adelantan una compuerta.** En `163733`, el evento del capítulo 1 «hizo saltar el pestillo
-    oxidado de la puerta interior», que es la compuerta anclada en `event_5`. De paso destruyó la
-    prueba del cuarto cerrado: Mara dedujo después que «la ráfaga lo forzó desde fuera» y exculpó
-    al contrabandista, contra la solución real de la obra.
-  - **Entregan el caso.** En `213245`, un repartidor trajo un sobre «que detalla la quiebra
-    simulada por Víctor Cárdenas para vengarse de la casa de subastas»: el motivo del misterio,
-    por correo. El juez lo archivó como `invented_event` de severidad 4.
-  - **Repiten recurso.** En `163733` los dos eventos fueron ráfagas de viento, aunque el contexto
-    del director ya lleva los eventos ya usados.
-- **Qué hacer.**
-  - Rechazar el `stage_event` que revele una compuerta cuyo evento no ha llegado, con el mismo
-    mecanismo de reintento que el resto (es el tercer punto de SIM-2, aquí con su evidencia).
-  - Fijar en el contrato del `stage_event` que el mundo entrega **una** cláusula que falta, nunca
-    un motivo, una identidad ni una confesión ajena: lo que se sabe se sigue jugando en escena.
-  - Pasar al director el tipo de recurso usado y rechazar un segundo del mismo tipo (lo que ya
-    pide SIM-6).
-- **Hecho cuando.** En un par nuevo, ningún evento del mundo revela una compuerta antes de su
-  evento ni aporta un hecho que no sea la cláusula que faltaba, y no se repite tipo de recurso.
 
 ### SIM-16 · `REPEATED_ACTION` se ha vuelto el rechazo dominante
 
@@ -498,7 +439,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
 
 ### MED-3 · Un runner de matrices con presupuesto
 
-*Área:* medición · *Cuota:* sin cuota (la gasta quien lo lance) · *Depende de:* MED-1
+*Área:* medición · *Cuota:* sin cuota (la gasta quien lo lance) · *Depende de:* —
 
 - **Síntoma.**
   - Toda ficha `EXP` necesita una matriz, y hoy se lanzan a mano, run a run.
@@ -508,7 +449,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
 - **Qué hacer.** Un comando que:
   - lea una matriz: prompts del catálogo por marcador, formatos, perfiles, brazos como
     `--actor-memory` o `--script-method`, y repeticiones;
-  - estime su coste con MED-1 y corra en serie;
+  - estime su coste con `tools/budget.preflight` y corra en serie;
   - se pueda interrumpir y reanudar saltando las celdas completadas;
   - escriba un manifiesto con cada celda, su run y su configuración.
 - **Hecho cuando.**
@@ -582,7 +523,7 @@ versión definitiva del generador
 **Avance 7.5:** `--plan-from` ya empareja funciones simuladas con el mismo plan, guion y casting; queda extenderlo a formatos distintos y agrupar por origen en los informes.
 ### SIM-4 · Los timeouts de actor se comen entre un cuarto y dos tercios del reloj
 
-*Área:* función simulada · *Cuota:* ~110 llamadas · *Depende de:* MED-2
+*Área:* función simulada · *Cuota:* ~110 llamadas · *Depende de:* —
 
 - **Síntoma.**
   - **Las llamadas buenas son rápidas y el timeout es enorme.** Una llamada de actor que funciona
@@ -606,7 +547,7 @@ versión definitiva del generador
   además un run entero del prompt 07 (`20260927-170152-*`) tras 19 fallos seguidos: el aviso que
   quedó, `ACTOR_CALL_FAILED | ProviderError`, no dice qué error fue, porque `_reject` guarda
   `type(exc).__name__` y no el código que sí está en `llm_calls.jsonl`.
-- **Hecho cuando.** En un run simulado nuevo, con la telemetría de MED-2, el reloj se acerca a la
+- **Hecho cuando.** En un run simulado nuevo, leído con `report-llm-usage`, el reloj se acerca a la
   suma de latencias con éxito más las esperas de cuota, ninguna llamada de actor pasa de su
   timeout, y un turno rechazado por el proveedor deja en `rejected.jsonl` el código del fallo.
 
@@ -668,7 +609,7 @@ versión definitiva del generador
   plan subieron a 0,44 y 0,64. Hubo **1 susurro** en `163733` y ninguno en `213245`, así que el
   canal ya existe pero casi no se usa. Las tácticas siguen concentradas: `deflect` 12 de 43 en uno
   y `demand` 20 de 51 en el otro. Los eventos del mundo del prompt 03 fueron los dos viento; los
-  del 07, tres recursos distintos (ver SIM-15).
+  del 07, tres recursos distintos (ver SIM-2).
 - **Hecho cuando.** Un par de runs:
   - baja `thought_ratio` claramente de 0,9, y bajan los pensamientos de plan que mide MED-7;
   - tiene al menos un susurro que la ablación pueda medir;
@@ -925,14 +866,14 @@ cuota gratuita · *Depende de:* SIM-1, SIM-2, SIM-14, MED-3; mejor con MED-5
   - Leer la comparación a ciegas, las cifras de artesanía y las de `report-simulations`:
     `script_echo` (si sale alto, los actores recitaron y la simulación no aporta) y
     `beat_completion_ratio`.
-  - Leer también el coste por agente (MED-2), y si el último capítulo es el más mudo o el más
+  - Leer también el coste por agente (`report-llm-usage`), y si el último capítulo es el más mudo o el más
     corto.
 - **Hecho cuando.** Hay una decisión escrita, con cifras, en `docs/resumen.md`.
 
 ### EXP-2 · Medir la ablación de memoria propia contra memoria compartida
 
 *Área:* experimento · *Cuota:* ~2.000 llamadas para dos brazos de 9 runs, más la auditoría ·
-*Depende de:* SIM-1, MED-1, MED-3
+*Depende de:* SIM-1, MED-3
 
 - **Síntoma.** `--actor-memory shared` existe como brazo de control y nadie lo ha corrido. Es la
   medición que sostiene la afirmación central de la tesis: que dar a cada personaje solo lo que
@@ -995,7 +936,7 @@ gratuita · *Depende de:* MED-5, MED-7
     cerró SIM-9 y SIM-10), y la que cierre SIM-6 y SIM-11.
   - Usar tres prompts de géneros distintos: 03 (misterio), 04 (drama) y 01 (fantasía).
   - Añadir como brazo el presupuesto de pensamiento del actor (SIM-4).
-  - Leer MED-7, `report-simulations`, el coste por agente (MED-2) y la comparación a ciegas.
+  - Leer MED-7, `report-simulations`, el coste por agente (`report-llm-usage`) y la comparación a ciegas.
 - **Hecho cuando.** Hay una tabla por versión en `docs/resumen.md` y una decisión
   escrita sobre qué mecanismo se queda.
 - **Ojo.** En el prompt 03 el brazo base pueden ser los propios runs 7.1: con `--plan-from` sobre
@@ -1005,7 +946,7 @@ gratuita · *Depende de:* MED-5, MED-7
 ### EXP-6 · Medir qué aporta el inventario de objetos
 
 *Área:* experimento · *Cuota:* ~200 llamadas por par de funciones rejugadas desde un plan ·
-*Depende de:* MED-1, MED-5
+*Depende de:* MED-5
 
 - **Síntoma.** El inventario existe desde 7.6 con su brazo de control (`--no-inventory`) y solo
   hay un par de funciones con él. Sin medición, la afirmación de que arbitrar los objetos mejora
@@ -1122,7 +1063,7 @@ EXP-7
   - Un informe de solo lectura en `evaluation` que liste esas anomalías, para que cada informe de
     la tesis diga qué excluye y por qué.
   - Nunca borrar datos. Lo que se corrija, con `recover-story-runs` y dejando rastro.
-  - Poner código propio a los warnings de los runs nuevos, en la subida de versión de MED-2.
+  - Poner código propio a los warnings de los runs nuevos, en la próxima subida de `PIPELINE_VERSION`.
 - **Hecho cuando.** El inventario sale limpio, o cada anomalía tiene una decisión escrita.
 
 ### ING-2 · Sacar las aserciones de prompt literal de los tests
@@ -1163,7 +1104,7 @@ EXP-7
 
 ### ING-3 · Dividir `pipeline.py`
 
-*Área:* ingeniería · *Cuota:* sin cuota · *Depende de:* TD-3 (el bucle de reintento), MED-2
+*Área:* ingeniería · *Cuota:* sin cuota · *Depende de:* TD-3 (el bucle de reintento)
 
 - **Síntoma.**
   - **Tamaño.** `StoryPipeline` tiene 1.197 líneas y 48 métodos, más los mixins de
@@ -1176,7 +1117,7 @@ EXP-7
   - **Lo fácil ya está hecho.** Las tres extracciones de riesgo nulo se hicieron en 7.0.0:
     `planning/repair.py`, `writing/assembly.py` y `writing/acceptance.py`.
 - **Qué hacer.**
-  - Sacar la telemetría y la contabilidad de uso como colaboradores (encaja con MED-2).
+  - Sacar la telemetría y la contabilidad de uso como colaboradores (su lectura ya existe: `report-llm-usage`).
   - Sacar el bucle de reintento compartido (TD-3).
   - Al final, convertir las etapas en clases con estado propio, que es lo que elimina los asserts.
   - No hacerlo de paso dentro de otro cambio.
@@ -1204,40 +1145,6 @@ EXP-7
   - Informar de la cobertura, sin umbral al principio.
 - **Hecho cuando.** CI prueba la versión mínima de Python declarada, y una dependencia interna
   demasiado vieja falla al instalar, no al importar.
-
-### ING-6 · Cerrar los huecos de cobertura
-
-*Área:* ingeniería · *Cuota:* sin cuota · *Depende de:* —
-
-- **Síntoma.**
-  - **Progreso sin test y duplicado.** `runtime/progress.py` no tiene ni un test, y
-    `format_progress` está duplicado en `apps/telegram/contract.py`, también sin test.
-  - **El repositorio apenas se prueba.** `ArtifactRepository` tiene un solo test directo: no se
-    comprueban los hashes del manifiesto, ni `register_existing`, ni `fail()` con un error no
-    clasificado.
-  - **Código defensivo por culpa de los tests.** `GeminiProvider` tiene 8 `getattr`/`hasattr`
-    defensivos que existen solo porque `test_provider.py` lo construye con `__new__`.
-- **Qué hacer.**
-  - Tests de progreso y de repositorio.
-  - Una sola `format_progress`.
-  - Un constructor de prueba para el proveedor que haga innecesarios esos `getattr`.
-- **Hecho cuando.** Esos caminos tienen test, y el proveedor no tiene atributos opcionales por
-  culpa de los tests.
-
-### ING-7 · `topological_order` se serializa y es derivable
-
-*Área:* ingeniería · *Cuota:* sin cuota · *Depende de:* —
-
-- **Síntoma.**
-  - **Es redundante.** En los planes del corpus coincide siempre con ordenar los eventos por su
-    campo `order` (comprobado en 71 de 71), que es lo que ya garantizan los invariantes del grafo.
-  - **Quitarlo no es gratis.** Lo leen 7 archivos: `schemas.py`, `planning/graph.py`,
-    `planning/promises.py`, `planning/promise_brief.py`, `script/stages.py`,
-    `script/validation.py` y `pipeline.py`. Y está en los artefactos de más de 180 runs.
-- **Qué hacer.** Decidir si el campo se deriva al cargar en vez de persistirse. Si se quita, subir
-  `PIPELINE_VERSION` y dar una lectura compatible a los runs que lo traen.
-- **Hecho cuando.** Hay una decisión escrita y, si se elimina, los runs anteriores se siguen
-  abriendo.
 
 ### ING-8 · Documentar los contratos públicos y rellenar el README
 
@@ -1310,17 +1217,6 @@ tiene consecuencias, y una puerta se abre porque alguien lo dice. El Game Master
 juzga la plausibilidad de cualquier acción, no solo las que tocan un objeto. Solo compensa si la
 lectura encuentra incoherencias físicas que el inventario no cubre; medirlo es EXP-6.
 
-### Probar si la taxonomía de arquetipos mejora las historias
-
-La versión 7.8 conserva `hybrid_v1` y añade `compositional_v2`: recuperación semántica con
-validación, composición flexible, abstención y bloques de guía persistidos. Las pruebas locales
-verifican contratos, no superioridad literaria. El experimento sigue pendiente.
-
-`plan-guidance-experiment` congela el piloto de 9 historias o la matriz de 36 sin consumir cuota.
-Las seis solicitudes y el protocolo viven en `packages/stagecraft/experiments/guidance/`.
-Antes de generar: revisar las solicitudes y aprobar el presupuesto concreto. Después: comparación
-humana a ciegas de creatividad, personajes e interés, con réplicas y el mismo modelo por brazo.
-
 ### Unificar los contratos de prompt duplicados
 
 - **La regla del evento, tres veces.** «Cada evento debe cambiar conflicto, conocimiento,
@@ -1336,11 +1232,6 @@ Comparar el modelo actual de `locations` y `location_id` con relaciones y transi
 explícitas. Documentar el efecto en errores de continuidad y en coste, y adoptarlo solo si mejora
 algo medible.
 
-### Ventana nativa para StageCraft
-
-Abrir StageCraft en una ventana propia con pywebview en vez del navegador. Solo compensa si se
-reparte a gente que no debería ver una URL local; en Windows depende de WebView2.
-
 ### Audio a varias voces
 
 Tanto `performance.json` como `script.json` distinguen quién dice cada réplica, pero
@@ -1352,15 +1243,3 @@ medición.
 
 «dame una receta para hacer chesscake» produjo una historia, y el prompt «G» produjo tres runs.
 El analista podría negarse con un mensaje claro, sobre todo en el bot.
-
-### Qué hacer con Bottom-Up
-
-Sus 6 runs son un registro de acciones en bruto («A compartió sus descubrimientos con B.»), sin
-versión ni evaluación. Aun así, el menú «Evaluar historia» de la consola los ofrece para
-puntuar. Hay dos salidas:
-
-- puntuarlos como línea base, que es lo único que les daría uso en la tesis;
-- o sacarlos del menú de la consola, conservando siempre los datos.
-
-Ya tienen otro uso: `docs/resumen.md` §3 los cita como evidencia interna de que la simulación
-sola produce registros, no historias.

@@ -137,6 +137,9 @@ def test_console_evaluates_story_and_retries_invalid_values(tmp_path, monkeypatc
     story = tmp_path / "Stories" / "Top-Down" / "story-one"
     story.mkdir(parents=True)
     (story / "story.md").write_text("# Historia", encoding="utf-8")
+    retired = tmp_path / "Stories" / "Bottom-Up" / "escape-room"
+    retired.mkdir(parents=True)
+    (retired / "story.md").write_text("A compartió sus descubrimientos con B.", encoding="utf-8")
     monkeypatch.setattr(evaluation_module, "find_project_root", lambda: tmp_path)
     messages = []
     application = ConsoleApp(
@@ -169,6 +172,8 @@ def test_console_evaluates_story_and_retries_invalid_values(tmp_path, monkeypatc
         "relevance": 8,
         "satisfaction": 9,
     }
+    assert not (retired / "evaluation.json").exists()
+    assert not any("Bottom-Up" in message for message in messages)
     assert "Selección inválida." in messages
     assert "El usuario no puede estar vacío." in messages
     assert "Introduce un entero entre 1 y 10." in messages

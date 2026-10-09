@@ -1,5 +1,11 @@
 # Historial de cambios
 
+## [3.2.1] - 2026-10-09
+
+- «Evaluar historia» ya no ofrece los runs de `Stories/Bottom-Up/`: son registros de acciones
+  del escape room retirado, no historias. Los datos se conservan y los informes los siguen
+  leyendo.
+
 ## [3.2.0] - 2026-09-28
 
 - Al generar una historia simulada cuya función tiene modelo propio (`GEMINI_STAGE_MODEL`),

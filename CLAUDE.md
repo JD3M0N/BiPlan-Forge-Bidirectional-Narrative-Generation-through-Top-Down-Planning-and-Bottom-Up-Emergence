@@ -20,7 +20,7 @@ El paquete se llamaba `top_down`; se renombró cuando dejó de ser solo top-down
 
 El resto del monorepo:
 
-- `packages/evaluation` guarda las evaluaciones humanas y los tres informes del corpus.
+- `packages/evaluation` guarda las evaluaciones humanas y los informes del corpus.
 - `packages/core` guarda las utilidades compartidas.
 - `apps/console` es la interfaz de terminal.
 - `apps/telegram` expone el generador como bot.
@@ -45,7 +45,8 @@ Comandos (opciones completas en [commands.md](commands.md)):
 
 - `generate-story`, `compare-story-runs`, `recover-story-runs`, `audit-stage-run`,
   `recompute-simulation-metrics`, `llm-budget` (Stagecraft).
-- `report-evaluations`, `report-story-craft`, `report-simulations` (evaluation).
+- `report-evaluations`, `report-story-craft`, `report-simulations`, `report-llm-usage`
+  (evaluation).
 - `asg-console`, `asg-telegram`, `asg-telegram-run`, `asg-studio` (apps).
 
 ### Calidad: ejecutar siempre antes de dar por terminado un cambio
@@ -180,6 +181,10 @@ este pipeline distinto de «pedirle una historia al modelo»:
   objetos existentes, y `payoff_of` apuntando siempre hacia atrás. Calcula con un Kahn estable
   el único orden de eventos en el que confía el resto del sistema. Un plan que no valida se
   rechaza y se reintenta.
+- **`topological_order` se persiste aunque sea derivable, a propósito** (decisión de ING-7).
+  Coincide con ordenar por `order` en los 71 planes del corpus. Pero es la salida del árbitro,
+  lo leen siete módulos y más de 180 runs, y quitarlo obligaría a subir `PIPELINE_VERSION` y a
+  mantener una lectura compatible sin ganar nada medible.
 - **Los mensajes de error de `graph.py` van en inglés a propósito.** `_record_rejected_plan` los
   reinyecta literalmente en el prompt de reparación (`planning/repair.py`). Son parte del
   contrato con el LLM, no texto para el usuario: no traducirlos.
@@ -345,7 +350,11 @@ esquema Pydantic, y `generate_text`) e implementa `GeminiProvider`. Lo que impor
     compuesto y no se empareja con uno puro.
   - Con cadena, `GEMINI_STAGE_MODEL` no enruta la función: es la segunda ranura de Gemini, justo
     tras la principal, y todas las llamadas siguen un solo orden (3.5 → 3.1 → Groq → Mistral).
-  - Con la cadena vacía no cambia nada.
+  - Con la cadena vacía no hay failover, pero desde 7.8.3 cada `GeminiProvider` apunta sus
+    intentos en el libro (`provider.quota`), así que `llm-budget` y las auditorías también
+    cuentan. Con cadena lo apunta solo `FailoverProvider`: no dupliques el cargo.
+  - `generate-story` se niega a arrancar (código 3) si lo que queda hoy no alcanza para la
+    media de ese formato (`tools/budget.preflight`); `--force` lo salta.
 
 Los tests inyectan un `FakeProvider` (ver `packages/stagecraft/tests/test_generator_v5.py`), que es
 la forma canónica de probar el pipeline. Se le pasa una secuencia de respuestas estructuradas y
@@ -646,7 +655,7 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
 - [packages/evaluation/METODOLOGIA.md](packages/evaluation/METODOLOGIA.md): cómo se evalúa la
   tesis, con su planilla de rasgos y su estado del arte.
 - [packages/evaluation/README.md](packages/evaluation/README.md): el formato de
-  `evaluation.json`, las seis métricas humanas y los tres informes.
+  `evaluation.json`, las seis métricas humanas y los informes.
 - [commands.md](commands.md): los comandos, en una línea cada uno.
 
 El informe de artesanía de la prosa (6.5.0 contra 6.6.0 y su réplica de ruido), la calibración de
