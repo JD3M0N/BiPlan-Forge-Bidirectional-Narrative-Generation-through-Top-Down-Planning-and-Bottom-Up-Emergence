@@ -69,8 +69,12 @@ def spent_from_logs(
     return {key: (value[0], value[1]) for key, value in spent.items()}
 
 
-def average_story(runs_root: Path) -> tuple[int, int, int] | None:
-    """Return the mean calls and tokens of the latest completed runs, and how many there were."""
+def average_story(runs_root: Path, story_format: str | None = None) -> tuple[int, int, int] | None:
+    """Return the mean calls and tokens of the latest completed runs, and how many there were.
+
+    With a story format, only runs of that format count: a simulated run spends several times
+    the calls of a narrative one, so a mixed mean would let it start without room.
+    """
     samples = []
     for run in sorted((p for p in runs_root.glob("*") if p.is_dir()), reverse=True):
         try:
@@ -78,7 +82,10 @@ def average_story(runs_root: Path) -> tuple[int, int, int] | None:
             usage = json.loads((run / "llm_usage.json").read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if metadata.get("status") == "completed" and usage.get("calls"):
+        matches = story_format is None or (metadata.get("story_format") or "narrative") == (
+            story_format
+        )
+        if matches and metadata.get("status") == "completed" and usage.get("calls"):
             samples.append((int(usage["calls"]), int(usage.get("total_tokens") or 0)))
         if len(samples) == RECENT_RUNS:
             break
@@ -98,13 +105,62 @@ def _left(cap: int, used: int, out: bool) -> int | None:
     return max(0, cap - used) if cap else None
 
 
+def slot_spending(settings, now: datetime) -> list[tuple[ChainEntry, int, int, datetime | None]]:
+    """Return every slot a run may spend on with its requests, tokens and exhaustion.
+
+    Spending is the larger of the ledger and the runs' call logs, which also cover the runs
+    made before the ledger existed.
+    """
+    entries: list[ChainEntry] = settings.quota_entries()
+    ledger = QuotaLedger(settings.budget_path) if settings.budget_path else None
+    logged = spent_from_logs(settings.output_root, [entry.slot for entry in entries], now)
+    result = []
+    for entry in entries:
+        stored = ledger.usage(entry.slot) if ledger else (0, 0)
+        result.append(
+            (
+                entry,
+                max(stored[0], logged[entry.slot.key][0]),
+                max(stored[1], logged[entry.slot.key][1]),
+                ledger.exhausted_until(entry.slot) if ledger else None,
+            )
+        )
+    return result
+
+
+def preflight(settings, story_format: str, *, now: datetime | None = None) -> str | None:
+    """Return why a run of this format does not fit in what is left today, or None if it may.
+
+    Only a run that surely does not fit is refused: without completed runs to estimate from, or
+    with a slot that has no known cap, the API stays the only authority.
+    """
+    now = now or datetime.now(UTC)
+    average = average_story(settings.output_root, story_format)
+    if average is None:
+        return None
+    states = slot_spending(settings, now)
+    requests_left = [_left(e.slot.max_requests, r, bool(u)) for e, r, _, u in states]
+    tokens_left = [_left(e.slot.max_tokens, t, bool(u)) for e, _, t, u in states]
+    short = []
+    if None not in requests_left and sum(requests_left) < average[0]:
+        short.append(f"~{_n(average[0])} llamadas y quedan {_n(sum(requests_left))}")
+    if None not in tokens_left and sum(tokens_left) < average[1]:
+        short.append(f"~{_n(average[1])} tokens y quedan {_n(sum(tokens_left))}")
+    if not short:
+        return None
+    back = min(until or window_bounds(entry.slot.window, now)[1] for entry, _, _, until in states)
+    return (
+        f"una historia en formato {story_format} gasta de media {' y '.join(short)} "
+        f"(media de los últimos {average[2]} runs completados de ese formato). La cuota "
+        f"{_when(back, now)}. Usa --force para lanzarla igual."
+    )
+
+
 def report(settings, *, now: datetime | None = None) -> list[str]:
     """Return the quota panel: one block per provider, one line per model, and what fits."""
     now = now or datetime.now(UTC)
-    entries: list[ChainEntry] = settings.quota_entries()
-    ledger = QuotaLedger(settings.budget_path) if settings.budget_path else None
-    slots = [entry.slot for entry in entries]
-    logged = spent_from_logs(settings.output_root, slots, now)
+    states = slot_spending(settings, now)
+    slots = [entry.slot for entry, *_ in states]
     local = now.astimezone()
     lines = [
         f"Cuotas disponibles · {WEEKDAYS[local.weekday()]} {local.day} "
@@ -115,15 +171,11 @@ def report(settings, *, now: datetime | None = None) -> list[str]:
     average = average_story(settings.output_root)
     fits: list[str] = []
     for provider in dict.fromkeys(slot.provider for slot in slots):
-        group = [entry for entry in entries if entry.slot.provider == provider]
+        group = [state for state in states if state[0].slot.provider == provider]
         rows, requests_left, tokens_left = [], [], []
         total_requests = total_tokens = 0
-        for entry in group:
+        for entry, requests, tokens, until in group:
             slot = entry.slot
-            stored = ledger.usage(slot) if ledger else (0, 0)
-            requests = max(stored[0], logged[slot.key][0])
-            tokens = max(stored[1], logged[slot.key][1])
-            until = ledger.exhausted_until(slot) if ledger else None
             total_requests += requests
             total_tokens += tokens
             requests_left.append(_left(slot.max_requests, requests, bool(until)))
@@ -135,9 +187,9 @@ def report(settings, *, now: datetime | None = None) -> list[str]:
                 f"  {slot.model:<{width}}  {used:>11} · {spent:>15} tokens · "
                 f"{entry.rpm_limit} RPM · {state}"
             )
-        caps = [entry.slot.max_requests for entry in group]
-        token_caps = [entry.slot.max_tokens for entry in group]
-        word = WINDOW_WORDS[group[0].slot.window]
+        caps = [entry.slot.max_requests for entry, *_ in group]
+        token_caps = [entry.slot.max_tokens for entry, *_ in group]
+        word = WINDOW_WORDS[group[0][0].slot.window]
         head = f"{_n(total_requests)}"
         if all(caps):
             head += f"/{_n(sum(caps))} peticiones {word} · quedan {_n(sum(requests_left))}"
@@ -147,7 +199,7 @@ def report(settings, *, now: datetime | None = None) -> list[str]:
             head += f" · {_n(total_tokens)}/{_n(sum(token_caps))} tokens"
         else:
             head += f" · {_n(total_tokens)} tokens"
-        reset = min(window_bounds(entry.slot.window, now)[1] for entry in group)
+        reset = min(window_bounds(entry.slot.window, now)[1] for entry, *_ in group)
         name = PROVIDER_NAMES.get(provider, provider)
         lines.append(f"{name:<8} {head} · {_when(reset, now)}")
         lines.extend(rows)

@@ -1,10 +1,28 @@
-# 7.8.2
+# Historial de cambios
+
+## 7.8.3
+
+- **La cuota del día se comprueba antes de lanzar (cierra MED-1).** `generate-story` estima las
+  llamadas y los tokens de una historia del formato pedido con la media de sus últimos runs
+  completados. Si lo que queda en las ranuras con tope no alcanza, se niega a arrancar con
+  código 3 y dice cuándo vuelve la cuota. `--force` la lanza igual. Sin runs de ese formato, o
+  con una ranura sin tope conocido, no se niega: la API sigue siendo la autoridad.
+- **Sin `ASG_LLM_CHAIN`, el libro de cuotas también cuenta.** El `GeminiProvider` principal, y
+  el de la función si tiene modelo propio, apuntan cada intento en `.cache/llm_budget.sqlite3`.
+  Un 429 diario deja la ranura fuera hasta su reinicio, no los ~55 s de `retry_delay` que manda
+  Gemini. Así `llm-budget` y `audit-stage-run`, que antes gastaban sin dejar rastro, entran en
+  el presupuesto.
+- `tools/budget.slot_spending` es el estado de cada ranura que comparten el panel y la
+  comprobación previa. `average_story` admite un formato.
+- `_RecordingProvider` tiene constructor propio y los proveedores ya no leen su configuración
+  con `getattr` por si un test se saltaba `__init__` (ING-6). `format_progress` vive en
+  `asg_core` (exige `asg-core>=0.7.0`) y se reexporta.
+
+## 7.8.2
 
 - Preserve explicit facts and uncertainty in analyst extraction; verify the draft against the original in a second extraction call and keep inventions in optional creative directions.
 - Repair retrieval constraint errors with contextual diagnostics and persist rejected structured drafts.
 - Abstain without a composition call when semantic retrieval fails; lexical matches no longer decide v2 rankings.
-
-# Historial de cambios
 
 ## 7.8.1
 

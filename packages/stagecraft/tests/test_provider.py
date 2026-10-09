@@ -47,19 +47,16 @@ class FakeModels:
 
 
 def provider_with(response=None, error: Exception | None = None) -> GeminiProvider:
-    provider = GeminiProvider.__new__(GeminiProvider)
-    provider.model_name = "fake-flash"
+    """A real GeminiProvider, one retry and no RPM pacing, talking to FakeModels."""
+    provider = GeminiProvider("fake-key", "fake-flash", max_retries=1)
+    provider._limiter = None
     provider._client = SimpleNamespace(models=FakeModels(response, error))
     return provider
 
 
 @pytest.fixture(autouse=True)
 def no_real_waits(monkeypatch):
-    """A provider built with __new__ falls back to real retries and real sleeps.
-
-    Every test here builds through provider_with(), so nothing exercises the real
-    countdown; a test that cares about a specific wait overrides this on top.
-    """
+    """Retries never sleep for real: a test that cares about a wait overrides this on top."""
     monkeypatch.setattr(provider_module, "countdown_wait", lambda *args: None)
     monkeypatch.setattr(provider_module, "retry_delay", lambda attempt, details: 0)
 
@@ -242,14 +239,25 @@ def test_authentication_errors_fail_immediately_without_retrying() -> None:
     ],
     ids=["explicit-quota-id", "billing-worded-daily-quota-is-not-mistaken-for-billing"],
 )
-def test_a_daily_quota_is_never_retried_and_keeps_its_id(error_text, expected_quota_id) -> None:
-    """MED-1: reading the text before the quota ID turned three daily quotas into billing."""
+def test_a_daily_quota_is_never_retried_and_keeps_its_id(
+    error_text, expected_quota_id, tmp_path
+) -> None:
+    """MED-1: reading the text before the quota ID turned three daily quotas into billing.
+
+    Outside a chain the provider charges its own ledger slot, and a spent daily quota keeps the
+    slot out until its window resets, not for the ~55 s retry_delay Gemini sends with it.
+    """
+    ledger = QuotaLedger(tmp_path / "budget.sqlite3")
+    slot = QuotaSlot("gemini", "fake-flash", "pacific_day", max_requests=500)
     provider = provider_with(error=Exception(error_text))
     provider.max_retries = 3
+    provider.quota = (ledger, slot)
     with pytest.raises(GeminiDailyQuotaError) as raised:
         provider._generate("text", provider._client.models.generate_content)
     assert raised.value.details["quota_id"] == expected_quota_id
     assert len(provider._client.models.generate_calls) == 1
+    assert ledger.usage(slot) == (1, 0)
+    assert ledger.exhausted_until(slot) == ledger.resets_at(slot)
 
 
 def test_a_billing_limit_named_only_in_the_text_is_still_billing() -> None:
@@ -420,9 +428,15 @@ def test_the_factory_builds_one_provider_until_the_performance_differs(monkeypat
         rpm_limit=15,
         stage_model="gemini-3.1-flash-lite",
         stage_rpm_limit=10,
+        budget_path=tmp_path / "budget.sqlite3",
     )
     routed = provider_module.provider_from_settings(split)
     assert isinstance(routed, provider_module.RoutedProvider)
+    # MED-1: without a chain each model still charges its own daily slot.
+    assert [provider.quota[1].key for provider in (routed.main, routed.stage)] == [
+        "gemini:gemini-3.5-flash-lite",
+        "gemini:gemini-3.1-flash-lite",
+    ]
     main, stage = RecordingGemini.built
     assert (main["model"], main["rpm_limit"]) == ("gemini-3.5-flash-lite", 15)
     assert (stage["model"], stage["rpm_limit"], stage["api_key"]) == (
@@ -570,12 +584,10 @@ def completion(content: str) -> dict:
     ids=["json-schema", "falls-back-to-json-object", "daily-cap-is-not-retried"],
 )
 def test_an_openai_compatible_provider_returns_validated_json(replies, formats) -> None:
-    provider = provider_module.OpenAICompatibleProvider.__new__(
-        provider_module.OpenAICompatibleProvider
+    provider = provider_module.OpenAICompatibleProvider(
+        "fake-key", "openai/gpt-oss-120b", "https://groq.invalid", label="Groq", max_retries=2
     )
-    provider.model_name = "openai/gpt-oss-120b"
-    provider.provider_label = "Groq"
-    provider.max_retries = 2
+    provider._limiter = None
     provider._client = FakeHTTP(replies)
     ask = {"system_instruction": "s", "prompt": "p", "schema": StoryRequest, "profile": "planning"}
     if replies[-1][0] == 429:
@@ -690,3 +702,35 @@ def test_the_quota_panel_adds_up_each_provider_from_logs_and_ledger(tmp_path) ->
     assert "3/1.000 peticiones hoy · quedan 997" in gemini
     assert any(line.strip().startswith("q ") and "AGOTADO" in line for line in panel)
     assert panel[-1] == "Caben aprox.: Gemini 332 · Groq 0."
+
+
+@pytest.mark.parametrize(
+    ("story_format", "cap", "refused"),
+    [("narrative", 500, False), ("narrative", 20, True), ("simulated", 20, False)],
+    ids=["fits", "does-not-fit", "no-run-of-that-format-to-estimate-from"],
+)
+def test_generate_story_refuses_a_run_that_does_not_fit_in_todays_quota(
+    tmp_path, story_format, cap, refused
+) -> None:
+    """MED-1: 060405 was launched 5 s after 054422 spent the day and died on its first call."""
+    from asg_stagecraft.runtime.config import Settings
+    from asg_stagecraft.tools.budget import preflight
+
+    run = tmp_path / "Stories" / "Stagecraft" / "20261001-000000-una"
+    run.mkdir(parents=True)
+    (run / "metadata.json").write_text('{"status": "completed"}', encoding="utf-8")
+    (run / "llm_usage.json").write_text('{"calls": 16, "total_tokens": 84000}', encoding="utf-8")
+    settings = Settings(
+        api_key="k",
+        model="g-main",
+        output_root=run.parent,
+        budget_path=tmp_path / "budget.sqlite3",
+        gemini_daily_requests=cap,
+    )
+    slot = settings.quota_entries()[0].slot
+    QuotaLedger(settings.budget_path).record(slot, requests=10, tokens=1000)
+    refusal = preflight(settings, story_format)
+    if refused:
+        assert "~16 llamadas y quedan 10" in refusal and "--force" in refusal
+    else:
+        assert refusal is None

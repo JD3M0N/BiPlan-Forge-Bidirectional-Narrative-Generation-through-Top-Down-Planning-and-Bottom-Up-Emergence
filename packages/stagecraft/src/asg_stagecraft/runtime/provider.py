@@ -48,11 +48,9 @@ _LIMITERS_LOCK = threading.Lock()
 # compared with the runs before 7.4.
 STAGE_MODEL_STAGES = frozenset({"performance"})
 # Both settings below are module constants, not constructor arguments: no call site in
-# the repository ever configured them, and the per-instance copies only survived because
-# the code read them through getattr defaults to tolerate a test double that skips
-# __init__. Reading the constant directly keeps one source of truth for the temperatures
-# CLAUDE.md documents, and a future caller that needs to vary them can reintroduce the
-# parameter along with the reason it exists.
+# the repository ever configured them. Reading the constant directly keeps one source of truth
+# for the temperatures CLAUDE.md documents, and a future caller that needs to vary them can
+# reintroduce the parameter along with the reason it exists.
 _STRUCTURED_VALIDATION_RETRIES = 1
 
 _DEFAULT_GENERATION_PROFILES: dict[str, float] = {
@@ -259,15 +257,23 @@ class LanguageModelProvider(Protocol):
 
 
 class _RecordingProvider:
-    """Retry, pace, validate and record model calls; subclasses only speak to their client.
+    """Retry, pace, validate and record model calls; subclasses only speak to their client."""
 
-    Everything here reads its tuning through getattr defaults, because the tests build
-    providers with __new__ and set only the client and the model name.
-    """
-
-    model_name: str
     provider_label = "Gemini"
     quota_recommendation = "Espera a que se restablezca la cuota o revisa tu plan en AI Studio."
+
+    def __init__(self, model_name: str, *, max_retries: int, max_retry_delay: int, limiter) -> None:
+        """Set the retry tuning, the RPM limiter and the recording state of every provider."""
+        self.model_name = model_name
+        self.max_retries = max_retries
+        self.max_retry_delay = max_retry_delay
+        self._limiter = limiter
+        self.wait_callback: Callable[[int, str], None] | None = None
+        self.usage_callback: Callable[[LLMUsageRecord], None] | None = None
+        self.usage_records: list[LLMUsageRecord] = []
+        # The ledger slot this provider charges on its own, outside a chain. A chain's
+        # FailoverProvider charges its slots itself, so its providers leave this empty.
+        self.quota: tuple[QuotaLedger, QuotaSlot] | None = None
 
     def _temperature(self, profile: str) -> float:
         """Look up the configured temperature for an explicit generation profile."""
@@ -306,12 +312,12 @@ class _RecordingProvider:
 
     def _emit_record(self, record: LLMUsageRecord) -> None:
         """Emit record."""
-        if not hasattr(self, "usage_records"):
-            self.usage_records = []
         self.usage_records.append(record)
-        callback = getattr(self, "usage_callback", None)
-        if callback:
-            callback(record)
+        if self.quota and record.operation != COUNT_TOKENS_OPERATION:
+            ledger, slot = self.quota
+            ledger.record(slot, requests=1, tokens=record.total_tokens)
+        if self.usage_callback:
+            self.usage_callback(record)
 
     def _record_auxiliary(
         self, operation: str, started: float, status: str, error_code: str | None = None
@@ -400,11 +406,7 @@ class _RecordingProvider:
         """
         call_id = uuid.uuid4().hex
         pending_wait = 0.0
-        max_retries = getattr(self, "max_retries", 1)
-        limiter = getattr(self, "_limiter", None)
-        callback = getattr(self, "wait_callback", None)
-        if not hasattr(self, "usage_records"):
-            self.usage_records = []
+        max_retries, limiter, callback = self.max_retries, self._limiter, self.wait_callback
         # GEMINI_MAX_RETRIES describes retries after the initial request.
         for attempt in range(max_retries + 1):
             waited, pending_wait = pending_wait, 0.0
@@ -438,6 +440,10 @@ class _RecordingProvider:
                 if permanent_quota or not transient or attempt >= max_retries:
                     if status == 429:
                         error_type = self._quota_error_type(exc, details)
+                        if self.quota and issubclass(error_type, ProviderDailyQuotaError):
+                            # Out until the window resets: the ~55 s retry_delay Gemini sends
+                            # with a spent daily quota is not when it comes back.
+                            self.quota[0].mark_exhausted(self.quota[1])
                         raise error_type(
                             f"{self.provider_label} agotó la cuota para {self.model_name}.",
                             details={
@@ -450,7 +456,7 @@ class _RecordingProvider:
                         ) from exc
                     raise
                 delay = retry_delay(attempt + 1, details)
-                if delay > getattr(self, "max_retry_delay", 120):
+                if delay > self.max_retry_delay:
                     raise GeminiRPMError(
                         f"{self.provider_label} indicó una espera superior al máximo configurado.",
                         details={**details, "model": self.model_name},
@@ -581,12 +587,14 @@ class GeminiProvider(_RecordingProvider):
         from google import genai
         from google.genai import types
 
-        self.model_name = model_name
+        super().__init__(
+            model_name,
+            max_retries=max_retries,
+            max_retry_delay=max_retry_delay,
+            limiter=_shared_limiter(api_key, model_name, rpm_limit, rpm_reserve),
+        )
         self.tpm_limit = tpm_limit
         self._token_limiter = TokenWindowLimiter(tpm_limit) if tpm_limit else None
-        self.max_retries = max_retries
-        self.max_retry_delay = max_retry_delay
-        self._limiter = _shared_limiter(api_key, model_name, rpm_limit, rpm_reserve)
         self._client = genai.Client(
             api_key=api_key,
             http_options=types.HttpOptions(
@@ -594,13 +602,10 @@ class GeminiProvider(_RecordingProvider):
                 retry_options=types.HttpRetryOptions(attempts=1),
             ),
         )
-        self.wait_callback: Callable[[int, str], None] | None = None
-        self.usage_callback: Callable[[LLMUsageRecord], None] | None = None
-        self.usage_records: list[LLMUsageRecord] = []
 
     def _preflight_tokens(self, prompt: str, system_instruction: str) -> None:
         """Count the prompt's tokens and wait for room under GEMINI_TPM_LIMIT."""
-        if not getattr(self, "_token_limiter", None):
+        if not self._token_limiter:
             return
         started = time.monotonic()
         try:
@@ -716,20 +721,19 @@ class OpenAICompatibleProvider(_RecordingProvider):
         """Initialize the provider for one base URL and model."""
         import httpx
 
-        self.model_name = model_name
+        super().__init__(
+            model_name,
+            max_retries=max_retries,
+            max_retry_delay=max_retry_delay,
+            limiter=_shared_limiter(api_key, model_name, rpm_limit, rpm_reserve),
+        )
         self.provider_label = label
-        self.max_retries = max_retries
-        self.max_retry_delay = max_retry_delay
         self.schema_mode = "json_schema"
-        self._limiter = _shared_limiter(api_key, model_name, rpm_limit, rpm_reserve)
         self._client = httpx.Client(
             base_url=base_url.rstrip("/"),
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=max(5_000, request_timeout_ms) / 1000,
         )
-        self.wait_callback: Callable[[int, str], None] | None = None
-        self.usage_callback: Callable[[LLMUsageRecord], None] | None = None
-        self.usage_records: list[LLMUsageRecord] = []
 
     def _post(self, body: dict) -> dict:
         """POST one chat completion and raise OpenAICompatibleError on any HTTP failure."""
@@ -759,7 +763,7 @@ class OpenAICompatibleProvider(_RecordingProvider):
     ):
         """Ask for JSON in json_schema mode, dropping to json_object if the model refuses it."""
         json_schema = _gemini_response_schema(schema)
-        if getattr(self, "schema_mode", "json_schema") == "json_schema":
+        if self.schema_mode == "json_schema":
             body = self._body(system_instruction, prompt, temperature)
             body["response_format"] = {
                 "type": "json_schema",
@@ -1076,6 +1080,7 @@ def provider_from_settings(settings: Settings):
     model's quota is spent first, then the second's, then the rest of the chain.
     """
     if not settings.chain:
+        ledger = QuotaLedger(settings.budget_path) if settings.budget_path else None
         shared = {
             "rpm_reserve": settings.rpm_reserve,
             "tpm_limit": settings.tpm_limit,
@@ -1086,15 +1091,24 @@ def provider_from_settings(settings: Settings):
         main = GeminiProvider(
             settings.api_key, settings.model, rpm_limit=settings.rpm_limit, **shared
         )
-        if not settings.splits_stage:
-            return main
-        stage = GeminiProvider(
-            settings.effective_stage_api_key,
-            settings.effective_stage_model,
-            rpm_limit=settings.effective_stage_rpm_limit,
-            **shared,
+        stage = (
+            GeminiProvider(
+                settings.effective_stage_api_key,
+                settings.effective_stage_model,
+                rpm_limit=settings.effective_stage_rpm_limit,
+                **shared,
+            )
+            if settings.splits_stage
+            else None
         )
-        return RoutedProvider(main, stage)
+        if ledger:
+            # Without a chain nothing fails over, but every call still counts, so the quota
+            # panel and the preflight of generate-story see this run and every audit.
+            slots = {entry.slot.model: entry.slot for entry in settings.quota_entries()}
+            for provider in (main, stage):
+                if provider is not None:
+                    provider.quota = (ledger, slots[provider.model_name])
+        return main if stage is None else RoutedProvider(main, stage)
     entries = settings.quota_entries()
     return FailoverProvider(
         [(entry.slot, _chain_provider(entry, settings)) for entry in entries],

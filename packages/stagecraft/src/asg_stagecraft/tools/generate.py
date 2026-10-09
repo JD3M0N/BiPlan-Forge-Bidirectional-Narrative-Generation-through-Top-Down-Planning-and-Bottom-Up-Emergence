@@ -18,6 +18,7 @@ from ..runtime.config import load_settings
 from ..runtime.errors import ASGError
 from ..runtime.progress import format_progress
 from ..runtime.provider import provider_from_settings
+from .budget import preflight
 
 EXAMPLE_PROMPT = (
     "Escribe un relato de ciencia ficción con perfil narrativo Desarrollada. Una cartógrafa "
@@ -142,6 +143,11 @@ def parser() -> argparse.ArgumentParser:
         help="Con --format simulated: reutiliza request, plan, guion y casting de un run completo",
     )
     result.add_argument(
+        "--force",
+        action="store_true",
+        help="Lanza el run aunque la cuota que queda hoy no alcance para una historia media",
+    )
+    result.add_argument(
         "--brief",
         type=Path,
         help=(
@@ -217,6 +223,17 @@ def apply_setting_flags(args: argparse.Namespace, settings):
     return replace(settings, **{name: value for name, value in flags.items() if value})
 
 
+def request_problem(
+    args: argparse.Namespace, options: GenerationOptions, prompt: StoryBrief | str
+) -> str | None:
+    """Say why a run cannot start from these flags and this request, or None when it can."""
+    if args.plan_from and options.story_format is not StoryFormat.SIMULATED:
+        return "--plan-from exige --format simulated."
+    if not prompt and not args.plan_from:
+        return "el prompt no puede estar vacío."
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the command-line entry point."""
     use_utf8_output()
@@ -235,13 +252,15 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValidationError, ValueError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 2
-        if args.plan_from and options.story_format is not StoryFormat.SIMULATED:
-            print("Error: --plan-from exige --format simulated.", file=sys.stderr)
-            return 2
-        if not prompt and not args.plan_from:
-            print("Error: el prompt no puede estar vacío.", file=sys.stderr)
+        problem = request_problem(args, options, prompt)
+        if problem:
+            print(f"Error: {problem}", file=sys.stderr)
             return 2
         settings = apply_setting_flags(args, settings)
+        refusal = None if args.force else preflight(settings, options.story_format.value)
+        if refusal:
+            print(f"Error: no cabe en la cuota de hoy: {refusal}", file=sys.stderr)
+            return 3
         provider = provider_from_settings(settings)
         generator = StoryGenerator.from_options(provider, settings.output_root, options)
 

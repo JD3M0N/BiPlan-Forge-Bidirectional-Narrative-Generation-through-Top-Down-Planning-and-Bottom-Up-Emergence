@@ -151,3 +151,20 @@ def test_plan_from_selects_simulation_without_prompting() -> None:
     assert read_request(args) == ""
     assert options.story_format is StoryFormat.SIMULATED
     assert options.simulation_mode.value == "adaptive"
+
+
+@pytest.mark.parametrize(("force", "code"), [(False, 3), (True, 1)], ids=["refused", "forced"])
+def test_a_run_without_quota_stops_before_its_first_call_unless_forced(
+    monkeypatch, capsys, tmp_path, force, code
+) -> None:
+    import asg_stagecraft.tools.generate as generate_module
+
+    def no_provider(_settings):
+        raise ValueError("the forced run reached the provider")
+
+    real = Settings(api_key="k", model="m", output_root=tmp_path)
+    monkeypatch.setattr(generate_module, "load_settings", lambda: real)
+    monkeypatch.setattr(generate_module, "preflight", lambda *_: "queda 0")
+    monkeypatch.setattr(generate_module, "provider_from_settings", no_provider)
+    assert main(["Una historia", *(["--force"] if force else [])]) == code
+    assert ("queda 0" in capsys.readouterr().err) is not force
