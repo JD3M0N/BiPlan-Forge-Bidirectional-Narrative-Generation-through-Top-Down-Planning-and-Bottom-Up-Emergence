@@ -1,5 +1,6 @@
 import json
 
+from asg_evaluation import usage_cli
 from asg_evaluation.report import _describe
 from asg_evaluation.simulation_cli import main, parser
 from asg_evaluation.simulation_report import (
@@ -172,3 +173,37 @@ def test_partial_performance_is_reported_without_inventing_final_metrics(tmp_pat
     assert records[0].values["logged_attempts"] is None
     assert records[0].values["logged_contexts"] is None
     assert records[0].values["context_coverage"] is None
+
+
+def test_llm_usage_splits_calls_by_agent_and_leaves_older_logs_unmeasured(tmp_path, capsys) -> None:
+    def call(call_id, agent, status="succeeded", tokens=10, **extra):
+        record = {"call_id": call_id, "operation": "structured:X", "stage": "performance"}
+        record.update(status=status, total_tokens=tokens, duration_seconds=1.5, **extra)
+        return record | ({} if agent is None else {"agent": agent})
+
+    logs = {
+        "nueva": [
+            call("a", "actor", status="failed", tokens=0, wait_seconds=2.0),
+            call("a", "actor"),
+            call("b", "actor"),
+            call("c", "stage_manager"),
+            {"operation": "count_tokens", "agent": "actor", "call_id": "z", "total_tokens": 99},
+        ],
+        "vieja": [call("d", None)],
+    }
+    root = tmp_path / "Stories" / "Stagecraft"
+    for name, records in logs.items():
+        run = write_run(root, name)
+        lines = "".join(json.dumps(record) + "\n" for record in records)
+        (run / "llm_calls.jsonl").write_text(lines, encoding="utf-8")
+    destination = tmp_path / "usage.csv"
+    args = ["--stories", str(tmp_path / "Stories"), "--csv", str(destination), "--group", "agent"]
+    assert usage_cli.main(args) == 0
+    output = capsys.readouterr().out
+    assert "Hybrid por agente  (1 run medido, 1 no medido)" in output
+    actor = next(line.split() for line in output.splitlines() if line.strip().startswith("actor"))
+    # calls, share, attempts, failed, tokens, latency, wait
+    assert actor[1:] == ["2", "66.7", "3", "1", "20", "4.5", "2.0"]
+    rows = destination.read_text(encoding="utf-8").splitlines()
+    assert [row.split(",")[0] for row in rows[1:]] == ["nueva", "nueva", "vieja"]
+    assert rows[-1].endswith(",,,,,,,")

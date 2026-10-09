@@ -95,9 +95,9 @@ historia; la poblacional daría un `0.0` engañoso. Los grupos juntan evaluacion
 no medias por historia: una historia evaluada dos veces pesa el doble, y por eso cada resumen
 conserva las dos cuentas, `stories` y `evaluations`.
 
-## Los tres informes
+## Los cuatro informes
 
-Los tres comparten ejes. La **versión** es la del generador (`generator_version.json`), no la
+Los cuatro comparten ejes. La **versión** es la del generador (`generator_version.json`), no la
 del contrato de pipeline, que agrupa releases distintas bajo una misma etiqueta. El **enfoque**
 sale de la carpeta: `Stories/Stagecraft` y `Stories/Top-Down` dan `Top-Down` o `Hybrid` según el
 formato, y cualquier otra carpeta, como las historias históricas de `Stories/Bottom-Up`, da su
@@ -120,5 +120,11 @@ propio nombre. Un CSV va en UTF-8 sin BOM: Excel en español necesita *Datos →
   eco del guion (`script_echo`), menciones de lo que un personaje no podía saber
   (`unknown_mentions`) y compresión de la narración, por voz, memoria, perfil y versión. Una cifra que un run no registró sale como no medida, nunca
   como cero.
+- **`report-llm-usage`** reparte, por enfoque, las llamadas, los intentos, los fallidos, los
+  tokens, la latencia y la espera de cuota de cada run entre agentes y etapas, desde
+  `llm_calls.jsonl`. Una llamada es un `call_id`: sus reintentos cuentan como intentos, no como
+  llamadas, y un recuento de tokens no es una llamada. Un run anterior a 7.2, cuyo registro no
+  nombra el agente, sale como **no medido**, nunca repartido en un agente anónimo. Con `--csv`
+  escribe una fila por run, etapa y agente.
 
 Las opciones completas están en [commands.md](../../commands.md).

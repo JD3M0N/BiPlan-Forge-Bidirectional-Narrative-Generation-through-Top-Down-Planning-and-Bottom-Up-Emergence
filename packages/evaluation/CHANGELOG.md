@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.0] - 2026-10-09
+
+- Added `report-llm-usage` (MED-2): calls, attempts, failed attempts, tokens, latency and quota
+  waiting of every run, split by agent and by stage from `llm_calls.jsonl` and grouped by
+  approach. A log written before 7.2, without the agent of each call, is reported as not
+  measured. `usage_report.aggregate_calls` is the one aggregation `report-simulations` and the
+  feature extractor's K06 now share.
+- `artifacts.read_json_lines` is the tolerant JSONL reader every report uses.
+
 ## [1.2.0] - 2026-10-08
 
 - `StudyRepository` gains `find_participant`, `contribution` (enrolled and pending),

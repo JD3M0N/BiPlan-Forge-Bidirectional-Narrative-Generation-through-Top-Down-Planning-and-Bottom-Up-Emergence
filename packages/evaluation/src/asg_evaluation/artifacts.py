@@ -52,6 +52,25 @@ def load_json_object(path: Path, on_error: ErrorHandler | None = None) -> dict:
     return document if isinstance(document, dict) else {}
 
 
+def read_json_lines(path: Path) -> list[dict]:
+    """Read valid JSON objects from an append-only log, tolerating a torn last line."""
+    if not path.is_file():
+        return []
+    try:
+        raw = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return []
+    found = []
+    for line in raw:
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            found.append(value)
+    return found
+
+
 def text_field(document: dict, field: str) -> str | None:
     """Read one non-empty string field, or None when it is absent."""
     value = document.get(field)

@@ -13,13 +13,14 @@ reading them as 0 would make the older corpus look spotless on exactly the probl
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from statistics import median
 
 from .artifacts import group_by, load_json_object, number_field, text_field
+from .artifacts import read_json_lines as _lines
+from .usage_report import aggregate_calls
 
 METRICS_FILENAME = "simulation_metrics.json"
 UNKNOWN = "desconocido"
@@ -233,25 +234,6 @@ def _text(document: dict, field_name: str) -> str:
     return text_field(document, field_name) or UNKNOWN
 
 
-def _lines(path: Path) -> list[dict]:
-    """Read valid JSON objects from an append-only log, tolerating a torn last line."""
-    if not path.is_file():
-        return []
-    try:
-        raw = path.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeDecodeError):
-        return []
-    found = []
-    for line in raw:
-        try:
-            value = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(value, dict):
-            found.append(value)
-    return found
-
-
 def _observed_logs(run_dir: Path) -> dict[str, float | None]:
     """Derive explicitly named log measures without inventing missing historical fields."""
     scenes = sorted((run_dir / "stage").glob("*/turns.jsonl"))
@@ -304,37 +286,8 @@ def _observed_logs(run_dir: Path) -> dict[str, float | None]:
 
 def _agent_costs(run_dir: Path) -> list[dict]:
     """Aggregate logical calls, token use and attempt latency by agent and model."""
-    groups: dict[tuple[str, str, str], dict] = {}
-    for item in _lines(run_dir / "llm_calls.jsonl"):
-        if item.get("operation") == "count_tokens" or not item.get("call_id"):
-            continue
-        key = (
-            str(item.get("stage") or ""),
-            str(item.get("agent") or ""),
-            str(item.get("model") or ""),
-        )
-        group = groups.setdefault(
-            key,
-            {
-                "stage": key[0],
-                "agent": key[1],
-                "model": key[2],
-                "call_ids": set(),
-                "tokens": 0,
-                "latency_seconds": 0.0,
-            },
-        )
-        group["call_ids"].add(item["call_id"])
-        group["tokens"] += item.get("total_tokens") or 0
-        group["latency_seconds"] += item.get("duration_seconds") or 0.0
+    columns = ("stage", "agent", "model", "calls", "tokens", "latency_seconds")
     return [
-        {
-            "stage": value["stage"],
-            "agent": value["agent"],
-            "model": value["model"],
-            "calls": len(value["call_ids"]),
-            "tokens": value["tokens"],
-            "latency_seconds": round(value["latency_seconds"], 3),
-        }
-        for _, value in sorted(groups.items())
+        {name: row[name] for name in columns}
+        for row in aggregate_calls(_lines(run_dir / "llm_calls.jsonl"), columns[:3])
     ]
