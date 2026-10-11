@@ -6,6 +6,9 @@ por pares a ciegas: entra con una clave, acepta participar, indica su perfil lec
 de dos en dos. El protocolo está en
 [ESTUDIO_FINAL.md](../../packages/evaluation/ESTUDIO_FINAL.md).
 
+Para instalarlo en otra PC Windows y dejarlo funcionando 24/7, sigue
+[la guía de despliegue](DEPLOYMENT.md).
+
 ## Configuración
 
 1. Habla con `@BotFather` en Telegram, crea un bot con `/newbot` y copia el
@@ -37,8 +40,8 @@ cada usuario puede cambiarlas para sí mismo desde `/settings`, sin tocar el `.e
 3. Desde la raíz instala las dependencias y ejecuta:
 
 ```powershell
-python -m pip install -r requirements-dev.txt
-asg-telegram
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -Telegram
+.\.venv\Scripts\asg-telegram.exe
 ```
 
 En Windows, `asg-telegram` abre el bot en una consola independiente con su propio

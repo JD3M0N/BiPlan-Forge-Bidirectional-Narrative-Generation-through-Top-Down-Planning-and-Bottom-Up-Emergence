@@ -63,7 +63,8 @@ def test_simulated_run_writes_every_artifact_and_completes(tmp_path) -> None:
     assert read_json(run, "promise_audit.json")["source"] == "narration"
     assert read_json(run, "performance_promise_audit.json")["source"] == "performance"
     assert (run.run_dir / "script_promise_audit.json").is_file()
-    assert (run.run_dir / "stage/promise_audit_draft.json").is_file()
+    for source in ("performance", "narration"):
+        assert (run.run_dir / f"stage/{source}_promise_audit_draft.json").is_file()
     completed = metadata["completed_stages"]
     assert completed == sorted(completed, key=pipeline_module.CHECKPOINT_STAGES.index)
     for stage in ("casting", "performance", "narration", "story"):

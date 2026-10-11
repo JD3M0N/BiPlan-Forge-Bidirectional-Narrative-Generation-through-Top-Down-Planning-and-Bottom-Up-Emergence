@@ -721,6 +721,7 @@ class PerformanceEngine:
     def _world_moves(
         self, drafts: list[WorldItemDraft], text: str, run: _SceneRun
     ) -> list[ItemAction]:
+        """Validate world object operations against a private inventory snapshot."""
         if self.inventory is None:
             return []
         trial = deepcopy(self.inventory)

@@ -34,6 +34,7 @@ jobs:
           cache-dependency-path: |
             requirements.txt
             requirements-dev.txt
+            constraints-py312.txt
             packages/*/pyproject.toml
             apps/*/pyproject.toml
 

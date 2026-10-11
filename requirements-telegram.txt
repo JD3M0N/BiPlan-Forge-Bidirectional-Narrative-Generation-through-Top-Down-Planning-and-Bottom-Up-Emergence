@@ -1,0 +1,6 @@
+# Desde la raiz del repositorio; Python 3.12 de 64 bits.
+-c constraints-py312.txt
+-e ./packages/core
+-e ./packages/evaluation
+-e ./packages/stagecraft
+-e ./apps/telegram

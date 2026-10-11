@@ -1,3 +1,4 @@
+-c constraints-py312.txt
 -e ./packages/core
 -e ./packages/evaluation
 -e ./packages/stagecraft

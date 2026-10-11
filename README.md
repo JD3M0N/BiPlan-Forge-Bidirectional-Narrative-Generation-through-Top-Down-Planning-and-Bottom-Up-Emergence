@@ -22,13 +22,16 @@ enfoques:
 ## Puesta en marcha
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements-dev.txt
-copy .env.example .env    # añade GEMINI_API_KEY para generar de verdad
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
+.\venv.ps1
+# Edita .env: añade GEMINI_API_KEY para generar de verdad
 generate-story "Un caballero rescata a una princesa de un dragón"
 .\run-tests.ps1           # los tests usan proveedores falsos
 ```
+
+Para instalar solo el bot en Windows: `.\setup.ps1 -Telegram`.
+Consulta [la guía de instalación 24/7](apps/telegram/DEPLOYMENT.md).
+Las dependencias se fijan en `constraints-py312.txt` para Python 3.12 de 64 bits.
 
 ## Más información
 

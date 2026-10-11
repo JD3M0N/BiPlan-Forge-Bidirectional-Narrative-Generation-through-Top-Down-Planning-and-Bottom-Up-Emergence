@@ -12,6 +12,7 @@ dependencies = [
   "asg-core>=0.7.0",
   "asg-evaluation>=1.0.0",
   "google-genai>=1.0,<2",
+  "httpx>=0.28,<1",
   "pydantic>=2.7,<3",
   "python-dotenv>=1.0,<2",
 ]
