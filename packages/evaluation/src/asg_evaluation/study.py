@@ -11,9 +11,12 @@ from pathlib import Path
 
 from .artifacts import load_json_object
 from .catalog import catalog_snapshot, digest, guidance
+from .publication import PublicationStore
+from .rolling import RollingStudy, backup_database, migrate_rolling
 from .study_design import coverage, make_assignments
+from .transfer import portable_provenance
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 PROSE_FORMATS = {"baseline", "narrative", "simulated"}
 _SCHEMA = (
     "CREATE TABLE study (id TEXT PRIMARY KEY, state TEXT NOT NULL, seed INTEGER NOT NULL, "
@@ -77,13 +80,14 @@ def read_candidate(directory: str | Path) -> dict:
     }
 
 
-class StudyRepository:
+class StudyRepository(RollingStudy, PublicationStore):
     """Keep one study and all its snapshots, participants and votes in SQLite."""
 
     def __init__(self, path: str | Path) -> None:
         """Open an existing study or initialize its versioned schema."""
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        backup_database(self.path, SCHEMA_VERSION)
         with self.transaction() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
             if version > SCHEMA_VERSION:
@@ -97,7 +101,9 @@ class StudyRepository:
                     "CREATE UNIQUE INDEX contribution_owner ON stories(owner) "
                     "WHERE owner IS NOT NULL AND curated=0"
                 )
-                db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+            if version < 3:
+                migrate_rolling(db)
+            db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
     @contextmanager
     def transaction(self):
@@ -115,16 +121,21 @@ class StudyRepository:
         finally:
             db.close()
 
-    def create(self, study_id: str, *, required_version: str, seed: int = 42) -> None:
+    def create(
+        self, study_id: str, *, required_version: str, seed: int = 42, mode: str = "fixed"
+    ) -> None:
         """Create a preparation-stage study pinned to a future generator release."""
+        if mode not in {"fixed", "rolling"}:
+            raise ValueError("Modo de estudio desconocido.")
         if not required_version.strip() or not study_id.strip():
             raise ValueError("Indica el estudio y la versión definitiva del generador.")
         with self.transaction() as db:
             if db.execute("SELECT 1 FROM study").fetchone():
                 raise ValueError("Esta base ya contiene un estudio.")
             db.execute(
-                "INSERT INTO study VALUES (?,?,?,?,?,?)",
-                (study_id, "preparation", seed, required_version, None, now()),
+                "INSERT INTO study(id,state,seed,required_version,snapshot,created_at,mode) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (study_id, "preparation", seed, required_version, None, now(), mode),
             )
 
     def info(self) -> dict:
@@ -161,7 +172,7 @@ class StudyRepository:
                 "SELECT * FROM participants WHERE external_id=?", (str(external_id),)
             ).fetchone()
             if row is None:
-                self._require(db, "preparation", "collection")
+                self._require_enrollment(db)
                 pid = identifier("p")
                 db.execute(
                     "INSERT INTO participants(id,external_id,profile,is_author) VALUES (?,?,?,?)",
@@ -170,10 +181,10 @@ class StudyRepository:
             else:
                 pid = row["id"]
                 if is_author and not row["is_author"]:
-                    self._require(db, "preparation", "collection")
+                    self._require_enrollment(db)
                     db.execute("UPDATE participants SET is_author=1 WHERE id=?", (pid,))
                 if profile and profile != row["profile"]:
-                    self._require(db, "preparation", "collection")
+                    self._require_enrollment(db)
                     db.execute("UPDATE participants SET profile=? WHERE id=?", (profile, pid))
             return dict(db.execute("SELECT * FROM participants WHERE id=?", (pid,)).fetchone())
 
@@ -188,24 +199,45 @@ class StudyRepository:
         """Enroll or replace one contribution before freeze, preserving its stable identifier."""
         candidate = read_candidate(directory)
         with self.transaction() as db:
-            self._require(db, "preparation", "collection")
+            info = self._require_enrollment(db)
             existing = db.execute(
                 "SELECT * FROM stories WHERE run_path=?", (candidate["run_path"],)
             ).fetchone()
+            duplicate = db.execute(
+                "SELECT id FROM stories WHERE text_hash=? AND run_path<>?",
+                (candidate["text_hash"], candidate["run_path"]),
+            ).fetchone()
+            if duplicate:
+                raise ValueError("Este texto ya está inscrito en el estudio.")
+            if owner and info["mode"] == "rolling":
+                reader = db.execute(
+                    "SELECT profile FROM participants WHERE id=?", (owner,)
+                ).fetchone()
+                if not reader or not reader["profile"]:
+                    raise ValueError("Completa el perfil lector antes de aportar una historia.")
             if existing and (existing["owner"] != owner or bool(existing["curated"]) != curated):
                 raise ValueError("El run ya tiene otra procedencia inscrita.")
             old = existing or (
                 db.execute(
-                    "SELECT id FROM stories WHERE owner=? AND curated=0", (owner,)
+                    "SELECT id FROM stories WHERE owner=? AND curated=0 AND active=1", (owner,)
                 ).fetchone()
                 if owner and not curated
                 else None
             )
+            if info["mode"] == "rolling":
+                if existing:
+                    if existing["text_hash"] != candidate["text_hash"]:
+                        raise ValueError("Un relato inscrito no puede cambiar de texto.")
+                    return existing["id"]
+                if old:
+                    db.execute("UPDATE stories SET active=0 WHERE id=?", (old["id"],))
+                old = None
             sid = old["id"] if old else identifier("s")
             if old:
                 db.execute("DELETE FROM stories WHERE id=?", (sid,))
             db.execute(
-                "INSERT INTO stories VALUES (?,?,?,?,?,?,?,?)",
+                "INSERT INTO stories(id,run_path,text,text_hash,provenance,owner,curated,family) "
+                "VALUES (?,?,?,?,?,?,?,?)",
                 (
                     sid,
                     candidate["run_path"],
@@ -221,6 +253,7 @@ class StudyRepository:
                 db.execute(
                     "INSERT OR IGNORE INTO exposures VALUES (?,?)", (owner, candidate["text_hash"])
                 )
+            self._rolling_enrolled(db, sid, owner, curated)
         return sid
 
     @staticmethod
@@ -235,6 +268,8 @@ class StudyRepository:
         """Validate the roster and corpus, then atomically freeze snapshots and assignments."""
         with self.transaction() as db:
             info = self._require(db, "collection")
+            if info["mode"] == "rolling":
+                raise ValueError("El estudio creciente se abre al recibir ocho aportaciones.")
             stories = self._stories(db)
             readers = [dict(r) for r in db.execute("SELECT * FROM participants ORDER BY id")]
             self._validate_pool(stories, readers, info["required_version"])
@@ -339,6 +374,7 @@ class StudyRepository:
             ).fetchone()
             if reader is None or reader["paused"]:
                 return None
+            self._ensure_session(db, participant)
             row = self._next(db, participant)
             if row is None:
                 return None
@@ -425,8 +461,9 @@ class StudyRepository:
             }
             available = [
                 s
-                for s in self._stories(db)
-                if s["id"] not in assigned
+                for s in self._replacement_pool(db, participant, current["session"])
+                if s["active"]
+                and s["id"] not in assigned
                 and s["owner"] != participant
                 and not db.execute(
                     "SELECT 1 FROM exposures WHERE participant=? AND text_hash=?",
@@ -462,7 +499,7 @@ class StudyRepository:
     def request_contribution(self, participant: str) -> None:
         """Reserve the next generation as this participant's contribution."""
         with self.transaction() as db:
-            self._require(db, "collection")
+            self._require_enrollment(db, preparation=False)
             db.execute(
                 "INSERT INTO contributions VALUES (?,NULL,1) ON CONFLICT(participant) "
                 "DO UPDATE SET job_id=NULL,pending=1",
@@ -499,7 +536,7 @@ class StudyRepository:
         """Report whether a contribution is enrolled and whether another one is reserved."""
         with self.transaction() as db:
             enrolled = db.execute(
-                "SELECT 1 FROM stories WHERE owner=? AND curated=0", (participant,)
+                "SELECT 1 FROM stories WHERE owner=? AND curated=0 AND active=1", (participant,)
             ).fetchone()
             pending = db.execute(
                 "SELECT 1 FROM contributions WHERE participant=? AND pending=1", (participant,)
@@ -547,7 +584,13 @@ class StudyRepository:
             ).fetchone()
         if not pending:
             return False
-        self.add_story(directory, owner=pid)
+        with self.transaction() as db:
+            existing = db.execute(
+                "SELECT id FROM stories WHERE run_path=? AND owner=?",
+                (str(directory.resolve()), pid),
+            ).fetchone()
+        if not existing:
+            self.add_story(directory, owner=pid)
         with self.transaction() as db:
             db.execute(
                 "UPDATE contributions SET pending=0 WHERE participant=? AND job_id=?", (pid, job_id)
@@ -560,6 +603,7 @@ class StudyRepository:
             stories = self._stories(db)
             for story in stories:
                 story.pop("run_path")
+                story["provenance"] = portable_provenance(story["provenance"])
             readers = [
                 dict(r)
                 for r in db.execute("SELECT id,profile,is_author FROM participants ORDER BY id")
@@ -568,7 +612,7 @@ class StudyRepository:
                 dict(r)
                 for r in db.execute(
                     "SELECT id,participant,session,position,criterion,"
-                    "left_id AS 'left',right_id AS 'right',void FROM assignments "
+                    "left_id AS 'left',right_id AS 'right',void,issued_at FROM assignments "
                     "ORDER BY participant,session,position"
                 )
             ]
@@ -580,9 +624,20 @@ class StudyRepository:
                     "FROM votes v JOIN assignments a ON a.id=v.assignment ORDER BY v.created_at"
                 )
             ]
+            exposures = [dict(r) for r in db.execute("SELECT * FROM exposures")]
+            contributions = [dict(r) for r in db.execute("SELECT * FROM first_contributions")]
+            readings = [dict(r) for r in db.execute("SELECT * FROM readings")]
+            sessions = [dict(r) for r in db.execute("SELECT * FROM sessions")]
+            info = dict(db.execute("SELECT * FROM study").fetchone())
+            info["snapshot"] = json.loads(info["snapshot"]) if info["snapshot"] else None
+            info = portable_provenance(info)
         return {
+            "readings": readings,
+            "exposures": exposures,
+            "first_contributions": contributions,
+            "sessions": sessions,
             "schema_version": SCHEMA_VERSION,
-            "study": self.info(),
+            "study": info,
             "stories": stories,
             "participants": readers,
             "assignments": assignments,

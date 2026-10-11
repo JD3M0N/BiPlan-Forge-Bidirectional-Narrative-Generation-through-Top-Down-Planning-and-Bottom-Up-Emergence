@@ -220,8 +220,15 @@ class TelegramStoryBot(GenerationCoordinator):
         """Cancel a waiting job or clear an inactive conversation state."""
         user_id = update.effective_user.id
         _user_log(update, "ejecutó /cancel")
+        pending_job = (
+            next((job for job in self.queue.active() if job.user_id == user_id), None)
+            if self.queue
+            else None
+        )
         outcome = self.queue.cancel_user(user_id) if self.queue else None
         if outcome == "cancelled":
+            if self.study and pending_job:
+                self.study.repository.release_contribution(str(user_id), pending_job.id)
             self.active_users.discard(user_id)
             context.user_data.clear()
             await update.effective_message.reply_text(

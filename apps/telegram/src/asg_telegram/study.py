@@ -93,7 +93,7 @@ class StudyConversation:
         if status.step in {Step.CONSENT, Step.PROFILE, Step.WAITING} or status.participant is None:
             await self.guide.show(update, context)
             return
-        if status.phase != "collection":
+        if not self.repository.collection_open():
             await update.effective_message.reply_text(COLLECTION_CLOSED)
             return
         try:
@@ -155,7 +155,14 @@ class StudyConversation:
         q = self.repository.next_question(participant)
         if q is None:
             await context.bot.send_message(
-                chat_id=chat_id, text=FINISHED, parse_mode=ParseMode.HTML
+                chat_id=chat_id,
+                text=(
+                    "Todavía faltan relatos desconocidos para tu próxima sesión. "
+                    "Vuelve con /evaluar más adelante."
+                    if self.repository.session_waiting(participant)
+                    else FINISHED
+                ),
+                parse_mode=ParseMode.HTML,
             )
             return
         progress = self.repository.progress(participant)

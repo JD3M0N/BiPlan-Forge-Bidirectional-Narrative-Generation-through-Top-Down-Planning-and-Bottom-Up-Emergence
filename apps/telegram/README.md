@@ -133,3 +133,10 @@ una vez; si vuelve a interrumpirse, queda como `RECOVERY_EXHAUSTED`.
 Si la historia pudo escribirse pero la auditoría o reescritura final falló, el
 bot entrega la mejor versión disponible y muestra la advertencia guardada en
 `metadata.json`. Los fallos de planificación no se degradan ni se entregan.
+
+## Estudio con pool creciente
+
+Para abrir automáticamente con ocho aportaciones nuevas, mantener la cola según cuota,
+publicar textos revisados y descargar los datos desde otra PC, sigue
+[la guía del estudio creciente](ROLLING_STUDY.md). Se activa con `--mode rolling`;
+el recorrido y los comandos manuales descritos arriba siguen disponibles en modo fijo.

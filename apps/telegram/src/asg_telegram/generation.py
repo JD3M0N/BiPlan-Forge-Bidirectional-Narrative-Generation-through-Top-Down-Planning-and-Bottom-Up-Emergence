@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,6 +14,7 @@ from telegram.error import BadRequest, TelegramError
 
 from .console import log_user_action
 from .contract import (
+    GenerationAvailability,
     GenerationCancelled,
     GenerationEvent,
     GenerationFailure,
@@ -54,6 +56,35 @@ class GenerationCoordinator(TelegramDelivery):
         self.study = None
         self.guide = None
         self.gate = None
+        self._job_tasks: set[asyncio.Task] = set()
+        self._stopping = False
+
+    def schedule(self, application, coroutine, *, update=None):
+        """Let embedding applications manage generation tasks by default."""
+        if update is None:
+            return application.create_task(coroutine)
+        return application.create_task(coroutine, update=update)
+
+    def background_task(self, application, coroutine, *, update=None):
+        """Own long quota waits outside Telegram's update-task shutdown barrier."""
+        task = asyncio.create_task(coroutine)
+        self._job_tasks.add(task)
+        task.add_done_callback(self._task_done)
+        return task
+
+    def _task_done(self, task) -> None:
+        """Release task references and consume unexpected background failures."""
+        self._job_tasks.discard(task)
+        if not task.cancelled() and task.exception():
+            LOGGER.error("Generation task failed", exc_info=task.exception())
+
+    async def stop_generation_tasks(self) -> None:
+        """Interrupt waiting tasks while leaving durable jobs recoverable on restart."""
+        self._stopping = True
+        tasks = list(self._job_tasks)
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     # --- per-user option preferences ------------------------------------
 
@@ -115,7 +146,8 @@ class GenerationCoordinator(TelegramDelivery):
                 StoryOutline.from_dict(job.brief) if job.brief else job.prompt
             )
             options = job.options if job.options is not None else self._legacy_options(job)
-            application.create_task(
+            self.schedule(
+                application,
                 self._generate_and_deliver(
                     context=context,
                     chat_id=job.chat_id,
@@ -124,7 +156,7 @@ class GenerationCoordinator(TelegramDelivery):
                     options=options,
                     progress_message_id=job.progress_message_id,
                     job_id=job.id,
-                )
+                ),
             )
         await self._refresh_queue(application)
 
@@ -145,6 +177,9 @@ class GenerationCoordinator(TelegramDelivery):
         ``recovery_pending`` forever, because nothing moved it out again.
         """
         for job in self.queue.recovery_pending():
+            if job.run_dir and self._completed_run(Path(job.run_dir)):
+                self.queue.requeue(job.id)
+                continue
             if job.recovery_count <= self.MAX_RECOVERY_ATTEMPTS:
                 self.queue.requeue(job.id)
                 notice = (
@@ -153,6 +188,8 @@ class GenerationCoordinator(TelegramDelivery):
                 )
             else:
                 self.queue.finish(job.id, "failed", error_code="RECOVERY_EXHAUSTED")
+                if self.study:
+                    self.study.repository.release_contribution(str(job.user_id), job.id)
                 notice = (
                     "El bot se reinició varias veces durante tu historia y no pude "
                     "completarla. Usa /newstory para intentarlo otra vez. "
@@ -203,7 +240,8 @@ class GenerationCoordinator(TelegramDelivery):
         job_id = await self._enqueue(update, context, request, progress_message.message_id, options)
         if self.queue and job_id is None:
             return
-        context.application.create_task(
+        self.schedule(
+            context.application,
             self._generate_and_deliver(
                 context=context,
                 chat_id=update.effective_chat.id,
@@ -240,6 +278,7 @@ class GenerationCoordinator(TelegramDelivery):
             story_format=str(options.get("format")) if options.get("format") else None,
             options=dict(options),
             brief=brief,
+            priority=self._generation_priority(update.effective_user.id),
         )
         if not result.created:
             context.user_data.clear()
@@ -253,6 +292,36 @@ class GenerationCoordinator(TelegramDelivery):
             self.study.repository.bind_contribution(str(update.effective_user.id), result.job.id)
         await self._refresh_queue(context.application)
         return result.job.id
+
+    def _generation_priority(self, user_id: int) -> int:
+        """Favor first contributions, then replacements, then free generations."""
+        if self.guide:
+            status = self.guide.status(user_id)
+            if status.contributing:
+                return 1 if status.enrolled else 0
+        return 2
+
+    def _availability(self, options) -> GenerationAvailability:
+        """Support older adapters that do not expose capacity diagnostics."""
+        query = getattr(self.generator, "availability", None)
+        return query(options or {}) if query else GenerationAvailability()
+
+    async def _wait_for_turn(self, job_id, options, application) -> bool:
+        """Wait outside the generation lock so deferred jobs do not block eligible work."""
+        if not self.queue or not job_id:
+            return True
+        while True:
+            job = self.queue.get(job_id)
+            if not job or job.status not in {"queued", "running", "quota_wait"}:
+                return False
+            if self.queue.next_ready() == job_id:
+                capacity = await asyncio.to_thread(self._availability, options)
+                if capacity.available:
+                    return True
+                until = capacity.retry_at or (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
+                self.queue.defer(job_id, until, capacity.reason)
+                await self._refresh_queue(application)
+            await asyncio.sleep(1)
 
     # --- running a job -------------------------------------------------------
 
@@ -304,31 +373,42 @@ class GenerationCoordinator(TelegramDelivery):
                 LOGGER.warning("no se pudo confirmar la edición del progreso a tiempo")
 
         should_cancel = (
-            (lambda: self.queue.cancellation_requested(job_id)) if job_id and self.queue else None
+            (lambda: self._stopping or self.queue.cancellation_requested(job_id))
+            if job_id and self.queue
+            else None
         )
 
         try:
-            async with self.generation_semaphore:
-                if job_id and self.queue:
-                    if self.queue.position(job_id) is None:
-                        await self._report_vanished_job(context, chat_id, progress_message_id)
-                        return
-                    self.queue.mark_running(job_id)
-                    await self._refresh_queue(context.application, include_running=True)
-                await self._run_generation_and_delivery(
-                    context=context,
-                    chat_id=chat_id,
-                    user=user,
-                    prompt=prompt,
-                    options=options or {},
-                    progress_message_id=progress_message_id,
-                    job_id=job_id,
-                    report_progress=report_progress,
-                    should_cancel=should_cancel,
-                    last_progress=last_progress,
-                )
+            while await self._wait_for_turn(job_id, options, getattr(context, "application", None)):
+                async with self.generation_semaphore:
+                    if job_id and self.queue:
+                        if self.queue.next_ready() != job_id:
+                            continue
+                        self.queue.mark_running(job_id)
+                        await self._refresh_queue(context.application, include_running=True)
+                    await self._run_generation_and_delivery(
+                        context=context,
+                        chat_id=chat_id,
+                        user=user,
+                        prompt=prompt,
+                        options=options or {},
+                        progress_message_id=progress_message_id,
+                        job_id=job_id,
+                        report_progress=report_progress,
+                        should_cancel=should_cancel,
+                        last_progress=last_progress,
+                    )
+                job = self.queue.get(job_id) if self.queue and job_id else None
+                if not job or job.status != "quota_wait":
+                    break
+            else:
+                await self._report_vanished_job(context, chat_id, progress_message_id)
         finally:
-            self.active_users.discard(user.id)
+            other_active = self.queue and any(
+                job.user_id == user.id and job.id != job_id for job in self.queue.active()
+            )
+            if not other_active:
+                self.active_users.discard(user.id)
             if self.queue:
                 await self._refresh_queue(context.application)
 
@@ -359,14 +439,19 @@ class GenerationCoordinator(TelegramDelivery):
     ) -> None:
         """Generate, report metadata, deliver, and begin evaluation."""
         try:
-            story_directory = await self._generate_story(
-                prompt,
-                options,
-                user,
-                job_id,
-                report_progress,
-                should_cancel,
-            )
+            existing = self.queue.get(job_id) if self.queue and job_id else None
+            directory = Path(existing.run_dir) if existing and existing.run_dir else None
+            if directory and self._completed_run(directory):
+                story_directory = directory
+            else:
+                story_directory = await self._generate_story(
+                    prompt,
+                    options,
+                    user,
+                    job_id,
+                    report_progress,
+                    should_cancel,
+                )
         except Exception as exc:
             await self._handle_generation_failure(
                 exc,
@@ -403,6 +488,17 @@ class GenerationCoordinator(TelegramDelivery):
             summary,
             enrolled=enrolled,
         )
+
+    @staticmethod
+    def _completed_run(directory: Path) -> bool:
+        """Recognize a finished persisted run after interrupted delivery."""
+        import json
+
+        try:
+            metadata = json.loads((directory / "metadata.json").read_text(encoding="utf-8"))
+            return metadata.get("status") == "completed" and (directory / "story.md").is_file()
+        except (OSError, ValueError):
+            return False
 
     async def _record_study_generation(self, context, chat_id, user, job_id, directory) -> bool:
         """Record exposure and enroll a reserved base story, keeping failures retryable."""
@@ -466,6 +562,25 @@ class GenerationCoordinator(TelegramDelivery):
         last_progress,
     ) -> None:
         """Persist, display, and safely report a generation failure."""
+        if (
+            isinstance(error, GenerationFailure)
+            and error.retryable_quota
+            and self.queue
+            and job_id
+            and not self.queue.cancellation_requested(job_id)
+        ):
+            job = self.queue.get(job_id)
+            capacity = self._availability(job.options if job else {})
+            until = capacity.retry_at or (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
+            self.queue.defer(job_id, until, "Cuota agotada; tu idea sigue guardada")
+            await self._safe_notice(
+                context,
+                chat_id,
+                "La cuota del proveedor se agot?. Tu solicitud conserva su turno. "
+                "Volveré a generar la historia automáticamente cuando haya capacidad.",
+                user,
+            )
+            return
         cancelled = isinstance(error, GenerationCancelled)
         recognized = isinstance(error, GenerationFailure)
         if job_id and self.queue:
@@ -614,9 +729,9 @@ class GenerationCoordinator(TelegramDelivery):
                         user,
                     )
                     return
-                await self._after_delivery(context, chat_id, user, enrolled)
                 if job_id and self.queue:
                     self.queue.finish(job_id, "completed")
+                await self._after_delivery(context, chat_id, user, enrolled)
         except Exception:
             log_user_action(
                 LOGGER,
@@ -638,7 +753,7 @@ class GenerationCoordinator(TelegramDelivery):
         finally:
             if job_id and self.queue:
                 job = self.queue.get(job_id)
-                if job and job.status == "running":
+                if job and job.status == "running" and not self._stopping:
                     self.queue.finish(job_id, "failed", error_code="DELIVERY_FAILED")
 
     async def _after_delivery(self, context, chat_id: int, user, enrolled: bool) -> None:
@@ -660,6 +775,11 @@ class GenerationCoordinator(TelegramDelivery):
             if job.status == "running" and not include_running:
                 continue
             text = self._queue_message(job.status, position, average)
+            if job.status == "quota_wait":
+                text = (
+                    f"Tu historia está en la posición {position}.\n{job.wait_reason}.\n"
+                    f"Próxima revisión: {job.not_before} (UTC). Tu idea está guardada."
+                )
             if job.progress_message_id:
                 try:
                     await application.bot.edit_message_text(

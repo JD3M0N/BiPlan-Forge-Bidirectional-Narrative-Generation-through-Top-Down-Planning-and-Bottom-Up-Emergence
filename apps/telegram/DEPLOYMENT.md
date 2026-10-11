@@ -1,4 +1,4 @@
-﻿# Instalar el bot en otra PC Windows
+# Instalar el bot en otra PC Windows
 
 ## Preparar el equipo
 
@@ -93,3 +93,10 @@ sin abrir el bot a mano. Revisa el historial de la tarea si no responde; para ve
 el error, detén la tarea y arranca manualmente desde PowerShell.
 La instalación no registra tareas ni cambia ajustes de energía por su cuenta.
 Haz copias periódicas de los datos con el bot detenido.
+
+## Cola por cuota y transferencia del estudio
+
+Para este despliegue usa [ROLLING_STUDY.md](ROLLING_STUDY.md): explica cómo importar las
+tres semillas, abrir un estudio `rolling`, configurar los administradores y la publicación
+en GitHub, y descargar un ZIP privado del estudio desde Telegram. No copies una base
+administrativa dentro de `story-pool/`.

@@ -40,6 +40,7 @@ from pydantic import ValidationError
 from .contract import (
     BriefSpec,
     EventCallback,
+    GenerationAvailability,
     GenerationCancelled,
     GenerationEvent,
     GenerationFailure,
@@ -394,6 +395,27 @@ class StagecraftGenerator:
             # its own usage to disk: keeping the records only grew the bot's memory without end.
             self._provider.usage_records.clear()
 
+    def availability(self, options: Mapping[str, OptionValue]) -> GenerationAvailability:
+        """Read durable quota windows without making a provider request."""
+        from asg_stagecraft.runtime.budget import QuotaLedger
+
+        settings = self._settings
+        if not settings.budget_path:
+            return GenerationAvailability()
+        ledger = QuotaLedger(settings.budget_path)
+        slots = [entry.slot for entry in settings.quota_entries()]
+        if not settings.chain:
+            models = {settings.model}
+            if options.get("format") == "simulated":
+                models.add(settings.effective_stage_model)
+            slots = [slot for slot in slots if slot.model in models]
+        blocked = [slot for slot in slots if not ledger.available(slot, estimated_tokens=1)]
+        if not blocked or (settings.chain and len(blocked) < len(slots)):
+            return GenerationAvailability()
+        resets = [ledger.exhausted_until(slot) or ledger.resets_at(slot) for slot in blocked]
+        retry_at = min(resets) if settings.chain else max(resets)
+        return GenerationAvailability(False, retry_at.isoformat(), "Esperando cuota del proveedor")
+
     def summarize(self, run_dir: Path) -> RunSummary:
         """Read a finished run and describe it for the chat."""
         return summarize_run(run_dir)
@@ -451,6 +473,13 @@ def _as_failure(error: ASGError) -> GenerationFailure:
         stage=error.stage,
         recommendation=error.recommendations[0] if error.recommendations else None,
         run_id=error.run_id,
+        retryable_quota=error.code
+        in {
+            "GEMINI_DAILY_QUOTA_EXHAUSTED",
+            "PROVIDER_DAILY_QUOTA_EXHAUSTED",
+            "GEMINI_RPM_EXHAUSTED",
+            "GEMINI_TPM_EXHAUSTED",
+        },
     )
 
 

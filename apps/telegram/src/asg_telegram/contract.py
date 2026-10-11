@@ -147,6 +147,15 @@ class RunSummary:
     audio_voice: str = ""
 
 
+@dataclass(frozen=True)
+class GenerationAvailability:
+    """Expose provider capacity without leaking provider types into the coordinator."""
+
+    available: bool = True
+    retry_at: str | None = None
+    reason: str = ""
+
+
 class GenerationFailure(Exception):
     """A generation failure that can be shown to a user as it stands.
 
@@ -163,6 +172,7 @@ class GenerationFailure(Exception):
         stage: str,
         recommendation: str | None = None,
         run_id: str | None = None,
+        retryable_quota: bool = False,
     ) -> None:
         """Store the safe, user-facing description of one failed generation."""
         super().__init__(summary)
@@ -171,6 +181,7 @@ class GenerationFailure(Exception):
         self.stage = stage
         self.recommendation = recommendation
         self.run_id = run_id
+        self.retryable_quota = retryable_quota
 
     def public_message(self) -> str:
         """Render the chat message describing this failure."""

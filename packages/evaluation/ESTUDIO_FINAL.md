@@ -188,3 +188,25 @@ anteriores se conservan con sus contratos originales. Las notas 1–10 quedan fu
 Fijar versión definitiva y presupuesto, generar el corpus, revisar extracciones, realizar el
 piloto humano, ejecutar el estudio y redactar el análisis de los resultados reales. No se usa
 el juez para elegir automáticamente qué generar ni se modifica ahora la simulación.
+
+## Variante de recogida continua (`rolling`)
+
+El protocolo fijo descrito arriba conserva sus validaciones. La variante creciente se crea
+con `--mode rolling`: abre al recibir ocho primeras aportaciones de lectores distintos,
+sin contar historias seleccionadas, reemplazos ni al investigador. Mantiene la recogida
+abierta durante la evaluación y no exige dos líneas base ni una única versión del generador.
+Por tanto, sus resultados son exploratorios; versiones y opciones se conservan para separar
+los análisis y no atribuir causalidad a su mezcla.
+
+Cada lector recibe como máximo dos sesiones de cinco historias. Las asignaciones se crean
+al comenzar cada sesión, favoreciendo relatos con menor cobertura y excluyendo los propios,
+los ya conocidos y los asignados anteriormente. Cada sesión conserva revisión del pool,
+semilla y candidatos; las sesiones iniciadas no se recalculan cuando llega otro relato.
+Los reemplazos son nuevos textos con nuevos identificadores; las referencias históricas y
+los votos no cambian. Las exposiciones por publicaciones públicas se declaran con el botón
+«Ya conocía esta historia» y se conservan en la exportación.
+
+La autorización para participar no autoriza publicar. La publicación exige consentimiento
+separado y revisión del investigador. La exportación privada conserva material del estudio
+con seudónimos; GitHub solo recibe textos autorizados, códigos neutros y huellas.
+Consulta [operación y transferencia](../../apps/telegram/ROLLING_STUDY.md).

@@ -23,6 +23,10 @@ class TelegramSettings:
     project_root: Path
     access_key: str = field(repr=False)
     study_path: Path
+    admin_ids: frozenset[int] = frozenset()
+    pool_repository: str = ""
+    pool_token: str = field(default="", repr=False)
+    pool_branch: str = "main"
 
 
 def load_settings(start: Path | None = None) -> TelegramSettings:
@@ -54,6 +58,24 @@ def load_settings(start: Path | None = None) -> TelegramSettings:
         raise TelegramConfigurationError(
             f"No existe la base del estudio {study_path}. Créala con evaluation-study create."
         )
+    try:
+        admin_ids = frozenset(
+            int(value.strip())
+            for value in os.getenv("TELEGRAM_ADMIN_IDS", "").split(",")
+            if value.strip()
+        )
+    except ValueError as exc:
+        raise TelegramConfigurationError(
+            "TELEGRAM_ADMIN_IDS exige IDs numéricos separados por comas."
+        ) from exc
     return TelegramSettings(
-        token, generator_name or "stagecraft", root, access_key, study_path.resolve()
+        token,
+        generator_name or "stagecraft",
+        root,
+        access_key,
+        study_path.resolve(),
+        admin_ids,
+        os.getenv("STORY_POOL_REPOSITORY", "").strip(),
+        os.getenv("STORY_POOL_TOKEN", "").strip(),
+        os.getenv("STORY_POOL_BRANCH", "main").strip(),
     )

@@ -13,9 +13,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 5
+from asg_evaluation.rolling import backup_database
+
+SCHEMA_VERSION = 6
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
-CANCELLABLE_STATUSES = ("queued", "recovery_pending")
+CANCELLABLE_STATUSES = ("queued", "quota_wait", "recovery_pending")
 MINIMUM_SAMPLES_FOR_ESTIMATE = 3
 DURATION_SAMPLE_SIZE = 10
 
@@ -67,6 +69,9 @@ _ADDED_COLUMNS = (
     ("story_format", "story_format TEXT"),
     ("options", "options TEXT"),
     ("brief", "brief TEXT"),
+    ("priority", "priority INTEGER NOT NULL DEFAULT 2"),
+    ("not_before", "not_before TEXT"),
+    ("wait_reason", "wait_reason TEXT"),
 )
 
 
@@ -107,6 +112,9 @@ class QueueJob:
     cancel_requested: int = 0
     story_format: str | None = None
     options: dict | None = None
+    priority: int = 2
+    not_before: str | None = None
+    wait_reason: str | None = None
     brief: dict | None = None
 
 
@@ -124,6 +132,7 @@ class QueueRepository:
     def __init__(self, path: Path) -> None:
         """Open a queue database, creating or migrating its schema."""
         path.parent.mkdir(parents=True, exist_ok=True)
+        backup_database(path, SCHEMA_VERSION)
         self.path = path
         self._lock = threading.RLock()
         self.last_recovered_ids: set[str] = set()
@@ -180,11 +189,13 @@ class QueueRepository:
         story_format: str | None = None,
         options: Mapping | None = None,
         brief: Mapping | None = None,
+        priority: int = 2,
     ) -> EnqueueResult:
         """Append a job unless the user already has an active request."""
         with self._lock, self._connect() as db:
             existing = db.execute(
-                "SELECT * FROM jobs WHERE user_id=? AND status IN ('queued','running')",
+                "SELECT * FROM jobs WHERE user_id=? "
+                "AND status IN ('queued','running','quota_wait','recovery_pending')",
                 (user_id,),
             ).fetchone()
             if existing:
@@ -202,11 +213,12 @@ class QueueRepository:
                 story_format=story_format,
                 options=dict(options) if options is not None else None,
                 brief=dict(brief) if brief is not None else None,
+                priority=priority,
             )
             db.execute(
                 "INSERT INTO jobs(id,user_id,username,chat_id,prompt,status,enqueued_at,"
-                "progress_message_id,narrative_profile,story_format,options,brief) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                "progress_message_id,narrative_profile,story_format,options,brief,priority) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     job.id,
                     job.user_id,
@@ -220,6 +232,7 @@ class QueueRepository:
                     story_format,
                     _dump_json(options),
                     _dump_json(brief),
+                    priority,
                 ),
             )
             return EnqueueResult(job, created=True)
@@ -228,8 +241,9 @@ class QueueRepository:
         """Return running and queued jobs in their effective FIFO order."""
         with self._lock, self._connect() as db:
             rows = db.execute(
-                "SELECT * FROM jobs WHERE status IN ('running','queued') "
-                "ORDER BY CASE status WHEN 'running' THEN 0 ELSE 1 END, enqueued_at"
+                "SELECT * FROM jobs WHERE status IN ('running','queued','quota_wait') "
+                "ORDER BY CASE status WHEN 'running' THEN 0 ELSE 1 END, "
+                "priority, enqueued_at, rowid"
             ).fetchall()
         return [self._job(row) for row in rows]
 
@@ -250,9 +264,31 @@ class QueueRepository:
         """Mark a queued job as running and record its start time."""
         with self._lock, self._connect() as db:
             db.execute(
-                "UPDATE jobs SET status='running', started_at=? WHERE id=?",
+                "UPDATE jobs SET status='running', started_at=?, "
+                "not_before=NULL, wait_reason=NULL WHERE id=?",
                 (datetime.now(UTC).isoformat(), job_id),
             )
+
+    def defer(self, job_id: str, until: str, reason: str) -> None:
+        """Keep a request and its FIFO position while waiting for provider capacity."""
+        with self._lock, self._connect() as db:
+            db.execute(
+                "UPDATE jobs SET status='quota_wait',not_before=?,wait_reason=? "
+                "WHERE id=? AND status IN ('queued','running','quota_wait')",
+                (until, reason, job_id),
+            )
+
+    def next_ready(self) -> str | None:
+        """Return the highest priority request whose persisted cooldown has elapsed."""
+        now = datetime.now(UTC).isoformat()
+        return next(
+            (
+                job.id
+                for job in self.active()
+                if job.status == "running" or not job.not_before or job.not_before <= now
+            ),
+            None,
+        )
 
     def set_run_dir(self, job_id: str, run_dir: str) -> None:
         """Associate a generated run directory with a queue job."""
@@ -363,7 +399,8 @@ class QueueRepository:
         with self._lock, self._connect() as db:
             rows = db.execute(
                 "SELECT status, COUNT(*) AS total FROM jobs "
-                "WHERE status IN ('queued','running') GROUP BY status"
+                "WHERE status IN ('queued','running','quota_wait','recovery_pending') "
+                "GROUP BY status"
             ).fetchall()
         return {row["status"]: row["total"] for row in rows}
 

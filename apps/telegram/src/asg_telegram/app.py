@@ -26,7 +26,9 @@ from .contract import GeneratorUnavailable
 from .generators import create_generator
 from .guide import ParticipantGuide
 from .handlers import TelegramStoryBot
+from .public_pool import GitHubPool, PoolPublisher
 from .queue import QueueRepository
+from .research_admin import ResearchAdmin
 from .study import StudyConversation
 
 LOGGER = logging.getLogger(__name__)
@@ -57,15 +59,18 @@ def build_application(token: str, bot: TelegramStoryBot, *, on_ready=None) -> Ap
             LOGGER.warning("No se pudieron publicar los comandos del bot: %s", exc)
         if bot.guide is not None:
             bot.announcer_task = asyncio.create_task(PhaseAnnouncer(bot.guide).run(application.bot))
+        _start_publisher(bot)
         if on_ready is not None:
             me = await application.bot.get_me()
             on_ready(me.username)
 
     async def post_stop(application) -> None:
         """Stop the phase announcer before the application shuts down."""
-        task = getattr(bot, "announcer_task", None)
-        if task is not None:
-            task.cancel()
+        await bot.stop_generation_tasks()
+        for name in ("announcer_task", "publisher_task"):
+            task = getattr(bot, name, None)
+            if task is not None:
+                task.cancel()
 
     async def post_shutdown(application) -> None:
         """Record that the bot stopped, so the console shows a clean ending."""
@@ -89,6 +94,7 @@ def build_application(token: str, bot: TelegramStoryBot, *, on_ready=None) -> Ap
     )
     if bot.gate is not None:
         application.add_handler(TypeHandler(Update, bot.gate.guard), group=-1)
+    _register_research_handlers(application, bot)
     application.add_handler(CommandHandler("start", bot.start))
     application.add_handler(CommandHandler("help", bot.help))
     application.add_handler(CommandHandler("newstory", bot.new_story))
@@ -110,7 +116,30 @@ def build_application(token: str, bot: TelegramStoryBot, *, on_ready=None) -> Ap
     application.add_handler(CallbackQueryHandler(bot.brief_callback, pattern=r"^brief:"))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, bot.text_input))
     application.add_error_handler(bot.on_error)
+    bot.schedule = bot.background_task
     return application
+
+
+def _start_publisher(bot) -> None:
+    """Start an optional publisher independently of the generation queue."""
+    publisher = getattr(bot, "pool_publisher", None)
+    if publisher:
+        bot.publisher_task = asyncio.create_task(publisher.run())
+
+
+def _register_research_handlers(application, bot) -> None:
+    """Attach private research tools when configured by the process entry point."""
+    admin = getattr(bot, "research_admin", None)
+    if admin:
+        for command, handler in (
+            ("publicacion", admin.consent),
+            ("publicaciones_pendientes", admin.pending),
+            ("revisar_historia", admin.review),
+            ("aprobar_historia", admin.approve),
+            ("exportar_estudio", admin.export),
+        ):
+            application.add_handler(CommandHandler(command, handler))
+        application.add_handler(CallbackQueryHandler(admin.consent_answer, pattern=r"^publish:"))
 
 
 def parser() -> argparse.ArgumentParser:
@@ -134,6 +163,14 @@ def main(argv: list[str] | None = None) -> int:
         bot.study = StudyConversation(repository, bot)
         bot.guide = ParticipantGuide(bot)
         bot.gate = AccessGate(bot.queue, settings.access_key, bot.guide)
+        bot.research_admin = ResearchAdmin(repository, settings.admin_ids)
+        if settings.pool_repository and settings.pool_token:
+            if not settings.admin_ids:
+                raise TelegramConfigurationError("Configura TELEGRAM_ADMIN_IDS antes de publicar.")
+            bot.pool_publisher = PoolPublisher(
+                repository,
+                GitHubPool(settings.pool_repository, settings.pool_token, settings.pool_branch),
+            )
     except (TelegramConfigurationError, ValueError, GeneratorUnavailable) as exc:
         LOGGER.error("%s", exc)
         return 2

@@ -45,6 +45,7 @@ class Status:
     enrolled: bool = False
     pending: bool = False
     is_author: bool = False
+    rolling: bool = False
 
     @property
     def can_generate(self) -> bool:
@@ -55,7 +56,7 @@ class Status:
     def contributing(self) -> bool:
         """Tell whether the next story will be enrolled as the user's base story."""
         return (
-            self.phase == "collection"
+            (self.phase == "collection" or (self.rolling and self.phase == "evaluation"))
             and self.participant is not None
             and (self.step == Step.BASE_STORY or self.pending)
         )
@@ -252,14 +253,20 @@ class ParticipantGuide:
     def status(self, user_id: int) -> Status:
         """Compute where a user stands, never from disposable conversation data."""
         access = self.queue.access(user_id)
-        phase = self.repository.info()["state"]
+        info = self.repository.info()
+        phase = info["state"]
+        rolling = info["mode"] == "rolling"
         if access is None:
             return Status(Step.LOCKED, phase)
         if not access["consented_at"]:
             return Status(Step.CONSENT, phase)
         reader = self.repository.find_participant(str(user_id))
         if reader is None or not reader["profile"]:
-            step = Step.PROFILE if phase in OPEN_PHASES else Step.ENROLLMENT_CLOSED
+            step = (
+                Step.PROFILE
+                if (phase in OPEN_PHASES or (rolling and phase == "evaluation"))
+                else Step.ENROLLMENT_CLOSED
+            )
             return Status(step, phase, reader["id"] if reader else None)
         contribution = self.repository.contribution(reader["id"])
         fields = {
@@ -267,10 +274,15 @@ class ParticipantGuide:
             "enrolled": contribution["enrolled"],
             "pending": contribution["pending"],
             "is_author": bool(reader["is_author"]),
+            "rolling": rolling,
         }
         if phase == "preparation":
             return Status(Step.WAITING, phase, **fields)
-        if phase == "collection" and not contribution["enrolled"] and not reader["is_author"]:
+        if (
+            self.repository.collection_open()
+            and not contribution["enrolled"]
+            and not reader["is_author"]
+        ):
             return Status(Step.BASE_STORY, phase, **fields)
         return Status(Step.READY, phase, **fields)
 
@@ -288,20 +300,41 @@ class ParticipantGuide:
             return ENROLLMENT_CLOSED_TEXT, None
         if status.step == Step.BASE_STORY:
             button = Button("✍️ Crear mi historia base", callback_data="guide:base")
-            return BASE_STORY_TEXT, Keyboard([[button]])
+            text = BASE_STORY_TEXT
+            if status.rolling:
+                text = text.replace(
+                    "mientras siga abierta la recogida", "mientras siga abierto el estudio"
+                )
+            return text, Keyboard([[button]])
         if status.phase == "evaluation":
             button = Button("▶️ Empezar a evaluar", callback_data="guide:evaluate")
             return READY_EVALUATION, Keyboard([[button]])
         if status.phase == "closed":
             return CLOSED_TEXT, None
         if status.phase == "collection":
-            return (AUTHOR_COLLECTION if status.is_author else READY_COLLECTION), None
+            text = AUTHOR_COLLECTION if status.is_author else READY_COLLECTION
+            if status.rolling:
+                text = text.replace(
+                    "cuando todos hayan aportado su historia",
+                    "al completar ocho aportaciones nuevas de usuarios distintos",
+                )
+            return text, None
         return READY_FROZEN, None
 
     async def send(self, bot, chat_id: int, user_id: int, *, header: str = "") -> None:
         """Send a user's current step and remember that they know the current phase."""
         status = self.status(user_id)
         text, markup = self.render(status)
+        jobs = self.queue.active()
+        for position, job in enumerate(jobs, 1):
+            if job.user_id == user_id:
+                text = f"Tu solicitud está guardada. Posición {position}. " + (
+                    job.wait_reason or ("Generando." if job.status == "running" else "En cola.")
+                )
+                if job.not_before:
+                    text += f" Próxima revisión: {job.not_before} (UTC)."
+                markup = None
+                break
         await bot.send_message(
             chat_id=chat_id, text=header + text, parse_mode=ParseMode.HTML, reply_markup=markup
         )
@@ -352,6 +385,9 @@ class ParticipantGuide:
         if action == "consent" and value == "no":
             return
         await self.send(context.bot, update.effective_chat.id, user.id)
+        admin = getattr(self.bot, "research_admin", None)
+        if action == "profile" and admin:
+            await admin.consent(update, context)
 
     def _record_answer(self, user_id: int, action: str, value: str) -> str:
         """Persist a consent or profile answer and return the confirmation to show."""
