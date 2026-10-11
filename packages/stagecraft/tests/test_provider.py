@@ -542,6 +542,30 @@ def test_the_chain_moves_on_when_a_slot_is_spent(
         assert chain.generate_text(**ask) == "second" and fakes[0].calls == 1
 
 
+def test_a_slot_that_refuses_access_is_skipped_for_the_rest_of_the_run(tmp_path) -> None:
+    """Groq's 403 to a blocked network killed every run with Mistral still untried (7.9.0)."""
+    ledger = QuotaLedger(tmp_path / "budget.sqlite3")
+    groq = provider_module.OpenAICompatibleProvider(
+        "fake-key", "openai/gpt-oss-120b", "https://groq.invalid", label="Groq", max_retries=2
+    )
+    groq._limiter = None
+    blocked = '{"error":{"message":"Access denied. Please check your network settings."}}'
+    groq._client = FakeHTTP([(403, blocked)])
+    slots = [QuotaSlot("groq", "openai/gpt-oss-120b"), QuotaSlot("mistral", "small")]
+    chain = provider_module.FailoverProvider(
+        list(zip(slots, [groq, QuotaFake("small")], strict=True)), ledger
+    )
+    notices = []
+    chain.wait_callback = lambda seconds, reason: notices.append(reason)
+    ask = {"system_instruction": "s", "prompt": "p", "profile": "prose"}
+    assert [chain.generate_text(**ask) for _ in range(2)] == ["small", "small"]
+    # One request found the refusal, with no retry; the second call never asked Groq again,
+    # and the ledger was told nothing, so another process or a fixed network can use it.
+    assert len(groq._client.bodies) == 1
+    assert notices == ["groq:openai/gpt-oss-120b rechaza el acceso; sigo con mistral:small"]
+    assert ledger.exhausted_until(slots[0]) is None
+
+
 class FakeHTTP:
     """Stand in for httpx.Client, replying with (status, payload) pairs in order."""
 

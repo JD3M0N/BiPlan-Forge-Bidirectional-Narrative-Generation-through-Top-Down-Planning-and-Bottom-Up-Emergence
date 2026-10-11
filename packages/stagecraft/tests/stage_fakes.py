@@ -20,10 +20,12 @@ from asg_stagecraft.stage.schemas import (
     BeatCheckDraft,
     BeatDirection,
     CastBibleDraft,
+    EvidenceSource,
     FutureConflict,
     FutureRevision,
     ItemActionDraft,
     KnowledgeGate,
+    NarrationReview,
     OutcomePart,
     PromiseStoryAuditDraft,
     PromiseStoryCheck,
@@ -32,6 +34,7 @@ from asg_stagecraft.stage.schemas import (
     ReflectionDraft,
     RelationshipState,
     RevisedScene,
+    WorldEventAssessment,
 )
 from test_generator_v5 import FakeProvider
 
@@ -130,6 +133,15 @@ class StageFakeProvider(FakeProvider):
 
     def generate_structured(self, *, system_instruction, prompt, schema, profile):
         """Route the stage schemas here and leave every other schema to the narrative double."""
+        if schema is NarrationReview:
+            return NarrationReview()
+        if schema is WorldEventAssessment:
+            return WorldEventAssessment(
+                compatible=True,
+                introduces_solution=False,
+                reveals_future_gate=False,
+                reason="Established pressure",
+            )
         if schema is CastBibleDraft:
             self.structured_calls.append((schema.__name__, system_instruction, prompt))
             return self._cast_bible(prompt)
@@ -381,7 +393,14 @@ class StageFakeProvider(FakeProvider):
                 ),
             )
         return BeatCheckDraft(
-            parts=[OutcomePart(part="the file is handed over", shown=True, evidence=turn_ids[-1:])]
+            parts=[
+                OutcomePart(
+                    part="the file is handed over",
+                    shown=True,
+                    evidence=turn_ids[-1:],
+                    sources=quoted_source(prompt, turn_ids[-1:]),
+                )
+            ]
         )
 
     def _reflection(self, prompt: str) -> ReflectionDraft:
@@ -420,3 +439,14 @@ def _mode_of(system_instruction: str) -> str:
     if "Name turning_actor_id" in system_instruction:
         return "turn"
     return "check"
+
+
+def quoted_source(context, ids):
+    """Extract exact spoken words from the director transcript for a scripted verdict."""
+    if not ids:
+        return []
+    line = next(line for line in context.splitlines() if line.startswith(ids[0] + " "))
+    speech = re.search(r"(?:Ana|Bruno|Cora)(?: a [^:]+)?: (.+?)(?: \[|$)", line)
+    if speech:
+        return [EvidenceSource(turn_id=ids[0], channel="speech", excerpt=speech.group(1))]
+    return []

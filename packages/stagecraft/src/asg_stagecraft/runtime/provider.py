@@ -24,6 +24,7 @@ from .errors import (
     GeminiTPMError,
     ProviderDailyQuotaError,
     ProviderError,
+    ProviderUnavailableError,
     StructuredResponseError,
 )
 from .quota import (
@@ -139,7 +140,8 @@ def _safe_provider_error(exc: Exception) -> ProviderError:
     message = str(exc).casefold()
     diagnostic = retry_details(exc)
     status = diagnostic.get("status")
-    if status in {401, 403} or any(
+    # A refused key or model is no transient fault: in a chain the next slot should answer.
+    refused = status in {401, 403} or any(
         token in message
         for token in (
             "api key",
@@ -149,7 +151,8 @@ def _safe_provider_error(exc: Exception) -> ProviderError:
             "401",
             "403",
         )
-    ):
+    )
+    if refused:
         summary = "Gemini rechazó la autenticación o los permisos configurados."
         recommendation = "Comprueba GEMINI_API_KEY y el acceso al modelo seleccionado."
     elif status == 400:
@@ -167,7 +170,7 @@ def _safe_provider_error(exc: Exception) -> ProviderError:
     else:
         summary = "Gemini no pudo completar la solicitud."
         recommendation = "Vuelve a intentarlo y consulta el registro local si persiste."
-    return ProviderError(
+    return (ProviderUnavailableError if refused else ProviderError)(
         summary,
         details={
             "exception_type": type(exc).__name__,
@@ -834,16 +837,26 @@ class OpenAICompatibleProvider(_RecordingProvider):
 
     def _safe_error(self, exc: Exception) -> ProviderError:
         """Classify a failure under this provider's name and without its credentials."""
+        details = {
+            "exception_type": type(exc).__name__,
+            **{
+                key: value
+                for key, value in retry_details(exc).items()
+                if value is not None and key != "status_name"
+            },
+        }
+        if details.get("status") in {401, 403}:
+            return ProviderUnavailableError(
+                f"{self.provider_label} rechazó el acceso.",
+                details=details,
+                recommendations=[
+                    f"Comprueba la clave de {self.provider_label} en el .env; un 403 también "
+                    "puede ser un bloqueo de la red o del país desde el que se llama."
+                ],
+            )
         return ProviderError(
             f"{self.provider_label} no pudo completar la solicitud.",
-            details={
-                "exception_type": type(exc).__name__,
-                **{
-                    key: value
-                    for key, value in retry_details(exc).items()
-                    if value is not None and key != "status_name"
-                },
-            },
+            details=details,
             recommendations=[
                 f"Comprueba la clave y el modelo de {self.provider_label} en el .env."
             ],
@@ -915,6 +928,7 @@ class RoutedProvider(_ProviderGroup):
         self._wait_callback = None
         self._usage_callback = None
         self.usage_records = []
+        self.refused: set[str] = set()
 
     def _children(self) -> list:
         """Return the main and the performance providers."""
@@ -955,7 +969,9 @@ class FailoverProvider(_ProviderGroup):
 
     The ledger skips a slot whose cap or declared exhaustion is known, so a spent quota costs
     no request to rediscover; a slot that answers with a daily or monthly 429 is marked out
-    until its window resets and the same call is repeated on the next slot.
+    until its window resets and the same call is repeated on the next slot. A slot that
+    refuses access (401 or 403) is skipped for the rest of this process only: a blocked network
+    or a fixed key can change before the provider's window does, so the ledger never hears of it.
     """
 
     def __init__(self, entries: list[tuple[QuotaSlot, object]], ledger: QuotaLedger) -> None:
@@ -968,6 +984,7 @@ class FailoverProvider(_ProviderGroup):
         self._wait_callback = None
         self._usage_callback = None
         self.usage_records = []
+        self.refused: set[str] = set()
 
     def _children(self) -> list:
         """Return the provider of every slot."""
@@ -988,23 +1005,17 @@ class FailoverProvider(_ProviderGroup):
     def _call(self, method: str, estimated_tokens: int, **kwargs):
         """Run one call on the first slot with allowance, failing over on a spent quota."""
         for index, (slot, provider) in enumerate(self.entries):
-            if not self.ledger.available(slot, estimated_tokens):
+            if not self._usable(slot, estimated_tokens):
                 continue
             before = len(self.usage_records)
             try:
                 return getattr(provider, method)(**kwargs)
             except ProviderDailyQuotaError as exc:
                 self.ledger.mark_exhausted(slot, retry_after=exc.details.get("retry_delay"))
-                following = next(
-                    (
-                        later.key
-                        for later, _ in self.entries[index + 1 :]
-                        if self.ledger.available(later, estimated_tokens)
-                    ),
-                    None,
-                )
-                if following and self.wait_callback:
-                    self.wait_callback(1, f"{slot.key} agotado; sigo con {following}")
+                self._announce(index, estimated_tokens, f"{slot.key} agotado")
+            except ProviderUnavailableError:
+                self.refused.add(slot.key)
+                self._announce(index, estimated_tokens, f"{slot.key} rechaza el acceso")
             finally:
                 self._record_spent(slot, before)
         resets = [
@@ -1012,13 +1023,32 @@ class FailoverProvider(_ProviderGroup):
             for slot, _ in self.entries
         ]
         raise ProviderDailyQuotaError(
-            "Todos los proveedores de la cadena agotaron su cupo.",
+            "Ningún proveedor de la cadena pudo atender la llamada: cupo agotado o acceso "
+            "rechazado.",
             details={
                 "slots": [slot.key for slot, _ in self.entries],
+                "refused": sorted(self.refused),
                 "next_reset": min(resets).isoformat(),
             },
             recommendations=["Espera al próximo reinicio o añade otro proveedor a ASG_LLM_CHAIN."],
         )
+
+    def _usable(self, slot: QuotaSlot, estimated_tokens: int) -> bool:
+        """Say whether a slot may take this call: not refused here, and with allowance left."""
+        return slot.key not in self.refused and self.ledger.available(slot, estimated_tokens)
+
+    def _announce(self, index: int, estimated_tokens: int, reason: str) -> None:
+        """Tell the run which slot takes over after the one at index dropped out."""
+        following = next(
+            (
+                later.key
+                for later, _ in self.entries[index + 1 :]
+                if self._usable(later, estimated_tokens)
+            ),
+            None,
+        )
+        if following and self.wait_callback:
+            self.wait_callback(1, f"{reason}; sigo con {following}")
 
     def generate_structured(
         self, *, system_instruction: str, prompt: str, schema: type[T], profile: str

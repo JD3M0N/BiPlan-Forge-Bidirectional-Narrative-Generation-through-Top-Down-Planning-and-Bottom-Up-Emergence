@@ -48,6 +48,7 @@ def materialize_bible(
     _validate_gate_anchors(gates, known_events)
     _validate_gate_logic(gates, plan)
     _validate_no_handed_answers(dossiers, gates)
+    _validate_premises(gates, dossiers, plan)
 
     return CastBible(
         dossiers=dossiers,
@@ -268,3 +269,29 @@ def _observations(
         elif len(gate.known_by) == len(required):
             observations.append(f"gate {gate.id} is known by everyone, so it hides nothing")
     return observations
+
+
+def _validate_premises(
+    gates: list[KnowledgeGate], dossiers: list[ActorDossier], plan: StoryPlan
+) -> None:
+    """A deduction needs earlier gates or literal knowledge of its investigator."""
+    by_id = {gate.id: gate for gate in gates}
+    known = {d.character_id: set(d.initial_knowledge) for d in dossiers}
+    order = {event_id: index for index, event_id in enumerate(plan.topological_order)}
+    for gate in gates:
+        if gate.how != "deduction":
+            continue
+        if not gate.premise_gate_ids and not gate.initial_premises:
+            raise ValueError("a deduction needs explicit premise_gate_ids or initial_premises")
+        if not set(gate.initial_premises) <= known.get(gate.revealed_by, set()):
+            raise ValueError(
+                "initial deduction premises must belong to the investigator's initial knowledge"
+            )
+        for key in gate.premise_gate_ids:
+            prior = by_id.get(key)
+            if prior is None or key == gate.id:
+                raise ValueError("deduction premise references an unknown or identical gate")
+            if gate.revealed_by not in prior.known_by and order.get(
+                prior.revealed_at_event_id, len(order)
+            ) >= order.get(gate.revealed_at_event_id, -1):
+                raise ValueError("deduction premises must be revealed before their conclusion")

@@ -15,6 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from ..formats import NarrativeVoice
+from .perception import item_moves
 from .schemas import ScenePerformance, StageTurn
 
 
@@ -43,6 +44,7 @@ def _focalized(turns: list[StageTurn], narrator: str, focal: str) -> list[StageT
         if turn.actor_id == focal
         else turn.model_copy(update={"thought": "", **_withheld_item(turn, focal)})
         for turn in turns
+        if focal in turn.witnesses
     ]
 
 
@@ -64,11 +66,13 @@ def _first_person(turns: list[StageTurn], narrator: str, focal: str) -> list[Sta
     ]
 
 
-def _withheld_item(turn: StageTurn, character_id: str) -> dict[str, None]:
-    """Drop the object move of a turn whose own object move this character did not perceive."""
-    if turn.item_action is None or character_id in set(turn.item_action.witnesses):
-        return {}
-    return {"item_action": None}
+def _withheld_item(turn: StageTurn, character_id: str) -> dict:
+    """Filter every move of a transaction by its own audience."""
+    moves = [move for move in item_moves(turn) if character_id in move.witnesses]
+    return {
+        "item_action": moves[0] if len(moves) == 1 else None,
+        "item_actions": moves if len(moves) > 1 else [],
+    }
 
 
 VOICES: dict[NarrativeVoice, VoiceStrategy] = {

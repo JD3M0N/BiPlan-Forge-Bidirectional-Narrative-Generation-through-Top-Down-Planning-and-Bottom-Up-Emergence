@@ -13,7 +13,13 @@ itself does, visibly, on stage - so the log stays the only source of what happen
 beat is still a beat that was performed rather than asserted.
 """
 
-from ..stage.schemas import BeatCheckDraft, BeatDirection, FutureConflict, FutureRevision
+from ..stage.schemas import (
+    BeatCheckDraft,
+    BeatDirection,
+    FutureConflict,
+    FutureRevision,
+    WorldEventAssessment,
+)
 from .base import Agent
 
 _DIRECTION_RULES = (
@@ -44,12 +50,12 @@ _MODE_CLAUSES: dict[str, str] = {
         "if any, must not block that change. Leave stage_event empty."
     ),
     "stall": (
-        " The scene has used its time. Supply a stage_event in {language}: something the world "
-        "itself does, which everyone present sees or hears, that makes the missing clause "
-        "happen or impossible to deny - a piece of evidence surfaces, someone arrives, a door "
-        "gives way. It must deliver the missing clause, not set a mood: never weather, light or "
-        "a sound that changes nothing, and never a device listed under EVENTOS DEL MUNDO YA "
-        "USADOS. Still name turning_actor_id and give them a note: they react first."
+        " The scene has used its time. You may offer a stage_event in {language}: an opportunity "
+        "or pressure consistent with established circumstances. Never supply a new solution, "
+        "identity, confession, document content or a deduction. Actors must discover and choose. "
+        "List world_items for every object affected, with its current holder as actor. "
+        "Cite world_basis when drawing on performed evidence. Empty is better than contrivance. "
+        "Name turning_actor_id and give a motivation to react, never the desired conclusion."
     ),
     "final": (
         " The world has already stepped in. Only read the clauses; leave the notes, "
@@ -72,7 +78,10 @@ class StageManagerAgent(Agent[BeatDirection]):
                 "improvising: they do not know what that thing is, and they must not be told. "
                 f"{_DIRECTION_RULES} "
                 "Choose which character moves first — whoever has the strongest reason to act "
-                "right now — and give at most two notes."
+                f"right now — and give at most two notes, written in {language}. Then, for each "
+                f"character on stage, restate in {language} what they want right now, from their "
+                "objective under EN ESCENA, as something they can play; never add what that "
+                "character does not know."
             ),
             prompt=context,
             schema=BeatDirection,
@@ -97,12 +106,35 @@ class StageManagerAgent(Agent[BeatDirection]):
                 "the situation is established on stage. Include each required revelation as "
                 "its own exact clause, citing a visible turn that supports its stated method. "
                 "Record an established world fact only when a cited action or world turn shows "
-                "it directly. A spoken claim, intention or thought is not a world fact. "
+                "it directly. For every part supply sources with turn_id, channel "
+                "and an exact excerpt. "
+                "For every proposed fact supply source and classify it as "
+                "established, claim or belief. "
+                "A spoken claim, intention or thought is not a world fact. "
+                f"Write your clauses and notes in {language}; when the beat lists fixed clauses, "
+                "copy each one as given. "
                 f"{_DIRECTION_RULES}"
                 f"{_MODE_CLAUSES[mode].format(language=language)}"
             ),
             prompt=context,
             schema=BeatCheckDraft,
+            profile="review",
+        )
+
+    def review_world(self, context: str) -> WorldEventAssessment:
+        """Independently check a proposed intervention before it becomes history."""
+        return self.provider.generate_structured(
+            system_instruction=(
+                "Review the proposed world event against the given premise, "
+                "rules, circumstances, gates and performed transcript. An "
+                "opportunity or pressure may follow established conditions, but "
+                "may not invent evidence, documentary contents, a culprit, a "
+                "confession, a solution or reveal a future gate. Judge semantic "
+                "compatibility; merely naming a source does not establish it. "
+                "Explain rejection precisely."
+            ),
+            prompt=context,
+            schema=WorldEventAssessment,
             profile="review",
         )
 
@@ -129,7 +161,13 @@ class StageManagerAgent(Agent[BeatDirection]):
                 "scene ID, order, location and cast fixed. Return each remaining scene once, "
                 "either kept with revised outcomes and changed actor objectives or omitted. Kept "
                 "scenes must retain the same event IDs and order, and may omit events; never "
-                "add an event. Preserve the user's premise, explicit constraints and world "
+                "add an event. Revised beats may replace dependencies with "
+                "earlier remaining event IDs "
+                "and supporting_fact_ids from established accepted facts. Removing any original "
+                "dependency requires an established fact that actually "
+                "substitutes its prerequisite. "
+                "Never treat an unmet event as achieved. Preserve the user's "
+                "premise, explicit constraints and world "
                 "rules. Treat the performed transcript as irreversible history. Do not force "
                 "an originally planned ending when it no longer follows. Write new scene "
                 f"settings and changed objectives in {language}. Omit unchanged objectives. "

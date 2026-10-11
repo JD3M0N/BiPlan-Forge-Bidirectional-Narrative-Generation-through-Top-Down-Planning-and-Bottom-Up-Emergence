@@ -21,7 +21,9 @@ witnessed. A concealed object is the extreme case - only its holder ever knows i
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
+from copy import deepcopy
 
 from ..formats import ActorMemory
 from ..planning.skeleton_match import normalize
@@ -182,6 +184,54 @@ class StageInventory:
             ),
         )
 
+    def resolve_many(
+        self, drafts: list[ItemActionDraft], *, action_text: str = "", **context
+    ) -> list[ItemAction]:
+        """Validate a complete ordered transaction on a copy, with no observable side effects."""
+        trial = deepcopy(self)
+        trial.on_item = None
+        accepted = []
+        for draft in drafts:
+            action = trial.resolve(draft, **context)
+            if action is not None:
+                action.performer_id = context["actor_id"]
+                accepted.append(action)
+                trial.apply(
+                    action, actor_id=context["actor_id"], location_id=context["location_id"]
+                )
+        self.validate_description(action_text, {move.item_id for move in accepted})
+        return accepted
+
+    def validate_description(self, text: str, declared: set[str]) -> None:
+        """Catch explicit manipulation of named props, including props outside this scene.
+
+        Conservative lexical guard: descriptions, speech and unknown synonyms are not claims
+        of manipulation. It supplements the structured arbiter rather than guessing transfers.
+        """
+        verbs = (
+            "(?:toma|recoge|entrega|suelta|deja "
+            "caer|deposita|coloca|guarda|esconde|saca|abre|usa|encaja|golpea|t"
+            "ake[sd]?|pick[s]? "
+            "up|give[sn]?|drop[s]?|place[sd]?|hide[sn]?|open[s]?|use[sd]?)"
+        )
+        text = normalize(text)
+        handles: dict[str, set[str]] = {}
+        for prop in self._props.values():
+            name = normalize(prop.name)
+            for key in {name, *[w for w in name.split() if len(w) >= 4]}:
+                handles.setdefault(key, set()).add(prop.id)
+        for handle, ids in handles.items():
+            if len(ids) != 1 or ids <= declared:
+                continue
+            if re.search(r"\b" + verbs + r"\b[^.;!?]{0,65}\b" + re.escape(handle) + r"\b", text):
+                raise TurnIssue(
+                    "UNDECLARED_ITEM_ACTION",
+                    (
+                        "the action manipulates a registered object without declaring its "
+                        "operation; declare all ordered moves or remove that manipulation"
+                    ),
+                )
+
     def apply(self, action: ItemAction, *, actor_id: str, location_id: str) -> None:
         """Move the object the way an accepted action says, and record that it was handled."""
         self.handled.add(action.item_id)
@@ -301,13 +351,11 @@ class StageInventory:
     ) -> list[str]:
         """List who perceives one object move.
 
-        Concealing is private by definition: nobody sees a thing go out of sight, so the holder
-        is the only witness however the turn was spoken. Everything else is perceived like the
+        Public concealment is witnessed: hiding an object does not erase knowledge of its holder.
+        Everything else is perceived like the
         turn that carried it, plus whoever the object left or reached - a hand-over whispered
         between two characters is a secret the rest of the stage does not get.
         """
-        if verb == "hide":
-            return [actor_id]
         parties = [item for item in (target_id, from_id) if item and item != actor_id]
         if visibility == "whisper":
             addressed = [item for item in on_stage if item in set(addressed_to)]

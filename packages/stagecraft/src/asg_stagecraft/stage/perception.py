@@ -88,7 +88,7 @@ def item_line(action: ItemAction, names: dict[str, str], *, concealed_from: bool
 
 def perceives_item(character_id: str, turn: StageTurn) -> bool:
     """Say whether one character perceived the object move a turn carried, if it carried one."""
-    return bool(turn.item_action) and character_id in set(turn.item_action.witnesses)
+    return any(character_id in move.witnesses for move in item_moves(turn))
 
 
 def visible_text(turn: StageTurn, character_id: str, names: dict[str, str]) -> str:
@@ -107,11 +107,13 @@ def visible_text(turn: StageTurn, character_id: str, names: dict[str, str]) -> s
         pieces.append(f"[pienso: {turn.thought}]")
     if turn.action:
         pieces.append(f"({stage_direction(speaker, turn.action, names)})")
-    if perceives_item(character_id, turn):
-        assert turn.item_action is not None
-        line = item_line(turn.item_action, names, concealed_from=turn.item_action.verb == "hide")
-        if line:
-            pieces.append(line)
+    for move in item_moves(turn):
+        if character_id in move.witnesses:
+            line = item_line(
+                move, names, concealed_from=move.verb == "hide" and len(move.witnesses) == 1
+            )
+            if line:
+                pieces.append(line)
     if turn.speech:
         target = ""
         if turn.visibility == "whisper":
@@ -130,3 +132,8 @@ def ordered_witnesses(actor_id: str, chosen: list[str], order: list[str]) -> lis
     if actor_id not in result:
         result.insert(0, actor_id)
     return result
+
+
+def item_moves(turn: StageTurn) -> list[ItemAction]:
+    """Read both historic single moves and the ordered transaction contract."""
+    return turn.item_actions or ([turn.item_action] if turn.item_action else [])

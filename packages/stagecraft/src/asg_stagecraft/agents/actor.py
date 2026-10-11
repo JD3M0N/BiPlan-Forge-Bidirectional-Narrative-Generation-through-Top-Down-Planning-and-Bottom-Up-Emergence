@@ -40,6 +40,8 @@ class ActorAgent(Agent[ActorTurnDraft]):
             prompt=(
                 f"{context}\n\n"
                 "Te toca. Haz un solo movimiento: di algo, haz algo, o las dos cosas. "
+                "Puedes actuar en silencio. Si cambias un campo de estado, cita en state_evidence "
+                "un fragmento exacto de este turno que fundamente el cambio. "
                 "Escribe solo lo que dices y lo que haces, sin tu nombre delante y sin comillas."
                 f"{retry_feedback}"
             ),
@@ -68,7 +70,8 @@ class ActorAgent(Agent[ActorTurnDraft]):
                 "que crees ahora que antes no creias, y como te has quedado con cada uno de los "
                 "que estaban ahi. Declara tu objetivo, compromiso, version que sostienes y que "
                 "te haria reconsiderar. Cuenta solo lo que tu has vivido o te han dicho "
-                "en esta escena."
+                "en esta escena. Incluye en evidence citas exactas de lo que presenciaste "
+                "para justificar cambios; si no hay evidencia, conserva el estado anterior."
             ),
             schema=ReflectionDraft,
             profile="planning",

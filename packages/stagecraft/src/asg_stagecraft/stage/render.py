@@ -13,7 +13,7 @@ foreshadowing a scene it has not lived yet.
 
 from __future__ import annotations
 
-from .perception import item_line, stage_direction, visible_text
+from .perception import item_line, item_moves, stage_direction, visible_text
 from .schemas import (
     ActorDossier,
     BeatBrief,
@@ -35,17 +35,16 @@ INVENTORY_RULES = (
     "- You are told what you are holding and what you can see. Those are the only objects there "
     "are for you: never produce, invent or mention one that is not listed, and never assume you "
     "have something back once you have given it away.",
-    "- To handle one, name it in item_action exactly as it is listed, with the verb for what you "
+    "- Use ordered item_actions for multiple moves (take then give); otherwise item_action. "
+    "Name each object exactly as listed, with the verb for what you "
     "do: use it, give it to someone present, take it, drop it, hide it, or show it. Most turns "
     "handle nothing; leave the verb as 'none' then.",
     "- You can only use, give, drop, hide or show what is in your own hands. To get hold of "
     "something else you have to take it, and only while it is here.",
     "- Say in your action what you do with it, as the audience would see it. The object is a "
     "move, not a label: reach for one when it gets you what you want.",
-    "- Something you hide is out of sight: nobody else knows you have it until you show it, so "
-    "when you hide one do not name it in your action - the others may see you put something "
-    "away, never what it was. What you hand over in a whisper passes between the two of you "
-    "alone.",
+    "- Hiding something in public is witnessed: others remember you concealed it. "
+    "A whispered hand-over is perceived by its participants only.",
 )
 
 
@@ -170,6 +169,15 @@ def actor_turn_context(
     if in_reach:
         blocks.append("LO QUE VES:\n" + "\n".join(f"- {prop_line(item)}" for item in in_reach))
     blocks.append(f"LO QUE QUIERES AQUI: {strip_internal_ids(objective)}")
+    blocks.append(
+        "Lo que ya decidiste sigue vigente: juega su coste o una nueva "
+        "prueba, no repitas la misma conversion. Puedes actuar en "
+        "silencio."
+    )
+    if len(scene.cast) == 1:
+        blocks.append(
+            "Estas a solas. Prioriza una accion concreta; no necesitas explicarla en voz alta."
+        )
     if state:
         blocks.append(f"COMO ESTAS: {_state_line(state, names)}")
     if gate_facts:
@@ -299,8 +307,8 @@ def transcript(turns: list[StageTurn], names: dict[str, str]) -> str:
         pieces = []
         if turn.action:
             pieces.append(f"({stage_direction(speaker, turn.action, names)})")
-        if turn.item_action:
-            pieces.append(item_line(turn.item_action, names, concealed_from=True))
+        for move in item_moves(turn):
+            pieces.append(item_line(move, names, concealed_from=len(move.witnesses) == 1))
         if turn.speech:
             aside = ""
             if turn.visibility == "whisper":
@@ -338,10 +346,10 @@ def scene_log(
             lines.append(mark.strip())
         if turn.action:
             lines.append(f"({stage_direction(speaker, turn.action, names)})")
-        if turn.item_action:
+        for move in item_moves(turn):
             # The narrator is told what actually changed hands, so it can dramatize the gap
             # between what a character said and what it was quietly doing with an object.
-            moved = item_line(turn.item_action, names, concealed_from=True)
+            moved = item_line(move, names, concealed_from=len(move.witnesses) == 1)
             if moved:
                 lines.append(f"{speaker} {moved}")
         if turn.speech:
@@ -368,19 +376,35 @@ def _presented(member: SceneCastBrief, names: dict[str, str]) -> str:
 
 
 def _state_line(state: CharacterState, names: dict[str, str]) -> str:
-    """Describe one character's state in words, never in figures."""
-    pieces = []
-    if state.emotion:
-        pieces.append(f"te sientes {state.emotion}")
-    if state.goal:
-        pieces.append(f"ahora mismo intentas {state.goal}")
-    if state.commitment:
-        pieces.append(f"sigues comprometido con {state.commitment}")
-    if state.cover_story:
-        pieces.append(f"la version que sostienes es {state.cover_story}")
-    if state.change_condition:
-        pieces.append(f"reconsiderarias si {state.change_condition}")
-    for item in state.relationships:
-        other = names.get(item.character_id, item.character_id)
-        pieces.append(f"con {other}: {item.stance}")
-    return "; ".join(pieces) or "sin nada que te pese"
+    """Describe one character's state in words, never in figures.
+
+    Labels rather than a sentence glued around each value: the values are the character's own
+    full sentences, so "sigues comprometido con No descansare" broke the grammar and the gender
+    every time. A stance towards someone the cast does not name is left out, never printed as id.
+    """
+    labelled = (
+        ("Te sientes", state.emotion),
+        ("Ahora intentas", state.goal),
+        ("Te has jurado", state.commitment),
+        ("Lo que sostienes ante los demas", state.cover_story),
+        ("Cambiarias de idea si", _without_leading_if(state.change_condition)),
+    )
+    pieces = [f"{label}: {_bare(value)}" for label, value in labelled if _bare(value)]
+    pieces.extend(
+        f"Con {names[item.character_id]}: {_bare(item.stance)}"
+        for item in state.relationships
+        if item.character_id in names and _bare(item.stance)
+    )
+    return ". ".join(pieces) + "." if pieces else "sin nada que te pese"
+
+
+def _bare(value: str) -> str:
+    """Trim a state value so a label can carry it: no outer spaces, no closing full stop."""
+    return value.strip().rstrip(".").strip()
+
+
+def _without_leading_if(value: str) -> str:
+    """Drop the "si" a character writes before its own condition, which the label already says."""
+    stripped = value.strip()
+    head, _, rest = stripped.partition(" ")
+    return rest if head.casefold() == "si" and rest else stripped

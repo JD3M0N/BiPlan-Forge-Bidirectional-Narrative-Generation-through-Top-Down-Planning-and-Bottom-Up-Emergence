@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..schemas import StoryPlan
-from .schemas import FutureRevision, SceneBrief
+from .schemas import FutureRevision, SceneBrief, StageFact
 
 
 def materialize_revision(
@@ -11,6 +11,7 @@ def materialize_revision(
     remaining: list[SceneBrief],
     plan: StoryPlan,
     achieved: set[str],
+    facts: list[StageFact] | None = None,
 ) -> list[SceneBrief]:
     """Keep the original scene graph while accepting new outcomes and omitted events."""
     expected = [scene.scene_id for scene in remaining]
@@ -47,6 +48,8 @@ def materialize_revision(
                     "purpose": item.purpose,
                     "conflict": item.conflict,
                     "promise_brief": "",
+                    "dependencies": item.dependencies,
+                    "supporting_fact_ids": item.supporting_fact_ids,
                 }
             )
             for item in proposal.beats
@@ -65,8 +68,40 @@ def materialize_revision(
             )
         )
         future_ids.update(new_ids)
-    available = achieved | future_ids
-    for dependency in plan.dependencies:
-        if dependency.target_event_id in future_ids and dependency.source_event_id not in available:
-            raise ValueError("a kept event depends on an unperformed or omitted event")
+    _validate_dependencies(revision, remaining, changed, plan, achieved, facts)
     return changed
+
+
+def _validate_dependencies(revision, remaining, changed, plan, achieved, facts):
+    """Require every prerequisite to precede its event and justify removed edges."""
+    future_ids = {beat.event_id for scene in changed for beat in scene.beats}
+    proposals = {
+        beat.event_id: beat for scene in revision.scenes if scene.keep for beat in scene.beats
+    }
+    original_edges = {key: set() for key in future_ids}
+    for dependency in plan.dependencies:
+        if dependency.target_event_id in original_edges:
+            original_edges[dependency.target_event_id].add(dependency.source_event_id)
+    for scene in remaining:
+        for beat in scene.beats:
+            if beat.event_id in original_edges and beat.dependencies is not None:
+                original_edges[beat.event_id] = set(beat.dependencies)
+    supported = {
+        fact.id
+        for fact in facts or []
+        if fact.status == "established" and fact.channel == "action" and fact.excerpt
+    }
+    order = [beat.event_id for scene in changed for beat in scene.beats]
+    available = set(achieved)
+    for key in order:
+        proposal = proposals[key]
+        edges = original_edges[key] if proposal.dependencies is None else set(proposal.dependencies)
+        if original_edges[key] - edges and (
+            not proposal.supporting_fact_ids or not set(proposal.supporting_fact_ids) <= supported
+        ):
+            raise ValueError("replacing a dependency requires cited established facts")
+        if not set(proposal.supporting_fact_ids) <= supported:
+            raise ValueError("revision cites an unknown or unestablished fact")
+        if not edges <= available:
+            raise ValueError("a kept event depends on an unperformed or omitted event")
+        available.add(key)

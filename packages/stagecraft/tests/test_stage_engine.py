@@ -19,17 +19,21 @@ from asg_stagecraft.stage.schemas import (
     BeatBrief,
     BeatCheckDraft,
     BeatDirection,
+    EvidenceSource,
     FactProposal,
     FutureRevision,
     ItemActionDraft,
     OutcomePart,
     Prop,
     ReflectionDraft,
+    RelationshipState,
     RevisedBeat,
     RevisedScene,
     SceneBrief,
     SceneCastBrief,
+    WorldEventAssessment,
 )
+from stage_fakes import quoted_source
 
 NAMES = {"ana": "Ana", "bruno": "Bruno", "cora": "Cora"}
 EVENT = "Se abre la puerta y la directora deja la carpeta sobre la mesa."
@@ -70,7 +74,16 @@ def scene(*, cast=("ana", "bruno"), beats=1, closes_play=False) -> SceneBrief:
 def shown(context: str) -> BeatCheckDraft:
     """Show the beat's one clause, citing the last turn of the transcript."""
     ids = _TURN_IDS.findall(context)
-    return BeatCheckDraft(parts=[OutcomePart(part="hands it over", shown=True, evidence=ids[-1:])])
+    return BeatCheckDraft(
+        parts=[
+            OutcomePart(
+                part="hands it over",
+                shown=True,
+                evidence=ids[-1:],
+                sources=quoted_source(context, ids[-1:]),
+            )
+        ]
+    )
 
 
 def unshown(turning: str = "", *, stage_event: str = "") -> BeatCheckDraft:
@@ -129,6 +142,12 @@ class Stage:
             whole_cast=list(cast),
             language="es",
             on_direction=self.entries.append,
+            review_world=lambda _: WorldEventAssessment(
+                compatible=True,
+                introduces_solution=False,
+                reveals_future_gate=False,
+                reason="test pressure",
+            ),
         )
 
     @property
@@ -250,7 +269,10 @@ def test_a_line_repeated_in_a_later_scene_is_rejected() -> None:
         (
             lambda context: [
                 OutcomePart(
-                    part="hands it over", shown=True, evidence=_TURN_IDS.findall(context)[-1:]
+                    part="hands it over",
+                    shown=True,
+                    evidence=_TURN_IDS.findall(context)[-1:],
+                    sources=quoted_source(context, _TURN_IDS.findall(context)[-1:]),
                 ),
                 OutcomePart(part="admits hiding it", shown=False),
             ],
@@ -266,6 +288,85 @@ def test_a_clause_only_counts_as_shown_with_a_turn_that_really_exists(parts, mis
     assert stage.entries[1].achieved is False
     assert stage.entries[1].missing == missing
     assert record.missing == missing
+
+
+GATE = "gate_folder: Bruno escondio la carpeta en el archivo (confession, Bruno)"
+
+
+@pytest.mark.parametrize(
+    "wording",
+    [
+        "gate_folder: Bruno escondio la carpeta en el archivo",
+        "Bruno escondio la carpeta en el archivo.",
+        None,
+    ],
+    ids=["by-its-id-without-the-suffix", "as-the-bare-fact", "never-mentioned"],
+)
+def test_a_required_gate_counts_however_the_director_words_it(wording) -> None:
+    """7.5 to 7.8 matched gates as exact strings, and six beats of six were forced."""
+
+    def judge(mode: str, context: str) -> BeatCheckDraft:
+        cited = _TURN_IDS.findall(context)[-1:]
+        parts = [
+            OutcomePart(
+                part="hands it over",
+                shown=True,
+                evidence=cited,
+                sources=quoted_source(context, cited),
+            )
+        ]
+        if wording:
+            parts.append(
+                OutcomePart(
+                    part=wording, shown=True, evidence=cited, sources=quoted_source(context, cited)
+                )
+            )
+        return BeatCheckDraft(parts=parts)
+
+    brief = scene()
+    brief.beats[0].required_gates = [GATE]
+    stage = Stage(judge)
+    record = stage.engine().perform_scene(brief).beats[0]
+    assert record.achieved is bool(wording)
+    assert record.missing == ([] if wording else [GATE])
+    # The fallback note hands the missing gate to an actor: as a fact, never with its id.
+    assert not any("gate_folder" in context for _, context in stage.moves)
+
+
+def test_the_director_restates_each_objective_in_the_fiction_language() -> None:
+    stage = Stage(lambda mode, context: shown(context))
+    stage.open_beat = lambda context: BeatDirection(
+        opening_actor_id="ana", objectives=["Ana: que Bruno suelte la carpeta", "Nadie: algo"]
+    )
+    stage.engine().perform_scene(scene())
+    contexts = dict(reversed(stage.moves))
+    assert "LO QUE QUIERES AQUI: que Bruno suelte la carpeta" in contexts["ana"]
+    assert "LO QUE QUIERES AQUI: lo que Bruno quiere" in contexts["bruno"]
+
+
+def test_a_reflected_stance_reaches_the_actor_by_name_in_a_labelled_state() -> None:
+    """7.8 printed "con sir_aldren:" and "reconsiderarias si Si descubriera" to every actor."""
+    stage = Stage(lambda mode, context: shown(context))
+    stage.reflect = lambda system, log: ReflectionDraft(
+        summary="Sali de alli con dudas.",
+        emotion="tensa",
+        change_condition="Si me mienten otra vez.",
+        evidence=["linea1a linea1b linea1c"],
+        relationships=[RelationshipState(character_id="ana_vela", stance="recelo")],
+    )
+    engine = stage.engine()
+    engine.perform_scene(scene())
+    engine.perform_scene(scene().model_copy(update={"scene_id": "chapter-1-scene-2", "number": 2}))
+    state = next(
+        line
+        for system, context in stage.moves
+        if system == "bruno"
+        for line in context.splitlines()
+        if "Con Ana: recelo" in line
+    )
+    assert "Te sientes: tensa." in state
+    assert "Cambiarias de idea si: me mienten otra vez." in state
+    assert "_" not in state and "Si me" not in state
 
 
 def test_when_the_director_names_nobody_the_engine_picks_and_says_so() -> None:
@@ -449,9 +550,22 @@ def test_world_facts_require_a_real_observable_source() -> None:
     def judge(mode, context):
         ids = _TURN_IDS.findall(context)
         return BeatCheckDraft(
-            parts=[OutcomePart(part="hands it over", shown=True, evidence=ids[-1:])],
+            parts=[
+                OutcomePart(
+                    part="hands it over",
+                    shown=True,
+                    evidence=ids[-1:],
+                    sources=quoted_source(context, ids[-1:]),
+                )
+            ],
             facts=[
-                FactProposal(statement="La puerta qued? abierta", source_turn_id=ids[0]),
+                FactProposal(
+                    statement="Ana hace un gesto hacia la puerta",
+                    source_turn_id=ids[0],
+                    source=EvidenceSource(
+                        turn_id=ids[0], channel="action", excerpt="gesto1 hacia puerta1"
+                    ),
+                ),
                 FactProposal(statement="Un secreto imaginado", source_turn_id="missing-turn"),
             ],
         )
@@ -538,6 +652,7 @@ def test_a_handover_changes_who_holds_the_object_and_is_logged() -> None:
             "verb": "give",
             "item_id": "sword",
             "item_name": "Espada",
+            "performer_id": "ana",
             "target_id": "bruno",
             "from_id": "ana",
             "witnesses": ["ana", "bruno"],

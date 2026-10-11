@@ -49,6 +49,7 @@ from asg_stagecraft.stage.validation import (
     REPETITION_THRESHOLD,
     TurnIssue,
     normalize_turn,
+    repair_form,
     similarity,
     strip_internal_ids,
     validate_turn,
@@ -312,16 +313,26 @@ def test_every_rejection_carries_the_code_the_audit_files_it_under() -> None:
 
 
 @pytest.mark.parametrize(
-    "action",
+    ("action", "repaired"),
     [
-        # Both verbatim from the second real run.
-        "Me arrodillo lentamente junto al hogar, escarbo las brasas con un hierro viejo.",
-        "Golpeo rítmicamente un pequeño bolígrafo metálico contra la palma de mi mano.",
+        # Both verbatim from the second real run. A leading verb would need conjugating, so it
+        # is still bounced; a possessive has one fix, so it is repaired in place since 7.9.
+        ("Me arrodillo lentamente junto al hogar, escarbo las brasas con un hierro viejo.", None),
+        (
+            "Golpeo rítmicamente un pequeño bolígrafo metálico contra la palma de mi mano.",
+            "Golpeo rítmicamente un pequeño bolígrafo metálico contra la palma de su mano.",
+        ),
     ],
+    ids=["leading-me-is-rejected", "possessive-is-repaired"],
 )
-def test_a_first_person_stage_direction_is_rejected(action) -> None:
+def test_a_first_person_stage_direction_is_repaired_or_rejected(action, repaired) -> None:
+    fixed, repairs = repair_form(act(action=action, speech="Algo."))
+    if repaired:
+        assert (fixed.action, repairs) == (repaired, ["FIRST_PERSON_ACTION"])
+        return
+    assert repairs == []
     with pytest.raises(TurnIssue) as error:
-        validate_turn(act(action=action, speech="Algo."), previous_speech=[])
+        validate_turn(fixed, previous_speech=[])
     assert error.value.code == "FIRST_PERSON_ACTION"
     assert str(error.value).isascii()
 
@@ -373,9 +384,17 @@ def test_a_speech_is_not_a_turn() -> None:
         "también."
     )
     assert len(speech.split()) > MAX_SPEECH_WORDS
+    # One sentence has no place to cut, so it is still bounced back.
+    unrepaired, repairs = repair_form(act(speech=speech))
+    assert repairs == []
     with pytest.raises(TurnIssue) as error:
-        validate_turn(act(speech=speech), previous_speech=[])
+        validate_turn(unrepaired, previous_speech=[])
     assert error.value.code == "LONG_SPEECH"
+    # Led by a sentence that fits, the line is cut there instead of costing the turn.
+    opening = "No pienso abrir esa puerta."
+    trimmed, repairs = repair_form(act(speech=f"{opening} {speech}"))
+    assert (trimmed.speech, repairs) == (opening, ["LONG_SPEECH"])
+    validate_turn(trimmed, previous_speech=[])
 
 
 def test_a_thought_that_only_restates_the_line_is_emptied() -> None:
@@ -971,8 +990,8 @@ def arbitrate(inventory, verb, item, target="", *, actor="ana", on_stage=("ana",
         ((SWORD,), "use", "Espada de Aldren", "", None, "ana", ["ana", "bruno"]),
         ((SWORD,), "give", "Espada de Aldren", "Bruno", None, "bruno", ["ana", "bruno"]),
         ((SWORD,), "drop", "Espada de Aldren", "", None, "", ["ana", "bruno"]),
-        # Hiding is perceived by its holder alone: that is what makes it hidden.
-        ((SWORD,), "hide", "Espada de Aldren", "", None, "ana", ["ana"]),
+        # Public hiding conceals the prop but does not erase witnessed possession.
+        ((SWORD,), "hide", "Espada de Aldren", "", None, "ana", ["ana", "bruno"]),
         ((DAGGER,), "show", "Punal corto", "", None, "ana", ["ana", "bruno"]),
         ((LANTERN,), "take", "Farol apagado", "", None, "ana", ["ana", "bruno"]),
         # Something somebody else carries in the open can be taken off them.
@@ -1054,14 +1073,14 @@ def test_a_whispered_handover_is_a_secret_between_the_two_hands() -> None:
     assert action.witnesses == ["ana", "bruno"]
 
 
-def test_shared_memory_widens_an_object_move_but_never_a_concealment() -> None:
+def test_shared_memory_widens_public_moves_including_concealment() -> None:
     inventory, _ = stage_inventory(SWORD, DAGGER, memory=ActorMemory.SHARED)
     public = arbitrate(inventory, "use", "Espada de Aldren", on_stage=("ana",))
     assert public is not None
     assert public.witnesses == ["ana", "bruno", "cora"]
     hidden = arbitrate(inventory, "hide", "Punal corto", on_stage=("ana",))
     assert hidden is not None
-    assert hidden.witnesses == ["ana"]
+    assert hidden.witnesses == ["ana", "bruno", "cora"]
 
 
 def test_an_object_only_appears_in_the_log_of_whoever_perceived_it() -> None:

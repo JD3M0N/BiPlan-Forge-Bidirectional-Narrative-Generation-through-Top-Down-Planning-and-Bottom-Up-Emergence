@@ -1,6 +1,6 @@
 # Hoja de ruta
 
-**Estado medido el 2026-10-09 con `asg-stagecraft` 7.8.3 (pipeline 7.8).** Un solo generador,
+**Estado medido el 2026-10-09 con `asg-stagecraft` 7.9.0 (pipeline 7.9).** Un solo generador,
 Stagecraft, con tres formatos: `narrative`, `script` y `simulated`. La función simulada puede
 llevar inventario de objetos, la guía narrativa tiene una estrategia experimental
 (`compositional_v2`) y la interfaz gráfica StageCraft (`asg-studio`) ya existe (ver
@@ -8,7 +8,7 @@ llevar inventario de objetos, la guía narrativa tiene una estrategia experiment
 
 | Corpus | Runs | Completados | Fallidos | Qué es |
 |---|---|---|---|---|
-| `Stories/Stagecraft/` | 25 | 20 | 4 | 7.0–7.8: diecisiete simulados y ocho narrativos; uno quedó en `running` al cancelarse a mano |
+| `Stories/Stagecraft/` | 29 | 24 | 4 | 7.0–7.9: veintiún simulados y ocho narrativos; uno quedó en `running` al cancelarse a mano |
 | `Stories/Top-Down/` | 176 | 135 | 41 | 4.0–6.2, anteriores al renombrado; 18 sin versión |
 | `Stories/Bottom-Up/` | 6 | — | — | el escape room retirado en 7.1.1, más tres lotes de CSV |
 
@@ -18,6 +18,37 @@ llevar inventario de objetos, la guía narrativa tiene una estrategia experiment
   acción pasaron de 0 a 11 respaldadas por un movimiento arbitrado, y el árbitro rechazó un
   `ITEM_NOT_HELD` que el brazo de control habría aceptado. n=1: prueba de mecanismo, no
   medición de calidad. La medición es EXP-6.
+- **Validación real 7.8 de la función (2026-10-09):** un replay del plan congelado del volcán
+  (`20261009-184753`, 86 llamadas, par de `150355`/`151512`) y un misterio nuevo con el prompt 03
+  (`20261009-185923`, 116 llamadas), los dos con Gemini puro (`ASG_LLM_CHAIN` vacío) y sin un
+  solo error del proveedor. Leídos enteros junto con las cuatro funciones 7.4–7.6:
+  - **Todo beat con compuertas obligatorias se ha forzado o ha necesitado al mundo:** 6 de 6
+    desde 7.5. Es un bug de emparejamiento de cadenas, no del modelo (SIM-17).
+  - **El contexto del actor llega roto:** ids inventados («con sir_aldren: Aliado táctico»),
+    objetivo en inglés y frases sin concordancia (SIM-18), y notas en inglés porque el esquema
+    lo pide (SIM-2).
+  - **El misterio no se resuelve:** el clímax lo da por alcanzado el director, pero
+    `promise_audit.json` da 0 de 2 promesas pagadas y el mecanismo lo demuestra el mundo
+    (SIM-1).
+  - `audit-stage-run` dio 100 de conocimiento y 100 de fidelidad a los dos: ningún juez ve nada
+    de lo anterior (TD-1).
+- **7.9.0 cierra SIM-16, SIM-17 y SIM-18 y la parte de idioma de SIM-2, verificado en real** con
+  dos replays de esos mismos planes (`20261009-195949` volcán, `20261009-200848` faro):
+
+  | | volcán 7.8 → 7.9 | faro 7.8 → 7.9 |
+  |---|---|---|
+  | Beats forzados / con ayuda del mundo | 1 / 0 → **0 / 0** | 0 / 2 → 0 / 1 |
+  | Notas del director en inglés | 14/38 → **0/35** | 36/42 → **0/38** |
+  | Contextos con ids / con objetivo en inglés | 26 / 41 → **0 / 0** | 24 / 40 → **0 / 0** |
+  | Rechazos / turnos saltados / reparados | 7 / 0 / — → 7 / 0 / 8 | 13 / 3 / — → **1 / 0** / 4 |
+  | Promesas pagadas (`promise_audit.json`) | — | 0/2 → **2/2** |
+
+  - Las compuertas casan por clave (`_clause_key`, `stage/engine.py`). En el volcán, `event_2`
+    se alcanza en el turno 6 con sus dos compuertas citadas; desde 7.5 se había forzado siempre.
+  - Quedan dos rastros de inglés en el estado. El volcán reutiliza un casting de 7.4 sin
+    `initial_goal` en español, y el `commitment` inicial salía del `want` del dossier. Este
+    último se quitó después de los replays y se verá en el siguiente run.
+  - El mundo sigue entregando la prueba del clímax del faro (SIM-2).
 - **Evaluación humana: casi inexistente.** De 146 `evaluation.json`, uno solo tiene puntuaciones
   reales (`Top-Down/20260831-223547-el-rescate-de-luminaria`). Todo lo demás que se sabe de la
   calidad sale de métricas automáticas o de jueces LLM, y esos jueces aprueban casi todo (TD-1).
@@ -116,7 +147,8 @@ generalización.
    muere a medias, como murió `054422`, o mide cosas que no son lo que dicen. MED-7 fija además
    la línea base de la actuación antes de cambiarla.
 2. **Una función y unos jueces que no mientan**, con SIM-1, SIM-2, SIM-14, TD-1 y TD-2.
-   Medir hoy mediría los defectos, no los formatos. SIM-9 y SIM-10 ya están cerradas con el par
+   Medir hoy mediría los defectos, no los formatos. SIM-16, SIM-17 y SIM-18 se cerraron en
+   7.9.0; un par anterior a 7.9 no se compara sin separar por `pipeline_version`. SIM-9 y SIM-10 ya están cerradas con el par
    de 7.2; SIM-14 y la parte del mundo de SIM-2 salieron de ese mismo par.
 3. **Matrices emparejadas**, con MED-3 y MED-5.
 4. **Los experimentos**: EXP-1, EXP-2, EXP-3 y EXP-5.
@@ -194,7 +226,10 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   - las mentiras (0 de 80) y la variedad de tácticas por actor;
   - cuánta memoria recibe cada turno (medido a mano en el par de 7.2: mediana y máximo de 8);
   - si las voces se distinguen;
-  - si el narrador cuenta un pensamiento con una compuerta antes de su evento (SIM-13).
+  - si el narrador cuenta un pensamiento con una compuerta antes de su evento (SIM-13);
+  - lo que salió a mano en la validación 7.8: ids y texto en inglés en el contexto del actor
+    (cerrado en 7.9, pero conviene vigilarlo), emociones repetidas entre escenas y cesiones
+    por acto (SIM-19).
 - **Qué hacer.** Calcularlas en `report-simulations`, que solo lee disco, desde `turns.jsonl`,
   `contexts.jsonl`, `director.jsonl`, `cast_bible.json` y `story.md`:
   - recuerdos y caracteres por contexto de actor;
@@ -253,6 +288,21 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   **ninguna** compuerta aparece citada como prueba en `director.jsonl`, porque las cláusulas
   siguen saliendo del `outcome` del evento y no de la compuerta. Y la solución llegó por confesión
   de la hija, no por la deducción que decía su `how` (ver TD-4 y SIM-11).
+- **Medido en 7.8** (`20261009-185923`, prompt 03). Los puntos 1 y 4 están a medias: las
+  compuertas ya entran como cláusulas obligatorias (`required_gates`), pero casi nunca casaban
+  (cerrado en 7.9); y `promise_audit.json` ya audita la función (`"source": "performance"`, con turnos
+  citados). El caso, otra vez, no se resuelve:
+  - `promise_audit.json` da **0 de 2** promesas pagadas, y el director da el clímax por alcanzado
+    («The engineering method is fully explained…», `shown=true`) citando turnos donde Mara afirma
+    «un plan de huida», Elena dice que su padre «desapareció en el mar» y el médico, que «solo
+    quería morir». Los dos jueces del mismo run se contradicen.
+  - **El mecanismo lo demuestra el mundo, no la deducción:** el `stage_event` del clímax es «El
+    pestillo de la puerta principal, liberado por el engranaje, cae con un golpe seco…».
+  - El narrador no inventó la solución: la deja abierta, como pide el punto 3.
+- **Medido en 7.9** (`20261009-200848`, replay del faro). `promise_audit.json` da **2 de 2**, y
+  las cuatro compuertas se citan como prueba en `director.jsonl`. Pero el clímax sigue
+  necesitando al mundo (SIM-2), y la deducción de Mara no se ha leído entera: falta comprobar
+  con la auditoría que no hay revelaciones inventadas.
 - **Hecho cuando.** En un par nuevo de runs:
   - cada compuerta que se revela en el último beat aparece en un turno citado como prueba en
     `director.jsonl`;
@@ -264,59 +314,38 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   - Vigilar el `script_echo` del clímax, hoy 0,026 y 0,036: si se dispara, el director está
     dictando.
 
-### SIM-2 · El director reescribe sus cláusulas y habla en inglés
+### SIM-2 · El mundo entrega la trama
 
 *Área:* función simulada · *Cuota:* se valida con el par de SIM-1 · *Depende de:* —
 
-- **Síntoma.**
-  - **Las cláusulas se rehacen en cada lectura, y se pierden por el camino.** El `achieved` de 7.1
-    es derivado, pero sobre cláusulas que el modelo elige cada vez.
-    - En `072847`, `chapter_3-scene-1`: la comprobación listó 3 cláusulas y la siguiente solo
-      «Elena admits…», que bastó para `achieved=true`.
-    - `chapter_1-scene-2` pasó de 2 cláusulas a 3 y volvió a 2.
-  - **Beats aceptados con poca prueba.** En `070539`, `chapter_2-scene-1` cerró con dos réplicas
-    de Mara en 3 turnos. El hallazgo de la anotación alterada que da título al evento nunca ocurre
-    en escena.
-  - **El mundo adelanta compuertas y entrega la trama.** Los `stage_event` hacen más de lo que
-    la escalera les pide:
-    - En `072847`, `chapter_1-scene-2`: «…revela las firmas alteradas del registro», que estaba
-      programada como deducción de Mara en el evento 4.
-    - En `163733` (7.2), el evento del capítulo 1 «hizo saltar el pestillo oxidado de la puerta
-      interior», que es la compuerta anclada en `event_5`. De paso destruyó la prueba del cuarto
-      cerrado: Mara dedujo después que «la ráfaga lo forzó desde fuera» y exculpó al
-      contrabandista, contra la solución real de la obra.
-    - En `213245` (7.2), un repartidor trajo un sobre «que detalla la quiebra simulada por Víctor
-      Cárdenas para vengarse de la casa de subastas»: el motivo del misterio, por correo. El juez
-      lo archivó como `invented_event` de severidad 4.
-  - **Las notas van en inglés.** Lo están 17 de 23 en `070539` y 27 de 31 en `072847`, y la nota
-    de coda está fija en inglés en `stage/engine.py` («The matter is settled now…»). Los actores
-    traducen la nota a pensamiento: «point directly to the conflicting times…» se vuelve «Apunto
-    directamente a las contradicciones temporales…». Es la causa probable de que el 94–95 % de los
-    turnos traigan pensamiento.
-  - **El estado del actor mezcla idiomas.** `ReflectionDraft` pide `emotion` y `goal` en inglés, y
-    `_state_line` (`stage/render.py`) los pega en una frase en español: «te sientes Anxious; ahora
-    mismo intentas Defend the accuracy of my atmospheric data…».
-  - **La confesión sustituye a la investigación**, que el prompt prohíbe. En `072847` la compuerta
-    del engranaje tiene `how=confession`, una nota pide «cede revelando…» y hay 4 turnos `confess`.
+- **Síntoma.** Cuando un beat se atasca, el `stage_event` hace más de lo que la escalera le
+  pide: revela compuertas antes de su evento, trae motivos y demuestra lo que alguien debía
+  deducir.
+  - En `072847` (7.1), `chapter_1-scene-2`: «…revela las firmas alteradas del registro», que
+    estaba programada como deducción de Mara en el evento 4.
+  - En `163733` (7.2), el evento del capítulo 1 «hizo saltar el pestillo oxidado de la puerta
+    interior», que es la compuerta de `event_5`. De paso destruyó la prueba del cuarto cerrado.
+  - En `213245` (7.2), un repartidor trajo un sobre «que detalla la quiebra simulada por Víctor
+    Cárdenas»: el motivo del misterio, por correo.
+  - En el faro 7.8 (`185923`), «un sobre abierto con el sello de un banco que confirma la fecha
+    exacta de la alteración», y en el clímax «el pestillo… liberado por el engranaje, cae».
+  - **En el faro 7.9 (`200848`) sigue:** el único evento del mundo es el del clímax, «una sección
+    de la pared exterior del faro cede… revelando una nota de cobro… que el farero dejó».
+  - **La confesión sustituye a la investigación**, que el prompt prohíbe. En `072847` la
+    compuerta del engranaje tiene `how=confession`.
+- **Hecho ya (7.3–7.9).** Las cláusulas se congelan en la primera lectura (`_clauses`), y en 7.9
+  casan por clave. Las notas, las cláusulas, la coda y la nota de reserva del director están en
+  el idioma de la ficción: 0 de 35 y 0 de 38 notas en inglés en el par 7.9, frente a 14 de 38 y
+  36 de 42 en 7.8.
 - **Qué hacer.**
-  - Congelar las cláusulas en la primera lectura del beat y guardarlas en `director.jsonl`.
-  - Escribir en el idioma de la ficción las notas, la coda, y la emoción y la meta de la reflexión.
   - Rechazar un `stage_event` que revele una compuerta cuyo evento no ha llegado, con el mismo
     mecanismo de reintento que el resto.
   - Fijar en el contrato del `stage_event` que el mundo entrega **una** cláusula que falta, nunca
-    un motivo, una identidad ni una confesión ajena: lo que se sabe se sigue jugando en escena.
+    un motivo, una identidad, una confesión ajena ni una deducción: lo que se sabe se sigue
+    jugando en escena.
   - Que el casting no programe como confesión una compuerta que la petición exige deducir.
-- **Medido en 7.2.** Nada de esto se ha arreglado, y el par de 7.2 lo confirma con sus cifras:
-  14 de 33 y 14 de 39 notas en inglés, 5 estados de actor mezclando idiomas en `213245`, cláusulas
-  rehechas en 2 y 4 beats, y una compuerta revelada por el mundo antes de su evento (arriba, con
-  su evidencia). `thought_ratio` bajó a 0,91 y 0,92, y los
-  pensamientos de plan siguen en el 44 % y el 64 %.
-- **Hecho cuando.** En el par de SIM-1:
-  - las cláusulas de cada beat son las mismas en todas sus lecturas;
-  - ninguna nota ni ningún estado de actor está en inglés;
-  - ninguna compuerta se revela antes de su evento, y ningún evento del mundo aporta un hecho que
-    no sea la cláusula que faltaba;
-  - `thought_ratio` se ha vuelto a medir, sin exigirle todavía un valor (eso es SIM-6).
+- **Hecho cuando.** En el par de SIM-1 ninguna compuerta se revela antes de su evento, y ningún
+  evento del mundo aporta un hecho que no sea la cláusula que faltaba.
 
 ### SIM-14 · Un actor se sale de la ficción y el log lo acepta
 
@@ -340,26 +369,6 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   run nuevo trae en su log una línea ajena al mundo de la ficción.
 - **Ojo.** El detector va en `stage/validation.py`, donde ninguna cifra viaja al prompt. Vigilar el
   falso positivo: una réplica corta con un nombre propio extranjero no es un turno roto.
-
-### SIM-16 · `REPEATED_ACTION` se ha vuelto el rechazo dominante
-
-*Área:* función simulada · *Cuota:* sin cuota para medir · *Depende de:* —
-
-- **Síntoma.** En los dos runs 7.2 es el **único** motivo de rechazo: 7 turnos en `163733` (5 de
-  ellos en la primera escena) y 10 en `213245`, y provocó los 2 turnos saltados y sus dos avisos
-  `[STAGE_TURN_SKIPPED]`. En 7.1 los rechazos eran uno por run, y de otro tipo.
-  - La regla mide **contención** contra **todas** las acciones anteriores del actor en la obra,
-    no solo la ventana de 3 del validador, desde que 7.2 amplió su alcance.
-  - Un turno rechazado dos veces se salta, y un salto costó en `163733` el beat forzado del
-    capítulo 1.
-  - El segundo intento del turno que se saltó de la ficción (SIM-14) salió justo de uno de estos
-    rechazos.
-- **Qué hacer.** Medir primero, con los logs que ya hay, cuántos de esos rechazos son un tic real
-  y cuántos son un gesto honesto que comparte un verbo. Según eso, decidir entre volver a la
-  ventana corta para la contención, exigir un solapamiento mayor, o dejarlo como está y dar al
-  actor la lista de sus propios gestos recientes para que no los proponga.
-- **Hecho cuando.** Hay una decisión escrita con las cifras de los cuatro runs, y en un par nuevo
-  ningún turno se salta por este motivo.
 
 ### TD-1 · Los jueces del pipeline aprueban casi todo
 
@@ -547,6 +556,11 @@ versión definitiva del generador
   además un run entero del prompt 07 (`20260927-170152-*`) tras 19 fallos seguidos: el aviso que
   quedó, `ACTOR_CALL_FAILED | ProviderError`, no dice qué error fue, porque `_reject` guarda
   `type(exc).__name__` y no el código que sí está en `llm_calls.jsonl`.
+- **Medido en 7.6–7.8.** Casi resuelto por el modelo de la función (`gemini-3.1-flash-lite`):
+  cero tokens de pensamiento en todas las llamadas, actor con mediana de 1,9 a 3,3 s y máximo de
+  23 a 43 s, y ningún error en el par 7.8 (`184753`, `185923`). Quedan 2 y 10 errores 503 en
+  `150355` y `153026`, y una llamada de actor de 119 s en `153026`: el timeout sigue siendo el
+  global de 120 s (`GEMINI_REQUEST_TIMEOUT_MS`).
 - **Hecho cuando.** En un run simulado nuevo, leído con `report-llm-usage`, el reloj se acerca a la
   suma de latencias con éxito más las esperas de cuota, ninguna llamada de actor pasa de su
   timeout, y un turno rechazado por el proveedor deja en `rejected.jsonl` el código del fallo.
@@ -577,6 +591,14 @@ versión definitiva del generador
     texto pertenece al reparto o al mundo, y que los turnos marcados `[clave]` tienen reflejo en
     la prosa.
   - Lo que falle vuelve como corrección, como en el Writer.
+- **Medido en 7.8.** En el faro (`185923`) la médica del prompt vuelve a ser un hombre, «el doctor
+  Aris», y la hija, otra vez, «Elena» (TD-2, TD-7). El cambio ya viene del reparto, no del
+  narrador. Además:
+  - una acotación del mundo pasa a la prosa tal cual, entre paréntesis;
+  - los nombres de utilería entran literales («la Espada de Aldren», «el Diario de
+    Investigaciones de Elara»);
+  - los pensamientos se narran como «Mara Vela pensaba que necesitaba comprobar…»;
+  - `dialogue_survival` es 1,0 en los dos runs 7.8: el narrador transcribe.
 - **Hecho cuando.** En el par de SIM-1 no hay nombres fuera del reparto ni cambios de género, y la
   auditoría no marca ninguna pista clave eliminada.
 
@@ -610,6 +632,13 @@ versión definitiva del generador
   canal ya existe pero casi no se usa. Las tácticas siguen concentradas: `deflect` 12 de 43 en uno
   y `demand` 20 de 51 en el otro. Los eventos del mundo del prompt 03 fueron los dos viento; los
   del 07, tres recursos distintos (ver SIM-2).
+- **Medido en 7.4–7.8.** **Peor que en 7.2:** `thought_ratio` es 1,0 en las seis funciones, aunque
+  el esquema (`ActorTurnDraft.thought`) ya dice «déjalo vacío salvo que difiera». Los que
+  empiezan por «debo» o «necesito» bajaron (6 de 41 y 6 de 42 en 7.8), pero el resto narra el
+  estado en vez de callar algo: «Aldren ha caído en la cuenta. Ahora debo asegurarme…». El actor
+  ve sus propios pensamientos anteriores en «LA ESCENA HASTA AHORA», y eso modela el patrón.
+  Susurros: 0 y 1 en el par 7.8, y en `151512` son susurros con solo dos personajes en escena.
+  Los eventos del mundo ya no son siempre viento.
 - **Hecho cuando.** Un par de runs:
   - baja `thought_ratio` claramente de 0,9, y bajan los pensamientos de plan que mide MED-7;
   - tiene al menos un susurro que la ablación pueda medir;
@@ -673,6 +702,11 @@ versión definitiva del generador
   solo turno `lie` en 94 turnos de actor, el contrabandista de `163733` jugó **una** táctica en
   toda la obra (`deflect`) y `demand` fue 20 de 51 turnos en `213245`. La resolución del prompt 03
   volvió a llegar por confesión, que su petición prohíbe.
+- **Medido en 7.8** (`185923`, prompt 03). Igual: **0 `lie`** en 42 turnos. Mara juega 20 de 22
+  turnos entre `investigate` y `confront`. Los cuatro sospechosos juegan sobre todo `deflect`
+  (13 de 20), y el médico, 5 de 6. El médico desvía cinco veces seguidas hacia «la estructura
+  vieja» y la tormenta, con las seis réplicas empezando por «Señorita Vela,», y solo cede con la
+  confesión: no tiene otra versión que contar.
 - **Hecho cuando.** En un par de misterio (prompts 03 y 07):
   - hay al menos una mentira sostenida y después descubierta;
   - hay más tácticas distintas por actor que en 7.1, leídas con MED-7.
@@ -700,6 +734,11 @@ versión definitiva del generador
   - Que el motor siga qué compuertas ha presenciado cada personaje, derivado de los testigos. Antes
     de abrir el beat de una deducción, pasa al director las premisas que faltan; la escalera puede
     entregar una premisa, nunca la conclusión.
+- **Medido en 7.8** (`185923`). Las dos compuertas `deduction` del faro no las deduce nadie: la
+  del engranaje la representa el mundo («El pestillo… liberado por el engranaje, cae…»), y Mara
+  la afirma sin premisas («este engranaje demuestra que el cerrojo fue manipulado
+  externamente»). Además, `gate_weather_contradiction` tiene `known_by` vacío: su premisa no la
+  sabe nadie al empezar.
 - **Hecho cuando.** En un par del prompt 03 y otro del 07:
   - ninguna deducción se abre sin sus premisas en la memoria del deductor;
   - ninguna compuerta se revela antes de su evento.
@@ -718,6 +757,9 @@ versión definitiva del generador
 
   La primera regla de Knox (1929) lo prohíbe: el culpable no puede ser nadie cuyos pensamientos
   conozca el lector.
+- **Medido en 7.8.** Se repite en el faro (`185923`): el capítulo 2 narra que Elena «no podía
+  dejar que descubriera que había sido ella quien alteró los registros», cuando eso nadie lo
+  dice en escena. El juez de `audit-stage-run` le dio 100 de fidelidad.
 - **Qué hacer.** Una estrategia nueva en `stage/voices.py`: retiene los pensamientos de quien está en
   `known_by` de una compuerta hasta el evento que la revela, y en lo demás se comporta como
   `omniscient`. Se apoya en las compuertas, no en el texto libre de `StoryRequest.genre`.
@@ -728,6 +770,59 @@ versión definitiva del generador
   - La lectura a ciegas decide entre esta voz, `omniscient` y `focalized` sobre quien investiga.
 - **Ojo.** Fuera del misterio la omnisciencia completa puede ser lo mejor: decide la lectura, no una
   regla. El porqué, en `docs/resumen.md` §9.
+
+### SIM-19 · El arco se gasta en el primer acto y el clímax no tiene oposición
+
+*Área:* función simulada · *Cuota:* ~90 llamadas (un replay del volcán) · *Depende de:* MED-7
+
+- **Síntoma.** Leído en las seis funciones del volcán, que comparten plan:
+  - **El cambio llega dos eventos antes.** El plan programa la renuncia de Aldren en `event_4`
+    («Aldren decide renunciar a su lealtad ciega…», capítulo 2). En las seis cede antes, en el
+    capítulo 1 (`concede` o `confess`). En `151512` deja la corona en el turno 9 de la escena 2.
+    Cuando llega `event_4`, ya no queda nada que decidir.
+  - **Los personajes no cambian de estado.** Elara está «Determinada» o «Determined» en 25 de 27
+    estados por escena. Mara, en el faro, está «Analítica» en 5 de 6.
+  - **Ceder es la táctica dominante.** Hay de 16 a 20 cesiones (`yields`) por función en el
+    volcán. En el clímax de `184753`, Elara e Ignis se dan la razón durante ocho turnos de
+    declaraciones solemnes, y Aldren, al que se dirigen, no habla ni una vez.
+  - Las escenas de un solo personaje se juegan como monólogo en voz alta: Aldren, solo, dice
+    «deber» tres veces en la primera escena de `151512`.
+- **Qué hacer.** Primero medirlo con MED-7: cesiones por acto y por personaje, y emociones
+  repetidas. Después:
+  - que el `change_condition` del dossier ate el cambio al evento del plan que lo programa,
+    para que el director no lo pida antes y la nota de giro no lo adelante;
+  - que la reflexión justifique una emoción repetida;
+  - que una escena con un solo personaje pida acción y pensamiento, no habla.
+- **Hecho cuando.** En un replay del volcán, el giro de Aldren cae en su evento, ninguna emoción
+  se repite más de dos escenas sin motivo escrito y el clímax tiene al menos una réplica en
+  contra.
+- **Ojo.** No convertir la oposición en terquedad: un personaje que se niega a todo hasta su
+  evento es tan falso como uno que cede en la primera réplica.
+
+### SIM-20 · El inventario solo ve lo que el actor declara
+
+*Área:* función simulada · *Cuota:* sin cuota · *Depende de:* —
+
+- **Síntoma.** El árbitro de 7.6 (`stage/inventory.py`) juzga el `item_action`, no lo que dicen
+  la acción ni el mundo:
+  - **El mundo mueve objetos sin árbitro.** En `151512`, el evento dice que el sello «resbala de
+    las manos de Aldren», pero quien lo tenía era Elara. En el turno siguiente Aldren lo «toma de
+    Princesa Elara».
+  - **La acción usa objetos que no se tienen.** En `185923`, Mara «golpea el engranaje de latón
+    pesado contra la estructura de la lente» dos turnos antes de tomarlo.
+  - **`hide` a la vista de todos.** En `184753`, Elara «guarda el diario en su cinto… mirando a
+    Sir Aldren», y el árbitro lo registra como oculto con un solo testigo.
+  - Se usan pocos objetos: en el faro hay 9 objetos y solo 3 se tocan (`props_used_ratio`
+    0,33).
+- **Qué hacer.**
+  - Que un `stage_event` que nombre un objeto pase por el árbitro como un movimiento más, o se
+    rechace.
+  - Que la acción que nombra un objeto ajeno sin `item_action` se rechace con el código de
+    siempre.
+  - Que `hide` exija una visibilidad `whisper` o una escena sin testigos.
+- **Hecho cuando.** Hay tests de los tres caminos, y EXP-6 se mide con ellos.
+- **Ojo.** Casar un nombre de objeto en texto libre falla con los sinónimos. Usar los nombres
+  normalizados de `stage/props.py` y aceptar el falso negativo.
 
 ### TD-3 · La revisión alarga en vez de reparar
 

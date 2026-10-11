@@ -85,6 +85,8 @@ class BeatBrief(BaseModel):
     conflict: str = Field(min_length=1)
     promise_brief: str = ""
     required_gates: list[str] = Field(default_factory=list)
+    dependencies: list[str] | None = None
+    supporting_fact_ids: list[str] = Field(default_factory=list)
 
 
 class SceneBrief(BaseModel):
@@ -112,6 +114,8 @@ class RevisedBeat(BaseModel):
     outcome: str = Field(min_length=1)
     purpose: str = Field(min_length=1)
     conflict: str = Field(min_length=1)
+    dependencies: list[str] | None = None
+    supporting_fact_ids: list[str] = Field(default_factory=list)
 
 
 class RevisedScene(BaseModel):
@@ -278,6 +282,8 @@ class KnowledgeGate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(pattern=ID_PATTERN)
+    premise_gate_ids: list[str] = Field(default_factory=list)
+    initial_premises: list[str] = Field(default_factory=list)
     fact: str = Field(
         min_length=1,
         description="In the fiction language: the fact itself, stated plainly.",
@@ -447,6 +453,7 @@ class ItemAction(BaseModel):
     verb: ItemVerb
     item_id: str = Field(pattern=ID_PATTERN)
     item_name: str = Field(min_length=1)
+    performer_id: str = ""
     target_id: str = ""
     # Whoever held the object before this move: the giver, or whoever it was taken from.
     from_id: str = ""
@@ -515,6 +522,11 @@ class ActorTurnDraft(BaseModel):
         default="", description="What I would need to see to reconsider, if it changed."
     )
 
+    state_evidence: str = Field(
+        default="",
+        description="Exact excerpt of this turn supporting a changed goal or commitment.",
+    )
+
 
 class ActorTurnWithItemsDraft(ActorTurnDraft):
     """One turn from an actor who may handle objects: the inventory's response schema.
@@ -530,6 +542,10 @@ class ActorTurnWithItemsDraft(ActorTurnDraft):
             "What you do with an object this turn. Leave verb as 'none' unless handling one is "
             "the move. Your action must say in words what you do with it."
         ),
+    )
+
+    item_actions: list[ItemActionDraft] = Field(
+        default_factory=list, description="Ordered operations; use this OR item_action, never both."
     )
 
 
@@ -559,6 +575,10 @@ class StageTurn(ActorTurnDraft):
     attempts: int = Field(default=1, ge=1)
     # None in every run without an inventory, and in a turn that handled no object.
     item_action: ItemAction | None = None
+    item_actions: list[ItemAction] = Field(default_factory=list)
+    # The form faults the engine fixed instead of bouncing the turn (7.9): the rejection code
+    # each one would have raised. Empty in earlier logs, which never repaired.
+    repairs: list[str] = Field(default_factory=list)
 
 
 class TurnRejection(BaseModel):
@@ -581,6 +601,8 @@ class TurnRejection(BaseModel):
         "ITEM_NOT_HELD",
         "ITEM_OUT_OF_REACH",
         "INVALID_ITEM_TARGET",
+        "UNDECLARED_ITEM_ACTION",
+        "INVALID_STATE_EVIDENCE",
     ]
     issue: str
     turn: dict | None = None
@@ -596,10 +618,34 @@ class BeatDirection(BaseModel):
         default_factory=list,
         max_length=2,
         description=(
-            "In English: at most two playable notes, each naming the character it is for, in the "
-            "form 'ana: press him until he names the date'. Never quote a line to be spoken."
+            "In the fiction language: at most two playable notes, each naming the character it "
+            "is for, in the form 'ana: apriétale hasta que diga la fecha'. Never quote a line to "
+            "be spoken."
         ),
     )
+    objectives: list[str] = Field(
+        default_factory=list,
+        description=(
+            "In the fiction language: one entry per character on stage, in the form "
+            "'name: what they want right now', restating their scene objective as something "
+            "they can play. Never a fact that character does not know."
+        ),
+    )
+
+
+class EvidenceSource(BaseModel):
+    """An exact, channel-specific citation; witnesses are derived by the engine."""
+
+    model_config = ConfigDict(extra="forbid")
+    turn_id: str
+    channel: Literal["action", "speech", "thought"]
+    excerpt: str = Field(min_length=1)
+
+
+class WorldItemDraft(ItemActionDraft):
+    """An object affected by the world, with its current holder named explicitly."""
+
+    actor: str = ""
 
 
 class OutcomePart(BaseModel):
@@ -607,12 +653,19 @@ class OutcomePart(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    part: str = Field(min_length=1, description="In English: one clause of the outcome.")
+    part: str = Field(
+        min_length=1,
+        description=(
+            "In the fiction language: one clause of the outcome. A fixed clause is copied as given."
+        ),
+    )
     shown: bool = Field(description="True only if an audience would have seen this happen.")
     evidence: list[str] = Field(
         default_factory=list,
         description="Turn IDs from the transcript that show it. Required when shown is true.",
     )
+
+    sources: list[EvidenceSource] = Field(default_factory=list)
 
 
 class BeatEvidence(BaseModel):
@@ -622,6 +675,8 @@ class BeatEvidence(BaseModel):
     turn_id: str
     kind: Literal["action", "declaration", "world_event"]
     excerpt: str
+    channel: Literal["action", "speech", "thought"] | None = None
+    witnesses: list[str] = Field(default_factory=list)
     assessment: Literal["director"] = "director"
 
 
@@ -632,6 +687,8 @@ class FactProposal(BaseModel):
     statement: str = Field(min_length=1)
     source_turn_id: str
     supersedes_id: str = ""
+    source: EvidenceSource | None = None
+    status: Literal["established", "claim", "belief"] = "established"
 
 
 class StageFact(BaseModel):
@@ -640,7 +697,10 @@ class StageFact(BaseModel):
     id: str
     statement: str
     source_turn_id: str
-    kind: Literal["action", "world_event"]
+    kind: Literal["action", "world_event", "declaration", "thought"]
+    channel: Literal["action", "speech", "thought"] | None = None
+    excerpt: str = ""
+    status: Literal["established", "claim", "belief"] = "established"
     witnesses: list[str] = Field(default_factory=list)
     supersedes_id: str = ""
     assessment: Literal["director"] = "director"
@@ -677,8 +737,8 @@ class BeatCheckDraft(BaseModel):
         default_factory=list,
         max_length=2,
         description=(
-            "In English: at most two playable notes, as in BeatDirection. When a turning actor is "
-            "named, one note is theirs and gives them a reason to change now."
+            "In the fiction language: at most two playable notes, as in BeatDirection. When a "
+            "turning actor is named, one note is theirs and gives them a reason to change now."
         ),
     )
     stage_event: str = Field(
@@ -688,6 +748,10 @@ class BeatCheckDraft(BaseModel):
             "or hears. Empty unless you are asked for one."
         ),
     )
+
+    world_items: list[WorldItemDraft] = Field(default_factory=list)
+    world_basis: list[EvidenceSource] = Field(default_factory=list)
+    world_effect: Literal["opportunity", "pressure"] = "pressure"
 
 
 class DirectorEntry(BaseModel):
@@ -709,6 +773,8 @@ class DirectorEntry(BaseModel):
     turning_fallback: bool = False
     stage_event: str = ""
     failed: bool = False
+    progress: dict[str, list[str]] = Field(default_factory=dict)
+    stagnant_checks: int = 0
 
 
 class BeatRecord(BaseModel):
@@ -757,6 +823,7 @@ class CharacterState(BaseModel):
     change_condition: str = ""
     source_turn_id: str = ""
     relationships: list[RelationshipState] = Field(default_factory=list)
+    evidence: str = ""
 
 
 class MemoryRecord(BaseModel):
@@ -796,6 +863,10 @@ class ReflectionDraft(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    evidence: list[str] = Field(
+        default_factory=list,
+        description="Exact excerpts of the scene supporting changed commitments or beliefs.",
+    )
     summary: str = Field(
         min_length=1,
         description=(
@@ -880,7 +951,12 @@ class PerformanceArtifact(BaseModel):
     # 2: achieved is derived from the director's clauses, gates say how they come out, and
     # every director call is logged. A 7.0 run still reads as contract 1.
     # 4: a turn may carry an item_action, and props record where every object began and ended.
-    contract_version: str = "4"
+    # 5: a turn records the form faults the engine repaired instead of rejecting (repairs).
+    contract_version: str = "6"
+    narrative_outcome: Literal["resolved", "open", "interrupted"] | None = None
+    interruption_reason: str = ""
+    planned_events: int | None = None
+    facts: list[StageFact] = Field(default_factory=list)
     language: str
     settings: PerformanceSettings
     scenes: list[ScenePerformance] = Field(default_factory=list)
@@ -936,7 +1012,7 @@ class NarrationArtifact(BaseModel):
     tone the author asked for, and chapters recorded as absent. A contract 1 file still loads.
     """
 
-    contract_version: str = "2"
+    contract_version: str = "3"
     narrative_voice: NarrativeVoice
     narrator_character_id: str = ""
     # The name as the person typed it, before it was resolved against the cast.
@@ -944,3 +1020,37 @@ class NarrationArtifact(BaseModel):
     narrator_source: Literal["", "none", "requested", "protagonist", "most_turns"] = ""
     narration_tone: str = ""
     chapters: list[ChapterNarration] = Field(default_factory=list)
+
+
+class NarrationFinding(BaseModel):
+    """One editorial issue, anchored to prose or a visible source turn."""
+
+    model_config = ConfigDict(extra="forbid")
+    code: Literal[
+        "INVENTED_EVENT",
+        "OMITTED_CONSEQUENCE",
+        "CONTRADICTION",
+        "VOICE",
+        "INTERNAL_MARKER",
+        "REPETITION",
+    ]
+    quote: str = ""
+    turn_ids: list[str] = Field(default_factory=list)
+    correction: str = Field(min_length=1)
+
+
+class NarrationReview(BaseModel):
+    """A bounded editorial review; it never writes new story events."""
+
+    model_config = ConfigDict(extra="forbid")
+    findings: list[NarrationFinding] = Field(default_factory=list)
+
+
+class WorldEventAssessment(BaseModel):
+    """Semantic review of a proposed intervention against established circumstances."""
+
+    model_config = ConfigDict(extra="forbid")
+    compatible: bool
+    introduces_solution: bool
+    reveals_future_gate: bool
+    reason: str

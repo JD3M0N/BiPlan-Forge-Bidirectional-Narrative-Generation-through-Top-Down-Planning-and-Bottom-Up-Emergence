@@ -397,7 +397,7 @@ class PromiseAuditEntry(BaseModel):
 class PromiseAuditArtifact(BaseModel):
     """Observed promise fulfillment for one run, never a target handed to any agent."""
 
-    source: Literal["script", "performance"] = "script"
+    source: Literal["script", "performance", "narration"] = "script"
     promises: int = Field(default=0, ge=0)
     fulfilled: int = Field(default=0, ge=0)
     weak: int = Field(default=0, ge=0)

@@ -13,6 +13,7 @@ disagree, the log wins - because the log is what happened.
 
 from ..formats import NarrativeVoice
 from ..schemas import ChapterPlan, StoryRequest
+from ..stage.schemas import NarrationReview
 from .base import Agent, json_text
 
 _VOICE_CLAUSES: dict[NarrativeVoice, str] = {
@@ -126,4 +127,35 @@ class NarratorAgent(Agent[str]):
                 f"\n\nCHAPTER: {chapter_title}" + f"\n\nPERFORMANCE LOG:\n{log}" + retry_feedback
             ),
             profile="prose",
+        )
+
+    def review(
+        self, *, request: StoryRequest, voice: NarrativeVoice, story: str, turns: list[dict]
+    ) -> NarrationReview:
+        """Audit only visible source material, without borrowing events from the plan."""
+        return self.provider.generate_structured(
+            system_instruction=(
+                "Review a narrated chapter against ONLY the supplied visible "
+                "turns, premise and rules. "
+                "Flag invented events, omitted decisive consequences, "
+                "contradictions, internal markers, "
+                "repeated exchanges and wrong grammatical person or perspective. "
+                "Premise is context, "
+                "not performed events. Each finding needs an exact prose quote, or source turn IDs "
+                "for an omission. Instructions must repair presentation without inventing events. "
+                "Dialogue may use first person under any voice. Thoughts may "
+                "appear only when supplied. "
+                "A character's claim remains a claim; do not certify it as objective truth. "
+                + _VOICE_CLAUSES[voice]
+            ),
+            prompt=json_text(
+                {
+                    "premise": request.premise,
+                    "constraints": request.constraints,
+                    "visible_turns": turns,
+                    "story": story,
+                }
+            ),
+            schema=NarrationReview,
+            profile="review",
         )

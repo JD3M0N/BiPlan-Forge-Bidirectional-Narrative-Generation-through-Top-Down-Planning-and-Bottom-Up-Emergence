@@ -47,6 +47,11 @@ _INTERNAL_ID = re.compile(r"\b(?:event|chapter|scene|promise|beat)[-_]\d+\b", re
 # arrodillo" and "la palma de mi mano" and lets a bare first-person verb through, because
 # guessing Spanish conjugation from one word would reject honest third-person directions.
 _FIRST_PERSON = re.compile(r"^(?:me|yo)\b|\b(?:mi|mis|conmigo)\b", re.IGNORECASE)
+# The first-person words a stage direction can lose without touching a verb.
+_THIRD_PERSON = {"mi": "su", "mis": "sus", "conmigo": "consigo"}
+_POSSESSIVE = re.compile(r"\b(?:mi|mis|conmigo)\b", re.IGNORECASE)
+# Where one spoken sentence ends and the next begins.
+_SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
 
 
 class TurnIssue(ValueError):
@@ -97,6 +102,53 @@ def normalize_turn(
             "visibility": visibility,
         }
     )
+
+
+def repair_form(turn: ActorTurnDraft) -> tuple[ActorTurnDraft, list[str]]:
+    """Fix the form faults that have one correct fix, and name the rejection each one avoided.
+
+    Two rejections used to bounce turns that only needed trimming, and two of them in a row
+    skip the turn: three of the 7.8 lighthouse run's turns were lost to lines of 46 to 55 words.
+    A line over the limit is cut at its last sentence end that fits; a stage direction that
+    says "mi" or "mis" or "conmigo" gets the third person. Anything else is left for
+    validate_turn to reject as before: a line with no sentence end inside the limit, or a
+    direction that opens on "me" or "yo", which would need a verb conjugated to fix.
+    """
+    repairs: list[str] = []
+    speech, action = turn.speech, turn.action
+    if len(speech.split()) > MAX_SPEECH_WORDS:
+        trimmed = _trim_to_sentences(speech)
+        if trimmed:
+            speech = trimmed
+            repairs.append("LONG_SPEECH")
+    if action and _FIRST_PERSON.search(action):
+        third = _POSSESSIVE.sub(_third_person, action)
+        if not _FIRST_PERSON.search(third):
+            action = third
+            repairs.append("FIRST_PERSON_ACTION")
+    if not repairs:
+        return turn, repairs
+    return turn.model_copy(update={"speech": speech, "action": action}), repairs
+
+
+def _trim_to_sentences(speech: str) -> str:
+    """Keep the leading whole sentences that fit the limit, or nothing when the first does not."""
+    kept: list[str] = []
+    words = 0
+    for sentence in _SENTENCE_END.split(speech.strip()):
+        count = len(sentence.split())
+        if words + count > MAX_SPEECH_WORDS:
+            break
+        kept.append(sentence)
+        words += count
+    return " ".join(kept)
+
+
+def _third_person(match: re.Match[str]) -> str:
+    """Turn one first-person possessive into the third person, keeping its capital."""
+    word = match.group(0)
+    replacement = _THIRD_PERSON[word.casefold()]
+    return replacement.capitalize() if word[0].isupper() else replacement
 
 
 def validate_turn(
@@ -298,3 +350,24 @@ def _unquote(value: str) -> str:
         if len(stripped) > 1 and stripped.startswith(opening) and stripped.endswith(closing):
             return stripped[1:-1].strip()
     return stripped
+
+
+def validate_state_evidence(candidate: ActorTurnDraft) -> None:
+    """A changed private state must point to the character's current expression."""
+    changes = (
+        candidate.goal_after,
+        candidate.commitment_after,
+        candidate.cover_story_after,
+        candidate.change_condition_after,
+    )
+    if not any(changes):
+        return
+    quote = candidate.state_evidence
+    if not quote.strip() or not any(
+        quote in text for text in (candidate.thought, candidate.action, candidate.speech)
+    ):
+        raise TurnIssue(
+            "INVALID_STATE_EVIDENCE",
+            "Cita un fragmento exacto de tu pensamiento, "
+            "accion o palabras que fundamente el cambio; deja vacio lo que no cambio.",
+        )

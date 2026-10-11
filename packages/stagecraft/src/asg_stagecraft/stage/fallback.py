@@ -12,7 +12,7 @@ the arbiter recorded, and that is all.
 
 from __future__ import annotations
 
-from .perception import item_line, stage_direction
+from .perception import item_line, item_moves, stage_direction
 from .schemas import StageTurn
 
 
@@ -26,8 +26,8 @@ def narrate(turns: list[StageTurn], names: dict[str, str]) -> str:
         speaker = names.get(turn.actor_id, turn.actor_id)
         if turn.action:
             paragraphs.append(_sentence(stage_direction(speaker, turn.action, names)))
-        if turn.item_action:
-            moved = item_line(turn.item_action, names).strip("[]")
+        for move in item_moves(turn):
+            moved = item_line(move, names).strip("[]")
             if moved:
                 paragraphs.append(_sentence(f"{speaker} {moved}"))
         if turn.speech:

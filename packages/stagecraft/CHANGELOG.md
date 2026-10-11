@@ -1,5 +1,41 @@
 # Historial de cambios
 
+## 7.9.1
+
+- **La cadena salta una ranura que rechaza el acceso.** Groq contesta 403 «Access denied.
+  Please check your network settings.» a las redes que bloquea, y la cadena solo saltaba ante
+  un 429 diario: el run moría en Groq con Mistral sin probar. Ahora un 401 o un 403 de
+  cualquier proveedor es `ProviderUnavailableError` (`PROVIDER_UNAVAILABLE`), y
+  `FailoverProvider` deja esa ranura fuera durante el resto del proceso. El libro de cuotas no
+  se entera, porque una red o una clave se arreglan antes de que acabe la ventana del
+  proveedor. Si ninguna ranura responde, el error dice cuáles rechazaron el acceso.
+
+## 7.9.0
+
+Pipeline 7.9. Arregla los defectos deterministas de la función que salieron de la validación
+real 7.8 (`20261009-184753` y `20261009-185923`).
+
+- **Las compuertas obligatorias casan por clave, no por texto (SIM-17).** `_derive` compara las
+  cláusulas del director con las congeladas por texto exacto, por texto normalizado y, en una
+  compuerta, por su id o por su hecho sin el sufijo «(how, nombre)». Una cláusula que repite
+  una compuerta se funde con ella al congelar, y una cláusula ajena ya no deja el beat abierto
+  para siempre. Antes, 6 de 6 beats con compuertas se forzaban aunque el director las diera por
+  mostradas.
+- **El contexto del actor ya no lleva ids ni frases rotas (SIM-18).** Las relaciones de la
+  reflexión se resuelven contra el reparto con `resolve_character` y sustituyen a la del
+  casting. La línea de estado usa etiquetas («Te sientes: …. Cambiarías de idea si: …») en vez
+  de frases con género y conectores duplicados.
+- **El director escribe en el idioma de la ficción (SIM-2).** Las notas y las cláusulas dejan
+  de pedirse en inglés, y `CODA_NOTE` y `FALLBACK_TURN_NOTE` pasan a español. La nota de
+  reserva ya no mete el id ni el sufijo de una compuerta. Al abrir un beat, el director
+  reescribe en español el objetivo de cada actor (`BeatDirection.objectives`), que el
+  Dramaturgo escribe en inglés y un replay conserva.
+- **Una forma con una sola corrección se repara en vez de saltar el turno (SIM-16).**
+  `repair_form` recorta una réplica larga en el último final de frase que cabe y pasa
+  `mi`/`mis`/`conmigo` de una acotación a tercera persona. Lo que no se puede reparar se sigue
+  rechazando. `performance.json` contrato 5: cada turno guarda sus `repairs`, y
+  `simulation_metrics.json` gana `form_repairs`, que vale `None` en contratos anteriores.
+
 ## 7.8.3
 
 - **La cuota del día se comprueba antes de lanzar (cierra MED-1).** `generate-story` estima las

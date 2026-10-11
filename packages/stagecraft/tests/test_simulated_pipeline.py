@@ -60,7 +60,8 @@ def test_simulated_run_writes_every_artifact_and_completes(tmp_path) -> None:
         assert (run.run_dir / name).is_file(), name
     assert run.performance_path.is_file()
     assert run.narration_path.is_file()
-    assert read_json(run, "promise_audit.json")["source"] == "performance"
+    assert read_json(run, "promise_audit.json")["source"] == "narration"
+    assert read_json(run, "performance_promise_audit.json")["source"] == "performance"
     assert (run.run_dir / "script_promise_audit.json").is_file()
     assert (run.run_dir / "stage/promise_audit_draft.json").is_file()
     completed = metadata["completed_stages"]
@@ -144,7 +145,7 @@ def test_every_voice_produces_a_story_and_records_itself(tmp_path, voice) -> Non
     run, _ = generate(tmp_path, narrative_voice=voice)
     narration = NarrationArtifact.model_validate(read_json(run, "narration.json"))
     assert narration.narrative_voice is voice
-    assert narration.contract_version == "2"
+    assert narration.contract_version == "3"
     assert run.story_path.read_text(encoding="utf-8").strip()
     if voice_choice(voice).takes_character:
         assert narration.narrator_character_id
@@ -157,7 +158,11 @@ def test_every_voice_produces_a_story_and_records_itself(tmp_path, voice) -> Non
 
 def upstream_calls(provider):
     """Every model call made before the narrator's first one, in order."""
-    structured = [(name, system, prompt) for name, system, prompt in provider.structured_calls]
+    structured = [
+        (name, system, prompt)
+        for name, system, prompt in provider.structured_calls
+        if name not in {"NarrationReview", "PromiseStoryAuditDraft"}
+    ]
     text = [
         (system, prompt)
         for system, prompt in provider.text_calls
@@ -296,7 +301,7 @@ def test_every_director_call_lands_in_director_jsonl(tmp_path) -> None:
 def test_the_last_scene_of_the_play_ends_in_a_coda(tmp_path) -> None:
     run, _ = generate(tmp_path)
     performance = PerformanceArtifact.model_validate(read_json(run, "performance.json"))
-    assert performance.contract_version == "4"
+    assert performance.contract_version == "6"
     assert performance.scenes[-1].coda_turns > 0
     assert all(scene.coda_turns == 0 for scene in performance.scenes[:-1])
     assert read_json(run, "simulation_metrics.json")["coda_turns"] == (
@@ -631,7 +636,7 @@ def test_the_inventory_dresses_the_stage_and_arbitrates_the_performance(tmp_path
     assert props["fallback"] is False
 
     performance = PerformanceArtifact.model_validate(read_json(run, "performance.json"))
-    assert performance.contract_version == "4"
+    assert performance.contract_version == "6"
     assert performance.settings.inventory is True
     assert [item.id for item in performance.props] == ["prop-1", "prop-2", "prop-3"]
     moves = [

@@ -29,6 +29,7 @@ from ..planning.profiles import NarrativeProfile
 from ..schemas import ID_PATTERN
 from .casting import gates_known_by_discoverer
 from .memory import CharacterMemory
+from .perception import item_moves
 from .schemas import (
     YIELDING_TACTICS,
     CastBible,
@@ -136,6 +137,10 @@ class SimulationMetrics(BaseModel):
     # Keyed by verb, so a performance that only ever used objects reads differently from one
     # that traded them. Absent verbs are simply missing from the mapping.
     item_actions_by_verb: dict[str, int] | None = None
+    # Form faults fixed in place instead of bounced back (a line cut at a sentence end, a
+    # direction moved to the third person). None before performance contract 5, which never
+    # repaired, so an older run reads as "no medido" rather than as a clean one.
+    form_repairs: int | None = None
     # Accepted object moves that took the actor two attempts. Not the arbiter's rejection count,
     # which lives per code in rejected.jsonl: performance.json keeps only accepted turns.
     item_repairs: int | None = None
@@ -204,6 +209,9 @@ def simulation_metrics(
         coda_turns=sum(item.coda_turns for item in scene_metrics),
         rejected_turns=sum(scene.rejected for scene in scenes),
         skipped_turns=sum(scene.skipped for scene in scenes),
+        form_repairs=sum(len(turn.repairs) for turn in acted)
+        if int(performance.contract_version) >= 5
+        else None,
         speech_words=sum(item.speech_words for item in actor_metrics),
         action_words=sum(item.action_words for item in actor_metrics),
         thought_words=sum(item.thought_words for item in actor_metrics),
@@ -244,7 +252,7 @@ def _inventory_metrics(
     """Measure the object traffic, or report every figure as unmeasured without an inventory."""
     if not performance.settings.inventory:
         return {"inventory": False}
-    moves = [turn.item_action for turn in all_turns if turn.item_action is not None]
+    moves = [move for turn in all_turns for move in item_moves(turn)]
     # Everyone the performance put on stage, not only whoever took a turn: the denominator has
     # to be the audience an object move could have had.
     cast = {item for turn in all_turns for item in (turn.actor_id, *turn.witnesses)}
@@ -255,17 +263,15 @@ def _inventory_metrics(
         1
         for scene in scenes
         for turn in scene.turns
-        if turn.item_action is not None
-        and len(set(turn.item_action.witnesses)) < len(set(turn.witnesses))
+        for move in item_moves(turn)
+        if len(set(move.witnesses)) < len(set(turn.witnesses))
     )
     return {
         "inventory": True,
         "props": len(props),
         "item_actions": len(moves),
         "item_actions_by_verb": dict(sorted(Counter(item.verb for item in moves).items())),
-        "item_repairs": sum(
-            1 for turn in all_turns if turn.attempts > 1 and turn.item_action is not None
-        ),
+        "item_repairs": sum(1 for turn in all_turns if turn.attempts > 1 and item_moves(turn)),
         "props_used_ratio": round(len(handled) / len(props), 4) if props else 0.0,
         "hidden_item_actions": sum(1 for item in moves if item.verb == "hide"),
         "secret_handoffs": secret,

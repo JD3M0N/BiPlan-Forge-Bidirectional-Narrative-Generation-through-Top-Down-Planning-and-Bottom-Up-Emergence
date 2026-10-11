@@ -26,15 +26,21 @@ without resolving them - one of them the ending of a mystery.
 
 from __future__ import annotations
 
+import json
+import re
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass, field
 
 from ..formats import ActorMemory, SimulationMode
+from ..planning.skeleton_match import normalize
 from ..runtime.errors import NON_DEGRADABLE_ERRORS, StagePerformanceError
 from . import policy
+from .causality import cited_source, observable_sources
 from .inventory import StageInventory
 from .memory import CharacterMemory
-from .perception import item_line, stage_direction, witnesses
+from .names import resolve_character
+from .perception import item_line, item_moves, stage_direction, witnesses
 from .render import actor_turn_context, director_beat_context, scene_log
 from .schemas import (
     ActorDossier,
@@ -48,14 +54,24 @@ from .schemas import (
     DirectorEntry,
     ItemAction,
     ItemActionDraft,
+    KnowledgeGate,
     ReflectionDraft,
     SceneBrief,
     ScenePerformance,
     StageFact,
     StageTurn,
     TurnRejection,
+    WorldEventAssessment,
+    WorldItemDraft,
 )
-from .validation import TurnIssue, normalize_turn, validate_turn
+from .validation import (
+    TurnIssue,
+    containment,
+    normalize_turn,
+    repair_form,
+    validate_state_evidence,
+    validate_turn,
+)
 
 # One repair attempt per turn. A second one costs as much as a turn and rarely lands: the actor
 # that produced an empty or repeated turn twice is better skipped than argued with.
@@ -72,15 +88,25 @@ TACTIC_WINDOW = 3
 # picks whoever has been using them most.
 RESISTING_TACTICS = frozenset({"deny", "deflect", "lie", "stall", "withdraw"})
 
+# Notes reach the actor as they are, so they are written in the fiction language like every
+# other line of its context; 7.8 and earlier sent these two in English.
 CODA_NOTE = (
-    "The matter is settled now. Play what it has cost you, or what it leaves you with, "
-    "in one last move."
+    "El asunto ya está decidido. Juega lo que te ha costado, o lo que te deja, en un último "
+    "movimiento."
 )
 # Used only when the director was asked to name who must change and did not.
 FALLBACK_TURN_NOTE = (
-    "The ground has shifted under you. What has to happen now: {part}. Let your character be "
-    "the one who makes it happen, for their own reasons."
+    "Tu tactica no produce cambios. Prueba otra accion desde lo que sabes y quieres; "
+    "asume su coste y deja que los demas respondan."
 )
+
+# How much of a gate's fact a director's clause must carry to count as that gate. The director
+# restates required gates in its own words, and 7.5 to 7.8 compared them as exact strings: six
+# beats of six with a required gate were forced although the director had marked it shown.
+GATE_CONTAINMENT = 0.8
+# A required gate reads "gate_id: fact (how, revealer)"; the trailing pair is advice for the
+# director, never part of what has to happen.
+_GATE_SUFFIX = re.compile(r"\s*\([^()]*\)\s*$")
 
 
 @dataclass
@@ -96,6 +122,9 @@ class _Verdict:
     next_actor_id: str = ""
     notes: list[str] = field(default_factory=list)
     stage_event: str = ""
+    world_items: list[WorldItemDraft] = field(default_factory=list)
+    progress: dict[str, list[str]] = field(default_factory=dict)
+    stagnant_checks: int = 0
 
 
 @dataclass
@@ -126,6 +155,9 @@ class PerformanceEngine:
         gate_facts: dict[str, list[str]],
         whole_cast: list[str],
         language: str,
+        knowledge_gates: list[KnowledgeGate] | None = None,
+        review_world: Callable[[str], WorldEventAssessment] | None = None,
+        constraints: str = "",
         actor_memory: ActorMemory = ActorMemory.OWN,
         simulation_mode: SimulationMode = SimulationMode.FIXED,
         inventory: StageInventory | None = None,
@@ -151,6 +183,14 @@ class PerformanceEngine:
         self.system_prompts = system_prompts
         self.names = names
         self.gate_facts = gate_facts
+        self.knowledge_gates = knowledge_gates or []
+        self.review_world = review_world
+        self.constraints = constraints
+        self.gate_witnesses = {gate.id: set(gate.known_by) for gate in self.knowledge_gates}
+        self.narrative_outcome = "open"
+        self.interruption_reason = ""
+        self._progress: dict[str, tuple[set[str], int]] = {}
+        self._previous_checks: dict[str, int] = {}
         self.whole_cast = whole_cast
         self.language = language
         self.actor_memory = actor_memory
@@ -175,12 +215,15 @@ class PerformanceEngine:
         self.memories: dict[str, CharacterMemory] = {
             character_id: CharacterMemory(character_id) for character_id in whole_cast
         }
+        # No commitment until the character's first reflection writes one: the dossier's want
+        # is English by design, and 7.8 printed it to the actor as "Te has jurado: Protect her
+        # father's reputation". initial_goal is the fiction-language want; a bible older than
+        # that field falls back to the English one.
         self.states: dict[str, CharacterState] = {
             character_id: CharacterState(
                 character_id=character_id,
                 scene_number=0,
                 goal=dossier.initial_goal or dossier.want,
-                commitment=dossier.want,
             )
             for character_id, dossier in dossiers.items()
         }
@@ -268,6 +311,7 @@ class PerformanceEngine:
         """Play one beat up the escalation ladder until it lands or is forced."""
         record = BeatRecord(event_id=beat.event_id, index=index)
         direction = self._open(run, index, beat)
+        self._restate_objectives(run, direction)
         record.opening_actor_id = direction.opening_actor_id
         record.notes = list(direction.notes)
         requested, notes = direction.opening_actor_id, list(direction.notes)
@@ -311,9 +355,16 @@ class PerformanceEngine:
     ) -> None:
         """Let the world deliver what is missing, let the actors answer it, and read once more."""
         if verdict.stage_event:
+            moves = self._world_moves(verdict.world_items, verdict.stage_event, run)
+            if self.inventory is not None:
+                for move in moves:
+                    self.inventory.apply(
+                        move, actor_id=move.performer_id, location_id=run.brief.location_id or ""
+                    )
             record.stage_events.append(verdict.stage_event)
             self.used_events.append(verdict.stage_event)
             event_turn = self._stage_event_turn(run, index, beat, verdict.stage_event)
+            event_turn.item_actions = moves
             run.turns.append(event_turn)
             self._record_turn(event_turn, run.brief.number)
             # The world's turn belongs in the turn log like any other: 7.1 wrote one turn fewer
@@ -330,7 +381,7 @@ class PerformanceEngine:
         final = self._check(run, index, beat, "final")
         record.checks += 1
         if final.achieved:
-            record.intervened = True
+            record.intervened = bool(record.stage_events)
             self._land(record, final, run)
             return
         record.forced = True
@@ -423,10 +474,11 @@ class PerformanceEngine:
         run.turns.append(turn)
         # Applied before the turn is remembered, so what each witness records is the world as it
         # stands after the object moved, never before.
-        if self.inventory is not None and turn.item_action is not None:
-            self.inventory.apply(
-                turn.item_action, actor_id=actor_id, location_id=run.brief.location_id or ""
-            )
+        if self.inventory is not None:
+            for move in item_moves(turn):
+                self.inventory.apply(
+                    move, actor_id=actor_id, location_id=run.brief.location_id or ""
+                )
         self._record_turn(turn, run.brief.number)
         updates = {
             field: value
@@ -443,7 +495,12 @@ class PerformanceEngine:
                 character_id=actor_id, scene_number=0
             )
             self.states[actor_id] = previous.model_copy(
-                update={**updates, "scene_number": run.brief.number, "source_turn_id": turn.id}
+                update={
+                    **updates,
+                    "scene_number": run.brief.number,
+                    "source_turn_id": turn.id,
+                    "evidence": turn.state_evidence,
+                }
             )
             if self.on_reflection:
                 self.on_reflection(
@@ -490,7 +547,12 @@ class PerformanceEngine:
         memory = self.memories[actor_id]
         witnessed = [turn for turn in turns if actor_id in set(turn.witnesses)]
         recalled = memory.recall(
-            self._query(scene, objective, witnessed),
+            self._query(scene, objective, witnessed)
+            + " "
+            + " ".join(
+                getattr(self.states.get(actor_id), name, "")
+                for name in ("goal", "commitment", "change_condition")
+            ),
             scene_number=scene.number,
             turn_number=number,
             present=[item for item in on_stage if item != actor_id],
@@ -565,12 +627,14 @@ class PerformanceEngine:
                 actor_name=self.names.get(actor_id, ""),
                 names=self.names,
             )
-            item_action = None
+            candidate, repairs = repair_form(candidate)
+            moves = []
             try:
                 validate_turn(
                     candidate, previous_speech=previous_speech, previous_actions=previous_actions
                 )
-                item_action = self._arbitrate(candidate, actor_id, scene, on_stage)
+                validate_state_evidence(candidate)
+                moves = self._arbitrate(candidate, actor_id, scene, on_stage)
             except TurnIssue as issue:
                 rejections += 1
                 self._reject(
@@ -593,8 +657,9 @@ class PerformanceEngine:
                 feedback = f"\n\nCORRECCION:\n{issue}\nVuelve a hacer tu movimiento."
                 continue
             turn = StageTurn(
-                **candidate.model_dump(exclude={"item_action"}),
-                item_action=item_action,
+                **candidate.model_dump(exclude={"item_action", "item_actions"}),
+                item_action=moves[0] if len(moves) == 1 else None,
+                item_actions=moves if len(moves) > 1 else [],
                 id=f"{scene.scene_id}-t{number:03d}",
                 scene_id=scene.scene_id,
                 number=number,
@@ -611,6 +676,7 @@ class PerformanceEngine:
                 direction_note=note,
                 retrieved_memory_ids=[item.id for item in recalled],
                 attempts=attempt,
+                repairs=repairs,
             )
             if self.on_attempt:
                 self.on_attempt(
@@ -627,21 +693,22 @@ class PerformanceEngine:
         return None, rejections
 
     def _arbitrate(
-        self,
-        candidate: ActorTurnDraft,
-        actor_id: str,
-        scene: SceneBrief,
-        on_stage: list[str],
-    ) -> ItemAction | None:
-        """Put the object move a turn proposed to the arbiter, if there is one to put.
-
-        Called once the turn itself has validated, so a rejected object move costs the actor the
-        same single repair any other fault would, with the arbiter's own English message.
-        """
+        self, candidate: ActorTurnDraft, actor_id: str, scene: SceneBrief, on_stage: list[str]
+    ) -> list[ItemAction]:
+        """Resolve all object operations against a private trial state."""
         if self.inventory is None:
-            return None
-        return self.inventory.resolve(
-            getattr(candidate, "item_action", None) or ItemActionDraft(),
+            return []
+        single = getattr(candidate, "item_action", None)
+        drafts = list(getattr(candidate, "item_actions", []))
+        if single and single.verb != "none":
+            if drafts:
+                raise TurnIssue(
+                    "UNDECLARED_ITEM_ACTION", "use either item_action or item_actions, not both"
+                )
+            drafts = [single]
+        return self.inventory.resolve_many(
+            drafts,
+            action_text=candidate.action,
             actor_id=actor_id,
             on_stage=on_stage,
             location_id=scene.location_id or "",
@@ -650,6 +717,66 @@ class PerformanceEngine:
             addressed_to=candidate.addressed_to,
             whole_cast=self.whole_cast,
         )
+
+    def _world_moves(
+        self, drafts: list[WorldItemDraft], text: str, run: _SceneRun
+    ) -> list[ItemAction]:
+        if self.inventory is None:
+            return []
+        trial = deepcopy(self.inventory)
+        trial.on_item = None
+        moves = []
+        for draft in drafts:
+            actor = resolve_character(draft.actor, self.names)
+            if actor not in run.on_stage:
+                raise TurnIssue(
+                    "INVALID_ITEM_TARGET",
+                    "a world object operation needs an affected character present on stage",
+                )
+            operation = ItemActionDraft(**draft.model_dump(exclude={"actor"}))
+            accepted = trial.resolve_many(
+                [operation],
+                actor_id=actor,
+                on_stage=run.on_stage,
+                location_id=run.brief.location_id or "",
+                names=self.names,
+                visibility="public",
+                addressed_to=[],
+                whole_cast=self.whole_cast,
+            )
+            for move in accepted:
+                trial.apply(move, actor_id=actor, location_id=run.brief.location_id or "")
+            moves.extend(accepted)
+        self.inventory.validate_description(text, {move.item_id for move in moves})
+        return moves
+
+    def _world_issue(
+        self, draft: BeatCheckDraft, run: _SceneRun, beat: BeatBrief, context: str
+    ) -> str:
+        """Validate physical changes and require a semantic review before intervention."""
+        if not draft.stage_event.strip():
+            return ""
+        try:
+            self._world_moves(draft.world_items, draft.stage_event, run)
+        except TurnIssue as exc:
+            return str(exc)
+        known = {turn.id: turn for turn in run.turns}
+        if any(cited_source(source, known) is None for source in draft.world_basis):
+            return "world event cites an unavailable or private source"
+        if self.review_world is None:
+            return "world event cannot be verified without an intervention reviewer"
+        try:
+            review = self.review_world(context + "\nPROPOSED WORLD EVENT:\n" + draft.stage_event)
+        except NON_DEGRADABLE_ERRORS:
+            raise
+        except Exception:
+            return "world event review unavailable"
+        if not review.compatible or review.introduces_solution or review.reveals_future_gate:
+            return (
+                review.reason
+                or "world event resolves the conflict or violates established circumstances"
+            )
+        return ""
 
     def _stage_event_turn(
         self, run: _SceneRun, beat_index: int, beat: BeatBrief, text: str
@@ -703,6 +830,19 @@ class PerformanceEngine:
         self._log(run, index, beat, "open", direction.model_dump(mode="json"), None)
         return direction
 
+    def _restate_objectives(self, run: _SceneRun, direction: BeatDirection) -> None:
+        """Replace each actor's objective with the director's restatement, when it gave one.
+
+        The playwright writes scene objectives in English, and a frozen script keeps them that
+        way on every replay, so the director restates them in the fiction language as it opens
+        the beat. An entry that names nobody on stage, or says nothing, leaves the original.
+        """
+        for entry in direction.objectives:
+            name, _, objective = entry.partition(":")
+            character_id = resolve_character(name, self.names)
+            if character_id in run.on_stage and objective.strip():
+                run.objectives[character_id] = objective.strip()
+
     def _check(self, run: _SceneRun, index: int, beat: BeatBrief, mode: str) -> _Verdict:
         """Ask the director to read the beat, and derive the verdict from its clauses."""
         context = self._director_context(run, beat)
@@ -726,8 +866,63 @@ class PerformanceEngine:
             return verdict
         verdict = self._derive(draft, run, mode, beat.event_id)
         self._accept_facts(draft, run)
+        key = run.brief.scene_id + ":" + beat.event_id
+        previous, stagnant = self._progress.get(key, (set(), 0))
+        signature = {proof.clause_id for proof in verdict.proofs}
+        signature.update(f.statement for f in self.facts if f.status == "established")
+        since = self._previous_checks.get(key, 0)
+        fresh = run.turns[since:]
+        progress = {
+            "information": sorted(signature - previous),
+            "resources": [turn.id for turn in fresh if item_moves(turn)],
+            "commitments": [
+                turn.id
+                for turn in fresh
+                if turn.state_evidence
+                and any(
+                    (
+                        turn.goal_after,
+                        turn.commitment_after,
+                        turn.cover_story_after,
+                        turn.change_condition_after,
+                    )
+                )
+            ],
+        }
+        stagnant = 0 if any(progress.values()) else stagnant + 1
+        self._progress[key] = (previous | signature, stagnant)
+        self._previous_checks[key] = len(run.turns)
+        verdict.progress = progress
+        verdict.stagnant_checks = stagnant
+        if stagnant >= 2:
+            actor = verdict.turning_actor_id or run.on_stage[0]
+            verdict.notes.append(f"{actor}: Cambia de tactica y juega una consecuencia nueva.")
+        if verdict.stage_event and self.simulation_mode is SimulationMode.FIXED:
+            self._validate_world_proposal(draft, verdict, run, index, beat, mode, context)
         self._log(run, index, beat, mode, draft.model_dump(mode="json"), verdict)
         return verdict
+
+    def _validate_world_proposal(self, draft, verdict, run, index, beat, mode, context):
+        """Review an intervention, allowing one logged correction before discarding it."""
+        issue = self._world_issue(draft, run, beat, context)
+        if not issue:
+            return
+        self._log(run, index, beat, mode, draft.model_dump(mode="json"), verdict)
+        try:
+            repaired = self.check_beat(context + "\nREPAIR WORLD EVENT: " + issue, "stall")
+            issue = self._world_issue(repaired, run, beat, context)
+        except NON_DEGRADABLE_ERRORS:
+            raise
+        except Exception:
+            issue = "world event repair unavailable"
+            repaired = None
+        if issue:
+            verdict.stage_event = ""
+            verdict.world_items = []
+            self.warnings.append(f"[WORLD_EVENT_REJECTED] {run.brief.scene_id}: {issue}")
+        elif repaired is not None:
+            verdict.stage_event = repaired.stage_event.strip()
+            verdict.world_items = repaired.world_items
 
     def _derive(self, draft: BeatCheckDraft, run: _SceneRun, mode: str, event_id: str) -> _Verdict:
         """Turn the director's clauses into a verdict the model never gets to declare.
@@ -735,49 +930,63 @@ class PerformanceEngine:
         A clause counts as shown only when it cites a turn that exists. Every missing clause
         keeps the beat open. When the rung requires someone to be named and the director named
         nobody, or gave them no note, the engine fills the gap deterministically and says so.
+
+        Clauses are matched to the frozen list by key, never by the director's exact wording: a
+        required gate counts whether it comes back with its id, without its advice suffix, or as
+        the bare fact. A clause the frozen list does not hold is ignored rather than allowed to
+        keep the beat open forever.
         """
         known = {turn.id: turn for turn in run.turns}
         beat_key = run.brief.scene_id + ":" + event_id
-        clauses = [part.part for part in draft.parts]
         required = run.brief.beats[
             next(index for index, beat in enumerate(run.brief.beats) if beat.event_id == event_id)
         ].required_gates
-        frozen = self._clauses.setdefault(beat_key, list(dict.fromkeys([*clauses, *required])))
+        frozen = self._clauses.get(beat_key)
+        if frozen is None:
+            # A clause that restates a required gate folds into it, so the gate is not frozen
+            # twice and asked to be shown twice.
+            first = [
+                _clause_key(part.part, required, required) or part.part for part in draft.parts
+            ]
+            frozen = self._clauses[beat_key] = list(dict.fromkeys([*first, *required]))
         evidence: list[str] = []
         proofs: list[BeatEvidence] = []
-        missing: list[str] = []
+        shown: set[str] = set()
         for part in draft.parts:
-            if part.part not in frozen:
+            key = _clause_key(part.part, frozen, required)
+            if key is None:
                 continue
-            cited = [
-                item
-                for item in part.evidence
-                if item in known
-                and (known[item].kind == "world" or known[item].action or known[item].speech)
-            ]
-            if part.shown and cited:
-                evidence.extend(item for item in cited if item not in evidence)
-                for item in cited:
-                    turn = known[item]
-                    kind = (
-                        "world_event"
-                        if turn.kind == "world"
-                        else "action"
-                        if turn.action
-                        else "declaration"
+            sources = observable_sources(part.sources, part.evidence, known)
+            gate = next((g for g in self.knowledge_gates if _gate_parts(key)[0] == g.id), None)
+            sources = self._gate_sources(gate, sources)
+            if not (part.shown and sources):
+                continue
+            shown.add(key)
+            clause_id = f"{event_id}:c{frozen.index(key) + 1:02d}"
+            for source, turn in sources:
+                if turn.id not in evidence:
+                    evidence.append(turn.id)
+                kind = (
+                    "world_event"
+                    if turn.kind == "world"
+                    else "declaration"
+                    if source.channel == "speech"
+                    else "action"
+                )
+                proofs.append(
+                    BeatEvidence(
+                        clause_id=clause_id,
+                        turn_id=turn.id,
+                        kind=kind,
+                        excerpt=source.excerpt,
+                        channel=source.channel,
+                        witnesses=list(turn.witnesses),
                     )
-                    proofs.append(
-                        BeatEvidence(
-                            clause_id=f"{event_id}:c{frozen.index(part.part) + 1:02d}",
-                            turn_id=item,
-                            kind=kind,
-                            excerpt=turn.action if kind != "declaration" else turn.speech,
-                        )
-                    )
-            else:
-                missing.append(part.part)
-        missing.extend(part for part in frozen if part not in clauses)
-        achieved = bool(frozen) and not missing and set(clauses) == set(frozen)
+                )
+                if gate:
+                    self.gate_witnesses.setdefault(gate.id, set()).update(turn.witnesses)
+        missing = [key for key in frozen if key not in shown]
+        achieved = bool(frozen) and not missing
         turning = draft.turning_actor_id if draft.turning_actor_id in run.on_stage else ""
         notes = list(draft.notes)
         fallback = False
@@ -786,7 +995,8 @@ class PerformanceEngine:
                 turning = self._likely_turner(run)
                 fallback = True
             if missing and not self._note_for(notes, turning):
-                notes = [*notes[:1], f"{turning}: {FALLBACK_TURN_NOTE.format(part=missing[0])}"]
+                part = _clause_text(missing[0], required)
+                notes = [*notes[:1], f"{turning}: {FALLBACK_TURN_NOTE.format(part=part)}"]
                 fallback = True
         next_actor = draft.next_actor_id if draft.next_actor_id in run.on_stage else ""
         return _Verdict(
@@ -801,7 +1011,20 @@ class PerformanceEngine:
             # A beat that lands on the stall reading needs no intervention, so the event the
             # director proposed never happens and must not be logged as if it had.
             stage_event=draft.stage_event.strip() if mode == "stall" and not achieved else "",
+            world_items=draft.world_items,
         )
+
+    def _gate_sources(self, gate, sources):
+        """Require known premises and an actual revealer for gated evidence."""
+        if gate is None:
+            return sources
+        if gate.how == "deduction" and self._missing_premises(gate):
+            return []
+        return [
+            (source, turn)
+            for source, turn in sources
+            if not gate.revealed_by or (turn.actor_id == gate.revealed_by and turn.kind == "actor")
+        ]
 
     def _accept_facts(self, draft: BeatCheckDraft, run: _SceneRun) -> None:
         """Record only world changes grounded in a witnessed action or world turn."""
@@ -809,9 +1032,23 @@ class PerformanceEngine:
         previous = {fact.id for fact in self.facts}
         seen = {(fact.source_turn_id, fact.statement.casefold()) for fact in self.facts}
         for proposal in draft.facts:
-            turn = turns.get(proposal.source_turn_id)
-            if turn is None or not turn.action:
+            source = proposal.source
+            if source is None:
                 continue
+            turn = cited_source(
+                source,
+                turns,
+                private=turns[source.turn_id].actor_id if source.turn_id in turns else "",
+            )
+            if turn is None or source.turn_id != proposal.source_turn_id:
+                continue
+            status = (
+                "belief"
+                if source.channel == "thought"
+                else "claim"
+                if source.channel == "speech"
+                else proposal.status
+            )
             if proposal.supersedes_id and proposal.supersedes_id not in previous:
                 continue
             key = (turn.id, proposal.statement.casefold())
@@ -821,15 +1058,36 @@ class PerformanceEngine:
                 id=f"fact-{len(self.facts) + 1:04d}",
                 statement=proposal.statement,
                 source_turn_id=turn.id,
-                kind="world_event" if turn.kind == "world" else "action",
-                witnesses=list(turn.witnesses),
-                supersedes_id=proposal.supersedes_id,
+                channel=source.channel,
+                excerpt=source.excerpt,
+                status=status,
+                kind="thought"
+                if status == "belief"
+                else "declaration"
+                if source.channel == "speech"
+                else "world_event"
+                if turn.kind == "world"
+                else "action",
+                witnesses=[turn.actor_id] if source.channel == "thought" else list(turn.witnesses),
+                supersedes_id=proposal.supersedes_id if status == "established" else "",
             )
             self.facts.append(fact)
             seen.add(key)
             previous.add(fact.id)
             if self.on_fact:
                 self.on_fact(fact)
+
+    def _missing_premises(self, gate: KnowledgeGate) -> list[str]:
+        """A deduction uses only evidence that reached its investigator."""
+        actor = gate.revealed_by
+        missing = [
+            key for key in gate.premise_gate_ids if actor not in self.gate_witnesses.get(key, set())
+        ]
+        known = {record.text for record in self.memories.get(actor, CharacterMemory(actor)).records}
+        missing.extend(text for text in gate.initial_premises if text not in known)
+        if not gate.premise_gate_ids and not gate.initial_premises:
+            missing.append("deduction has no recorded premises")
+        return missing
 
     def _likely_turner(self, run: _SceneRun) -> str:
         """Name who has dug in hardest when the director named nobody: most resisting tactics."""
@@ -853,7 +1111,7 @@ class PerformanceEngine:
 
     def _director_context(self, run: _SceneRun, beat: BeatBrief) -> str:
         """Build what the director reads, with the deadlock and repetition signals attached."""
-        return director_beat_context(
+        context = director_beat_context(
             scene=run.brief,
             beat=beat,
             turns=run.turns,
@@ -867,6 +1125,29 @@ class PerformanceEngine:
                 if self.inventory
                 else None
             ),
+        )
+        established = [f.model_dump(mode="json") for f in self.facts if f.status == "established"]
+        pending = {
+            g.id: self._missing_premises(g)
+            for g in self.knowledge_gates
+            if g.revealed_at_event_id == beat.event_id and g.how == "deduction"
+        }
+        context += "\nREGLAS DEL MUNDO Y PETICION:\n" + self.constraints
+        return (
+            context
+            + "\nHECHOS ESTABLECIDOS:\n"
+            + json.dumps(established, ensure_ascii=False)
+            + "\nPREMISAS PENDIENTES:\n"
+            + json.dumps(pending, ensure_ascii=False)
+            + "\nCAMBIOS YA ASUMIDOS (no repetir conversiones; poner a prueba sus consecuencias):\n"
+            + json.dumps(
+                {
+                    key: state.model_dump(mode="json")
+                    for key, state in self.states.items()
+                    if key in run.on_stage
+                },
+                ensure_ascii=False,
+            )
         )
 
     def _log(
@@ -900,6 +1181,8 @@ class PerformanceEngine:
                 turning_fallback=verdict.turning_fallback if verdict else False,
                 stage_event=verdict.stage_event if verdict else "",
                 failed=failed,
+                progress=verdict.progress if verdict else {},
+                stagnant_checks=verdict.stagnant_checks if verdict else 0,
             )
         )
 
@@ -922,33 +1205,28 @@ class PerformanceEngine:
         # An object move is remembered by exactly those who perceived it, which is not always
         # the turn's own witness list: a hidden object is nobody's business but its holder's,
         # and a hand-over reaches the hands even when the words did not.
-        moved = ""
-        item_witnesses: list[str] = []
-        if turn.item_action is not None:
-            item_witnesses = list(turn.item_action.witnesses)
-            speaker = self.names.get(turn.actor_id, turn.actor_id)
-            line = item_line(turn.item_action, self.names, concealed_from=True)
-            moved = f"{speaker} {line}" if line else ""
-        for character_id in dict.fromkeys([*turn.witnesses, *item_witnesses]):
+        moves = item_moves(turn)
+        item_witnesses = {person for move in moves for person in move.witnesses}
+        for character_id in dict.fromkeys([*turn.witnesses, *sorted(item_witnesses)]):
             memory = self.memories.get(character_id)
             if memory is None:
                 continue
-            perceived = character_id in set(turn.witnesses)
-            pieces = [
-                visible if perceived else "",
-                moved if character_id in set(item_witnesses) else "",
-            ]
+            pieces = [visible if character_id in turn.witnesses else ""]
+            for move in moves:
+                if character_id in move.witnesses:
+                    pieces.append(
+                        item_line(move, self.names, concealed_from=len(move.witnesses) == 1)
+                    )
             text = " ".join(piece for piece in pieces if piece)
-            if not text:
-                continue
-            memory.remember(
-                kind=self._memory_kind(turn, character_id),
-                text=text,
-                scene_number=scene_number,
-                turn_id=turn.id,
-                participants=list(turn.witnesses),
-                importance=0.6 if turn.visibility == "whisper" or turn.kind == "world" else 0.5,
-            )
+            if text:
+                memory.remember(
+                    kind=self._memory_kind(turn, character_id),
+                    text=text,
+                    scene_number=scene_number,
+                    turn_id=turn.id,
+                    participants=list(turn.witnesses),
+                    importance=0.8 if moves or "?" in turn.speech else 0.5,
+                )
         if turn.thought and turn.kind == "actor":
             self.memories[turn.actor_id].remember(
                 kind="thought",
@@ -1011,6 +1289,7 @@ class PerformanceEngine:
                     f"{self.names.get(character_id, character_id)} no pudo reflexionar."
                 )
                 continue
+            reflection = _grounded_reflection(reflection, witnessed, character_id)
             memory = self.memories[character_id]
             memory.remember(
                 kind="reflection",
@@ -1052,9 +1331,13 @@ class PerformanceEngine:
         """
         previous = self.states.get(character_id)
         stances = {item.character_id: item for item in (previous.relationships if previous else [])}
+        # The reflection names the other side as it pleases ("sir_aldren" for aldren); until 7.8
+        # that key was kept raw, printed back to the actor as an id and never replaced the stance
+        # the casting wrote. One that names nobody, or the character itself, is dropped.
         for item in reflection.relationships:
-            if item.character_id != character_id:
-                stances[item.character_id] = item
+            other = resolve_character(item.character_id, self.names)
+            if other and other != character_id:
+                stances[other] = item.model_copy(update={"character_id": other})
         return CharacterState(
             character_id=character_id,
             scene_number=scene_number,
@@ -1089,11 +1372,12 @@ class PerformanceEngine:
     @staticmethod
     def _note_for(notes: list[str], actor_id: str) -> str:
         """Return the note addressed to one actor, if any note is."""
-        for note in notes:
-            head, _, body = note.partition(":")
-            if head.strip().casefold() == actor_id.casefold() and body.strip():
-                return body.strip()
-        return ""
+        return " ".join(
+            body.strip()
+            for note in notes
+            for head, _, body in [note.partition(":")]
+            if head.strip().casefold() == actor_id.casefold() and body.strip()
+        )
 
     def _reject(
         self,
@@ -1133,3 +1417,67 @@ class PerformanceEngine:
         """Report one performance milestone when a callback is configured."""
         if self.on_event:
             self.on_event(kind, message)
+
+
+def _gate_parts(gate: str) -> tuple[str, str]:
+    """Split a required gate into its id and its bare fact, dropping the advice suffix."""
+    gate_id, _, rest = gate.partition(":")
+    return gate_id.strip(), _GATE_SUFFIX.sub("", rest).strip()
+
+
+def _clause_key(text: str, keys: list[str], gates: list[str]) -> str | None:
+    """Return the frozen clause a director's clause stands for, or None when it is none of them.
+
+    Exact wording first, then the same words with accents and punctuation folded away; a
+    required gate also answers to its id and to its bare fact, however the director dressed it.
+    """
+    if text in keys:
+        return text
+    wanted = normalize(text)
+    for key in keys:
+        if normalize(key) == wanted:
+            return key
+    for gate in gates:
+        if gate not in keys:
+            continue
+        gate_id, fact = _gate_parts(gate)
+        prefix = normalize(gate_id)
+        if prefix and (wanted == prefix or wanted.startswith(prefix + " ")):
+            return gate
+        if fact and containment(fact, text) >= GATE_CONTAINMENT:
+            return gate
+    return None
+
+
+def _clause_text(clause: str, gates: list[str]) -> str:
+    """Say a missing clause the way an actor may read it: a gate loses its id and its advice."""
+    return _gate_parts(clause)[1] if clause in gates else clause
+
+
+def _grounded_reflection(reflection, witnessed, character_id):
+    """Private changes must cite something this actor actually perceived."""
+    allowed = [
+        text
+        for turn in witnessed
+        for text in (
+            turn.action,
+            turn.speech,
+            turn.thought if turn.actor_id == character_id else "",
+        )
+        if text
+    ]
+    grounded = bool(reflection.evidence) and all(
+        quote.strip() and any(quote in text for text in allowed) for quote in reflection.evidence
+    )
+    if grounded:
+        return reflection
+    return reflection.model_copy(
+        update={
+            "goal": "",
+            "commitment": "",
+            "cover_story": "",
+            "change_condition": "",
+            "beliefs": [],
+            "relationships": [],
+        }
+    )

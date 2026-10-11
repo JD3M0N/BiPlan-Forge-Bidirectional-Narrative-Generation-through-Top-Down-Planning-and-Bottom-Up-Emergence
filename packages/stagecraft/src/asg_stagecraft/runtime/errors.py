@@ -124,6 +124,17 @@ class ProviderDailyQuotaError(ProviderError):
     code = "PROVIDER_DAILY_QUOTA_EXHAUSTED"
 
 
+class ProviderUnavailableError(ProviderError):
+    """Signal a provider that refuses this caller outright (401 or 403), so a chain can skip it.
+
+    Groq answers 403 "Access denied. Please check your network settings." to networks it
+    blocks: the key is fine and no retry helps, but before 7.9.1 the chain treated it like any
+    other failure and the run died there with Mistral still untried.
+    """
+
+    code = "PROVIDER_UNAVAILABLE"
+
+
 class GeminiDailyQuotaError(ProviderDailyQuotaError):
     """Represent GeminiDailyQuotaError data and behavior."""
 

@@ -299,7 +299,7 @@ A esa lista, el guion y el simulado añaden los suyos.
   `report-story-craft` las recalcula desde `story.md`, así que también mide los runs anteriores
   a 6.5.0, que no las traen.
 
-`version.py` fija `PIPELINE_VERSION` (7.7) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.7).
+`version.py` fija `PIPELINE_VERSION` (7.9) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.9).
 `StoryRun` se niega a abrir un run incompleto o de una versión no soportada. Si cambias el
 conjunto de artefactos o su significado, sube la versión en vez de romper los runs ya generados:
 son datos de la tesis. Una limpieza que no toca artefactos sube solo el parche de
@@ -340,7 +340,8 @@ esquema Pydantic, y `generate_text`) e implementa `GeminiProvider`. Lo que impor
 - **La cadena de proveedores** (7.7), `ASG_LLM_CHAIN=gemini,groq,mistral`.
   - `FailoverProvider` prueba sus ranuras (proveedor y modelo; Groq da una por modelo) en orden.
     Si una da un 429 diario o mensual (`ProviderDailyQuotaError`), la misma llamada se repite en
-    la siguiente.
+    la siguiente. Un 401 o 403 (`ProviderUnavailableError`, desde 7.9.1) también salta, y esa
+    ranura queda fuera solo en ese proceso: Groq da 403 a redes bloqueadas aunque la clave valga.
   - `runtime/budget.py` es el libro: SQLite en `.cache/llm_budget.sqlite3`, compartido entre
     procesos. Salta una ranura agotada sin gastar la petición, con una ventana por proveedor.
     Los topes son configuración, nunca constantes. `llm-budget` lo muestra.
@@ -611,6 +612,11 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
   en `revealed_by`, con `how`, y **no** en `known_by`. El primer run real los confundió y le dio
   al detective la solución de partida. `stage/casting.py` lo rechaza desde 7.1; no relajes esa
   validación para que pase un casting.
+- **Las cláusulas de un beat casan por clave, no por texto.** El director reescribe a su manera
+  las compuertas obligatorias (`"gate_x: hecho (how, nombre)"`): sin el sufijo, o como el hecho
+  a secas. De 7.5 a 7.8 se compararon como cadenas exactas, y los 6 beats con compuertas se
+  forzaron. `_clause_key` (`stage/engine.py`) es la única vía para emparejarlas; no vuelvas a
+  comparar `part.part` con `in`. La nota de reserva le pasa al actor el hecho, nunca el id.
 - **El esquema del turno con objetos solo se pide con el inventario activo.**
   `ActorTurnWithItemsDraft` es un modelo aparte de `ActorTurnDraft` a propósito: el esquema
   cruza al proveedor, así que un campo de objeto presente pero sin usar cambiaría todas las
