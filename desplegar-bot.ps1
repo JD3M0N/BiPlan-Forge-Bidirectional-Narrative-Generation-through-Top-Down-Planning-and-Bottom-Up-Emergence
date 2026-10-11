@@ -3,7 +3,7 @@
     Instala todo lo necesario y deja el bot de Telegram del estudio funcionando en esta PC.
 .DESCRIPTION
     Un solo paso para la PC que sirve el bot (lo lanza iniciar-bot.bat con doble clic):
-    instala Python 3.12 si falta, crea el entorno, completa .env, crea el estudio pack,
+    instala Python 3.12 si no hay 3.12 ni 3.15, crea el entorno, completa .env, crea el estudio pack,
     evita la suspension y registra una tarea que arranca el bot al iniciar sesion y lo
     reinicia si se cae. Se puede repetir sin romper nada.
 .EXAMPLE
@@ -77,17 +77,21 @@ function Set-EnvValue([string]$Key, [string]$Value) {
     [IO.File]::WriteAllLines($EnvFile, $lines, [Text.UTF8Encoding]::new($false))
 }
 
-function Find-Python312 {
+function Find-SupportedPython {
+    # Accepts 3.12 or 3.15, the two versions with checked constraints; 3.12 first.
     # Probing writes to stderr when a version is missing; that must not stop the script.
     $ErrorActionPreference = "Continue"
-    $check = 'import sys; sys.exit(0 if sys.version_info[:2] == (3, 12) and sys.maxsize > 2**32 else 1)'
-    $candidates = @(
-        (Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"),
-        "C:\Program Files\Python312\python.exe"
-    )
+    $check = 'import sys; sys.exit(0 if sys.version_info[:2] in ((3, 12), (3, 15)) and sys.maxsize > 2**32 else 1)'
+    $candidates = @()
+    foreach ($version in "312", "315") {
+        $candidates += (Join-Path $env:LOCALAPPDATA "Programs\Python\Python$version\python.exe")
+        $candidates += "C:\Program Files\Python$version\python.exe"
+    }
     if (Get-Command py -ErrorAction SilentlyContinue) {
-        $found = & py -3.12 -c "import sys; print(sys.executable)" 2>$null
-        if ($LASTEXITCODE -eq 0 -and $found) { $candidates = @("$found".Trim()) + $candidates }
+        foreach ($version in "-3.12", "-3.15") {
+            $found = & py $version -c "import sys; print(sys.executable)" 2>$null
+            if ($LASTEXITCODE -eq 0 -and $found) { $candidates = @("$found".Trim()) + $candidates; break }
+        }
     }
     $onPath = Get-Command python -ErrorAction SilentlyContinue
     if ($onPath) { $candidates += $onPath.Source }
@@ -105,7 +109,7 @@ function Install-Python312 {
         Write-Host "Instalando Python 3.12 con winget..."
         & winget install --id Python.Python.3.12 --exact --scope user --silent `
             --accept-package-agreements --accept-source-agreements
-        $python = Find-Python312
+        $python = Find-SupportedPython
         if ($python) { return $python }
     }
     Write-Host "Descargando el instalador oficial de Python 3.12..."
@@ -116,7 +120,7 @@ function Install-Python312 {
         "/quiet", "InstallAllUsers=0", "PrependPath=1", "Include_launcher=1", "Include_test=0"
     )
     if ($process.ExitCode -ne 0) { throw "El instalador de Python termino con codigo $($process.ExitCode)." }
-    $python = Find-Python312
+    $python = Find-SupportedPython
     if (-not $python) { throw "Python 3.12 no aparece tras instalarlo. Instalalo a mano desde python.org y repite." }
     return $python
 }
@@ -188,8 +192,8 @@ if ($Actualizar -and (Test-Path -LiteralPath (Join-Path $Root ".git")) -and (Get
     if ($LASTEXITCODE -ne 0) { Write-Warning "No se pudo actualizar con git; sigo con el codigo actual." }
 }
 
-Write-Step "Comprobando Python 3.12"
-$python = Find-Python312
+Write-Step "Comprobando Python (3.12 o 3.15)"
+$python = Find-SupportedPython
 if (-not $python) { $python = Install-Python312 }
 Write-Host "Python: $python"
 

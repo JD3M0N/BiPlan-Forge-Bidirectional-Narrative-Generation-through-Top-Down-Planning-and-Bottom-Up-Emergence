@@ -14,3 +14,4 @@ docs/*
 !docs/resumen.md
 .cache/
 story-comparison.html
+.requirements-setup.txt

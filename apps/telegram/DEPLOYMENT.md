@@ -7,7 +7,8 @@ ponlo en la raíz. Después haz doble clic en **`iniciar-bot.bat`**.
 
 `desplegar-bot.ps1` hace lo siguiente:
 
-1. Instala Python 3.12 si falta, con winget o con el instalador oficial, por usuario.
+1. Usa el Python 3.12 o 3.15 que ya haya; si no hay ninguno, instala 3.12 con winget o con
+   el instalador oficial, por usuario.
 2. Ejecuta `setup.ps1 -Telegram`.
 3. Pide por consola solo lo que falte en `.env`: `TELEGRAM_BOT_TOKEN`,
    `TELEGRAM_ACCESS_KEY`, `GEMINI_API_KEY` y `TELEGRAM_ADMIN_IDS`.
@@ -28,9 +29,10 @@ iniciada. El resto de este documento describe la instalación manual.
 
 ## Preparar el equipo
 
-Instala **Python 3.12 de 64 bits**, con el lanzador `py`, y copia o clona el
+Instala **Python 3.12 o 3.15 de 64 bits**, con el lanzador `py`, y copia o clona el
 repositorio completo en su ubicación definitiva. Se ha comprobado con Python
-3.12.10; `setup.ps1` comprueba la versión mayor/menor y la arquitectura.
+3.12.10 y 3.15.0; `setup.ps1` comprueba la versión mayor/menor y la arquitectura.
+Sin `-Python` prefiere 3.12 y, si falta, usa 3.15.
 Necesitas Internet para descargar las dependencias y para usar Telegram y los
 proveedores de generación/audio.
 
@@ -52,8 +54,12 @@ Con `-Python C:\ruta\python.exe` puedes indicar el intérprete al crearla.
 Sin `-Telegram` instala también consola, Studio y herramientas de desarrollo.
 
 `requirements.txt` instala todas las aplicaciones; `requirements-telegram.txt`
-solo las necesarias para el bot. Ambos usan `constraints-py312.txt`, que fija las
-versiones directas y transitivas del entorno comprobado, sin rutas personales.
+solo las necesarias para el bot. Las restricciones van por versión:
+`constraints-py312.txt` y `constraints-py315.txt` fijan las versiones directas y
+transitivas del entorno comprobado en cada una, sin rutas personales. Los
+`requirements*.txt` citan el de 3.12; con 3.15, `setup.ps1` instala una copia temporal
+que cita el suyo. 3.15 necesita versiones más nuevas de `pydantic`, `aiohttp` y otras,
+porque las de 3.12 no publican ruedas para 3.15. La suite entera pasa con las dos.
 Las restricciones no instalan paquetes por sí solas
 ([documentación de pip](https://pip.pypa.io/en/stable/user_guide/#constraints-files)).
 No es una actualización automática a las últimas versiones: para cambiar versiones,
