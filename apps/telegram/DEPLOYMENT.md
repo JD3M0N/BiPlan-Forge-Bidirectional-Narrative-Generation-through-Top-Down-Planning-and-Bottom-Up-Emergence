@@ -1,5 +1,31 @@
 # Instalar el bot en otra PC Windows
 
+## En un paso
+
+Copia o clona el proyecto completo en la PC, sin `.venv`. Si tienes un `.env` ya relleno,
+ponlo en la raíz. Después haz doble clic en **`iniciar-bot.bat`**.
+
+`desplegar-bot.ps1` hace lo siguiente:
+
+1. Instala Python 3.12 si falta, con winget o con el instalador oficial, por usuario.
+2. Ejecuta `setup.ps1 -Telegram`.
+3. Pide por consola solo lo que falte en `.env`: `TELEGRAM_BOT_TOKEN`,
+   `TELEGRAM_ACCESS_KEY`, `GEMINI_API_KEY` y `TELEGRAM_ADMIN_IDS`.
+4. Crea el estudio pack ([PACK_STUDY.md](PACK_STUDY.md)) si no existe.
+5. Quita la suspensión con el equipo enchufado.
+6. Registra la tarea «StageCraft Telegram», que arranca el bot al iniciar sesión y lo
+   reinicia si se cae.
+
+Repetirlo es seguro: detiene el bot, sincroniza y lo vuelve a arrancar, sin tocar los datos.
+
+- `iniciar-bot.bat -Estado`: estado y últimas líneas de `Stories/telegram-bot.log`.
+- `iniciar-bot.bat -Actualizar`: `git pull --ff-only` antes de instalar.
+- `iniciar-bot.bat -Desinstalar`: detiene el bot y quita la tarea; conserva `Stories/` y
+  `Evaluations/`.
+
+La tarea corre en la sesión del usuario, así que la PC debe quedar encendida y con la sesión
+iniciada. El resto de este documento describe la instalación manual.
+
 ## Preparar el equipo
 
 Instala **Python 3.12 de 64 bits**, con el lanzador `py`, y copia o clona el

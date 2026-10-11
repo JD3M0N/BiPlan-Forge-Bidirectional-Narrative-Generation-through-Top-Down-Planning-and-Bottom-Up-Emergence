@@ -8,7 +8,15 @@ import sqlite3
 from pathlib import Path
 
 from .catalog import catalog_snapshot, digest, guidance
+from .pack import PACK_SESSION_SIZE
 from .study_design import session_questions
+
+GROWING_MODES = frozenset({"rolling", "pack"})
+
+
+def _session_limit(mode: str) -> int:
+    """Give rolling readers two sessions and pack readers a single one."""
+    return 1 if mode == "pack" else 2
 
 
 def backup_database(path: Path, target_version: int) -> None:
@@ -69,7 +77,7 @@ class RollingStudy:
         states = ["collection"]
         if preparation:
             states.append("preparation")
-        if info.get("mode") == "rolling":
+        if info.get("mode") in GROWING_MODES:
             states.append("evaluation")
         return self._require(db, *states)
 
@@ -77,7 +85,7 @@ class RollingStudy:
         """Report whether a new contribution may still be enrolled."""
         info = self.info()
         return info["state"] == "collection" or (
-            info["mode"] == "rolling" and info["state"] == "evaluation"
+            info["mode"] in GROWING_MODES and info["state"] == "evaluation"
         )
 
     def _rolling_enrolled(self, db, sid: str, owner: str | None, curated: bool) -> None:
@@ -110,29 +118,36 @@ class RollingStudy:
     def _ensure_session(self, db, participant: str) -> None:
         """Assign one reproducible session without rewriting earlier assignments."""
         info = dict(db.execute("SELECT * FROM study").fetchone())
-        if info["mode"] != "rolling" or self._next(db, participant):
+        if info["mode"] not in GROWING_MODES or self._next(db, participant):
             return
+        pack = info["mode"] == "pack"
         reader = db.execute("SELECT * FROM participants WHERE id=?", (participant,)).fetchone()
         if not reader or not reader["profile"]:
             return
         contributed = db.execute(
-            "SELECT 1 FROM first_contributions WHERE participant=?", (participant,)
+            "SELECT 1 FROM contributions WHERE participant=?"
+            if pack
+            else "SELECT 1 FROM first_contributions WHERE participant=?",
+            (participant,),
         ).fetchone()
         if not contributed and not reader["is_author"]:
             return
         number = db.execute(
             "SELECT COALESCE(MAX(number),0)+1 FROM sessions WHERE participant=?", (participant,)
         ).fetchone()[0]
-        if number > 2:
+        if number > _session_limit(info["mode"]):
             return
         pool = self._eligible_session_pool(db, participant)
+        if pack:
+            members = {row[0] for row in db.execute("SELECT story FROM pack")}
+            pool = [story for story in pool if story["id"] in members]
         if len(pool) < 2:
             return
         seed = int(digest([info["seed"], participant, number, info["revision"]])[:12], 16)
         rng = random.Random(seed)
         rng.shuffle(pool)
         pool.sort(key=lambda story: story["appearances"])
-        chosen = [s["id"] for s in pool[:5]]
+        chosen = [s["id"] for s in pool[:PACK_SESSION_SIZE]]
         db.execute(
             "INSERT INTO sessions VALUES (?,?,?,?,?)",
             (participant, number, info["revision"], seed, json.dumps(pool)),
@@ -176,4 +191,5 @@ class RollingStudy:
             count = db.execute(
                 "SELECT COUNT(*) FROM sessions WHERE participant=?", (participant,)
             ).fetchone()[0]
-        return self.info()["mode"] == "rolling" and count < 2
+        mode = self.info()["mode"]
+        return mode in GROWING_MODES and count < _session_limit(mode)

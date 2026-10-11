@@ -10,6 +10,7 @@ from pathlib import Path
 
 from asg_core import atomic_write_json, use_utf8_output
 
+from .pack import read_author_requests
 from .study import StudyRepository
 from .transfer import export_bundle, import_bundle
 
@@ -23,7 +24,10 @@ def parser() -> argparse.ArgumentParser:
     create.add_argument("id")
     create.add_argument("--version", required=True)
     create.add_argument("--seed", type=int, default=42)
-    create.add_argument("--mode", choices=("fixed", "rolling"), default="fixed")
+    create.add_argument("--mode", choices=("fixed", "rolling", "pack"), default="fixed")
+    create.add_argument(
+        "--author-prompts", type=Path, help="JSON con los cuatro prompts del autor (modo pack)"
+    )
     participant = sub.add_parser("participant")
     participant.add_argument("external_id", help="ID de Telegram; no se publica en los informes")
     participant.add_argument("--profile", required=True)
@@ -60,6 +64,12 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("Indica --db para operar sobre un estudio.")
         if args.command != "create" and not args.db.is_file():
             raise ValueError("No existe la base del estudio.")
+        if args.command == "create":
+            # Validate before opening: a failed create must not leave an empty database.
+            if (args.mode == "pack") != bool(args.author_prompts):
+                raise ValueError("El modo pack exige --author-prompts, y solo él lo admite.")
+            if args.author_prompts:
+                read_author_requests(args.author_prompts)
         repository = StudyRepository(args.db)
         result = _dispatch(repository, args)
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -73,6 +83,8 @@ def _dispatch(repository: StudyRepository, args) -> dict:
     """Execute one command and return only operator-relevant output."""
     if args.command == "create":
         repository.create(args.id, required_version=args.version, seed=args.seed, mode=args.mode)
+        if args.author_prompts:
+            repository.load_author_requests(args.author_prompts)
     elif args.command == "participant":
         reader = repository.participant(
             args.external_id, profile=args.profile, is_author=args.author
@@ -108,5 +120,10 @@ def _dispatch(repository: StudyRepository, args) -> dict:
         "state": data["study"]["state"],
         "stories": len(data["stories"]),
         "participants": len(data["participants"]),
+        "pack": data["pack"],
+        "author_requests": [
+            {key: entry[key] for key in ("slot", "format", "story")}
+            for entry in data["author_requests"]
+        ],
         "coverage": data["coverage"],
     }

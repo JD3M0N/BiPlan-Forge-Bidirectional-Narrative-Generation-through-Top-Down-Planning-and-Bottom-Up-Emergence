@@ -64,6 +64,11 @@ La guía completa y el orden de operaciones están en
 - `rank-stories juez.json RUTA --output ranking.json`: rankings y ficha de diez historias; `--study DB` reutiliza las extracciones del estudio.
 - `generate-baseline "PREMISA" --output CARPETA_NUEVA`: generación directa, consume cuota.
 
+- `evaluation-study --db RUTA create ID --version V --mode pack --author-prompts JSON`: paquete
+  de 10 relatos (6 de participantes y 4 del autor), ver [PACK_STUDY.md](apps/telegram/PACK_STUDY.md).
+- `iniciar-bot.bat` (`desplegar-bot.ps1`): instala y deja el bot corriendo en otra PC;
+  `-Estado`, `-Actualizar`, `-Desinstalar`.
+
 Telegram: el bot exige `ASG_EVALUATION_STUDY` y `TELEGRAM_ACCESS_KEY`. Guía a cada participante desde la clave hasta su historia base y la votación (`/start`, `/aportar`, `/evaluar`, `/pausa`).
 
 ## Guía narrativa experimental (7.8)

@@ -11,12 +11,13 @@ from pathlib import Path
 
 from .artifacts import load_json_object
 from .catalog import catalog_snapshot, digest, guidance
+from .pack import PackStudy, migrate_pack, story_format
 from .publication import PublicationStore
 from .rolling import RollingStudy, backup_database, migrate_rolling
 from .study_design import coverage, make_assignments
 from .transfer import portable_provenance
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 PROSE_FORMATS = {"baseline", "narrative", "simulated"}
 _SCHEMA = (
     "CREATE TABLE study (id TEXT PRIMARY KEY, state TEXT NOT NULL, seed INTEGER NOT NULL, "
@@ -80,7 +81,7 @@ def read_candidate(directory: str | Path) -> dict:
     }
 
 
-class StudyRepository(RollingStudy, PublicationStore):
+class StudyRepository(RollingStudy, PackStudy, PublicationStore):
     """Keep one study and all its snapshots, participants and votes in SQLite."""
 
     def __init__(self, path: str | Path) -> None:
@@ -103,6 +104,8 @@ class StudyRepository(RollingStudy, PublicationStore):
                 )
             if version < 3:
                 migrate_rolling(db)
+            if version < 4:
+                migrate_pack(db)
             db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
     @contextmanager
@@ -125,7 +128,7 @@ class StudyRepository(RollingStudy, PublicationStore):
         self, study_id: str, *, required_version: str, seed: int = 42, mode: str = "fixed"
     ) -> None:
         """Create a preparation-stage study pinned to a future generator release."""
-        if mode not in {"fixed", "rolling"}:
+        if mode not in {"fixed", "rolling", "pack"}:
             raise ValueError("Modo de estudio desconocido.")
         if not required_version.strip() or not study_id.strip():
             raise ValueError("Indica el estudio y la versión definitiva del generador.")
@@ -209,7 +212,8 @@ class StudyRepository(RollingStudy, PublicationStore):
             ).fetchone()
             if duplicate:
                 raise ValueError("Este texto ya está inscrito en el estudio.")
-            if owner and info["mode"] == "rolling":
+            appended = info["mode"] in {"rolling", "pack"}
+            if owner and appended:
                 reader = db.execute(
                     "SELECT profile FROM participants WHERE id=?", (owner,)
                 ).fetchone()
@@ -224,7 +228,7 @@ class StudyRepository(RollingStudy, PublicationStore):
                 if owner and not curated
                 else None
             )
-            if info["mode"] == "rolling":
+            if appended:
                 if existing:
                     if existing["text_hash"] != candidate["text_hash"]:
                         raise ValueError("Un relato inscrito no puede cambiar de texto.")
@@ -254,6 +258,7 @@ class StudyRepository(RollingStudy, PublicationStore):
                     "INSERT OR IGNORE INTO exposures VALUES (?,?)", (owner, candidate["text_hash"])
                 )
             self._rolling_enrolled(db, sid, owner, curated)
+            self._pack_enrolled(db, sid, owner, curated, story_format(candidate))
         return sid
 
     @staticmethod
@@ -268,8 +273,8 @@ class StudyRepository(RollingStudy, PublicationStore):
         """Validate the roster and corpus, then atomically freeze snapshots and assignments."""
         with self.transaction() as db:
             info = self._require(db, "collection")
-            if info["mode"] == "rolling":
-                raise ValueError("El estudio creciente se abre al recibir ocho aportaciones.")
+            if info["mode"] != "fixed":
+                raise ValueError("Este estudio abre la votación por su cuenta.")
             stories = self._stories(db)
             readers = [dict(r) for r in db.execute("SELECT * FROM participants ORDER BY id")]
             self._validate_pool(stories, readers, info["required_version"])
@@ -499,9 +504,17 @@ class StudyRepository(RollingStudy, PublicationStore):
     def request_contribution(self, participant: str) -> None:
         """Reserve the next generation as this participant's contribution."""
         with self.transaction() as db:
-            self._require_enrollment(db, preparation=False)
+            info = self._require_enrollment(db, preparation=False)
+            if (
+                info["mode"] == "pack"
+                and db.execute(
+                    "SELECT 1 FROM stories WHERE owner=? AND curated=0", (participant,)
+                ).fetchone()
+            ):
+                raise ValueError("Ya aportaste tu historia al estudio.")
             db.execute(
-                "INSERT INTO contributions VALUES (?,NULL,1) ON CONFLICT(participant) "
+                "INSERT INTO contributions(participant,job_id,pending) VALUES (?,NULL,1) "
+                "ON CONFLICT(participant) "
                 "DO UPDATE SET job_id=NULL,pending=1",
                 (participant,),
             )
@@ -628,6 +641,13 @@ class StudyRepository(RollingStudy, PublicationStore):
             contributions = [dict(r) for r in db.execute("SELECT * FROM first_contributions")]
             readings = [dict(r) for r in db.execute("SELECT * FROM readings")]
             sessions = [dict(r) for r in db.execute("SELECT * FROM sessions")]
+            pack = [dict(r) for r in db.execute("SELECT * FROM pack ORDER BY story")]
+            author_requests = [
+                dict(r)
+                for r in db.execute(
+                    "SELECT slot,prompt,format,story FROM author_requests ORDER BY slot"
+                )
+            ]
             info = dict(db.execute("SELECT * FROM study").fetchone())
             info["snapshot"] = json.loads(info["snapshot"]) if info["snapshot"] else None
             info = portable_provenance(info)
@@ -636,6 +656,8 @@ class StudyRepository(RollingStudy, PublicationStore):
             "exposures": exposures,
             "first_contributions": contributions,
             "sessions": sessions,
+            "pack": pack,
+            "author_requests": author_requests,
             "schema_version": SCHEMA_VERSION,
             "study": info,
             "stories": stories,

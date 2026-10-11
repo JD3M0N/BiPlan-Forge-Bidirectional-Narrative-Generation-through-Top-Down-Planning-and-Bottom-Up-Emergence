@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -93,7 +94,9 @@ def test_daily_quota_keeps_bound_contribution_and_retries_without_user_input(tmp
     telegram = SimpleNamespace(edit_message_text=AsyncMock(), send_message=AsyncMock())
     context = SimpleNamespace(bot=telegram, application=SimpleNamespace(bot=telegram), user_data={})
     release = Mock()
-    coordinator.study = SimpleNamespace(repository=SimpleNamespace(release_contribution=release))
+    coordinator.study = SimpleNamespace(
+        repository=SimpleNamespace(release_contribution=release, assigned_format=lambda *_: None)
+    )
     user = SimpleNamespace(id=1, username="reader", full_name="Reader")
     error = GenerationFailure(
         "quota", code="GEMINI_DAILY_QUOTA_EXHAUSTED", stage="plan", retryable_quota=True
@@ -314,3 +317,47 @@ def test_stagecraft_capacity_tracks_main_and_stage_separately(tmp_path):
     assert generator.availability({"format": "simulated"}).available
     ledger.mark_exhausted(primary)
     assert not generator.availability({"format": "simulated"}).available
+
+
+def test_pack_queues_author_stories_once_and_hides_the_participant_format(tmp_path):
+    from asg_telegram.guide import ParticipantGuide
+    from asg_telegram.handlers import TelegramStoryBot
+    from asg_telegram.study import StudyConversation
+
+    repository = StudyRepository(tmp_path / "study.sqlite3")
+    repository.create("pack", required_version="DEMO-1", mode="pack")
+    prompts = Path(__file__).parents[1] / "pack_author_prompts.json"
+    repository.load_author_requests(prompts)
+    repository.transition("collection")
+    queue = QueueRepository(tmp_path / "queue.sqlite3")
+    application = SimpleNamespace(bot=SimpleNamespace(), user_data={i: {} for i in range(-4, 0)})
+    for _ in range(2):
+        bot = TelegramStoryBot(FakeGenerator(tmp_path), queue)
+        bot.study = StudyConversation(repository, bot)
+        bot.guide = ParticipantGuide(bot)
+        bot.author_chat_id = 99
+        bot.schedule = lambda application, coroutine, **kwargs: coroutine.close()
+        asyncio.run(bot.ensure_author_jobs(application))
+    jobs = queue.active()
+    assert sorted(job.user_id for job in jobs) == [-4, -3, -2, -1]
+    assert {job.priority for job in jobs} == {1} and {job.chat_id for job in jobs} == {99}
+    assert [job.options["format"] for job in sorted(jobs, key=lambda j: -j.user_id)] == [
+        entry["format"] for entry in json.loads(prompts.read_text(encoding="utf-8"))
+    ]
+    queue.grant(7)
+    queue.set_consent(7, True)
+    repository.participant("7", profile="regular")
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=7, username="a", full_name="a"),
+        effective_message=SimpleNamespace(reply_text=AsyncMock()),
+    )
+    context = SimpleNamespace(user_data={})
+    asyncio.run(bot.new_story(update, context))
+    markup = update.effective_message.reply_text.call_args.kwargs["reply_markup"]
+    buttons = [button.callback_data for row in markup.inline_keyboard for button in row]
+    assert buttons == ["mode:free", "mode:guided"]
+    assert bot._generation_priority(7) == 0
+    participant = repository.find_participant("7")["id"]
+    repository.assign_format(participant)
+    repository.bind_contribution("7", "job-7")
+    assert bot._blind(7, "job-7") and not bot._blind(-1, jobs[0].id)

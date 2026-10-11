@@ -46,6 +46,7 @@ class Status:
     pending: bool = False
     is_author: bool = False
     rolling: bool = False
+    pack: bool = False
 
     @property
     def can_generate(self) -> bool:
@@ -189,6 +190,40 @@ CLOSED_TEXT = (
     "Muchas gracias por tu participación. Tus respuestas ya forman parte del análisis de "
     "la tesis."
 )
+PACK_CONSENT_TEXT = CONSENT_TEXT.replace(
+    "leerás hasta 10 relatos en dos sesiones y elegirás, de dos en dos, cuál prefieres en "
+    "creatividad, personajes y trama. Son unas 30 decisiones en total.",
+    "leerás 5 relatos en una sola sesión y elegirás, de dos en dos, cuál prefieres en "
+    "creatividad, personajes y trama. Son unas 15 decisiones en total.",
+)
+PACK_BASE_STORY_TEXT = (
+    "<b>Paso 2 de 3 · Tu historia base</b>\n\n"
+    "Ahora crearás tu <b>historia base</b>. Las primeras historias de los participantes "
+    "forman, junto con las del investigador, el <b>paquete de 10 relatos</b> que leerán y "
+    "compararán todos, sin saber quién pidió cada uno ni cómo se generó. A ti nunca te "
+    "pediremos evaluar la tuya.\n\n"
+    "<b>Cómo crearla</b>\n"
+    "Describe tu idea con un <i>prompt libre</i> (uno o dos párrafos) o con la <i>obra "
+    "guiada</i>, en la que el bot te pregunta título, género, ambientación, trama y "
+    "personajes. El método de generación lo asigna el estudio.\n\n"
+    "La generación tarda varios minutos y, si la cuota del proveedor se agota, tu idea "
+    "espera guardada en la cola hasta que haya capacidad. Te avisaré al terminar. Hasta "
+    "entonces no podrás crear otras historias."
+)
+PACK_READY_COLLECTION = (
+    "<b>Tu historia base está inscrita</b> ✅\n\n"
+    "Mientras se completa el paquete de 10 relatos puedes usar:\n" + FREE_COMMANDS + "\n\n"
+    "<b>Paso 3 de 3 · La evaluación</b> se abrirá cuando el paquete esté completo. Te "
+    "avisaré por aquí."
+)
+OUTSIDE_PACK = (
+    "Gracias por tu historia. El paquete de 10 relatos ya estaba completo, así que esta "
+    "queda guardada en el estudio, pero no entrará en las comparaciones."
+)
+AUTHOR_ENROLLED = "Historia del investigador inscrita en el estudio."
+PACK_READY_EVALUATION = READY_EVALUATION.replace(
+    "Son hasta 10 relatos en dos sesiones.", "Son 5 relatos en una sola sesión."
+)
 ENROLLMENT_CLOSED_TEXT = (
     "<b>La inscripción en el estudio está cerrada</b>\n\n"
     "Ya no es posible incluir tu participación en la evaluación. Aun así puedes usar:\n"
@@ -233,6 +268,33 @@ def profile_keyboard() -> Keyboard:
     )
 
 
+def _base_story_text(status: Status) -> str:
+    """Explain the base story in the wording of the study's mode."""
+    if status.pack:
+        return PACK_BASE_STORY_TEXT
+    if status.rolling:
+        return BASE_STORY_TEXT.replace(
+            "mientras siga abierta la recogida", "mientras siga abierto el estudio"
+        )
+    return BASE_STORY_TEXT
+
+
+def _collection_text(status: Status) -> str:
+    """Explain what happens after enrolling, while collection is still open."""
+    if status.is_author:
+        text = AUTHOR_COLLECTION
+    elif status.pack:
+        return PACK_READY_COLLECTION
+    else:
+        text = READY_COLLECTION
+    if status.rolling:
+        text = text.replace(
+            "cuando todos hayan aportado su historia",
+            "al completar ocho aportaciones nuevas de usuarios distintos",
+        )
+    return text
+
+
 class ParticipantGuide:
     """Derive each user's step from durable storage and explain it in the chat."""
 
@@ -255,7 +317,7 @@ class ParticipantGuide:
         access = self.queue.access(user_id)
         info = self.repository.info()
         phase = info["state"]
-        rolling = info["mode"] == "rolling"
+        rolling = info["mode"] in {"rolling", "pack"}
         if access is None:
             return Status(Step.LOCKED, phase)
         if not access["consented_at"]:
@@ -275,6 +337,7 @@ class ParticipantGuide:
             "pending": contribution["pending"],
             "is_author": bool(reader["is_author"]),
             "rolling": rolling,
+            "pack": info["mode"] == "pack",
         }
         if phase == "preparation":
             return Status(Step.WAITING, phase, **fields)
@@ -282,6 +345,7 @@ class ParticipantGuide:
             self.repository.collection_open()
             and not contribution["enrolled"]
             and not reader["is_author"]
+            and not (fields["pack"] and contribution["pending"] and phase == "evaluation")
         ):
             return Status(Step.BASE_STORY, phase, **fields)
         return Status(Step.READY, phase, **fields)
@@ -291,7 +355,7 @@ class ParticipantGuide:
         if status.step == Step.LOCKED:
             return LOCKED_TEXT, None
         if status.step == Step.CONSENT:
-            return CONSENT_TEXT, consent_keyboard()
+            return (PACK_CONSENT_TEXT if status.pack else CONSENT_TEXT), consent_keyboard()
         if status.step == Step.PROFILE:
             return PROFILE_TEXT, profile_keyboard()
         if status.step == Step.WAITING:
@@ -300,25 +364,15 @@ class ParticipantGuide:
             return ENROLLMENT_CLOSED_TEXT, None
         if status.step == Step.BASE_STORY:
             button = Button("✍️ Crear mi historia base", callback_data="guide:base")
-            text = BASE_STORY_TEXT
-            if status.rolling:
-                text = text.replace(
-                    "mientras siga abierta la recogida", "mientras siga abierto el estudio"
-                )
-            return text, Keyboard([[button]])
+            return _base_story_text(status), Keyboard([[button]])
         if status.phase == "evaluation":
             button = Button("▶️ Empezar a evaluar", callback_data="guide:evaluate")
-            return READY_EVALUATION, Keyboard([[button]])
+            text = PACK_READY_EVALUATION if status.pack else READY_EVALUATION
+            return text, Keyboard([[button]])
         if status.phase == "closed":
             return CLOSED_TEXT, None
         if status.phase == "collection":
-            text = AUTHOR_COLLECTION if status.is_author else READY_COLLECTION
-            if status.rolling:
-                text = text.replace(
-                    "cuando todos hayan aportado su historia",
-                    "al completar ocho aportaciones nuevas de usuarios distintos",
-                )
-            return text, None
+            return _collection_text(status), None
         return READY_FROZEN, None
 
     async def send(self, bot, chat_id: int, user_id: int, *, header: str = "") -> None:
@@ -328,12 +382,15 @@ class ParticipantGuide:
         jobs = self.queue.active()
         for position, job in enumerate(jobs, 1):
             if job.user_id == user_id:
-                text = f"Tu solicitud está guardada. Posición {position}. " + (
+                queued = f"Tu solicitud está guardada. Posición {position}. " + (
                     job.wait_reason or ("Generando." if job.status == "running" else "En cola.")
                 )
                 if job.not_before:
-                    text += f" Próxima revisión: {job.not_before} (UTC)."
-                markup = None
+                    queued += f" Próxima revisión: {job.not_before} (UTC)."
+                if status.phase == "evaluation" and status.step == Step.READY:
+                    text = f"{queued}\n\n{text}"
+                else:
+                    text, markup = queued, None
                 break
         await bot.send_message(
             chat_id=chat_id, text=header + text, parse_mode=ParseMode.HTML, reply_markup=markup

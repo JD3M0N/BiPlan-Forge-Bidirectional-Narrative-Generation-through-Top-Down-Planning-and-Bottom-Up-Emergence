@@ -7,7 +7,9 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
+from asg_evaluation import study_cli
 from asg_evaluation.demo import synthetic_run
+from asg_evaluation.pack import PACK_FORMATS
 from asg_evaluation.study import StudyRepository
 from asg_evaluation.transfer import export_bundle, import_bundle, split_bundle
 
@@ -180,6 +182,8 @@ def test_roundtrip_preserves_votes_sessions_and_local_run_paths(tmp_path):
         "exposures",
         "coverage",
         "first_contributions",
+        "pack",
+        "author_requests",
     ):
         assert downloaded[key] == original[key]
     with restored.transaction() as db:
@@ -230,3 +234,48 @@ def test_known_story_replacement_uses_recorded_session_pool(tmp_path):
     repo.recognize(reader, question["id"], question["left"]["id"])
     assert all(later not in (q["left"], q["right"]) for q in repo.export()["assignments"])
     assert repo.export()["exposures"]
+
+
+def test_pack_balances_hidden_formats_opens_at_ten_and_assigns_one_session(tmp_path):
+    prompts = tmp_path / "author.json"
+    prompts.write_text(
+        json.dumps([{"prompt": f"idea {fmt}", "format": fmt} for fmt in PACK_FORMATS * 2]),
+        encoding="utf-8",
+    )
+    db = tmp_path / "study.sqlite3"
+    args = ["--db", str(db), "create", "pack", "--version", "DEMO-1", "--mode", "pack"]
+    assert study_cli.main([*args, "--author-prompts", str(prompts)]) == 0
+    repo = StudyRepository(db)
+    repo.transition("collection")
+    for request in repo.pending_author_requests():
+        job = f"author-{request['slot']}"
+        repo.bind_author_job(request["slot"], job)
+        run = synthetic_run(tmp_path / job, 50 + request["slot"], story_format=request["format"])
+        assert repo.complete_author_generation(job, run)
+    readers = []
+    for index in range(9):
+        external = f"telegram-{index}"
+        reader = repo.participant(external, profile="regular")["id"]
+        repo.request_contribution(reader)
+        fmt = repo.assign_format(reader)
+        repo.bind_contribution(external, f"job-{index}")
+        assert repo.assign_format(reader) == fmt == repo.assigned_format(external, f"job-{index}")
+        readers.append((external, reader, fmt))
+    assert [fmt for *_, fmt in readers[:6]] == list(PACK_FORMATS * 3)
+    for index, (external, _reader, fmt) in enumerate(readers):
+        assert repo.info()["state"] == ("evaluation" if index > 5 else "collection")
+        run = synthetic_run(tmp_path / f"run{index}", 10 + index, story_format=fmt)
+        assert repo.complete_generation(external, f"job-{index}", run)
+    data = repo.export()
+    pack = {entry["story"] for entry in data["pack"]}
+    assert len(pack) == 10 and len(data["stories"]) == 13
+    assert repo.info()["snapshot"]["pack"] == data["pack"]
+    with pytest.raises(ValueError, match="Ya aportaste"):
+        repo.request_contribution(readers[0][1])
+    reader = readers[0][1]
+    own = next(s["id"] for s in data["stories"] if s["owner"] == reader)
+    assert repo.next_question(reader)["session"] == 1
+    shown = {q[side] for q in repo.export()["assignments"] for side in ("left", "right")}
+    assert len(shown) == 5 and shown <= pack - {own}
+    assert len(repo.export()["assignments"]) == 15
+    assert not repo.session_waiting(reader)

@@ -1087,11 +1087,13 @@ presupuesto · *Depende de:* versión definitiva, MED-8 y la revisión de MED-9
 - **Qué hacer.**
   - Revisar manualmente extracciones y realizar un piloto de entrega ciega, lectura, preguntas,
     abstenciones, exposición previa, pausa y reanudación.
-  - Ejecutar el protocolo de [ESTUDIO_FINAL.md](packages/evaluation/ESTUDIO_FINAL.md):
-    aproximadamente 6–8 lectores, cinco relatos seleccionados (dos directos y tres del sistema)
-    más una aportación reemplazable por participante antes de congelar.
-  - Congelar el conjunto antes de votar; hasta diez historias desconocidas por lector en dos
-    sesiones de hasta cinco, con un criterio por pregunta y respuestas A/B o abstención.
+  - Ejecutar el protocolo pack de [PACK_STUDY.md](apps/telegram/PACK_STUDY.md), desplegado
+    con `iniciar-bot.bat`.
+    - El paquete son 10 relatos: las 6 primeras aportaciones de participantes y 4 del autor.
+    - Cada mitad va en `narrative` y en `simulated`, con formato asignado a ciegas.
+    - El paquete se congela solo y abre la votación.
+    - Cada lector tiene una sesión de 5 relatos, con un criterio por pregunta y respuestas
+      A/B o abstención.
   - Publicar cobertura prevista y efectiva, abstenciones, acuerdo e intervalos por lector,
     con y sin el autor. No inventar un ranking global si el grafo queda desconectado.
 - **Hecho cuando.** El piloto está documentado y el estudio real publica las tres preferencias

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Mapping
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -30,6 +31,8 @@ from .states import ConversationState
 
 LOGGER = logging.getLogger(__name__)
 WARNING_MESSAGE_LIMIT = 3500
+AUTHOR_PRIORITY = 1
+BLIND_PROGRESS = "Generando tu historia"
 UNEXPECTED_ERROR_MESSAGE = (
     "No pude generar la historia por un error interno inesperado. "
     "Consulta el registro de la consola y vuelve a intentarlo. "
@@ -55,6 +58,7 @@ class GenerationCoordinator(TelegramDelivery):
         self._memory_options: dict[int, dict[str, OptionValue]] = {}
         self.study = None
         self.guide = None
+        self.author_chat_id: int | None = None
         self.gate = None
         self._job_tasks: set[asyncio.Task] = set()
         self._stopping = False
@@ -158,6 +162,7 @@ class GenerationCoordinator(TelegramDelivery):
                     job_id=job.id,
                 ),
             )
+        await self.ensure_author_jobs(application)
         await self._refresh_queue(application)
 
     @staticmethod
@@ -214,7 +219,12 @@ class GenerationCoordinator(TelegramDelivery):
             await update.effective_message.reply_text("Ya hay una generación activa para ti.")
             return
         self.active_users.add(user_id)
-        options, was_reset = self.effective_options(user_id)
+        if context.user_data.get("pack_participant"):
+            status = self.guide.status(user_id)
+            fmt = self.study.repository.assign_format(status.participant)
+            options, was_reset = self.generator.normalize_options({"format": fmt}), False
+        else:
+            options, was_reset = self.effective_options(user_id)
         if was_reset:
             await update.effective_message.reply_text(
                 "Tus opciones guardadas ya no eran válidas y las restablecí a las de por defecto."
@@ -294,10 +304,17 @@ class GenerationCoordinator(TelegramDelivery):
         return result.job.id
 
     def _generation_priority(self, user_id: int) -> int:
-        """Favor first contributions, then replacements, then free generations."""
+        """Favor first contributions, then replacements or researcher stories, then the rest.
+
+        Once a pack is complete, late contributions no longer fill it and wait like free use.
+        """
+        if user_id < 0:
+            return AUTHOR_PRIORITY
         if self.guide:
             status = self.guide.status(user_id)
             if status.contributing:
+                if status.pack and self.study.repository.pack_complete():
+                    return 2
                 return 1 if status.enrolled else 0
         return 2
 
@@ -339,9 +356,12 @@ class GenerationCoordinator(TelegramDelivery):
         """Serialize generation while keeping progress reporting thread-safe."""
         loop = asyncio.get_running_loop()
         last_progress: list[GenerationProgress] = []
+        blind = self._blind(user.id, job_id)
 
         def report_progress(update: GenerationProgress) -> None:
             """Forward synchronous pipeline progress to the Telegram event loop."""
+            if blind:
+                update = GenerationProgress(update.percent, "generating", BLIND_PROGRESS)
             changed = not last_progress or (
                 last_progress[-1].percent,
                 last_progress[-1].stage,
@@ -472,6 +492,9 @@ class GenerationCoordinator(TelegramDelivery):
             )
         self._log_generation_complete(user, story_directory)
         summary = self.generator.summarize(Path(story_directory))
+        if self._blind(user.id, job_id):
+            # Captions, call counts and warnings would tell a pack reader the method.
+            summary = replace(summary, usage=None, warnings=(), document_caption=None)
         await self._report_run_metadata(
             context,
             chat_id,
@@ -500,9 +523,70 @@ class GenerationCoordinator(TelegramDelivery):
         except (OSError, ValueError):
             return False
 
+    def _blind(self, user_id: int, job_id: str | None) -> bool:
+        """Tell whether the study assigned this job's format and must keep it hidden."""
+        if not (self.study and job_id) or user_id < 0:
+            return False
+        return self.study.repository.assigned_format(str(user_id), job_id) is not None
+
+    async def ensure_author_jobs(self, application) -> None:
+        """Queue each pending researcher story of a pack study as a durable job."""
+        repository = self.study.repository if self.study else None
+        if not (self.queue and repository and self.author_chat_id):
+            return
+        if repository.info()["mode"] != "pack":
+            return
+        for request in repository.pending_author_requests():
+            job = self.queue.get(request["job_id"]) if request["job_id"] else None
+            if job and job.status in {"queued", "running", "quota_wait", "recovery_pending"}:
+                continue
+            user = SimpleNamespace(
+                id=-request["slot"],
+                username=f"autor-{request['slot']}",
+                full_name=f"autor-{request['slot']}",
+            )
+            options = self.generator.normalize_options({"format": request["format"]})
+            result = self.queue.enqueue(
+                user_id=user.id,
+                username=user.username,
+                chat_id=self.author_chat_id,
+                prompt=request["prompt"],
+                story_format=request["format"],
+                options=dict(options),
+                priority=AUTHOR_PRIORITY,
+            )
+            if not result.created:
+                continue
+            repository.bind_author_job(request["slot"], result.job.id)
+            self.active_users.add(user.id)
+            context = SimpleNamespace(
+                bot=application.bot,
+                application=application,
+                user_data=application.user_data[user.id],
+            )
+            self.schedule(
+                application,
+                self._generate_and_deliver(
+                    context=context,
+                    chat_id=self.author_chat_id,
+                    user=user,
+                    prompt=request["prompt"],
+                    options=options,
+                    job_id=result.job.id,
+                ),
+            )
+
     async def _record_study_generation(self, context, chat_id, user, job_id, directory) -> bool:
         """Record exposure and enroll a reserved base story, keeping failures retryable."""
         repository = self.study.repository
+        if user.id < 0:
+            try:
+                return await asyncio.to_thread(
+                    repository.complete_author_generation, job_id, directory
+                )
+            except (ValueError, OSError) as exc:
+                LOGGER.warning("No se inscribió la historia del autor %s: %s", job_id, exc)
+                return False
         try:
             return await asyncio.to_thread(
                 repository.complete_generation, str(user.id), job_id, directory
@@ -576,7 +660,7 @@ class GenerationCoordinator(TelegramDelivery):
             await self._safe_notice(
                 context,
                 chat_id,
-                "La cuota del proveedor se agot?. Tu solicitud conserva su turno. "
+                "La cuota del proveedor se agotó. Tu solicitud conserva su turno. "
                 "Volveré a generar la historia automáticamente cuando haya capacidad.",
                 user,
             )
@@ -614,6 +698,8 @@ class GenerationCoordinator(TelegramDelivery):
         if self.guide and self.guide.status(user.id).contributing:
             message = f"{message}\n\n{BASE_RETRY}"
         await self._safe_notice(context, chat_id, message, user)
+        if user.id < 0 and not cancelled and not self._stopping:
+            await self.ensure_author_jobs(context.application)
 
     @staticmethod
     def _failure_progress(error, recognized: bool, last_progress) -> GenerationProgress:

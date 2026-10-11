@@ -164,6 +164,12 @@ def main(argv: list[str] | None = None) -> int:
         bot.guide = ParticipantGuide(bot)
         bot.gate = AccessGate(bot.queue, settings.access_key, bot.guide)
         bot.research_admin = ResearchAdmin(repository, settings.admin_ids)
+        if study["mode"] == "pack":
+            if not settings.admin_ids:
+                raise TelegramConfigurationError(
+                    "El estudio pack entrega las historias del autor a TELEGRAM_ADMIN_IDS."
+                )
+            bot.author_chat_id = min(settings.admin_ids)
         if settings.pool_repository and settings.pool_token:
             if not settings.admin_ids:
                 raise TelegramConfigurationError("Configura TELEGRAM_ADMIN_IDS antes de publicar.")

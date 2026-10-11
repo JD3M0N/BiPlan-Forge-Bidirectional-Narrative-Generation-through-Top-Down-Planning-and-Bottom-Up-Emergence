@@ -13,7 +13,7 @@ from telegram.ext import ContextTypes
 from .console import log_user_action
 from .contract import OptionSpec, OptionValue, StoryGeneratorAdapter
 from .generation import GenerationCoordinator
-from .guide import OUTSIDE_SAMPLE
+from .guide import AUTHOR_ENROLLED, OUTSIDE_PACK, OUTSIDE_SAMPLE
 from .panel import (
     choice_keyboard,
     describe_options,
@@ -59,17 +59,17 @@ def _user_log(update: Update, action: str, category: str = "acción") -> None:
     log_user_action(LOGGER, user_id=user.id, username=readable, action=action, category=category)
 
 
-def _mode_keyboard() -> InlineKeyboardMarkup:
-    """Build the free-form, guided and options selection keyboard."""
-    return InlineKeyboardMarkup(
+def _mode_keyboard(options: bool = True) -> InlineKeyboardMarkup:
+    """Build the free-form, guided and, unless the study fixes them, options keyboard."""
+    rows = [
         [
-            [
-                InlineKeyboardButton("Prompt libre", callback_data="mode:free"),
-                InlineKeyboardButton("Obra guiada", callback_data="mode:guided"),
-            ],
-            [InlineKeyboardButton("⚙️ Opciones", callback_data="mode:options")],
+            InlineKeyboardButton("Prompt libre", callback_data="mode:free"),
+            InlineKeyboardButton("Obra guiada", callback_data="mode:guided"),
         ]
-    )
+    ]
+    if options:
+        rows.append([InlineKeyboardButton("⚙️ Opciones", callback_data="mode:options")])
+    return InlineKeyboardMarkup(rows)
 
 
 def _format_keyboard(
@@ -151,17 +151,29 @@ class TelegramStoryBot(GenerationCoordinator):
                 "Ya estoy generando una historia para ti. Espera a que termine."
             )
             return
-        contributing = False
+        contributing = pack = False
         if self.guide:
             status = self.guide.status(user_id)
             if not status.can_generate:
                 await self.guide.show(update, context)
                 return
             contributing = status.contributing
+            pack = contributing and status.pack
             if contributing and not status.pending:
-                self.study.repository.request_contribution(status.participant)
+                try:
+                    self.study.repository.request_contribution(status.participant)
+                except ValueError as exc:
+                    await update.effective_message.reply_text(str(exc))
+                    return
         context.user_data.clear()
         context.user_data["contributing"] = contributing
+        if pack:
+            # The study assigns the format blindly; options stay at their defaults.
+            context.user_data.update(state=ConversationState.CHOOSE_MODE, pack_participant=True)
+            await update.effective_message.reply_text(
+                "¿Cómo quieres describir tu historia base?", reply_markup=_mode_keyboard(False)
+            )
+            return
         options, was_reset = self.effective_options(user_id)
         if was_reset:
             await update.effective_message.reply_text(
@@ -271,6 +283,9 @@ class TelegramStoryBot(GenerationCoordinator):
             )
             return
         if mode == "options":
+            if context.user_data.get("pack_participant"):
+                await query.edit_message_text("El estudio fija las opciones de esta historia.")
+                return
             context.user_data["panel_return"] = "summary"
             await self._render_panel(update.effective_user.id, query.edit_message_text)
             return
@@ -748,7 +763,14 @@ class TelegramStoryBot(GenerationCoordinator):
         context.user_data.clear()
         if self.guide is None:
             return
+        if user.id < 0:
+            if enrolled:
+                await context.bot.send_message(chat_id=chat_id, text=AUTHOR_ENROLLED)
+            return
         if enrolled:
+            status = self.guide.status(user.id)
+            if status.pack and not self.study.repository.in_pack(str(user.id)):
+                await context.bot.send_message(chat_id=chat_id, text=OUTSIDE_PACK)
             await self.guide.send(context.bot, chat_id, user.id)
             return
         if not self.guide.status(user.id).contributing:

@@ -74,14 +74,16 @@ class SyntheticProvider:
         return Findings(features=findings)
 
 
-def synthetic_run(directory: Path, number: int, *, baseline: bool = False) -> Path:
+def synthetic_run(
+    directory: Path, number: int, *, baseline: bool = False, story_format: str = "narrative"
+) -> Path:
     """Write artificial research inputs under a demo directory, never the real corpus."""
     directory.mkdir(parents=True, exist_ok=False)
     paragraphs = [f"# DEMOSTRACIÓN FICTICIA {number}", "Ada buscaba una llave."]
     paragraphs.extend(f"Ada encontró la pista número {i} en el jardín." for i in range(number + 1))
     paragraphs.append("Ada encontró la llave y abrió la puerta.")
     atomic_write_text(directory / "story.md", "\n\n".join(paragraphs))
-    fmt = "baseline" if baseline else "narrative"
+    fmt = "baseline" if baseline else story_format
     atomic_write_json(
         directory / "metadata.json",
         {

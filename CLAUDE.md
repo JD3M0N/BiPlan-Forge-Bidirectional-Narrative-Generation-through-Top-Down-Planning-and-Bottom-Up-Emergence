@@ -456,6 +456,11 @@ que saber antes de tocar `stage/`:
   - La historia base es la aportación de `StudyRepository`: mientras `Status.contributing`,
     `/newstory` solo ofrece `PROSE_FORMATS`. Un fallo llama a `release_contribution`; si no, la
     reserva queda atada a un trabajo muerto y `bind_contribution` no vuelve a enlazarla.
+  - El modo de estudio `pack` (`asg_evaluation/pack.py`, [apps/telegram/PACK_STUDY.md](apps/telegram/PACK_STUDY.md))
+    llena 10 plazas: 3+3 aportaciones con formato asignado a ciegas (`assign_format`; el
+    progreso y la entrega lo ocultan) y 2+2 historias del autor, que `ensure_author_jobs`
+    encola con `user_id` negativo y prioridad 1. Al llenarse abre la votación: una sesión de 5
+    por lector. `iniciar-bot.bat` lo despliega en otra PC.
   - `announcer.py` revisa la fase cada minuto y avisa una vez por persona y fase (tabla
     `announcements`).
   - Sin `guide` (los tests de conversación), los handlers se comportan como antes, sin puertas.

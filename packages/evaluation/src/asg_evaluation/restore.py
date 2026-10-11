@@ -84,6 +84,15 @@ def restore_analysis_database(data: dict, destination) -> None:
                 "INSERT INTO first_contributions VALUES (?,?)",
                 (contribution["participant"], contribution["story"]),
             )
+        for entry in data.get("pack", []):
+            db.execute(
+                "INSERT INTO pack VALUES (?,?,?)", (entry["story"], entry["slot"], entry["format"])
+            )
+        for request in data.get("author_requests", []):
+            db.execute(
+                "INSERT INTO author_requests(slot,prompt,format,story) VALUES (?,?,?,?)",
+                (request["slot"], request["prompt"], request["format"], request["story"]),
+            )
         for session in data.get("sessions", []):
             db.execute(
                 "INSERT INTO sessions VALUES (?,?,?,?,?)",

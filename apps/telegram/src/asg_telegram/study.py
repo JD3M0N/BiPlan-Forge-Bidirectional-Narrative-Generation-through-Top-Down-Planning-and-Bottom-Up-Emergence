@@ -40,6 +40,10 @@ CONTRIBUTE_REPLACE = (
     "termine correctamente; entonces la sustituirá. Elige narrativa o simulada y describe "
     "tu idea."
 )
+CONTRIBUTE_PACK = (
+    "Tu próxima historia será tu <b>historia base</b>: la que entra en el estudio. "
+    "Describe tu idea."
+)
 SESSION_BREAK = (
     "<b>Sesión {session} de {sessions}</b>\n\n"
     "Empiezas un grupo nuevo de relatos. Si lo necesitas, este es un buen momento para "
@@ -103,9 +107,10 @@ class StudyConversation:
         except ValueError as exc:
             await update.effective_message.reply_text(str(exc))
             return
-        await update.effective_message.reply_text(
-            CONTRIBUTE_REPLACE if status.enrolled else CONTRIBUTE_NEW, parse_mode=ParseMode.HTML
-        )
+        text = CONTRIBUTE_REPLACE if status.enrolled else CONTRIBUTE_NEW
+        if status.pack:
+            text = CONTRIBUTE_PACK
+        await update.effective_message.reply_text(text, parse_mode=ParseMode.HTML)
         await self.generation.new_story(update, context)
 
     async def pause(self, update, context) -> None:
