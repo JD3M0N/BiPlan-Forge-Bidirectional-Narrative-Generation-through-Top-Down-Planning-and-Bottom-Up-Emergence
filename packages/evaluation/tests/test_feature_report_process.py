@@ -2,8 +2,8 @@
 
 import json
 
-from asg_evaluation.demo import synthetic_run
 from asg_evaluation.feature_report import read_features
+from evaluation_fakes import synthetic_run
 
 
 def test_direct_prose_costs_are_reported_and_unknown_logs_remain_missing(tmp_path):

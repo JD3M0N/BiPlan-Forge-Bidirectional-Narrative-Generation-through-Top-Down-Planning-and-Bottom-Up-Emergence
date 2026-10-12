@@ -1,9 +1,9 @@
 """Version identifiers persisted with every generated story."""
 
 GENERATOR_NAME = "asg-stagecraft"
-__version__ = "7.10.0"
+__version__ = "7.11.0"
 GENERATOR_VERSION = __version__
-PIPELINE_VERSION = "7.10"
+PIPELINE_VERSION = "7.11"
 # Runs written as Top-Down 5.x and 6.x stay readable: renaming the package and adding the
 # hybrid stages is additive, so every earlier contract still opens as a StoryRun. 7.1 changed
 # what a simulated beat's "achieved" means and added director.jsonl; 7.2 changed what
@@ -20,7 +20,8 @@ PIPELINE_VERSION = "7.10"
 # narrative_retrieval.json and blueprint contract 2 with frozen downstream blocks. 7.9 has the
 # director write in the fiction language and restate objectives, matches required gates by key
 # rather than by wording, and adds performance.json contract 5: turns record form repairs.
-# Earlier runs open.
+# 7.10 adds cited evidence to beats and narration. 7.11 stops writing the retired 1-10
+# evaluation.json template. Earlier runs open.
 SUPPORTED_PIPELINE_VERSIONS = frozenset(
     {
         "5.0",
@@ -40,6 +41,7 @@ SUPPORTED_PIPELINE_VERSIONS = frozenset(
         "7.7",
         "7.8",
         "7.9",
+        "7.10",
         PIPELINE_VERSION,
     }
 )

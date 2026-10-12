@@ -91,9 +91,8 @@ class StoryRun:
 class StoryGenerator:
     """Provide the stable public API for Stagecraft generation.
 
-    The keywords mirror GenerationOptions field for field, and a test holds them in step: the
-    console and the bot build this facade through `create_autospec(spec_set=True)`, so an
-    explicit signature is what lets their tests reject an option the facade does not declare.
+    The keywords mirror GenerationOptions field for field, and a test holds them in step, so a
+    caller's autospec rejects an option the facade does not declare.
     """
 
     def __init__(

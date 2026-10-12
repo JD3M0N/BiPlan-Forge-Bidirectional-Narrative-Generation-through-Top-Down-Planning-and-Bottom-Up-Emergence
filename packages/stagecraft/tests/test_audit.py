@@ -1,5 +1,3 @@
-import json
-
 from asg_core import craft_metrics
 from asg_stagecraft.planning.profiles import NarrativeProfile
 from asg_stagecraft.schemas import ChapterPlan, PlotEvent, StoryPlan, StoryRequest
@@ -134,27 +132,3 @@ def test_a_story_without_dialogue_reports_a_zero_ratio():
     assert metrics.quoted_paragraphs == 0
     assert metrics.dialogue_ratio == 0.0
     assert metrics.words_per_paragraph > 0
-
-
-def test_recorded_craft_matches_the_reporter_recomputation(tmp_path):
-    """Keep the run artifact and the corpus reporter on the same figures."""
-    from asg_evaluation.craft_report import read_story_craft
-
-    run_dir = tmp_path / "Top-Down" / "20260913-120000-el-faro"
-    run_dir.mkdir(parents=True)
-    text = story(DRAMATIZED, SUMMARIZED)
-    metrics = story_metrics(request(), plan(), text)
-    (run_dir / "story.md").write_text(text, encoding="utf-8")
-    (run_dir / "story_metrics.json").write_text(metrics.model_dump_json(indent=2), encoding="utf-8")
-
-    record = read_story_craft(run_dir, tmp_path)
-
-    assert record.craft.paragraphs == metrics.prose_paragraphs
-    assert record.craft.sentences == metrics.prose_sentences
-    assert record.craft.words == metrics.prose_words
-    assert record.craft.dialogue_ratio == metrics.dialogue_ratio
-    assert record.craft.words_per_sentence == metrics.words_per_sentence
-    assert record.craft.words_per_paragraph == metrics.words_per_paragraph
-    assert json.loads((run_dir / "story_metrics.json").read_text(encoding="utf-8"))[
-        "chapter_bodies_recovered"
-    ]

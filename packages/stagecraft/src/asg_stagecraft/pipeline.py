@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import TypeVar
 
 from asg_core import create_story_audio_sync
-from asg_evaluation import create_evaluation_template
 
 from .agents import (
     AnalystAgent,
@@ -1300,7 +1299,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
         plan: StoryPlan,
         story: str,
     ) -> None:
-        """Persist observed metrics, evaluation template, metadata, and story."""
+        """Persist observed metrics, metadata, and story."""
         assert self.repository is not None
         self.repository.save_json(
             "story_metrics.json",
@@ -1312,14 +1311,13 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
         """Write the final artifact, close the run, and report completion.
 
         Shared by the narrative story and the theater-script tails, so both formats leave the
-        run in the same completed shape: story.md, the evaluation template, optional audio,
+        run in the same completed shape: story.md, optional audio,
         usage, and a completed status.
         """
         assert self.repository is not None
         self._finishing = True
         self._notify(98, "story", saving_message)
         self.repository.save_text("story.md", rendered)
-        create_evaluation_template(self.repository.run_dir)
         self.repository.complete_stage("story")
         self._create_audio()
         self._save_usage()

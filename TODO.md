@@ -1,5 +1,12 @@
 # Hoja de ruta
 
+**Cierre, 2026-10-12:** `asg-stagecraft` 7.11.0 (pipeline 7.11), `asg-evaluation` 2.0.0 y
+`asg-telegram` 5.0.0. El bot solo crea historias (Top-Down o híbrido, libre o guiada, con audio)
+y las compara a ciegas por pares; la consola, la evaluación 1-10, los estudios `rolling`/`pack`
+y los informes `report-evaluations`, `report-story-craft`, `report-simulations` y
+`report-llm-usage` se retiraron. Las cifras de proceso y coste se leen con `report-features`
+(capas P y K) o del JSON del run; la comparación de runs, en StageCraft. 672 tests en verde.
+
 **Estado medido el 2026-10-09 con `asg-stagecraft` 7.9.0 (pipeline 7.9).** Un solo generador,
 Stagecraft, con tres formatos: `narrative`, `script` y `simulated`. La función simulada puede
 llevar inventario de objetos, la guía narrativa tiene una estrategia experimental
@@ -191,9 +198,8 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   de la función (`stage_model`): `pair_runs` no da por limpio un par que lo cambie. Cuando exista
   MED-5, también el mismo plan.
 - **A ciegas.** Para comparar:
-  - `compare-story-runs` sobre `story.md`;
-  - `report-story-craft --format prose --group format` para la artesanía;
-  - `report-simulations` para la función.
+  - la comparación de runs de StageCraft (`asg-studio`) sobre `story.md`;
+  - `report-features` para la artesanía (capa T), la función (capa P) y el coste (capa K).
 - **Ruido.** La réplica de doce historias de 6.6.0 dio hasta 16 puntos de diferencia entre dos
   corridas del mismo prompt y la misma versión. Una diferencia de medianas menor de unos cinco
   puntos, con n=9, no se interpreta.
@@ -206,7 +212,8 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
 - **La calidad la deciden personas, por pares.** La evaluación de la tesis sigue
   [packages/evaluation/METODOLOGIA.md](packages/evaluation/METODOLOGIA.md): rasgos contables con
   cita, tres criterios humanos por pares a ciegas y un juez aprendido de esos pares. Las seis
-  métricas de 1 a 10 de `evaluation.json` son un instrumento heredado, no la medida.
+  métricas de 1 a 10 de `evaluation.json` eran un instrumento heredado y se retiraron en el
+  cierre.
 - **Por escrito.** El resultado va con cifras y comandos en el doc del formato
   (`docs/resumen.md` o `docs/resumen.md`), no aquí.
 
@@ -230,7 +237,8 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   - lo que salió a mano en la validación 7.8: ids y texto en inglés en el contexto del actor
     (cerrado en 7.9, pero conviene vigilarlo), emociones repetidas entre escenas y cesiones
     por acto (SIM-19).
-- **Qué hacer.** Calcularlas en `report-simulations`, que solo lee disco, desde `turns.jsonl`,
+- **Qué hacer.** Calcularlas en `asg_evaluation.simulation_report` (capa P de
+  `report-features`), que solo lee disco, desde `turns.jsonl`,
   `contexts.jsonl`, `director.jsonl`, `cast_bible.json` y `story.md`:
   - recuerdos y caracteres por contexto de actor;
   - turnos con destinatario y turnos respondidos;
@@ -463,7 +471,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   - escriba un manifiesto con cada celda, su run y su configuración.
 - **Hecho cuando.**
   - Una matriz interrumpida a mitad se completa al relanzarla, sin repetir runs.
-  - Su manifiesto basta para pasar los runs a `compare-story-runs` y a los informes por celda.
+  - Su manifiesto basta para pasar los runs a StageCraft y a `report-features` por celda.
 
 ---
 
@@ -561,7 +569,7 @@ versión definitiva del generador
   23 a 43 s, y ningún error en el par 7.8 (`184753`, `185923`). Quedan 2 y 10 errores 503 en
   `150355` y `153026`, y una llamada de actor de 119 s en `153026`: el timeout sigue siendo el
   global de 120 s (`GEMINI_REQUEST_TIMEOUT_MS`).
-- **Hecho cuando.** En un run simulado nuevo, leído con `report-llm-usage`, el reloj se acerca a la
+- **Hecho cuando.** En un run simulado nuevo, leído en su `llm_calls.jsonl`, el reloj se acerca a la
   suma de latencias con éxito más las esperas de cuota, ninguna llamada de actor pasa de su
   timeout, y un turno rechazado por el proveedor deja en `rejected.jsonl` el código del fallo.
 
@@ -958,10 +966,10 @@ cuota gratuita · *Depende de:* SIM-1, SIM-2, SIM-14, MED-3; mejor con MED-5
 - **Qué hacer.**
   - Una matriz con los mismos prompts canónicos en `narrative` y en `simulated`, mismo perfil e,
     idealmente, mismo plan (MED-5), siguiendo el protocolo.
-  - Leer la comparación a ciegas, las cifras de artesanía y las de `report-simulations`:
+  - Leer la comparación a ciegas y las cifras de `report-features` (capas T y P):
     `script_echo` (si sale alto, los actores recitaron y la simulación no aporta) y
     `beat_completion_ratio`.
-  - Leer también el coste por agente (`report-llm-usage`), y si el último capítulo es el más mudo o el más
+  - Leer también el coste por agente (capa K), y si el último capítulo es el más mudo o el más
     corto.
 - **Hecho cuando.** Hay una decisión escrita, con cifras, en `docs/resumen.md`.
 
@@ -973,7 +981,8 @@ cuota gratuita · *Depende de:* SIM-1, SIM-2, SIM-14, MED-3; mejor con MED-5
 - **Síntoma.** `--actor-memory shared` existe como brazo de control y nadie lo ha corrido. Es la
   medición que sostiene la afirmación central de la tesis: que dar a cada personaje solo lo que
   presenció produce mejores escenas que darles todo lo público.
-  - El proxy determinista es `unknown_mentions`; la medida seria la da `audit-stage-run`.
+  - El proxy determinista es `unknown_mentions`; el juez `audit-stage-run` se retiró en 7.11
+    (git `714f13e`) porque aprobaba casi todo.
   - Pero el juez por defecto (`gemini-3.5-flash-lite`) todavía no es fiable:
     - marcó como fuga un hecho que estaba literalmente en la memoria inicial del personaje
       (reauditoría de `023354`);
@@ -1031,7 +1040,7 @@ gratuita · *Depende de:* MED-5, MED-7
     cerró SIM-9 y SIM-10), y la que cierre SIM-6 y SIM-11.
   - Usar tres prompts de géneros distintos: 03 (misterio), 04 (drama) y 01 (fantasía).
   - Añadir como brazo el presupuesto de pensamiento del actor (SIM-4).
-  - Leer MED-7, `report-simulations`, el coste por agente (`report-llm-usage`) y la comparación a ciegas.
+  - Leer MED-7, `report-features` (capas P y K) y la comparación a ciegas.
 - **Hecho cuando.** Hay una tabla por versión en `docs/resumen.md` y una decisión
   escrita sobre qué mecanismo se queda.
 - **Ojo.** En el prompt 03 el brazo base pueden ser los propios runs 7.1: con `--plan-from` sobre
@@ -1072,35 +1081,27 @@ gratuita · *Depende de:* MED-5, MED-7
 
 ### EXP-4 · Evaluación humana por pares a ciegas
 
-**Auditoría 2026-10-05:** SQLite, el flujo de Telegram y la agregación están implementados;
-todavía no se ha realizado el piloto ni el estudio humano. **2026-10-08:** el bot (`asg-telegram`
-4.0.0) ya es el del experimento: clave compartida, consentimiento, perfil, historia base
-obligatoria antes del uso libre, guía `que_mirar` en cada pregunta y avisos de fase. Falta el
-piloto.
+*Área:* experimento · *Cuota:* votar no consume cuota; generar y extraer sí · *Depende de:*
+MED-8 y la revisión de MED-9
 
-*Área:* experimento · *Cuota:* votar no consume cuota; generación y extracción requieren
-presupuesto · *Depende de:* versión definitiva, MED-8 y la revisión de MED-9
-
-- **Síntoma.** La demo contiene once historias y 180 respuestas ficticias. Comprueba mecanismos,
-  no preferencias humanas ni validez de las mediciones. Las notas históricas 1–10 pertenecen a
-  otro instrumento y no sustituyen este estudio (audio [03:41–04:16]).
+- **Síntoma.** El instrumento está listo (2026-10-12): el bot `asg-telegram` 5.0.0 recoge
+  historias de los participantes (Top-Down o híbrido, libre o guiada, con audio) y, cuando el
+  investigador abre la votación, presenta pares a ciegas con una pregunta cada vez. Todavía no
+  hay ni una historia ni un voto reales.
 - **Qué hacer.**
-  - Revisar manualmente extracciones y realizar un piloto de entrega ciega, lectura, preguntas,
-    abstenciones, exposición previa, pausa y reanudación.
-  - Ejecutar el protocolo pack de [PACK_STUDY.md](apps/telegram/PACK_STUDY.md), desplegado
-    con `iniciar-bot.bat`.
-    - El paquete son 10 relatos: las 6 primeras aportaciones de participantes y 4 del autor.
-    - Cada mitad va en `narrative` y en `simulated`, con formato asignado a ciegas.
-    - El paquete se congela solo y abre la votación.
-    - Cada lector tiene una sesión de 5 relatos, con un criterio por pregunta y respuestas
-      A/B o abstención.
-  - Publicar cobertura prevista y efectiva, abstenciones, acuerdo e intervalos por lector,
-    con y sin el autor. No inventar un ranking global si el grafo queda desconectado.
-- **Hecho cuando.** El piloto está documentado y el estudio real publica las tres preferencias
-  con su cobertura y limitaciones. La falta de cobertura queda explícita si no permite ordenar.
-- **Ojo.** Prompts y opciones libres permiten asociaciones, no aislar causalmente un parámetro.
-  La comparación controlada de parametrizaciones requiere su propio diseño y presupuesto.
-  Conservar los `evaluation.json` históricos; los pares viven en la base del estudio.
+  - Arrancar el bot en la PC del investigador (`iniciar-bot.bat`) y pedir a los participantes
+    que creen historias, una por una.
+  - Añadir dos líneas base de un solo prompt (`generate-baseline` y `evaluation-study add`) y
+    excluir lo que no deba entrar.
+  - `evaluation-study open` cuando haya bastantes historias; votar hasta el tope de 15 preguntas
+    por lector; `close` y `export`. Guía en [apps/telegram/README.md](apps/telegram/README.md).
+  - `report-preferences`: cobertura, abstenciones, acuerdo e intervalos por lector, con y sin el
+    autor. No inventar un ranking global si el grafo queda desconectado.
+- **Hecho cuando.** El estudio real publica las tres preferencias con su cobertura y
+  limitaciones.
+- **Ojo.** Prompts y enfoques libres permiten asociaciones, no aislar causalmente un parámetro.
+  Las bases de los estudios anteriores (`Evaluations/pack-prueba`, `Evaluations/telegram-rolling`)
+  quedan como datos y el estudio nuevo no las abre.
 
 ### EXP-7 · El juez aprendido de los pares humanos
 
@@ -1214,7 +1215,7 @@ EXP-7
   - **Lo fácil ya está hecho.** Las tres extracciones de riesgo nulo se hicieron en 7.0.0:
     `planning/repair.py`, `writing/assembly.py` y `writing/acceptance.py`.
 - **Qué hacer.**
-  - Sacar la telemetría y la contabilidad de uso como colaboradores (su lectura ya existe: `report-llm-usage`).
+  - Sacar la telemetría y la contabilidad de uso como colaboradores (su lectura ya existe: capa K).
   - Sacar el bucle de reintento compartido (TD-3).
   - Al final, convertir las etapas en clases con estado propio, que es lo que elimina los asserts.
   - No hacerlo de paso dentro de otro cambio.
@@ -1248,14 +1249,14 @@ EXP-7
 *Área:* ingeniería · *Cuota:* sin cuota · *Depende de:* el cierre del proyecto
 
 - **Síntoma.**
-  - `README.md` de la raíz está vacío a propósito: se redacta al cerrar, cuando los contratos ya
-    no se muevan.
+  - `README.md` de la raíz ya es una portada corta (estructura y puesta en marcha); falta el
+    contrato de artefactos.
   - Las fachadas no tienen ejemplos que se ejecuten.
   - `packages/core/README.md` sigue en inglés y los demás están en español.
 - **Qué hacer.** Al cerrar:
   - ejemplos mínimos de entrada, salida y fallo para `asg_core`, `asg_stagecraft` y
     `asg_evaluation`;
-  - el README de la raíz, en UTF-8.
+  - el contrato de artefactos en el README de la raíz, en UTF-8.
 - **Hecho cuando.** Los ejemplos se validan en los tests o en CI, y la documentación describe el
   contrato de artefactos vigente y su compatibilidad con los runs anteriores.
 
@@ -1321,7 +1322,7 @@ lectura encuentra incoherencias físicas que el inventario no cubre; medirlo es 
   `planning/profiles.py` y una en `planning/repair.py`.
 - **Los perfiles, a mano.** `agents/analyst.py` repite en `PROFILE_ALIASES` y `EXPLICIT_PROFILE`
   los nombres de perfil que ya dan `NarrativeProfile` y `PROFILE_LABELS`.
-- **Detección desigual.** La consola no tiene selector de perfil y depende del analista.
+- **Detección desigual.** El bot no tiene selector de perfil y depende del analista o del `.env`.
 
 ### Grafo explícito de lugares
 

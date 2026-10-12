@@ -1,4 +1,4 @@
-"""Load bot configuration and resolve the project root."""
+"""Load the bot configuration from the root .env."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ from pathlib import Path
 from asg_core import find_project_root
 from dotenv import load_dotenv
 
+DEFAULT_STUDY = "Evaluations/estudio/study.sqlite3"
+
 
 class TelegramConfigurationError(RuntimeError):
     """Report missing or invalid Telegram configuration."""
@@ -16,21 +18,16 @@ class TelegramConfigurationError(RuntimeError):
 
 @dataclass(frozen=True)
 class TelegramSettings:
-    """Hold the bot token, generator, access key and study database location."""
+    """Hold the bot token and where the queue and the study live."""
 
-    telegram_token: str
-    generator_name: str
+    token: str = field(repr=False)
     project_root: Path
-    access_key: str = field(repr=False)
     study_path: Path
-    admin_ids: frozenset[int] = frozenset()
-    pool_repository: str = ""
-    pool_token: str = field(default="", repr=False)
-    pool_branch: str = "main"
+    queue_path: Path
 
 
 def load_settings(start: Path | None = None) -> TelegramSettings:
-    """Read the root .env and reject a bot that could run outside the experiment."""
+    """Read TELEGRAM_BOT_TOKEN and ASG_EVALUATION_STUDY, resolving paths from the root."""
     root = find_project_root(start)
     load_dotenv(root / ".env")
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
@@ -38,44 +35,8 @@ def load_settings(start: Path | None = None) -> TelegramSettings:
         raise TelegramConfigurationError(
             "Falta TELEGRAM_BOT_TOKEN. Añádelo al archivo .env de la raíz."
         )
-    generator_name = os.getenv("STORY_GENERATOR", "stagecraft").strip().lower()
-    access_key = os.getenv("TELEGRAM_ACCESS_KEY", "").strip()
-    if not access_key:
-        raise TelegramConfigurationError(
-            "Falta TELEGRAM_ACCESS_KEY. Define en .env la clave que entregarás a los "
-            "participantes del estudio."
-        )
-    study = os.getenv("ASG_EVALUATION_STUDY", "").strip()
-    if not study:
-        raise TelegramConfigurationError(
-            "Falta ASG_EVALUATION_STUDY. Crea el estudio con evaluation-study create y "
-            "apunta esta variable a su base de datos."
-        )
-    study_path = Path(study)
-    if not study_path.is_absolute():
-        study_path = root / study_path
-    if not study_path.is_file():
-        raise TelegramConfigurationError(
-            f"No existe la base del estudio {study_path}. Créala con evaluation-study create."
-        )
-    try:
-        admin_ids = frozenset(
-            int(value.strip())
-            for value in os.getenv("TELEGRAM_ADMIN_IDS", "").split(",")
-            if value.strip()
-        )
-    except ValueError as exc:
-        raise TelegramConfigurationError(
-            "TELEGRAM_ADMIN_IDS exige IDs numéricos separados por comas."
-        ) from exc
+    study = Path(os.getenv("ASG_EVALUATION_STUDY", "").strip() or DEFAULT_STUDY)
+    study = study if study.is_absolute() else root / study
     return TelegramSettings(
-        token,
-        generator_name or "stagecraft",
-        root,
-        access_key,
-        study_path.resolve(),
-        admin_ids,
-        os.getenv("STORY_POOL_REPOSITORY", "").strip(),
-        os.getenv("STORY_POOL_TOKEN", "").strip(),
-        os.getenv("STORY_POOL_BRANCH", "main").strip(),
+        token, root, study.resolve(), root / "Stories" / "telegram_jobs.sqlite3"
     )

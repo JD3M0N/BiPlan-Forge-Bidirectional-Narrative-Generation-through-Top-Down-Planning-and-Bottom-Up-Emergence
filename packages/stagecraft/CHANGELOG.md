@@ -1,5 +1,16 @@
 # Historial de cambios
 
+## 7.11.0
+
+Pipeline 7.11, limpieza para el cierre.
+
+- Un run nuevo ya no escribe la plantilla `evaluation.json` de la evaluación 1-10 heredada: la
+  evaluación de la tesis son los pares a ciegas de `asg-evaluation` 2.0.
+- Se retiran `compare-story-runs` (StageCraft ya compara runs), `audit-stage-run` (el juez LLM
+  que aprobaba casi todo, TD-1) y `plan-guidance-experiment`; las solicitudes de
+  `experiments/guidance/` se conservan como datos.
+- `extract-story-features --study` lee el estudio nuevo y pide que la votación esté abierta.
+
 ## 7.9.1
 
 - **La cadena salta una ranura que rechaza el acceso.** Groq contesta 403 «Access denied.

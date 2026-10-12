@@ -1,129 +1,177 @@
-"""Pure rendering for the guided story-brief wizard: no I/O, only text and keyboards."""
+"""Guided story wizard as a pure state machine: answers in, text and keyboards out."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from .contract import BriefSpec, CastEntry, StoryOutline
+from .generator import BRIEF_LIMITS, MAX_CAST, PRONOUNS, ROLES, StoryOutline, brief_from
 
-BRIEF_STEPS = ("title", "genre", "setting", "plot", "cast", "notes", "confirm")
-MEMBER_STEPS = ("name", "role", "pronoun", "description", "secret")
-SKIPPABLE_STEPS = frozenset({"title", "genre", "setting", "notes", "description", "secret"})
-
+FIELDS = ("title", "genre", "setting", "plot")
+OPTIONAL = frozenset({"title", "genre", "setting", "notes", "description", "secret"})
 _QUESTIONS = {
-    "title": "¿Qué título provisional quieres? Puedes omitirlo.",
-    "genre": "¿Cuál es el género? Puedes omitirlo.",
-    "setting": "¿Dónde y cuándo ocurre? Puedes omitirlo.",
+    "title": "¿Qué título provisional quieres?",
+    "genre": "¿Cuál es el género?",
+    "setting": "¿Dónde y cuándo ocurre?",
     "plot": "Cuéntame la trama.",
-    "notes": ("¿Alguna nota más: idioma, tono o restricciones? Puedes omitirla."),
-    "name": "¿Cómo se llama este personaje?",
-    "description": "Descríbelo brevemente. Puedes omitirlo.",
-    "secret": "¿Tiene algún secreto? Puedes omitirlo.",
+    "notes": "¿Alguna nota más: tono, idioma o restricciones?",
+    "name": "¿Cómo se llama el personaje?",
+    "role": "¿Qué papel tiene?",
+    "pronoun": "¿Qué pronombre usa?",
+    "description": "Descríbelo brevemente.",
+    "secret": "¿Guarda algún secreto?",
 }
 
 
-def question(step: str, spec: BriefSpec) -> str:
-    """Return the question shown for one wizard step, with its length limit stated."""
-    text = _QUESTIONS[step]
-    limit = spec.limits.get(step)
-    return f"{text} (máximo {limit} caracteres)" if limit else text
+@dataclass
+class Reply:
+    """What the bot says next, and the outline once the participant confirms it."""
+
+    text: str
+    keyboard: InlineKeyboardMarkup | None = None
+    outline: StoryOutline | None = None
 
 
-def check_length(field: str, text: str, spec: BriefSpec) -> str:
-    """Trim and validate one free-text answer against the brief's declared limits."""
-    trimmed = text.strip()
-    limit = spec.limits.get(field)
-    if limit and len(trimmed) > limit:
-        raise ValueError(f"Ese texto supera los {limit} caracteres permitidos.")
-    return trimmed
-
-
-def skip_keyboard(step: str) -> InlineKeyboardMarkup:
-    """Build the keyboard offered on a step that may be left empty."""
-    button = InlineKeyboardButton("Omitir", callback_data=f"brief:skip:{step}")
-    return InlineKeyboardMarkup([[button]])
-
-
-def role_keyboard(spec: BriefSpec) -> InlineKeyboardMarkup:
-    """Build the keyboard listing every role a cast member may declare."""
+def _buttons(rows: list[list[tuple[str, str]]]) -> InlineKeyboardMarkup:
+    """Build an inline keyboard from (label, wizard action) pairs."""
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton(choice.label, callback_data=f"brief:role:{index}")]
-            for index, choice in enumerate(spec.roles)
+            [InlineKeyboardButton(label, callback_data=f"w:{data}") for label, data in row]
+            for row in rows
         ]
     )
 
 
-def pronoun_keyboard(spec: BriefSpec) -> InlineKeyboardMarkup:
-    """Build the keyboard listing every pronoun a cast member may declare."""
-    return InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton(choice.label, callback_data=f"brief:pron:{index}")]
-            for index, choice in enumerate(spec.pronouns)
-        ]
-    )
+def start() -> tuple[dict, Reply]:
+    """Open a new wizard at its first question."""
+    state = {"step": "title", "values": {}, "cast": [], "member": {}}
+    return state, _ask(state)
 
 
-def cast_keyboard(count: int, spec: BriefSpec) -> InlineKeyboardMarkup:
-    """Build the keyboard shown once a cast member is complete."""
-    rows = []
-    if count < spec.max_cast:
-        rows.append([InlineKeyboardButton("➕ Añadir personaje", callback_data="brief:add")])
-    if count:
-        rows.append([InlineKeyboardButton("↩ Quitar el último", callback_data="brief:undo")])
-    rows.append([InlineKeyboardButton("Continuar", callback_data="brief:next")])
-    return InlineKeyboardMarkup(rows)
+def _ask(state: dict) -> Reply:
+    """Render the question for the current step."""
+    step = state["step"]
+    if step == "cast":
+        rows = []
+        if len(state["cast"]) < MAX_CAST:
+            rows.append([("➕ Añadir personaje", "add")])
+        rows.append([("Continuar", "next")])
+        names = ", ".join(member["name"] for member in state["cast"]) or "ninguno"
+        return Reply(f"Personajes: {names}.", _buttons(rows))
+    if step == "role":
+        return Reply(
+            _QUESTIONS[step],
+            _buttons([[(label, f"role:{i}")] for i, (_, label) in enumerate(ROLES)]),
+        )
+    if step == "pronoun":
+        return Reply(
+            _QUESTIONS[step],
+            _buttons([[(label, f"pron:{i}")] for i, (_, label) in enumerate(PRONOUNS)]),
+        )
+    if step == "confirm":
+        return Reply(
+            summary(outline(state)),
+            _buttons([[("🚀 Generar", "go")], [("✏️ Empezar de nuevo", "restart")]]),
+        )
+    limit = BRIEF_LIMITS.get(step)
+    text = _QUESTIONS[step] + (f" (máximo {limit} caracteres)" if limit else "")
+    return Reply(text, _buttons([[("Omitir", "skip")]]) if step in OPTIONAL else None)
 
 
-def confirm_keyboard() -> InlineKeyboardMarkup:
-    """Build the keyboard shown on the final brief confirmation card."""
-    return InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton("🚀 Generar", callback_data="brief:go")],
-            [InlineKeyboardButton("⚙️ Opciones", callback_data="brief:opts")],
-            [InlineKeyboardButton("✏️ Empezar de nuevo", callback_data="brief:restart")],
-        ]
-    )
+def _advance(state: dict) -> Reply:
+    """Move to the step after the current one and ask it."""
+    step = state["step"]
+    order = (*FIELDS, "cast")
+    member_order = ("name", "role", "pronoun", "description", "secret")
+    if step in FIELDS:
+        state["step"] = order[order.index(step) + 1]
+    elif step in member_order[:-1]:
+        state["step"] = member_order[member_order.index(step) + 1]
+    elif step == "secret":
+        state["cast"].append(state["member"])
+        state["member"] = {}
+        state["step"] = "cast"
+    elif step == "notes":
+        state["step"] = "confirm"
+    return _ask(state)
 
 
-def outline_from(values: dict) -> StoryOutline:
-    """Build a StoryOutline from the wizard's collected answers."""
-    cast = tuple(CastEntry(**member) for member in values.get("cast", []))
+def answer(state: dict, text: str) -> Reply:
+    """Store a typed answer for the current step, or explain why it was refused."""
+    step = state["step"]
+    if step in {"cast", "role", "pronoun", "confirm"}:
+        return Reply("Usa los botones para continuar.")
+    value = text.strip()
+    limit = BRIEF_LIMITS.get(step)
+    if limit and len(value) > limit:
+        return Reply(f"Ese texto supera los {limit} caracteres permitidos.")
+    if not value and step not in OPTIONAL:
+        return Reply("Esta respuesta no puede quedar vacía.")
+    target = state["member"] if step in {"name", "description", "secret"} else state["values"]
+    if step == "name" and any(m["name"].lower() == value.lower() for m in state["cast"]):
+        return Reply("Ya hay un personaje con ese nombre.")
+    target[step] = value
+    return _advance(state)
+
+
+def press(state: dict, action: str) -> Reply:
+    """Apply one button press of the wizard."""
+    kind, _, arg = action.partition(":")
+    step = state["step"]
+    if kind == "skip" and step in OPTIONAL:
+        return answer(state, "")
+    if kind == "add" and step == "cast" and len(state["cast"]) < MAX_CAST:
+        state["step"] = "name"
+        return _ask(state)
+    if kind == "next" and step == "cast":
+        state["step"] = "notes"
+        return _ask(state)
+    if kind in {"role", "pron"} and step == ("role" if kind == "role" else "pronoun"):
+        choices = ROLES if kind == "role" else PRONOUNS
+        state["member"][step] = choices[int(arg)][0]
+        return _advance(state)
+    if kind == "restart":
+        state.clear()
+        state.update(start()[0])
+        return _ask(state)
+    if kind == "go" and step == "confirm":
+        result = outline(state)
+        try:
+            brief_from(result)
+        except ValueError as exc:
+            return Reply(f"{exc}\n\nEmpieza de nuevo con /crear.")
+        return Reply("Obra lista.", outline=result)
+    return Reply("Ese paso ya no está activo.")
+
+
+def outline(state: dict) -> StoryOutline:
+    """Build the outline from the answers collected so far."""
+    values = state["values"]
     return StoryOutline(
         plot=values.get("plot", ""),
         title=values.get("title", ""),
         genre=values.get("genre", ""),
         setting=values.get("setting", ""),
-        cast=cast,
+        cast=tuple(state["cast"]),
         notes=values.get("notes", ""),
     )
 
 
-def _cast_summary(outline: StoryOutline) -> str:
-    """Render one line per declared cast member, for the confirmation card."""
-    lines = []
-    for member in outline.cast:
-        detail = ", ".join(part for part in (member.role, member.pronoun) if part)
-        lines.append(f"  · {member.name}" + (f" ({detail})" if detail else ""))
-    return "\n".join(lines)
-
-
-def outline_summary(outline: StoryOutline, *, limit: int = 3500) -> str:
-    """Render the outline as a confirmation card, staying under Telegram's message limit."""
-    lines = ["<b>Revisa la obra</b>", ""]
-    if outline.title:
-        lines.append(f"Título: {outline.title}")
-    if outline.genre:
-        lines.append(f"Género: {outline.genre}")
-    if outline.setting:
-        lines.append(f"Ambientación: {outline.setting}")
-    lines.append(f"Trama: {outline.plot}")
-    if outline.cast:
-        lines.append(f"Reparto ({len(outline.cast)}):")
-        lines.append(_cast_summary(outline))
-    if outline.notes:
-        lines.append(f"Notas: {outline.notes}")
+def summary(story: StoryOutline) -> str:
+    """Render the confirmation card in plain text, under Telegram's message limit."""
+    lines = ["Revisa la obra:", ""]
+    for label, value in (
+        ("Título", story.title),
+        ("Género", story.genre),
+        ("Ambientación", story.setting),
+        ("Trama", story.plot),
+    ):
+        if value:
+            lines.append(f"{label}: {value}")
+    for member in story.cast:
+        lines.append(f"  · {member['name']} ({member['role']}, {member['pronoun']})")
+    if story.notes:
+        lines.append(f"Notas: {story.notes}")
     text = "\n".join(lines)
-    if len(text) > limit:
-        text = text[: limit - 20].rstrip() + "\n[…recortado…]"
-    return text
+    return text if len(text) <= 3500 else text[:3480].rstrip() + "\n[…recortado…]"

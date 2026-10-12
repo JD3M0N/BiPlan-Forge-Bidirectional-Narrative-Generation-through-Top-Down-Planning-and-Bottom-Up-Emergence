@@ -68,7 +68,7 @@ narrativa se adapta a actos).
 - **Qué se mide** (`simulation_metrics.json`): `script_echo` (cerca de 1 = recitan),
   `repetition_ratio` (solo habla), `action_repetition_ratio`, `unknown_mentions`,
   `dialogue_survival` (cerca de 1 = el narrador transcribió), compresión de narración.
-  `audit-stage-run` añade un juez LLM sobre filtraciones de conocimiento y fidelidad.
+  (El juez LLM `audit-stage-run` se retiró en 7.11: aprobaba casi todo.)
 - **Comparabilidad:** las funciones 7.0 y 7.1 no son comparables con 7.2+ (el tope de recuperación
   no se aplicaba, casi no había destinatarios, la nota del director se repetía). Separar por
   `pipeline_version`.

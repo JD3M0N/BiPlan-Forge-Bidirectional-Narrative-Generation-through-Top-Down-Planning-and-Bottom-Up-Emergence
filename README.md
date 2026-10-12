@@ -13,9 +13,10 @@ enfoques:
 | Carpeta | Contenido |
 |---|---|
 | `packages/stagecraft` | el generador |
-| `packages/evaluation` | evaluaciones humanas e informes del corpus |
+| `packages/evaluation` | la evaluación: pares humanos a ciegas, rasgos con cita y juez aprendido |
 | `packages/core` | utilidades compartidas |
-| `apps/console`, `apps/telegram`, `apps/studio` | consola, bot de Telegram e interfaz web |
+| `apps/telegram` | el bot del estudio: crear historias y compararlas |
+| `apps/studio` | StageCraft, la interfaz web local |
 | `Stories/` | las historias generadas (datos de investigación, no se borran) |
 | `docs/` | [resumen técnico](docs/resumen.md) y los PDF fuente de la tesis |
 
@@ -29,8 +30,8 @@ generate-story "Un caballero rescata a una princesa de un dragón"
 .\run-tests.ps1           # los tests usan proveedores falsos
 ```
 
-Para instalar solo el bot en Windows: `.\setup.ps1 -Telegram`.
-Consulta [la guía de instalación 24/7](apps/telegram/DEPLOYMENT.md).
+El bot del estudio se arranca con `iniciar-bot.bat`; ver [apps/telegram](apps/telegram/README.md).
+La evaluación, paso a paso, está en [packages/evaluation](packages/evaluation/README.md).
 Las dependencias se fijan en `constraints-py312.txt` para Python 3.12 de 64 bits.
 
 ## Más información

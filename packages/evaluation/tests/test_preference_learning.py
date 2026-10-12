@@ -5,12 +5,13 @@ from itertools import combinations
 
 import numpy as np
 import pytest
-from asg_evaluation.demo import run_demo
+from asg_evaluation import learning_cli
 from asg_evaluation.feature_report import read_features, study_extractions
+from asg_evaluation.features import extract_features
 from asg_evaluation.judge import _validate, fit_linear, predict, rank_features, train_judge
 from asg_evaluation.learning_cli import load_study_features
 from asg_evaluation.preferences import agreement, bradley_terry, decided_votes
-from asg_evaluation.study import StudyRepository
+from evaluation_fakes import SyntheticProvider, voted_study
 
 
 def sample():
@@ -73,25 +74,39 @@ def test_abstention_does_not_connect_graph_and_agreement_normalizes_orientation(
 
 
 def test_public_commands_reuse_study_extractions_and_reject_mixed_protocols(tmp_path):
-    output = tmp_path / "demo"
-    summary = run_demo(output)
-    ranking = json.loads((output / "ranking.json").read_text(encoding="utf-8"))
-    table = json.loads((output / "table.json").read_text(encoding="utf-8"))
-    assert ranking["excluded"] == [] and len(ranking["rankings"]["H01"]) == summary["stories"]
-    assert all(row["features"]["R02"]["status"] == "measured" for row in table["stories"])
-    repository = StudyRepository(output / "study.sqlite3")
-    features = load_study_features(repository)
+    study = voted_study(tmp_path)
+    provider = SyntheticProvider()
+    for story in study.export()["stories"]:
+        extract_features(
+            story["text"],
+            provider,
+            model="fake",
+            output=tmp_path / "features" / f"{story['id']}.json",
+        )
+    db, runs = tmp_path / "study.sqlite3", str(tmp_path / "runs")
+    judge_path, ranking_path = tmp_path / "judge.json", tmp_path / "ranking.json"
+    assert learning_cli.human_main([str(db), "--output", str(tmp_path / "human.json")]) == 0
+    assert learning_cli.train_main([str(db), "--output", str(judge_path)]) == 0
+    assert (
+        learning_cli.rank_main(
+            [str(judge_path), runs, "--study", str(db), "--output", str(ranking_path)]
+        )
+        == 0
+    )
+    ranking = json.loads(ranking_path.read_text(encoding="utf-8"))
+    assert ranking["excluded"] == [] and len(ranking["rankings"]["H01"]) == 6
+    features = load_study_features(study)
     story = next(iter(features))
     features[story]["identity"]["model"] = "other-model"
     with pytest.raises(ValueError, match="protocolos"):
-        train_judge(repository.export(), features)
-    sidecar = output / "features" / f"{story}.json"
+        train_judge(study.export(), features)
+    sidecar = tmp_path / "features" / f"{story}.json"
     sidecar.write_text(json.dumps(features[story]), encoding="utf-8")
-    extractions = study_extractions(output / "study.sqlite3")
+    extractions = study_extractions(db)
     rows = [
         read_features(p.parent, extractions=extractions)
-        for p in (output / "runs").rglob("story.md")
+        for p in (tmp_path / "runs").rglob("story.md")
     ]
-    judge = json.loads((output / "judge.json").read_text(encoding="utf-8"))
+    judge = json.loads(judge_path.read_text(encoding="utf-8"))
     excluded = rank_features(judge, rows)["excluded"]
     assert [e["reason"] for e in excluded] == ["Protocolo de extracción distinto"]

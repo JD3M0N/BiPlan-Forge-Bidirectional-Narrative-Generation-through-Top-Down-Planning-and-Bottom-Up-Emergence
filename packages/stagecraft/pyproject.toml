@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "asg-core>=0.7.0",
-  "asg-evaluation>=1.0.0",
+  "asg-evaluation>=2.0.0",
   "google-genai>=1.0,<2",
   "httpx>=0.28,<1",
   "pydantic>=2.7,<3",
@@ -18,13 +18,10 @@ dependencies = [
 ]
 
 [project.scripts]
-plan-guidance-experiment = "asg_stagecraft.tools.guidance_experiment:main"
 extract-story-features = "asg_stagecraft.tools.extract_features:main"
 generate-baseline = "asg_stagecraft.tools.baseline:main"
 generate-story = "asg_stagecraft.tools.generate:main"
-compare-story-runs = "asg_stagecraft.tools.compare:main"
 recover-story-runs = "asg_stagecraft.tools.recovery:main"
-audit-stage-run = "asg_stagecraft.tools.audit_stage:main"
 llm-budget = "asg_stagecraft.tools.budget:main"
 recompute-simulation-metrics = "asg_stagecraft.tools.recompute:main"
 

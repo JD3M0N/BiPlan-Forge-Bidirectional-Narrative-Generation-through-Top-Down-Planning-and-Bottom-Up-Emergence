@@ -4,8 +4,8 @@ A run's simulation_metrics.json is written once, with whatever the metrics modul
 the time, so a run older than a measurement cannot report it: the 7.0 runs lack every figure 7.1
 added, and the design doc once quoted those figures recomputed by hand. This command rebuilds
 what the current code measures from the artifacts the run already has on disk, and writes it
-beside the original as simulation_metrics.recomputed.json. Like audit-stage-run it never modifies
-what it reads; unlike it, it spends no quota.
+beside the original as simulation_metrics.recomputed.json. It never modifies what it reads and
+spends no quota.
 
 Two figures cannot be rebuilt from the logs. The emotion each reflection named was not persisted
 before 7.2, so emotions are copied from the original measurements when they exist. And a cast

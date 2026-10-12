@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.0.0] - 2026-10-12
+
+A single pairwise study for the thesis close, as the tutor asked: human pairs, evidence-quoted
+features and a learned judge. Breaks compatibility.
+
+- `study.py` is rewritten with one mode: collection, evaluation (`open` freezes the pool) and
+  closed. Questions are assigned lazily, one at a time, so anyone may vote: the criterion
+  cycles, a reader never sees their own or a known story, never repeats a pair and criterion,
+  prefers stories already read and the least compared pairs, and stops at 15 questions. The
+  database is created on first use (schema 10); the schemas 1-4 of the retired studies are
+  refused and their files stay as data.
+- `evaluation-study` keeps `status`, `add`, `exclude`/`include`, `author`, `open`, `close` and
+  `export`.
+- Removed: the fixed, rolling and pack modes, publication, bundles and restore, the offline demo
+  (`evaluation-demo`), the legacy 1-10 `evaluation.json` (`report-evaluations`), and the
+  `report-story-craft`, `report-simulations` and `report-llm-usage` commands.
+  `simulation_report` stays as the library the process features read.
+
 ## [1.3.0] - 2026-10-09
 
 - Added `report-llm-usage` (MED-2): calls, attempts, failed attempts, tokens, latency and quota

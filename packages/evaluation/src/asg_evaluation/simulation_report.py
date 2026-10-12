@@ -1,4 +1,4 @@
-"""Aggregate what every stored performance produced, for comparing simulated corpora.
+"""Read what one stored performance produced, for the process features of a run.
 
 Reads only JSON, like the rest of this package: it never imports the pipeline, so a run can be
 studied long after the code that wrote it has moved on. The axes it groups by are the knobs the
@@ -13,14 +13,12 @@ reading them as 0 would make the older corpus look spotless on exactly the probl
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from statistics import median
 
-from .artifacts import group_by, load_json_object, number_field, text_field
+from .artifacts import load_json_object, number_field, text_field
 from .artifacts import read_json_lines as _lines
-from .usage_report import aggregate_calls
 
 METRICS_FILENAME = "simulation_metrics.json"
 UNKNOWN = "desconocido"
@@ -101,41 +99,6 @@ class SimulationRecord:
     inventory: str = "sin inventario"
 
 
-@dataclass
-class SimulationSummary:
-    """Central tendency of one group of performances."""
-
-    label: str
-    runs: int
-    values: dict[str, tuple[float | None, float | None]] = field(default_factory=dict)
-
-
-SIMULATION_GROUPINGS: dict[str, Callable[[SimulationRecord], str]] = {
-    "story": lambda record: record.story,
-    "voice": lambda record: record.narrative_voice,
-    "memory": lambda record: record.actor_memory,
-    "profile": lambda record: record.narrative_profile,
-    "version": lambda record: record.generator_version,
-    "voice-memory": lambda record: f"{record.narrative_voice} / {record.actor_memory}",
-    "mode": lambda record: record.simulation_mode,
-    "inventory": lambda record: record.inventory,
-}
-
-
-def discover_simulations(stories_root: str | Path) -> list[Path]:
-    """Return every run directory that holds a performance, in a stable order."""
-    root = Path(stories_root)
-    if not root.is_dir():
-        return []
-    candidates = {path.parent for path in root.rglob(METRICS_FILENAME)}
-    candidates.update(path.parents[2] for path in root.rglob("stage/*/turns.jsonl"))
-    return sorted(
-        item
-        for item in candidates
-        if load_json_object(item / "metadata.json").get("story_format") == "simulated"
-    )
-
-
 def read_simulation(directory: str | Path, stories_root: str | Path) -> SimulationRecord | None:
     """Describe one performed run, or None when its metrics cannot be read."""
     run_dir, root = Path(directory), Path(stories_root)
@@ -175,58 +138,6 @@ def read_simulation(directory: str | Path, stories_root: str | Path) -> Simulati
         if (load_json_object(run_dir / "performance.json").get("settings") or {}).get("inventory")
         else "sin inventario",
     )
-
-
-def collect_simulations(stories_root: str | Path) -> list[SimulationRecord]:
-    """Measure every performed run below a root, in discovery order."""
-    root = Path(stories_root)
-    found = (read_simulation(directory, root) for directory in discover_simulations(root))
-    return [record for record in found if record is not None]
-
-
-def summarize_simulations(
-    records: Iterable[SimulationRecord],
-    key: Callable[[SimulationRecord], str],
-) -> list[SimulationSummary]:
-    """Group performances and report the mean and median of every field that was measured."""
-    summaries = []
-    for label, group in group_by(records, lambda record: key(record) or UNKNOWN).items():
-        values = {}
-        for name in SIMULATION_FIELDS:
-            numbers = [value for record in group if (value := record.values[name]) is not None]
-            values[name] = (
-                (sum(numbers) / len(numbers), median(numbers)) if numbers else (None, None)
-            )
-        summaries.append(SimulationSummary(label=label, runs=len(group), values=values))
-    return summaries
-
-
-def simulation_row(record: SimulationRecord) -> list[object]:
-    """Flatten one performed run into its declared CSV columns."""
-    return [
-        record.story,
-        record.run_id,
-        record.narrative_profile,
-        record.narrative_voice,
-        record.actor_memory,
-        record.generator_version,
-        record.status,
-        record.warnings,
-        *("" if record.values[name] is None else record.values[name] for name in SIMULATION_FIELDS),
-    ]
-
-
-SIMULATION_COLUMNS: tuple[str, ...] = (
-    "story",
-    "run_id",
-    "narrative_profile",
-    "narrative_voice",
-    "actor_memory",
-    "generator_version",
-    "status",
-    "warnings",
-    *SIMULATION_FIELDS,
-)
 
 
 def _text(document: dict, field_name: str) -> str:
@@ -282,6 +193,42 @@ def _observed_logs(run_dir: Path) -> dict[str, float | None]:
         if any("proofs" in item for item in directions)
         else None,
     }
+
+
+def aggregate_calls(items: Iterable[dict], keys: tuple[str, ...]) -> list[dict]:
+    """Sum logical calls, attempts, tokens and latency per combination of keys.
+
+    A token count is no call, and a record without call_id cannot be regrouped, so neither
+    counts. Rows come back sorted by their keys.
+    """
+    groups: dict[tuple[str, ...], dict] = {}
+    for item in items:
+        if item.get("operation") == "count_tokens" or not item.get("call_id"):
+            continue
+        key = tuple(str(item.get(name) or "") for name in keys)
+        group = groups.setdefault(
+            key,
+            {
+                **dict(zip(keys, key, strict=True)),
+                "call_ids": set(),
+                "tokens": 0,
+                "latency_seconds": 0.0,
+            },
+        )
+        group["call_ids"].add(item["call_id"])
+        group["tokens"] += item.get("total_tokens") or 0
+        group["latency_seconds"] += item.get("duration_seconds") or 0.0
+    rows = []
+    for _, group in sorted(groups.items()):
+        call_ids = group.pop("call_ids")
+        rows.append(
+            {
+                **group,
+                "calls": len(call_ids),
+                "latency_seconds": round(group["latency_seconds"], 3),
+            }
+        )
+    return rows
 
 
 def _agent_costs(run_dir: Path) -> list[dict]:

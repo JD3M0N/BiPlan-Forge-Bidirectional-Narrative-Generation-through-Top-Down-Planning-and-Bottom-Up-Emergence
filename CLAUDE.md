@@ -20,15 +20,18 @@ El paquete se llamaba `top_down`; se renombró cuando dejó de ser solo top-down
 
 El resto del monorepo:
 
-- `packages/evaluation` guarda las evaluaciones humanas y los informes del corpus.
+- `packages/evaluation` es la evaluación de la tesis: pares humanos a ciegas, rasgos con cita y
+  juez aprendido.
 - `packages/core` guarda las utilidades compartidas.
-- `apps/console` es la interfaz de terminal.
-- `apps/telegram` expone el generador como bot.
+- `apps/telegram` es el bot del estudio: crea historias y las compara a ciegas.
 - `apps/studio` es **StageCraft**, la interfaz gráfica local (web, FastAPI y JS sin build).
 
 Hubo un tercer enfoque, **Bottom-Up**: una simulación multiagente determinista de una sala de
 escape (`packages/escape_room`). Se retiró en 7.1.1 porque el formato simulado lo sustituye. Sus 6
-runs siguen en `Stories/Bottom-Up/` como datos históricos, y `evaluation` los sigue leyendo.
+runs siguen en `Stories/Bottom-Up/` como datos históricos.
+
+La consola (`apps/console`) y la evaluación 1-10 (`evaluation.json`) se retiraron en el cierre
+(octubre de 2026), junto con los estudios `fixed`, `rolling` y `pack`. Siguen en git.
 
 ## Entorno y comandos
 
@@ -43,11 +46,11 @@ tests usan proveedores falsos.
 
 Comandos (opciones completas en [commands.md](commands.md)):
 
-- `generate-story`, `compare-story-runs`, `recover-story-runs`, `audit-stage-run`,
-  `recompute-simulation-metrics`, `llm-budget` (Stagecraft).
-- `report-evaluations`, `report-story-craft`, `report-simulations`, `report-llm-usage`
-  (evaluation).
-- `asg-console`, `asg-telegram`, `asg-telegram-run`, `asg-studio` (apps).
+- `generate-story`, `generate-baseline`, `recover-story-runs`, `recompute-simulation-metrics`,
+  `llm-budget`, `extract-story-features` (Stagecraft).
+- `evaluation-study`, `report-features`, `audit-feature-extraction`, `report-preferences`,
+  `fit-preference-judge`, `rank-stories` (evaluation).
+- `asg-telegram` (o `iniciar-bot.bat`) y `asg-studio` (apps).
 
 ### Calidad: ejecutar siempre antes de dar por terminado un cambio
 
@@ -121,7 +124,7 @@ de añadir uno:
 ### Dependencias entre paquetes
 
 ```text
-core  ←  evaluation  ←  stagecraft  ←  console, telegram, studio
+core  ←  evaluation  ←  stagecraft  ←  telegram, studio
 ```
 
 - `core` no depende de nada del repo.
@@ -139,7 +142,7 @@ Dentro de `stagecraft`, los módulos van por subpaquete:
 | `writing/` | auditoría, evidencia de artesanía, ensamblado, aceptación |
 | `script/` | validación, render y etapas del guion |
 | `stage/` | la función simulada y el árbitro del inventario |
-| `tools/` | los comandos: `generate`, `compare`, `recovery`, `audit_stage`, `recompute` |
+| `tools/` | los comandos: `generate`, `baseline`, `extract_features`, `budget`, `recovery`, `recompute` |
 
 En la raíz quedan la fachada y el contrato: `__init__`, `version`, `formats`, `options`,
 `brief`, `schemas`, `generator`, `pipeline` y `agents/`.
@@ -150,14 +153,13 @@ En la raíz quedan la fachada y el contrato: `__init__`, `version`, `formats`, `
   perfil, ledger, guía, audio y su voz, visión, personaje de la visión (`narrator`), tono,
   memoria y turnos por beat. Se valida una vez y cada run la guarda en
   `generation_options.json`.
-- `StoryGenerator` conserva kwargs explícitos, uno por campo: la consola y Telegram prueban la
-  fachada con `create_autospec(spec_set=True)`, y `test_generation_options.py` falla si un
-  campo y un kwarg dejan de coincidir. Las superficies usan `GenerationOptions.from_settings` y
+- `StoryGenerator` conserva kwargs explícitos, uno por campo, y `test_generation_options.py`
+  falla si un campo y un kwarg dejan de coincidir. Las superficies usan `GenerationOptions.from_settings` y
   `StoryGenerator.from_options`; `StoryPipeline` recibe solo `options=`.
 - Añadir una opción: campo en `GenerationOptions` con `Field(title=, description=)` en español,
   kwarg en la fachada, consumirlo donde vive el mecanismo (sin tocar los prompts cuando está
-  apagada) y, si la interfaz la muestra, su entrada en `apps/studio/src/asg_studio/catalog.py` y
-  su `OptionSpec` en `apps/telegram/src/asg_telegram/generators.py`.
+  apagada) y, si la interfaz la muestra, su entrada en `apps/studio/src/asg_studio/catalog.py`.
+  El bot no ofrece opciones: las toma todas del `.env`.
 - `StoryBrief` (`brief.py`) es la obra estructurada: trama y reparto se componen en un prompt
   determinista que el analista lee como cualquier otro, así que `StoryRequest` y el esquema que
   va a Gemini no cambian. El run guarda `brief.json`.
@@ -296,10 +298,11 @@ A esa lista, el guion y el simulado añaden los suyos.
 - **`story_metrics.json`** registra tamaño y artesanía observados: palabras, capítulos, eventos,
   proporción de párrafos con diálogo, palabras por frase y por párrafo, también por capítulo.
   Ninguna de esas cifras viaja a ningún prompt: son observaciones, no objetivos.
-  `report-story-craft` las recalcula desde `story.md`, así que también mide los runs anteriores
-  a 6.5.0, que no las traen.
+  Los rasgos T de `asg-evaluation` las recalculan desde `story.md`, así que también miden los
+  runs anteriores a 6.5.0, que no las traen.
 
-`version.py` fija `PIPELINE_VERSION` (7.9) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.9).
+`version.py` fija `PIPELINE_VERSION` (7.11) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.11).
+Desde 7.11 un run nuevo ya no trae `evaluation.json`.
 `StoryRun` se niega a abrir un run incompleto o de una versión no soportada. Si cambias el
 conjunto de artefactos o su significado, sube la versión en vez de romper los runs ya generados:
 son datos de la tesis. Una limpieza que no toca artefactos sube solo el parche de
@@ -424,79 +427,48 @@ que saber antes de tocar `stage/`:
   - Apagado no cambia **nada**: ni prompt, ni esquema, ni etapa, ni artefacto. Un test compara
     los dos brazos, y es lo que hace que la opción sea medible.
 
-### evaluation: estudios persistentes e informes
+### evaluation: el método del tutor
 
-- **La metodología de evaluación de la tesis está en
-  [packages/evaluation/METODOLOGIA.md](packages/evaluation/METODOLOGIA.md)**, fiel al audio del
-  tutor: rasgos contables con cita (la planilla `packages/evaluation/planilla/`), pares humanos a
-  ciegas en tres criterios y un juez aprendido. Las seis métricas 1-10 de `evaluation.json` son
-  un instrumento heredado. Los CSV de la planilla son la fuente: tras editarlos, regenerar el
-  Excel con `python packages/evaluation/planilla/build_planilla.py`.
-- `report-evaluations`, `report-story-craft` y `report-simulations` comparten los lectores
-  tolerantes de `artifacts.py`: un artefacto ausente, roto o de otro tipo cuenta como ausente,
-  nunca como fallo.
-- Una cifra que un run no registró se informa como **no medida**, nunca como cero.
-- El enfoque se infiere de la carpeta:
-  - `Stories/Stagecraft` y `Stories/Top-Down` dan `Top-Down`, o `Hybrid` si el formato es
-    simulado;
-  - cualquier otra carpeta da su nombre, y así `Stories/Bottom-Up` sigue agrupado como
-    `Bottom-Up`.
-- El formato de `evaluation.json` y los ejes de los informes están en
-  [packages/evaluation/README.md](packages/evaluation/README.md).
+- **La metodología está en [packages/evaluation/METODOLOGIA.md](packages/evaluation/METODOLOGIA.md)**,
+  fiel al audio del tutor: pares humanos a ciegas en tres criterios, rasgos contables con cita
+  (la planilla `packages/evaluation/planilla/`) y un juez aprendido. Los comandos, paso a paso,
+  en [packages/evaluation/README.md](packages/evaluation/README.md). Los CSV de la planilla son
+  la fuente: tras editarlos, regenerar el Excel con
+  `python packages/evaluation/planilla/build_planilla.py`. Cambiar `rasgos.csv` cambia la huella
+  del catálogo e invalida extracciones y jueces ya hechos.
+- **`study.py` tiene un solo modo:** recogida, votación (`open` congela el conjunto con huella) y
+  cerrado. Las preguntas se asignan **de una en una** cuando el lector las pide
+  (`next_question`), sin lista previa de lectores: criterio en ciclo, nunca la historia propia ni
+  una conocida, nunca repite par y criterio, prefiere lo ya leído y lo menos comparado, tope
+  `QUESTIONS_PER_READER` (15). La base se crea sola (esquema 10) y rechaza las de los estudios
+  retirados (esquemas 1-4), que quedan en `Evaluations/` como datos.
+- `export()` es el contrato con `preferences.py`, `judge.py`, `feature_report.py` y
+  `tools/extract_features.py`: seudónimo, sin IDs de Telegram ni rutas.
+- Los lectores tolerantes (`artifacts.py`, `pairing.py`, `simulation_report.py`) tratan un
+  artefacto ausente, roto o de otro tipo como ausente, nunca como fallo. Una cifra que un run no
+  registró es **no medida**, nunca cero. StageCraft usa `pairing.py`.
 
-### Telegram: el bot no conoce el pipeline
+### Telegram: el bot del estudio
 
-- **Desde 4.0.0 es solo el bot del experimento (EXP-4).** No arranca sin `TELEGRAM_ACCESS_KEY` ni
-  `ASG_EVALUATION_STUDY`, y la evaluación 1–10 ya no existe en él.
-  - `access.py` es un `TypeHandler` en el grupo −1: quien no tiene la clave no llega a ningún
-    handler. Nunca registres el texto que escribe un usuario sin acceso: puede ser la clave.
-  - `guide.py` deriva el paso de cada persona de la cola (`access`) y de la base del estudio,
-    **nunca de `user_data`**, y guarda todos los textos del recorrido. Un paso nuevo es una
-    entrada de `Step` y su texto en `render`, no una rama suelta en los handlers.
-  - La historia base es la aportación de `StudyRepository`: mientras `Status.contributing`,
-    `/newstory` solo ofrece `PROSE_FORMATS`. Un fallo llama a `release_contribution`; si no, la
-    reserva queda atada a un trabajo muerto y `bind_contribution` no vuelve a enlazarla.
-  - El modo de estudio `pack` (`asg_evaluation/pack.py`, [apps/telegram/PACK_STUDY.md](apps/telegram/PACK_STUDY.md))
-    llena 10 plazas: 3+3 aportaciones con formato asignado a ciegas (`assign_format`; el
-    progreso y la entrega lo ocultan) y 2+2 historias del autor, que `ensure_author_jobs`
-    encola con `user_id` negativo y prioridad 1. Al llenarse abre la votación: una sesión de 5
-    por lector. `iniciar-bot.bat` lo despliega en otra PC.
-  - `announcer.py` revisa la fase cada minuto y avisa una vez por persona y fase (tabla
-    `announcements`).
-  - Sin `guide` (los tests de conversación), los handlers se comportan como antes, sin puertas.
-- `contract.py` define, del lado de la aplicación, el `Protocol` `StoryGeneratorAdapter` y sus
-  tipos (`GenerationProgress`, `RunSummary`, `GenerationFailure`, `OptionSpec`, `StoryOutline`,
-  `BriefSpec`, `GeneratorUnavailable`).
-- Los handlers, la entrega y la consola hablan solo ese contrato. `generators.py` tiene los
-  adaptadores que traducen un pipeline concreto: al añadir un generador se escribe un adaptador,
-  no se tocan las conversaciones. Es el único módulo que importa `asg_stagecraft`; un fallo de
-  configuración se envuelve en `GeneratorUnavailable`, no en el error crudo del pipeline.
-- `STORY_GENERATOR` vale `stagecraft`, que es el único generador registrado.
-- **Cada usuario configura sus propias opciones desde el chat.** `/settings` (o `/opciones`)
-  abre un panel de botones sobre `option_specs`, que el adaptador construye a partir de los
-  campos de `GenerationOptions` y sus etiquetas (`options.py`, `formats.py`,
-  `planning/profiles.py`). Las preferencias se guardan por usuario en la cola
-  (`QueueRepository.user_options`), como *overrides* dispersos: solo las claves que el usuario
-  cambió, para que un valor nuevo del `.env` siga llegando a quien no tocó esa opción.
-  `generators.StagecraftGenerator.normalize_options` fusiona, resuelve el formato y valida con
-  `GenerationOptions.with_changes`, traduciendo los errores de Pydantic al español.
-- **La obra guiada construye un `StoryOutline`,** no un prompt de texto: título, género,
-  ambientación, trama, hasta `MAX_CAST` personajes (nombre, rol, pronombre, descripción y
-  secreto) y notas. `wizard.py` tiene el flujo puro; `handlers.py` lo conecta. El adaptador la
-  convierte en `StoryBrief` justo antes de llamar al pipeline.
+- **Solo crea historias y las compara.** Sin clave, perfiles ni opciones por usuario: todo sale
+  del `.env`. Corre en la PC del investigador (`iniciar-bot.bat`), que abre y cierra la votación
+  con `evaluation-study`.
+- Crear: `handlers.py` ofrece Top-Down (`narrative`) o Híbrido (`simulated`), y prompt libre u
+  obra guiada. `wizard.py` es el asistente como máquina de estados pura (`start`, `answer`,
+  `press`) y devuelve un `StoryOutline`.
+- `jobs.py`: `JobQueue` es la cola FIFO SQLite (`Stories/telegram_jobs.sqlite3`), con una
+  solicitud activa por persona; un run interrumpido por un reinicio vuelve a la cola una vez.
+  `StoryWorker` genera de una en una, edita un solo mensaje de progreso, entrega (`delivery.py`:
+  archivo, audio y texto) e inscribe la historia en el estudio si está en recogida.
+- **`generator.py` es el único módulo que importa `asg_stagecraft`.** Pide siempre prosa con
+  audio y traduce los errores a `GenerationFailure` (con `quota` si se acabó la cuota).
 - **La cancelación pasa `should_cancel` a `generate()`,** nunca lanza desde el callback de
-  progreso: `generation.py` construye `lambda: queue.cancellation_requested(job_id)` y el
-  adaptador traduce `RunCancelledError` a `GenerationCancelled`.
-- `queue.py` es una cola FIFO SQLite durable (`Stories/telegram_queue.sqlite3`) con migración de
-  esquema (v4 añade `options`, `brief` y la tabla `user_options`; v5, `access`,
-  `access_attempts` y `announcements`) y cancelación, y
-  `generation.py` la coordina con la entrega.
-- `console.py` y `terminal.py` dan la consola del operador: una cabecera con el bot, las
-  versiones, el modelo y la cuota, y un registro de una línea por evento. La ventana que abre
-  `asg-telegram` (`launcher.py`) no se cierra si el bot falla al arrancar o se detiene por un
-  error: espera una tecla, para que el error no se pierda con la ventana.
-- Cualquier fallo que escape de un adaptador sin ser `GenerationFailure` se considera un defecto
-  interno y se reporta como error inesperado.
+  progreso.
+- `voting.py` es `/evaluar`: envía las historias sin leer (texto y audio) con «Ya la leí» y «Ya
+  la conocía», y después la pregunta con A, B y «No puedo decidir». Un candado por lector evita
+  carreras de doble pulsación.
+- `tests/test_bot.py` recorre los cuatro caminos, la cola, la votación y el adaptador con un
+  Telegram y un generador falsos (`telegram_fakes.py`).
 
 ### StageCraft: la interfaz gráfica
 
@@ -516,21 +488,15 @@ que saber antes de tocar `stage/`:
 - Los tests usan un generador falso y una carpeta temporal (`tests/studio_fakes.py`); nunca
   Gemini.
 
-### Consola
-
-Dos menús: generar con Stagecraft y evaluar cualquier historia de `Stories/`. `ConsoleApp` y los
-menús reciben `input_fn` y `output` inyectados (`types.py`), que es como los tests recorren los
-menús sin terminal. Mantener esa inyección al añadir pantallas.
-
 ### core
 
 - `find_project_root` sube por el árbol buscando un directorio con `Stories/` y `packages/`. Se
   puede forzar con `ASG_PROJECT_ROOT`, útil si se despliega en un contenedor.
 - `files.py` da la escritura atómica UTF-8 (`atomic_write_text`, `atomic_write_json`,
   `atomic_write_csv`) y `artifact_json`, el formato JSON de los artefactos por separado.
-- `locks.py` da `file_lock`, que serializa las evaluaciones del bot y de la consola.
+- `locks.py` da `file_lock`, que serializa las extracciones de rasgos de un mismo texto.
 - `console.py` da `use_utf8_output`, lo primero que llaman los comandos de Stagecraft, de
-  evaluation y `asg-console`. Sin él, una consola de Windows imprime mojibake.
+  evaluation y el bot. Sin él, una consola de Windows imprime mojibake.
 - `audio.py` hace la narración con edge-tts.
 - `craft.py` calcula las cifras de artesanía de la prosa (`craft_metrics`), puras y
   deterministas. Vive en `core` porque la usan `writing/audit.py` y `evaluation`, y `evaluation`
@@ -586,9 +552,8 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
 - **`ruff format` también formatea los bloques de Python dentro del Markdown.** Un ejemplo mal
   formateado en un README de paquete hace fallar `ruff format --check`. `docs/` y `Stories/`
   están excluidos en `pyproject.toml`.
-- **`README.md` está vacío (0 bytes) a propósito.** Se redacta al cerrar el proyecto, cuando los
-  contratos públicos ya no se muevan. No lo rellenes antes aunque parezca una mejora barata;
-  cuando llegue el momento, guárdalo en UTF-8.
+- **`README.md` es la portada del cierre:** qué es, estructura y puesta en marcha, en pocas
+  líneas. El detalle vive en `commands.md` y en el README de cada paquete; guárdalo en UTF-8.
 - **`.gitignore` ignora `docs/*` salvo siete archivos en lista blanca.** Si creas un doc nuevo en
   `docs/` y quieres que se versione, añádelo también a esa lista.
 - **`.cache/` contiene sqlite y cachés de pytest de experimentos previos**
@@ -647,11 +612,10 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
   progreso también corre dentro del bucle de reintentos del proveedor, que convierte cualquier
   excepción en un `ProviderError` degradable, y `_record_failure` vuelve a emitir eventos. El
   pipeline consulta `should_cancel` al entrar en `_call_agent` y lanza `RunCancelledError`, que
-  está en `NON_DEGRADABLE_ERRORS`. Telegram también pasa `should_cancel` a `generate()` (cerrado
-  en 3.0.0 del bot, antes ficha OPS-3).
-- **El `callback_data` de un botón de Telegram tiene un máximo de 64 bytes.** Los paneles de
-  opciones y del asistente guiado (`panel.py`, `wizard.py`) codifican índices en vez de valores
-  para no acercarse al límite; un test recorre cada teclado y lo comprueba.
+  está en `NON_DEGRADABLE_ERRORS`. El bot también pasa `should_cancel` a `generate()`.
+- **El `callback_data` de un botón de Telegram tiene un máximo de 64 bytes.** El asistente
+  guiado (`wizard.py`) codifica índices en vez de valores, y la votación usa ids cortos de
+  pregunta (`q` y 16 hex).
 - **Los dobles de audio de los tests reciben solo `story_path`.** Por eso el pipeline pasa
   `voice=` a `create_story_audio_sync` solo cuando hay una voz elegida.
 - **Windows puede servir `.js` como `text/plain`**, y el navegador no ejecuta así un módulo ES:
@@ -665,8 +629,8 @@ menús sin terminal. Mantener esa inyección al añadir pantallas.
   `test_gemini_live.py`.
 - [packages/evaluation/METODOLOGIA.md](packages/evaluation/METODOLOGIA.md): cómo se evalúa la
   tesis, con su planilla de rasgos y su estado del arte.
-- [packages/evaluation/README.md](packages/evaluation/README.md): el formato de
-  `evaluation.json`, las seis métricas humanas y los informes.
+- [packages/evaluation/README.md](packages/evaluation/README.md): la evaluación paso a paso.
+- [apps/telegram/README.md](apps/telegram/README.md): el bot y la operación del estudio.
 - [commands.md](commands.md): los comandos, en una línea cada uno.
 
 El informe de artesanía de la prosa (6.5.0 contra 6.6.0 y su réplica de ruido), la calibración de

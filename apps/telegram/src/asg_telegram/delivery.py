@@ -1,307 +1,113 @@
-"""Reliable Telegram delivery for completed story files and fragments."""
+"""Send a story to a chat: the Markdown file, its narration and the text in chunks."""
 
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
+import re
 from pathlib import Path
 
-from asg_core import AudioGenerationError, create_story_audio
+from telegram import InlineKeyboardMarkup, InputFile
 from telegram.constants import ParseMode
 from telegram.error import BadRequest, NetworkError, TelegramError
 
-from .console import log_user_action
-from .prompts import telegram_story_chunks
-
 LOGGER = logging.getLogger(__name__)
 RETRY_DELAYS = (1, 2, 4)
-DEFAULT_DOCUMENT_CAPTION = "Historia completa en formato Markdown."
+CHUNK_LIMIT = 3900
+HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$")
 
 
-class TelegramDelivery:
-    """Deliver stories with retry and safe-notice behavior."""
+async def send_retrying(send, what: str) -> bool:
+    """Run one Telegram call, retrying only temporary network errors.
 
-    async def _deliver_story(
-        self,
-        *,
-        context,
-        chat_id: int,
-        user,
-        story_path: Path,
-        caption: str = DEFAULT_DOCUMENT_CAPTION,
-        audio: bool = True,
-        audio_voice: str = "",
-    ) -> bool:
-        """Send the complete file first and then best-effort HTML fragments."""
-        if not await self._send_document_with_retry(
-            context=context,
-            chat_id=chat_id,
-            user=user,
-            story_path=story_path,
-            caption=caption,
-        ):
-            return False
-        story = await asyncio.to_thread(story_path.read_text, encoding="utf-8")
-        if audio:
-            await self._deliver_audio(
-                context=context,
-                chat_id=chat_id,
-                user=user,
-                story_path=story_path,
-                story=story,
-                voice=audio_voice,
-            )
-        chunks = telegram_story_chunks(story)
-        for index, chunk in enumerate(chunks, start=1):
-            try:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=chunk,
-                    parse_mode=ParseMode.HTML,
-                )
-            except TelegramError:
-                log_user_action(
-                    LOGGER,
-                    user_id=user.id,
-                    username=user.username or user.full_name,
-                    action=(
-                        f"Falló el fragmento {index}/{len(chunks)}; "
-                        "se activó la entrega solo por archivo"
-                    ),
-                    category="advertencia",
-                    level=logging.WARNING,
-                    exc_info=True,
-                )
-                await self._safe_notice(
-                    context,
-                    chat_id,
-                    "La historia fue generada correctamente. Telegram no pudo "
-                    "mostrar todos los fragmentos, pero tienes el archivo completo.",
-                    user,
-                )
+    BadRequest subclasses NetworkError and is permanent, so it is caught first.
+    """
+    for delay in (*RETRY_DELAYS, None):
+        try:
+            await send()
+            return True
+        except BadRequest:
+            break
+        except NetworkError:
+            if delay is None:
                 break
-        log_user_action(
-            LOGGER,
-            user_id=user.id,
-            username=user.username or user.full_name,
-            action="Historia entregada por Telegram",
-            category="éxito",
-        )
-        return True
-
-    async def _deliver_audio(
-        self,
-        *,
-        context,
-        chat_id: int,
-        user,
-        story_path: Path,
-        story: str,
-        voice: str = "",
-    ) -> bool:
-        """Ensure and send narration without blocking the story workflow."""
-        try:
-            if voice:
-                artifact = await create_story_audio(story_path, voice=voice)
-            else:
-                artifact = await create_story_audio(story_path)
-        except AudioGenerationError:
-            log_user_action(
-                LOGGER,
-                user_id=user.id,
-                username=user.username or user.full_name,
-                action="No se pudo crear el audio; la entrega de texto continuará",
-                category="advertencia",
-                level=logging.WARNING,
-                exc_info=True,
-            )
-            await self._safe_notice(
-                context,
-                chat_id,
-                "La historia está lista, pero no pude crear su audio. "
-                "Continuaré con el texto y la evaluación.",
-                user,
-            )
-            return False
-
-        delivered = await self._send_audio_with_retry(
-            context=context,
-            chat_id=chat_id,
-            user=user,
-            audio_path=artifact.path,
-            title=self._story_title(story),
-            language=artifact.language,
-            voice=artifact.voice,
-        )
-        if not delivered:
-            await self._safe_notice(
-                context,
-                chat_id,
-                "La historia y su audio permanecen guardados, pero Telegram no pudo "
-                "recibir el MP3. Continuaré con el texto y la evaluación.",
-                user,
-            )
-        return delivered
-
-    async def _send_audio_with_retry(
-        self,
-        *,
-        context,
-        chat_id: int,
-        user,
-        audio_path: Path,
-        title: str,
-        language: str,
-        voice: str,
-    ) -> bool:
-        """Send an MP3 with bounded retries for temporary network errors."""
-
-        async def send() -> None:
-            """Upload the narration file once."""
-            with audio_path.open("rb") as audio:
-                await context.bot.send_audio(
-                    chat_id=chat_id,
-                    audio=audio,
-                    filename=audio_path.name,
-                    title=title[:64],
-                    performer="ASG",
-                    caption=f"Narración {language} · {voice}",
-                )
-
-        return await self._send_with_retry(
-            send,
-            user=user,
-            success="Audio entregado por Telegram",
-            rejected="Telegram no pudo recibir el audio",
-            exhausted="Telegram no pudo recibir el audio",
-            failure_level=logging.WARNING,
-        )
-
-    @staticmethod
-    def _story_title(story: str) -> str:
-        """Extract a compact title from the first Markdown heading."""
-        for line in story.splitlines():
-            title = line.lstrip("#").strip() if line.lstrip().startswith("#") else ""
-            if title:
-                return title
-        return "Historia narrada"
-
-    async def _send_document_with_retry(
-        self,
-        *,
-        context,
-        chat_id: int,
-        user,
-        story_path: Path,
-        caption: str = DEFAULT_DOCUMENT_CAPTION,
-    ) -> bool:
-        """Send a story document with bounded retries for network failures."""
-
-        async def send() -> None:
-            """Upload the story file once."""
-            with story_path.open("rb") as document:
-                await context.bot.send_document(
-                    chat_id=chat_id,
-                    document=document,
-                    filename=story_path.name,
-                    caption=caption,
-                )
-
-        return await self._send_with_retry(
-            send,
-            user=user,
-            attempt_label="Enviando archivo",
-            rejected="Telegram rechazó permanentemente el archivo",
-            exhausted="Se agotaron los reintentos del archivo",
-        )
-
-    async def _send_with_retry(
-        self,
-        send,
-        *,
-        user,
-        rejected: str,
-        exhausted: str,
-        success: str | None = None,
-        attempt_label: str | None = None,
-        failure_level: int = logging.ERROR,
-    ) -> bool:
-        """Run one Telegram upload, retrying only temporary network errors.
-
-        Permanent rejections are never retried: repeating a request Telegram
-        already refused only delays telling the user that it failed. BadRequest
-        must be caught before NetworkError because it subclasses it, so the
-        order of these handlers is load-bearing.
-        """
-        attempts = len(RETRY_DELAYS) + 1
-        for attempt in range(1, attempts + 1):
-            if attempt_label:
-                log_user_action(
-                    LOGGER,
-                    user_id=user.id,
-                    username=user.username or user.full_name,
-                    action=f"{attempt_label}, intento {attempt}/{attempts}",
-                    category="entrega",
-                )
-            try:
-                await send()
-            except BadRequest:
-                self._log_delivery_failure(user, rejected, failure_level)
-                return False
-            except NetworkError:
-                if attempt == attempts:
-                    self._log_delivery_failure(user, exhausted, failure_level)
-                    return False
-                delay = RETRY_DELAYS[attempt - 1]
-                log_user_action(
-                    LOGGER,
-                    user_id=user.id,
-                    username=user.username or user.full_name,
-                    action=f"Error temporal; nuevo intento en {delay} segundos",
-                    category="advertencia",
-                    level=logging.WARNING,
-                    exc_info=True,
-                )
-                await asyncio.sleep(delay)
-            except TelegramError:
-                self._log_delivery_failure(user, rejected, failure_level)
-                return False
-            else:
-                if success:
-                    log_user_action(
-                        LOGGER,
-                        user_id=user.id,
-                        username=user.username or user.full_name,
-                        action=success,
-                        category="éxito",
-                    )
-                return True
-        return False
-
-    @staticmethod
-    def _log_delivery_failure(user, action: str, level: int) -> None:
-        """Record why one Telegram upload will not be attempted again."""
-        log_user_action(
-            LOGGER,
-            user_id=user.id,
-            username=user.username or user.full_name,
-            action=action,
-            category="error" if level >= logging.ERROR else "advertencia",
-            level=level,
-            exc_info=True,
-        )
-
-    async def _safe_notice(self, context, chat_id: int, text: str, user) -> None:
-        """Send a user notice without allowing Telegram errors to escape."""
-        try:
-            await context.bot.send_message(chat_id=chat_id, text=text)
+            await asyncio.sleep(delay)
         except TelegramError:
-            log_user_action(
-                LOGGER,
-                user_id=user.id,
-                username=user.username or user.full_name,
-                action="No se pudo enviar el aviso al usuario",
-                category="advertencia",
-                level=logging.WARNING,
-                exc_info=True,
-            )
+            break
+    LOGGER.warning("No se pudo enviar %s", what, exc_info=True)
+    return False
+
+
+def story_chunks(markdown: str, limit: int = CHUNK_LIMIT) -> list[str]:
+    """Split Markdown into HTML messages, headings in bold, never cutting an entity."""
+    messages: list[str] = []
+    current = ""
+    for block in re.split(r"\n\s*\n", markdown.strip()):
+        heading = HEADING.match(block.strip())
+        text = heading.group(1) if heading else block.strip()
+        while text:
+            end = len(text)
+            # Escape after cutting, so an entity is never split; 7 leaves room for <b></b>.
+            while len(html.escape(text[:end])) > limit - 7:
+                space = text.rfind(" ", 0, end)
+                end = space if space > 0 else max(1, end * 3 // 4)
+            piece, text = text[:end], text[end:].lstrip()
+            rendered = f"<b>{html.escape(piece)}</b>" if heading else html.escape(piece)
+            candidate = f"{current}\n\n{rendered}" if current else rendered
+            if len(candidate) <= limit:
+                current = candidate
+            else:
+                messages.append(current)
+                current = rendered
+    if current or not messages:
+        messages.append(current)
+    return messages
+
+
+async def send_story(
+    bot,
+    chat_id: int,
+    run_dir: Path,
+    *,
+    name: str = "historia",
+    heading: str = "",
+    keyboard: InlineKeyboardMarkup | None = None,
+) -> bool:
+    """Send story.md, story.mp3 when present, and the text; the keyboard goes last.
+
+    The text matters most, so a missing or failed narration never blocks it.
+    """
+    story = Path(run_dir) / "story.md"
+    text = story.read_text(encoding="utf-8")
+    sent = await send_retrying(
+        lambda: bot.send_document(
+            chat_id=chat_id,
+            document=InputFile(text.encode("utf-8"), filename=f"{name}.md"),
+            caption=heading or None,
+        ),
+        f"el archivo de {name}",
+    )
+    audio = story.with_name("story.mp3")
+    if audio.is_file():
+        await send_retrying(
+            lambda: bot.send_audio(
+                chat_id=chat_id,
+                audio=InputFile(audio.read_bytes(), filename=f"{name}.mp3"),
+                title=name,
+            ),
+            f"el audio de {name}",
+        )
+    chunks = story_chunks(text)
+    for index, chunk in enumerate(chunks):
+        last = index == len(chunks) - 1
+        sent &= await send_retrying(
+            lambda chunk=chunk, last=last: bot.send_message(
+                chat_id=chat_id,
+                text=chunk,
+                parse_mode=ParseMode.HTML,
+                reply_markup=keyboard if last else None,
+            ),
+            f"el texto de {name}",
+        )
+    return sent

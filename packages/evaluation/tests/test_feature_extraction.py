@@ -4,7 +4,6 @@ import json
 
 import pytest
 from asg_evaluation.catalog import core_ids
-from asg_evaluation.demo import SyntheticProvider, synthetic_run
 from asg_evaluation.feature_audit import compare_extractions
 from asg_evaluation.feature_report import read_features
 from asg_evaluation.features import (
@@ -20,6 +19,7 @@ from asg_evaluation.features import (
     paragraphs,
     scene_features,
 )
+from evaluation_fakes import SyntheticProvider, synthetic_run
 
 
 def test_literal_evidence_duplicates_and_empty_denominators():

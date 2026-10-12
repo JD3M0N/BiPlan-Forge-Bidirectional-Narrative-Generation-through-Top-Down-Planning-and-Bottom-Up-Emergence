@@ -11,6 +11,9 @@ Cada archivo es un `StoryRequest` congelado: no vuelve a pasar por el analista.
 
 ## Preparación sin cuota
 
+> El preparador `plan-guidance-experiment` se retiró en `asg-stagecraft` 7.11. Para usarlo,
+> recupéralo con `git show 714f13e:packages/stagecraft/src/asg_stagecraft/tools/guidance_experiment.py`.
+
 Desde la raíz del repositorio:
 
 ```powershell

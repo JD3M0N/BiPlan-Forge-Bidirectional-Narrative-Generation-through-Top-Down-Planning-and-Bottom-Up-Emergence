@@ -55,7 +55,6 @@ def test_real_gemini_smoke_run() -> None:
     assert request["narrative_profile"] in {"essential", "developed", "expansive"}
     assert metadata["status"] == "completed"
     assert metadata["model"] == settings.model
-    assert (run.run_dir / "evaluation.json").is_file()
 
     required_artifacts = {
         "generator_version.json",

@@ -1,130 +1,98 @@
 # ASG Evaluation
 
-Gestiona estudios por pares en SQLite, extrae rasgos con evidencias y aprende tres jueces de
-preferencias. Conserva los lectores y los informes históricos. Nunca importa el pipeline.
+La evaluación de la tesis, tal como la pidió el tutor ([METODOLOGIA.md](METODOLOGIA.md)):
 
-La guía ejecutable está en [ESTUDIO_FINAL.md](ESTUDIO_FINAL.md): protocolo, comandos, bot,
-demostración sin red, extracción, auditoría, validación y ranking. El sistema está preparado;
-el corpus definitivo, el piloto y el estudio humano todavía están pendientes.
+1. **Humana, por pares a ciegas.** Las personas comparan dos historias y eligen la que tiene más
+   creatividad, mejores personajes o la trama más interesante.
+2. **Mecánica, por rasgos con cita.** Un modelo cuenta cosas de cada historia (conflictos,
+   mentiras, objetos usados…) y cita el pasaje; el código comprueba la cita.
+3. **Intermedia, un juez aprendido.** Una regresión aprende de los pares humanos qué combinación
+   de rasgos predice la preferencia, y ordena todo el corpus.
 
-La evaluación de la tesis sigue [METODOLOGIA.md](METODOLOGIA.md): rasgos contables extraídos
-de cada historia, tres criterios humanos por pares a ciegas y un juez aprendido de esos pares. Lo
-que se mide está en la planilla [planilla/](planilla/) (CSV y `planilla_evaluacion.xlsx`).
+El paquete lee solo JSON, Markdown y SQLite: nunca importa el generador. Lo que se mide está en
+[planilla/](planilla/) (`rasgos.csv`, `criterios_humanos.csv` y `planilla_evaluacion.xlsx`).
 
-## Evaluación humana
+## Paso a paso
 
-> Las seis métricas de 1 a 10 de esta sección son el instrumento heredado de la tesis de Roger
-> Fuentes. Siguen funcionando, pero no son la medida de la tesis: ver
-> [METODOLOGIA.md](METODOLOGIA.md), §1.
+### 1. Recoger historias
 
-Cada carpeta con una historia terminada (`story.md`) lleva un `evaluation.json`. Las
-puntuaciones son enteros de **1 a 10**, donde 1 es el resultado más bajo y 10 el más alto:
+El bot de Telegram ([apps/telegram](../../apps/telegram/README.md)) inscribe cada historia que
+genera mientras el estudio está en recogida. Las líneas base de un solo prompt se generan y se
+inscriben a mano; cualquier otro run completo en prosa también:
 
-- `coherence`: sentido global, continuidad del estado del mundo y del conocimiento, motivaciones
-  creíbles y progresión causal sin contradicciones.
-- `pacing`: estructura reconocible, progreso perceptible en cada tramo y dosificación de
-  información, decisiones, consecuencias y tensión.
-- `creativity`: originalidad, elementos inesperados e ideas valiosas, sin clichés ni tropos
-  trillados.
-- `engagement`: interés e impacto emocional sostenidos por preguntas claras, progreso visible,
-  costos cambiantes y preparación narrativa.
-- `relevance`: fidelidad al prompt original, sin elementos fuera de lugar.
-- `satisfaction`: si las expectativas importantes reciben pagos claros, preparados, costosos y
-  sorprendentes sin romper lo prometido.
-
-### Formato de `evaluation.json`
-
-Una historia pendiente de evaluar contiene la plantilla:
-
-```json
-{
-  "schema_version": 1,
-  "evaluations": [
-    {
-      "user": null,
-      "coherence": null,
-      "pacing": null,
-      "creativity": null,
-      "engagement": null,
-      "relevance": null,
-      "satisfaction": null
-    }
-  ]
-}
+```powershell
+$db = "Evaluations/estudio/study.sqlite3"
+generate-baseline "PREMISA" --output Stories/Baseline/01   # consume cuota
+evaluation-study --db $db add Stories/Baseline/01
+evaluation-study --db $db status
+evaluation-study --db $db exclude ID      # fuera del conjunto; include lo devuelve
+evaluation-study --db $db author ID_DE_TELEGRAM_DEL_INVESTIGADOR
 ```
 
-- Un registro con **los seis parámetros nulos o ausentes** es una plantilla pendiente, esté donde
-  esté en la lista y tenga o no `user`: escribir solo el nombre y puntuar después es válido. Las
-  plantillas se descartan al guardar la siguiente evaluación; las completas se conservan y la
-  nueva se añade al final.
-- Cualquier otro registro incompleto (unas puntuaciones sí y otras no, un campo desconocido, un
-  valor fuera de 1-10) se rechaza con un error que nombra **la posición del registro y el campo
-  culpable**, para poder arreglar el archivo a mano.
-- Una evaluación completa exige un `user` no vacío y los seis parámetros.
+La base se crea sola la primera vez que se abre. Solo admite runs completos en prosa
+(`narrative`, `simulated` o `baseline`).
 
-El archivo se puede editar a mano respetando ese contrato, o rellenar desde **asg-console →
-Evaluar historia** o desde el bot de Telegram al terminar una generación. Las escrituras se
-serializan con `asg_core.file_lock` y se sustituyen de forma atómica, así que dos evaluaciones
-simultáneas no se pisan.
+### 2. Votar
 
-### API
-
-```python
-from asg_evaluation import GROUPINGS, add_evaluation, collect_evaluations, summarize
-
-add_evaluation(
-    story_directory,
-    user="lector-1",
-    scores={
-        "coherence": 8,
-        "pacing": 7,
-        "creativity": 9,
-        "engagement": 8,
-        "relevance": 10,
-        "satisfaction": 8,
-    },
-)
-
-records = collect_evaluations(stories_root)  # todas, incluidas las no evaluadas
-summarize(records, key=GROUPINGS["profile"])  # media y varianza por perfil
+```powershell
+evaluation-study --db $db open    # congela el conjunto (huella sha256) y abre /evaluar
+evaluation-study --db $db close
+evaluation-study --db $db export Evaluations/estudio/datos.json
 ```
 
-`read_evaluations(story_directory)` devuelve solo las evaluaciones completas de una historia.
-La varianza es **muestral** y vale `None` con una sola evaluación, que es el caso habitual por
-historia; la poblacional daría un `0.0` engañoso. Los grupos juntan evaluaciones individuales,
-no medias por historia: una historia evaluada dos veces pesa el doble, y por eso cada resumen
-conserva las dos cuentas, `stories` y `evaluations`.
+Las preguntas se asignan de una en una cuando el lector las pide, sin lista previa de lectores:
 
-## Los cuatro informes
+- el criterio va en ciclo (creatividad, personajes, trama);
+- nunca su propia historia ni una que marcó como conocida;
+- nunca repite par y criterio; prefiere historias que ya leyó y los pares menos comparados;
+- tope de 15 preguntas por lector (unas 5 historias por 3 criterios);
+- se responde A, B o «No puedo decidir»; la abstención no es empate ni victoria.
 
-Los cuatro comparten ejes. La **versión** es la del generador (`generator_version.json`), no la
-del contrato de pipeline, que agrupa releases distintas bajo una misma etiqueta. El **enfoque**
-sale de la carpeta: `Stories/Stagecraft` y `Stories/Top-Down` dan `Top-Down` o `Hybrid` según el
-formato, y cualquier otra carpeta, como las historias históricas de `Stories/Bottom-Up`, da su
-propio nombre. Un CSV va en UTF-8 sin BOM: Excel en español necesita *Datos → Desde texto*.
+La exportación es seudónima: sin IDs de Telegram ni rutas locales.
 
-- **`report-evaluations`** resume las puntuaciones humanas por historia, perfil, versión,
-  enfoque o formato. Con `--csv` escribe una fila por evaluación. Una historia con el
-  `evaluation.json` corrupto se informa por `stderr` y el comando termina con código 1, pero el
-  resto del corpus sí se agrega.
-- **`report-story-craft`** recalcula desde `story.md`, con `asg_core.craft_metrics`, la
-  artesanía de la prosa: proporción de párrafos con diálogo, palabras por frase y palabras por
-  párrafo. La cruza con el plan, la revisión, el uso de Gemini y los metadatos del run, y da
-  mediana y rango. Al recalcular desde `story.md` compara también los runs anteriores a que
-  esas cifras se registraran. No sustituye a la evaluación humana: dice si el pipeline escribió
-  escena o sinopsis, no si la historia es buena. Por defecto solo mide el formato narrativo,
-  porque un guion teatral mediría casi cero diálogo; `--format prose` compara narrativo y
-  simulado.
-- **`report-simulations`** resume cada función representada desde `simulation_metrics.json`:
-  beats alcanzados, intervenidos y forzados, turnos por beat, repetición del habla y del gesto,
-  eco del guion (`script_echo`), menciones de lo que un personaje no podía saber
-  (`unknown_mentions`) y compresión de la narración, por voz, memoria, perfil y versión. Una cifra que un run no registró sale como no medida, nunca
-  como cero.
-- **`report-llm-usage`** reparte, por enfoque, las llamadas, los intentos, los fallidos, los
-  tokens, la latencia y la espera de cuota de cada run entre agentes y etapas, desde
-  `llm_calls.jsonl`. Una llamada es un `call_id`: sus reintentos cuentan como intentos, no como
-  llamadas, y un recuento de tokens no es una llamada. Un run anterior a 7.2, cuyo registro no
-  nombra el agente, sale como **no medido**, nunca repartido en un agente anónimo. Con `--csv`
-  escribe una fila por run, etapa y agente.
+### 3. Rasgos
 
-Las opciones completas están en [commands.md](../../commands.md).
+```powershell
+extract-story-features --study $db --dry-run   # cuántas llamadas costará
+extract-story-features --study $db             # consume cuota; reanudable
+audit-feature-extraction Evaluations/estudio/features/ID.json --output revision.json
+report-features Stories --study $db --json tabla.json --csv tabla.csv --horizontal horizontal.json
+```
+
+- Solo los 27 rasgos `núcleo` de las capas T, R y X entran al juez; T01 (palabras) controla la
+  longitud. Los de proceso (P), coste (K) y configuración (C) van a los informes.
+- Cada medida guarda valor, unidad, evidencias y estado: `measured` (incluido cero),
+  `not_applicable`, `missing` o `failed`. Una cita que no está en el texto se repara una vez y,
+  si sigue mal, queda como fallo, nunca como cero.
+- `audit-feature-extraction --second OTRA.json` compara dos extracciones del mismo texto
+  (test-retest). `extract-story-features --root RUTA` mide un corpus fuera del estudio.
+
+### 4. Preferencias, juez y ranking
+
+```powershell
+report-preferences $db --output preferencias.json --bootstrap 1000
+fit-preference-judge $db --output juez.json
+rank-stories juez.json Stories --study $db --output ranking.json
+```
+
+- Bradley–Terry regularizado por criterio, con intervalos remuestreando lectores, y el acuerdo
+  sobre los mismos pares, con y sin el investigador. Sin grafo conectado no hay orden global.
+- Tres regresiones logísticas L2 sobre diferencias de rasgos, validadas dejando fuera historias
+  y familias de premisa, frente al azar y a la longitud sola.
+- `rank-stories` ordena el corpus y prepara las fichas de las diez primeras (`ranking.md`).
+- Un juez que no generaliza es un resultado válido: se marca exploratorio.
+
+## Módulos
+
+| Módulo | Qué hace |
+|---|---|
+| `study.py`, `study_cli.py` | el estudio por pares y `evaluation-study` |
+| `features.py`, `voice_attribution.py` | el extractor de rasgos con cita |
+| `feature_report.py`, `feature_cli.py`, `feature_audit.py` | tabla de rasgos, análisis horizontal y auditoría |
+| `preferences.py` | Bradley–Terry, acuerdo e intervalos |
+| `judge.py`, `learning_cli.py` | el juez aprendido y el ranking |
+| `catalog.py` | lee la planilla y fija su huella |
+| `pairing.py`, `simulation_report.py`, `artifacts.py` | lectores tolerantes de runs, también para StageCraft |
+
+Los estudios `fixed`, `rolling` y `pack` y la evaluación 1–10 (`evaluation.json`) se retiraron
+en 2.0.0. Sus bases y archivos quedan como datos en `Evaluations/` y `Stories/`.

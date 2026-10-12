@@ -2,9 +2,9 @@
 
 Cómo se evalúan las historias de Stagecraft en la tesis. El documento sigue las indicaciones del
 tutor (audio del 2026-10-03) y su rúbrica, y las contrasta con la literatura reciente. La planilla
-con todo lo que se mide está en [planilla/](planilla/). La implementación y el protocolo
-operativo vigente están en [ESTUDIO_FINAL.md](ESTUDIO_FINAL.md). Las herramientas están listas;
-el corpus definitivo y la ejecución experimental siguen pendientes.
+con todo lo que se mide está en [planilla/](planilla/). Los comandos, paso a paso, están en el
+[README](README.md), y el bot que recoge historias y votos, en
+[apps/telegram](../../apps/telegram/README.md).
 
 ## 1. De dónde sale
 
@@ -91,8 +91,8 @@ Es justo lo que el tutor advierte: la escala absoluta no discrimina.
 - **Se conserva** la línea base monolítica.
 - **Se cambian** la escala por comparaciones por pares, y los criterios de experiencia de uso por
   criterios narrativos.
-- El `evaluation.json` actual, con seis métricas de 1 a 10, es heredero de ese esquema. Sigue
-  funcionando, pero **no es la medida de la tesis**: es un instrumento heredado.
+- El `evaluation.json` de los runs antiguos, con seis métricas de 1 a 10, era heredero de ese
+  esquema. Se retiró en `asg-evaluation` 2.0.0: **no es la medida de la tesis**.
 
 ## 2. Principios
 
@@ -179,8 +179,8 @@ Usa el proveedor configurado, mediante el adaptador de Stagecraft (ficha MED-9).
 
 ## 4. Análisis horizontal
 
-El estudio principal compara las cinco historias seleccionadas y las aportaciones de lectores
-con prompts y opciones libres. Se describen asociaciones entre configuración, rasgos y costes,
+El estudio principal compara las aportaciones de los participantes, con prompts libres y los dos
+enfoques, y las líneas base. Se describen asociaciones entre configuración, rasgos y costes,
 separando versiones. No se atribuyen causalmente las diferencias a un parámetro.
 
 La matriz de [planilla/matriz.csv](planilla/matriz.csv) queda como diseño posible posterior,
@@ -189,18 +189,30 @@ comparación controlada futura se usarán las reglas de emparejamiento de `pairi
 
 ## 5. Evaluación humana
 
-El protocolo es aproximadamente 6–8 lectores y 11–13 historias: cinco seleccionadas
-(dos directas, tres del sistema) más una aportación reemplazable por lector. Primero se recoge,
-después se congela el conjunto y finalmente se vota. No se evalúan historias propias o conocidas.
+El protocolo tiene tres fases, y el investigador decide cuándo pasar de una a otra:
 
-Cada lector recibe hasta diez historias en dos sesiones de hasta cinco, con sorteo reproducible,
-cobertura equilibrada y posiciones A/B compensadas. Se busca que cada historia se compare con
-otras dos por criterio en cada sesión y que existan pares compartidos entre lectores. Se presenta
-una pregunta y un criterio cada vez, con las formulaciones de la planilla.
+1. **Recogida.** Cada participante crea historias desde el bot de Telegram, eligiendo el
+   enfoque (Top-Down o híbrido) y la forma (prompt libre u obra guiada). Cada historia queda
+   inscrita como suya. El investigador añade las líneas base de un solo prompt y puede excluir
+   las que no deban entrar.
+2. **Votación.** `evaluation-study open` congela el conjunto con su huella. Desde ahí, `/evaluar`
+   presenta pares a ciegas, con texto y audio, y una pregunta cada vez, con las formulaciones de
+   la planilla. Nadie compara su propia historia, y «Ya la conocía» la cambia por otra.
+3. **Cierre.** `evaluation-study close` y la exportación seudónima.
+
+**Asignación.** Las preguntas se asignan de una en una cuando el lector las pide, así que puede
+votar cualquiera, haya aportado o no.
+
+- El criterio va en ciclo.
+- Se eligen primero las historias que el lector ya leyó, para que el esfuerzo de lectura no
+  crezca con cada pregunta. Después, los pares menos comparados y las historias menos vistas.
+- Cada lector responde como mucho 15 preguntas, unas cinco historias por tres criterios, y nunca
+  repite par y criterio. La posición A/B se compensa.
+- El sorteo es reproducible con la semilla del estudio.
 
 Se admite A, B o «No puedo decidir». La abstención se registra y no es empate ni victoria.
-Se informa cobertura prevista, votos efectivos y abstenciones por separado. No se calcula un
-ranking humano global si el grafo de comparaciones queda desconectado.
+Se informan votos efectivos y abstenciones por separado. No se calcula un ranking humano global
+si el grafo de comparaciones queda desconectado.
 
 La agregación usa Bradley–Terry regularizado por criterio e intervalos por bootstrap de lectores.
 El acuerdo se calcula sobre los mismos pares y criterios, mediante proporción de acuerdo y alfa
@@ -209,7 +221,6 @@ de Kendall a partir de comparaciones parciales. El estudio es exploratorio y no 
 para diferencias pequeñas.
 
 El registro persistente usa SQLite fuera de los runs, con seudónimos en las exportaciones.
-La guía [ESTUDIO_FINAL.md](ESTUDIO_FINAL.md) especifica estados, comandos, exclusiones y reanudación.
 
 ## 6. El juez aprendido
 

@@ -6,13 +6,12 @@
     constraints-py315.txt). Los requirements*.txt citan el de 3.12; con 3.15 se instala una
     copia temporal que cita el suyo. Sin -Python se prefiere 3.12 y, si falta, 3.15.
 .EXAMPLE
-    .\setup.ps1 -Telegram
+    .\setup.ps1
 .EXAMPLE
     .\setup.ps1 -Python C:\Python315\python.exe
 #>
 [CmdletBinding()]
 param(
-    [switch]$Telegram,
     [string]$Python,
     [string]$VenvPath = ".venv"
 )
@@ -55,7 +54,7 @@ try {
 
     $version = (& $envPython -c $versionCheck | Select-Object -Last 1)
     if ($LASTEXITCODE -ne 0) { throw "El entorno debe usar Python 3.12 o 3.15 de 64 bits. Recrealo en una carpeta nueva." }
-    $requirements = if ($Telegram) { "requirements-telegram.txt" } else { "requirements-dev.txt" }
+    $requirements = "requirements-dev.txt"
     $constraints = "constraints-py$($version.Trim().Replace('.', '')).txt"
     $generated = $null
     if ($constraints -ne "constraints-py312.txt") {
@@ -81,7 +80,7 @@ try {
     }
     & $envPython -m pip check
     if ($LASTEXITCODE -ne 0) { throw "Hay dependencias incompatibles." }
-    & $envPython -m asg_telegram.app --help
+    & $envPython -c "import asg_telegram.app"
     if ($LASTEXITCODE -ne 0) { throw "No se pudo cargar el bot." }
 
     # find_project_root necesita Stories incluso en un clon nuevo (Git la ignora).
@@ -90,7 +89,7 @@ try {
         Copy-Item -LiteralPath ".env.example" -Destination ".env"
     }
     Write-Host "Entorno listo: $envPython" -ForegroundColor Green
-    Write-Host "Configura .env y la base del estudio antes de arrancar el bot. Consulta apps/telegram/DEPLOYMENT.md."
+    Write-Host "Configura .env y arranca el bot con iniciar-bot.bat. Consulta apps/telegram/README.md."
 } finally {
     Pop-Location
 }

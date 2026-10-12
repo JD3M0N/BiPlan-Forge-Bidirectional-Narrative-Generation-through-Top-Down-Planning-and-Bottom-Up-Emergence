@@ -10,7 +10,28 @@ from scipy.optimize import minimize
 from scipy.special import expit
 
 from .catalog import CRITERIA
-from .study_design import components
+
+
+def components(nodes: list[str], edges: list[tuple[str, str]]) -> list[list[str]]:
+    """Find comparison components, including isolated stories."""
+    adjacency = {node: set() for node in nodes}
+    for left, right in edges:
+        adjacency.setdefault(left, set()).add(right)
+        adjacency.setdefault(right, set()).add(left)
+    groups = []
+    while adjacency:
+        pending = [next(iter(adjacency))]
+        found = set()
+        while pending:
+            node = pending.pop()
+            if node in found:
+                continue
+            found.add(node)
+            pending.extend(adjacency.get(node, set()) - found)
+        groups.append(sorted(found))
+        for node in found:
+            adjacency.pop(node, None)
+    return groups
 
 
 def decided_votes(votes: list[dict], criterion: str | None = None) -> list[dict]:

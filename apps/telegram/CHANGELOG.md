@@ -1,5 +1,21 @@
 # Historial de cambios
 
+## [5.0.0] - 2026-10-12
+
+Reescrito para el cierre: el bot solo crea historias y las compara. Corre en la PC del
+investigador, que abre y cierra la votación con `evaluation-study`.
+
+- Crear tiene cuatro caminos: Top-Down o Híbrido, y prompt libre u obra guiada. La historia
+  llega con su narración en audio y entra en el estudio mientras está en recogida.
+- `/evaluar` presenta pares a ciegas con texto y audio, una pregunta cada vez (A, B o «No puedo
+  decidir»), sobre el estudio nuevo de `asg-evaluation` 2.0.
+- Se retiran la clave de acceso, el consentimiento, el perfil lector, las fases guiadas, el
+  anunciador, `/settings`, el modo pack, la publicación en GitHub, la exportación por chat, la
+  consola de colores y el despliegue en otra PC (`desplegar-bot.ps1`, `DEPLOYMENT.md`,
+  `PACK_STUDY.md`, `ROLLING_STUDY.md`). Un solo comando: `asg-telegram`.
+- La cola nueva es `Stories/telegram_jobs.sqlite3`; la vieja queda como dato.
+- De 21 módulos y 13 archivos de tests a 8 módulos y uno de tests.
+
 ## [4.0.1] - 2026-10-09
 
 - La barra de progreso es la de `asg_core.format_progress`: el bot ya no lleva su propia copia.
