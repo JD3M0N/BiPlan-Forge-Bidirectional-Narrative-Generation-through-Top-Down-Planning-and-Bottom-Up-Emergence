@@ -1,5 +1,41 @@
 # Historial de cambios
 
+## 7.12.0
+
+Pipeline 7.12. Responde a los primeros lectores de fuera del proyecto (11 runs 7.10 de
+`Stories/Stagecraft/20261011-*` y `20261012-*`): «lenguaje super rebuscado», nombres en cada
+línea y un run muerto en la etapa del mundo.
+
+- **Un capítulo narrado ya no cae al respaldo por la revisión.** En 7.10, 7 de 14 capítulos
+  simulados salieron del narrador determinista, frente a 0 de 50 antes de existir la revisión;
+  la historia de los navegantes, entera. Ahora una cita que no está en el texto se descarta en
+  vez de lanzar, solo `INVENTED_EVENT` y `CONTRADICTION` bloquean, una revisión que no puede
+  correr acepta el capítulo (`NARRATION_REVIEW_UNAVAILABLE`) y, agotados los intentos, se
+  entrega el de menos hallazgos (`NARRATION_BEST_ATTEMPT`). Las marcas `[clave]` y
+  `[X piensa:` se limpian en vez de rechazar. `narration.json` pasa al contrato 4.
+- **El respaldo se lee como prosa:** un párrafo por turno, nombre completo solo la primera vez,
+  «piensa» con el pensamiento en cursiva y sin pensamientos en otro idioma. El log que lee el
+  narrador usa los nombres igual.
+- **Contrato de estilo** (`agents/style.py`) para Drafter, Writer y Narrator: prosa clara, sin
+  repetir nombres, sin coletillas que expliquen la emoción y sin símiles encadenados.
+- **`style_request`** en `request.json`: el registro que pidió la persona, literal y sin
+  traducir, llega como instrucción a quien escribe y al crítico. «Historia corta», «breve» o
+  hasta 1.500 palabras pedidas fuerzan el perfil Esencial.
+- **Las observaciones de oficio llegan siempre al Writer.** Nombre repetido en frases seguidas,
+  coletillas y símiles (`asg_core.readability_signals`) se suman a las de diálogo y párrafos, y
+  cada capítulo observado recibe una nota aunque el crítico no dé ninguna (TD-1, TD-3).
+- **Mundo y personajes** escriben nombres, roles y voz en el idioma de la ficción y evitan los
+  nombres de siempre (TD-2, TD-7). Los ids casi válidos («Sala Del Trono») se normalizan
+  (`ModelId`), la etapa del mundo reintenta y la corrección estructurada cita el valor
+  rechazado.
+- **La función:** el actor piensa en el idioma de la ficción (`WRONG_LANGUAGE`); dos personajes
+  que repiten táctica uno frente a otro adelantan el giro del director una vez por beat
+  (`policy.is_deadlocked`), y el director orienta sus notas al género pedido.
+- **`GEMINI_PROSE_MODEL`** (opcional): la prosa que lee el lector puede ir a un modelo mejor,
+  con su propio tope diario, y vuelve al principal al agotarse. `RoutedProvider` ya no tumba un
+  run cuando el modelo de la función rechaza el acceso o se queda sin cuota.
+- El bot cierra como fallido el run que un reinicio dejó en `running`.
+
 ## 7.11.0
 
 Pipeline 7.11, limpieza para el cierre.

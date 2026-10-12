@@ -16,7 +16,12 @@ from asg_stagecraft.formats import (
 from asg_stagecraft.runtime.errors import GeminiDailyQuotaError
 from asg_stagecraft.runtime.provider import RoutedProvider, current_call_context
 from asg_stagecraft.schemas import LLMUsageRecord
-from asg_stagecraft.stage.schemas import NarrationArtifact, PerformanceArtifact
+from asg_stagecraft.stage.schemas import (
+    NarrationArtifact,
+    NarrationFinding,
+    NarrationReview,
+    PerformanceArtifact,
+)
 from asg_stagecraft.tools import recompute
 from stage_fakes import StageFakeProvider
 from test_generator_v5 import major_story_review, make_request
@@ -146,7 +151,7 @@ def test_every_voice_produces_a_story_and_records_itself(tmp_path, voice) -> Non
     run, _ = generate(tmp_path, narrative_voice=voice)
     narration = NarrationArtifact.model_validate(read_json(run, "narration.json"))
     assert narration.narrative_voice is voice
-    assert narration.contract_version == "3"
+    assert narration.contract_version == "4"
     assert run.story_path.read_text(encoding="utf-8").strip()
     if voice_choice(voice).takes_character:
         assert narration.narrator_character_id
@@ -344,6 +349,39 @@ def test_the_narrator_falls_back_without_losing_the_run(tmp_path) -> None:
     story = run.story_path.read_text(encoding="utf-8")
     assert "—" in story
     assert read_json(run, "simulation_metrics.json")["narration_source_fallbacks"] >= 1
+
+
+def finding(code, quote):
+    """One editorial finding quoting the fake narrator's prose."""
+    return NarrationReview(findings=[NarrationFinding(code=code, quote=quote, correction="x")])
+
+
+@pytest.mark.parametrize(
+    ("reviews", "attempts", "warning"),
+    [
+        ([RuntimeError("review down")], 1, "NARRATION_REVIEW_UNAVAILABLE"),
+        (
+            [finding("INVENTED_EVENT", "Ana cerro el archivo")] * 2,
+            2,
+            "NARRATION_BEST_ATTEMPT",
+        ),
+        ([finding("CONTRADICTION", "una cita parafraseada")], 1, None),
+        ([finding("VOICE", "Nadie mas lo sabe")], 1, None),
+    ],
+    ids=["review-fails-open", "best-attempt", "unsupported-quote", "advisory-only"],
+)
+def test_a_narrated_chapter_never_falls_back_over_the_review(
+    tmp_path, reviews, attempts, warning
+) -> None:
+    """Found in 7.10: a paraphrased quote or a failed review sent 7 of 14 chapters to fallback."""
+    provider = StageFakeProvider(story_review=major_story_review(), narration_reviews=reviews)
+    run, _ = generate(tmp_path, provider)
+    chapter = read_json(run, "narration.json")["chapters"][0]
+    assert (chapter["source"], chapter["attempts"]) == ("narrator", attempts)
+    warnings = read_json(run, "metadata.json")["warnings"]
+    assert not any("NARRATION_FALLBACK" in item for item in warnings)
+    if warning:
+        assert any(warning in item for item in warnings)
 
 
 def test_a_narrator_failure_leaves_its_exception_on_disk(tmp_path) -> None:

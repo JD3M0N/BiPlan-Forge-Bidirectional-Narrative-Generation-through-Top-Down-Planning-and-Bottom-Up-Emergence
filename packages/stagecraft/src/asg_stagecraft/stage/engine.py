@@ -316,6 +316,7 @@ class PerformanceEngine:
         record.notes = list(direction.notes)
         requested, notes = direction.opening_actor_id, list(direction.notes)
         turns_in_beat = checks = 0
+        standoff_called = False
 
         while True:
             moved = self._advance(run, index, beat, requested, notes)
@@ -324,10 +325,15 @@ class PerformanceEngine:
             turns_in_beat += 1
             record.turns += 1
             at_cap = policy.must_force(turns_in_beat, turns_per_beat=self.turns_per_beat)
-            if not at_cap and not policy.should_check(turns_in_beat):
+            beat_turns = [turn for turn in run.turns if turn.beat_index == index]
+            # A standoff gets its turn now rather than at the next scheduled check (7.12), once
+            # per beat, so a cast that keeps one tactic costs one director call more at most.
+            deadlocked = not at_cap and not standoff_called and policy.is_deadlocked(beat_turns)
+            standoff_called = standoff_called or deadlocked
+            if not at_cap and not deadlocked and not policy.should_check(turns_in_beat):
                 continue
             checks += 1
-            mode = "stall" if at_cap else ("turn" if checks >= 2 else "check")
+            mode = "stall" if at_cap else ("turn" if checks >= 2 or deadlocked else "check")
             verdict = self._check(run, index, beat, mode)
             record.checks += 1
             if verdict.turning_actor_id:
@@ -631,7 +637,10 @@ class PerformanceEngine:
             moves = []
             try:
                 validate_turn(
-                    candidate, previous_speech=previous_speech, previous_actions=previous_actions
+                    candidate,
+                    previous_speech=previous_speech,
+                    previous_actions=previous_actions,
+                    language=self.language,
                 )
                 validate_state_evidence(candidate)
                 moves = self._arbitrate(candidate, actor_id, scene, on_stage)

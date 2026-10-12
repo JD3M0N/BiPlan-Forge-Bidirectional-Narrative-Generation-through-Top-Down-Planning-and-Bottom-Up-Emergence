@@ -174,7 +174,8 @@ def test_a_beat_that_never_lands_climbs_the_whole_ladder_before_it_is_forced() -
     stage = Stage(judge)
     performed = stage.engine().perform_scene(scene())
     record = performed.beats[0]
-    assert stage.modes == ["check", "turn", "stall", "final"]
+    # The fake actors trade one tactic each, a standoff: since 7.12 that earns one early turn.
+    assert stage.modes == ["check", "turn", "turn", "stall", "final"]
     assert record.forced and not record.achieved
     assert record.missing == ["hands it over"]
     assert record.reaction_turns == 2
@@ -390,6 +391,7 @@ def test_every_director_call_is_logged_once() -> None:
         "open",
         "check",
         "turn",
+        "turn",
         "stall",
         "final",
     ]
@@ -478,7 +480,7 @@ def test_adaptive_mode_keeps_an_unreached_beat_open_without_a_world_event() -> N
     assert not performed.beats[0].achieved
     assert not performed.beats[0].forced
     assert all(turn.kind == "actor" for turn in performed.turns)
-    assert stage.modes == ["check", "turn", "stall"]
+    assert stage.modes == ["check", "turn", "turn", "stall"]
 
 
 def test_future_revision_changes_outcomes_but_keeps_the_scene_graph() -> None:

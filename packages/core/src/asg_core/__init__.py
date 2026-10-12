@@ -15,8 +15,10 @@ from .audio import (
 from .console import use_utf8_output
 from .craft import (
     CraftMetrics,
+    ReadabilitySignals,
     craft_metrics,
     prose_paragraphs,
+    readability_signals,
     split_sentences,
 )
 from .files import artifact_json, atomic_write_csv, atomic_write_json, atomic_write_text
@@ -32,11 +34,13 @@ __all__ = [
     "CraftMetrics",
     "NarrationVoice",
     "Progress",
+    "ReadabilitySignals",
     "artifact_json",
     "atomic_write_csv",
     "atomic_write_json",
     "atomic_write_text",
     "craft_metrics",
+    "readability_signals",
     "create_unique_directory",
     "create_story_audio",
     "create_story_audio_sync",

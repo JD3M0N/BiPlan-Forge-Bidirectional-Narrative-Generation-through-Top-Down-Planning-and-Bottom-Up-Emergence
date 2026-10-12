@@ -37,6 +37,7 @@ AXES: tuple[Axis, ...] = (
     Axis("work", "Obra", pairing=True),
     Axis("model", "Modelo", pairing=True),
     Axis("stage_model", "Modelo de la función", SIMULATED, pairing=True),
+    Axis("prose_model", "Modelo de la prosa", pairing=True),
     Axis("narrative_profile", "Perfil", pairing=True),
     Axis("story_format", "Formato"),
     Axis("script_method", "Método del guion", frozenset({"script"})),
@@ -188,9 +189,8 @@ def read_run_config(run_dir: str | Path) -> RunConfig:
     # single-model run.
     used = metadata.get("models_used")
     if isinstance(used, list):
-        main_models = sorted(
-            {str(item) for item in used} - {text_field(metadata, "stage_model") or ""}
-        )
+        own = {text_field(metadata, "stage_model") or "", text_field(metadata, "prose_model") or ""}
+        main_models = sorted({str(item) for item in used} - own)
         if len(main_models) > 1:
             put("model", "+".join(main_models), "metadata.json")
     put("model", text_field(metadata, "model"), "metadata.json")
@@ -208,6 +208,11 @@ def read_run_config(run_dir: str | Path) -> RunConfig:
             text_field(metadata, "stage_model") or text_field(metadata, "model"),
             "metadata.json",
         )
+    # The reader-facing prose ran on `model` unless metadata names a prose model that really
+    # answered (7.12): it falls back to `model` once its small free allowance is spent.
+    prose = text_field(metadata, "prose_model")
+    answered = isinstance(used, list) and prose in {str(item) for item in used}
+    put("prose_model", prose if answered else text_field(metadata, "model"), "metadata.json")
     put("script_method", text_field(metadata, "script_method"), "metadata.json")
     put("narrative_voice", text_field(metadata, "narrative_voice"), "metadata.json")
     put("actor_memory", text_field(metadata, "actor_memory"), "metadata.json")
@@ -303,6 +308,11 @@ def _warnings(configs: list[RunConfig], differing: list[str]) -> list[str]:
     if "stage_model" in differing:
         warnings.append(
             "Los actores usan modelos distintos: la diferencia de la función puede ser del modelo."
+        )
+    if "prose_model" in differing:
+        warnings.append(
+            "La prosa la escribieron modelos distintos: la diferencia de estilo puede ser del "
+            "modelo."
         )
     if "narrative_profile" in differing:
         warnings.append("Tienen perfiles narrativos distintos.")

@@ -42,7 +42,7 @@ from ..writing.assembly import assemble_story, narrated_plan
 from ..writing.audit import story_metrics, word_count
 from . import fallback
 from .casting import dossier_index, fallback_bible, gates_for, materialize_bible
-from .editorial import editorial_issues, review_turns
+from .editorial import editorial_verdict, review_turns, strip_markers
 from .engine import CODA_TURNS, REACTION_TURNS, PerformanceEngine
 from .inventory import StageInventory
 from .memory import RECENCY_DECAY, RETRIEVED_RECORDS
@@ -311,10 +311,12 @@ class SimulationStagesMixin:
                 lambda: actor.run(system, context, feedback, items=inventory is not None),
             ),
             open_beat=lambda context: stage_call(
-                "stage_manager", lambda: director.open_beat(context, request.language)
+                "stage_manager",
+                lambda: director.open_beat(context, request.language, request.genre),
             ),
             check_beat=lambda context, mode: stage_call(
-                "stage_manager", lambda: director.check(context, request.language, mode=mode)
+                "stage_manager",
+                lambda: director.check(context, request.language, mode=mode, genre=request.genre),
             ),
             reflect=lambda system, log: stage_call(
                 "actor", lambda: actor.reflect(system, log, request.language)
@@ -859,7 +861,7 @@ class SimulationStagesMixin:
             key_ids = {
                 item for scene in view.scenes for beat in scene.beats for item in beat.evidence
             }
-            log = scene_log(view.visible, names, thoughts=True, key_ids=key_ids)
+            log = scene_log(view.visible, names, thoughts=True, key_ids=key_ids, short_names=True)
             visible_ids = {turn.id for turn in view.visible}
             facts = [
                 fact
@@ -930,6 +932,7 @@ class SimulationStagesMixin:
         """Narrate one chapter, or render its log deterministically when the model cannot."""
         assert self.repository is not None
         feedback = ""
+        candidates: list[tuple[int, int, str]] = []
         for attempt in range(1, NARRATION_ATTEMPTS + 1):
 
             def narrate_once(feedback_snapshot: str = feedback):
@@ -960,51 +963,70 @@ class SimulationStagesMixin:
                     f"({type(exc).__name__}). Return the complete chapter."
                 )
                 continue
+            candidate = strip_markers(candidate)
             self.repository.save_text(
                 f"narration/chapter-{index:03d}-attempt-{attempt:03d}.md", candidate
             )
             diagnostic = writer_candidate_issue(candidate, "", [])
-            if diagnostic is None:
-                try:
-                    review = self._call_agent(
-                        "narrator_review",
-                        lambda candidate=candidate: agent.review(
-                            request=request,
-                            voice=voice,
-                            story=candidate,
-                            turns=review_turns(visible),
-                        ),
-                    )
-                    issues = editorial_issues(review, candidate, visible)
-                    self.repository.save_data(
-                        f"narration/chapter-{index:03d}-review-{attempt:03d}.json",
-                        {
-                            "review": review.model_dump(mode="json"),
-                            "issues": issues,
-                            "accepted": not issues,
-                        },
-                    )
-                except NON_DEGRADABLE_ERRORS:
-                    raise
-                except Exception as exc:
-                    issues = [f"Editorial review unavailable: {type(exc).__name__}"]
-                    self.repository.save_data(
-                        f"narration/chapter-{index:03d}-review-{attempt:03d}.json",
-                        {"accepted": False, "issues": issues},
-                    )
-                if not issues:
-                    self.repository.save_text(f"narration/chapter-{index:03d}.md", candidate)
-                    return candidate, attempt, "narrator"
+            if diagnostic is not None:
                 feedback = (
-                    "\nEDITORIAL REPAIR (one bounded correction, preserve source events):\n"
-                    + "\n".join(issues)
+                    "\n\nRETRY CORRECTION:\nThe previous attempt was rejected because "
+                    f"{diagnostic.message}. {diagnostic.retry_instruction}"
                 )
                 continue
-            feedback = (
-                "\n\nRETRY CORRECTION:\nThe previous attempt was rejected because "
-                f"{diagnostic.message}. {diagnostic.retry_instruction}"
+            try:
+                review = self._call_agent(
+                    "narrator_review",
+                    lambda candidate=candidate: agent.review(
+                        request=request,
+                        voice=voice,
+                        story=candidate,
+                        turns=review_turns(visible),
+                    ),
+                )
+            except NON_DEGRADABLE_ERRORS:
+                raise
+            except Exception as exc:
+                # A review that could not run says nothing against the chapter, so the
+                # chapter stands: in 7.10 this path discarded sound prose for the fallback.
+                self.repository.save_data(
+                    f"narration/chapter-{index:03d}-review-{attempt:03d}.json",
+                    {"accepted": True, "review_unavailable": type(exc).__name__},
+                )
+                warning = (
+                    f"[NARRATION_REVIEW_UNAVAILABLE] Capitulo {index}: "
+                    "se acepto el capitulo sin revision editorial."
+                )
+                self.repository.add_warning(warning)
+                self._emit("narration_review_unavailable", warning, stage="narration")
+                self.repository.save_text(f"narration/chapter-{index:03d}.md", candidate)
+                return candidate, attempt, "narrator"
+            verdict = editorial_verdict(review, candidate, visible)
+            self.repository.save_data(
+                f"narration/chapter-{index:03d}-review-{attempt:03d}.json",
+                {"review": review.model_dump(mode="json"), **verdict.as_record()},
             )
-        body = fallback.narrate(visible, names)
+            if verdict.accepted:
+                self.repository.save_text(f"narration/chapter-{index:03d}.md", candidate)
+                return candidate, attempt, "narrator"
+            candidates.append((len(verdict.blocking), attempt, candidate))
+            feedback = (
+                "\nEDITORIAL REPAIR (one bounded correction, preserve source events):\n"
+                + "\n".join(verdict.issues)
+            )
+        if candidates:
+            # Fewest blocking findings wins, the later attempt on a tie: it already had the
+            # corrections. Model prose with a disputed detail still reads better than the log.
+            blocking, attempt, body = min(candidates, key=lambda item: (item[0], -item[1]))
+            warning = (
+                f"[NARRATION_BEST_ATTEMPT] Capitulo {index}: se entrego el intento {attempt} "
+                f"con {blocking} observaciones editoriales sin resolver."
+            )
+            self.repository.add_warning(warning)
+            self._emit("narration_best_attempt", warning, stage="narration")
+            self.repository.save_text(f"narration/chapter-{index:03d}.md", body)
+            return body, attempt, "narrator"
+        body = fallback.narrate(visible, names, request.language)
         warning = f"[NARRATION_FALLBACK] Capitulo {index}: se narro con el narrador de respaldo."
         self.repository.add_warning(warning)
         self._emit("narration_fallback", warning, stage="narration")

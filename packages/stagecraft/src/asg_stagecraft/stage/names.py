@@ -34,3 +34,45 @@ def resolve_character(requested: str, names: dict[str, str]) -> str:
         character_id for character_id, name in names.items() if words & set(normalize(name).split())
     }
     return next(iter(matches)) if len(matches) == 1 else ""
+
+
+# Words that cannot stand alone as what a character is called.
+_TITLES = frozenset(
+    "lord lady sir don dona doña senor señor senora señora doctor doctora dr. dra. capitan "
+    "capitán capitana padre madre hermano hermana fray sor tio tío tia tía abuela abuelo".split()
+)
+
+
+class ShortNames:
+    """Hand out a character's full name once, then the name prose would use after (7.12).
+
+    The fallback and the narrator's log named every character in full on every line, and the
+    7.10 stories read that way: about twice as many names as model-narrated chapters.
+    """
+
+    def __init__(self, names: dict[str, str]) -> None:
+        """Precompute short names, keeping the full one where two characters would collide."""
+        self.full = names
+        short = {key: short_name(value) for key, value in names.items()}
+        taken = list(short.values())
+        self.short = {
+            key: value if taken.count(value) == 1 else names[key] for key, value in short.items()
+        }
+        self.seen: set[str] = set()
+
+    def name(self, character_id: str) -> str:
+        """The full name on first mention, the short one afterwards."""
+        if character_id not in self.full:
+            return character_id
+        if character_id in self.seen:
+            return self.short[character_id]
+        self.seen.add(character_id)
+        return self.full[character_id]
+
+
+def short_name(full_name: str) -> str:
+    """The first name, or title and name when the first word is a title."""
+    words = full_name.split()
+    if len(words) > 1 and words[0].lower() in _TITLES:
+        return " ".join(words[:2])
+    return words[0] if words else full_name

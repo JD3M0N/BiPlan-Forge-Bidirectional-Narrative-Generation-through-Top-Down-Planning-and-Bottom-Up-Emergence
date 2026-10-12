@@ -133,12 +133,21 @@ class FakeGenerator:
         self.root = root
         self.failure = failure
         self.calls: list[tuple] = []
+        self.closed: list[Path] = []
 
-    def generate(self, request, story_format, *, on_progress=None, should_cancel=None):
+    def generate(
+        self, request, story_format, *, on_progress=None, should_cancel=None, on_run_created=None
+    ):
         """Record the call, report progress and return a new run."""
         self.calls.append((request, story_format))
+        if on_run_created:
+            on_run_created(self.root / f"run-{len(self.calls)}")
         if on_progress:
             on_progress(50, "Escribiendo")
         if self.failure:
             raise self.failure
         return fake_run(self.root, f"run-{len(self.calls)}", story_format)
+
+    def close_interrupted(self, run_dir: Path) -> None:
+        """Record the run a restart asked to close."""
+        self.closed.append(run_dir)

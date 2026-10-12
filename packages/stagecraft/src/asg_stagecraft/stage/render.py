@@ -13,6 +13,7 @@ foreshadowing a scene it has not lived yet.
 
 from __future__ import annotations
 
+from .names import ShortNames
 from .perception import item_line, item_moves, stage_direction, visible_text
 from .schemas import (
     ActorDossier,
@@ -64,7 +65,8 @@ def actor_system_prompt(
     """
     lines = [
         f"You are {name}. You are not an assistant and you are not a narrator: you are this "
-        f"person, living this moment. Everything you say is spoken in {language}.",
+        f"person, living this moment. Everything you say, do and think is written in "
+        f"{language}, thoughts included.",
         "",
         "WHO YOU ARE",
         f"- What you want: {dossier.want}",
@@ -111,7 +113,11 @@ def actor_system_prompt(
             "something, you do not know it: guess, ask, or be wrong, but never narrate a fact "
             "you never learned.",
             "- Play for what you want, using one tactic at a time. When a tactic fails, change "
-            "it rather than repeating yourself in new words.",
+            "it rather than repeating yourself in new words. Once you have stated your position, "
+            "do not state it again: do something about it, give some ground, or move the scene "
+            "elsewhere.",
+            "- Address someone by name only when it matters; people in a room rarely say each "
+            "other's names.",
             "- One move per turn, in a short line, as people talk. Say or do one thing and let "
             "the others answer; a speech is not a turn.",
             "- When someone has just spoken to you, answer that first - take it up, contradict "
@@ -328,6 +334,7 @@ def scene_log(
     *,
     thoughts: bool,
     key_ids: frozenset[str] | set[str] = frozenset(),
+    short_names: bool = False,
 ) -> str:
     """Render one scene's log for the narrator, with or without access to inner life.
 
@@ -335,15 +342,18 @@ def scene_log(
     so the narrator knows which moments the chapter turns on and can compress the rest: the
     first real run expanded the log instead of curating it, because every turn looked equal.
     """
+    calls = ShortNames(names) if short_names else None
     lines = []
     for turn in turns:
-        mark = "[clave] " if turn.id in key_ids else ""
+        # On its own line for every kind of turn: sharing a line with a world event, the mark
+        # was copied into the prose as part of the sentence (7.10).
+        if turn.id in key_ids:
+            lines.append("[clave]")
         if turn.kind == "world":
-            lines.append(f"{mark}({turn.action})")
+            lines.append(f"({turn.action})")
             continue
-        speaker = names.get(turn.actor_id, turn.actor_id)
-        if mark:
-            lines.append(mark.strip())
+        # The narrator copies what it reads: with short_names it reads a name as prose would.
+        speaker = calls.name(turn.actor_id) if calls else names.get(turn.actor_id, turn.actor_id)
         if turn.action:
             lines.append(f"({stage_direction(speaker, turn.action, names)})")
         for move in item_moves(turn):

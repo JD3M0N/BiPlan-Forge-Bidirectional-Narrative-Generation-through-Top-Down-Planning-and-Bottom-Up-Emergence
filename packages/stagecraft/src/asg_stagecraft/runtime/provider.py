@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
-from typing import Protocol, TypeVar
+from typing import Any, Protocol, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -48,6 +48,11 @@ _LIMITERS_LOCK = threading.Lock()
 # and narration writes the text that is evaluated, which stays on the main model so it can be
 # compared with the runs before 7.4.
 STAGE_MODEL_STAGES = frozenset({"performance"})
+# The calls whose text a reader sees: drafted and revised chapters, and the simulated narration.
+# Only these go to GEMINI_PROSE_MODEL; titles, critics and the narration's review stay on main.
+PROSE_CALLS = frozenset(
+    {("drafting", "drafter"), ("revision", "writer"), ("narration", "narrator")}
+)
 # Both settings below are module constants, not constructor arguments: no call site in
 # the repository ever configured them. Reading the constant directly keeps one source of truth
 # for the temperatures CLAUDE.md documents, and a future caller that needs to vary them can
@@ -111,6 +116,21 @@ def _shared_limiter(
         return _LIMITERS.setdefault(
             (_key_fingerprint(api_key), model_name, capacity), SlidingWindowLimiter(capacity)
         )
+
+
+def _rejected_value(error: dict) -> dict:
+    """Quote the offending scalar so the model can fix it, never a whole object or a long text.
+
+    The model's own short value is not a credential or a prompt; quoting it turns "does not
+    match the pattern" into a correction the model can act on.
+    """
+    value = error.get("input")
+    if not error.get("loc"):
+        # A whole-payload error (unparsable JSON) would quote the raw response back.
+        return {}
+    if isinstance(value, str | int | float | bool) and len(str(value)) <= 80:
+        return {"rejected": value}
+    return {}
 
 
 def _gemini_response_schema(schema: type[BaseModel]) -> dict:
@@ -522,10 +542,9 @@ class _RecordingProvider:
                         "location": ".".join(str(part) for part in error.get("loc", ())) or "$",
                         "type": str(error.get("type", "validation_error")),
                         "message": str(error.get("msg", "validation failed"))[:240],
+                        **_rejected_value(error),
                     }
-                    for error in exc.errors(
-                        include_url=False, include_context=False, include_input=False
-                    )
+                    for error in exc.errors(include_url=False, include_context=False)
                 ]
                 if validation_attempt >= validation_retries:
                     raise StructuredResponseError(
@@ -912,45 +931,88 @@ class _ProviderGroup:
 
 
 class RoutedProvider(_ProviderGroup):
-    """Send the performance's calls to their own provider and every other call to the main one.
+    """Send the performance and the reader-facing prose to their own providers, the rest to main.
 
-    The pipeline tags each call with its stage (call_context), so routing needs no agent to
-    know about it.
+    The pipeline tags each call with its stage and agent (call_context), so routing needs no
+    agent to know about it. A routed provider that runs out of its daily allowance or refuses
+    the caller hands the call, and every later one of its kind in this run, to the main model:
+    in 7.9 a Groq 403 on the performance model counted as four actor failures and ended the run
+    in five seconds.
     """
 
-    def __init__(self, main, stage, *, stages: frozenset[str] = STAGE_MODEL_STAGES) -> None:
-        """Wrap the main and performance providers and join their usage records."""
+    def __init__(
+        self,
+        main,
+        stage=None,
+        *,
+        stages: frozenset[str] = STAGE_MODEL_STAGES,
+        prose=None,
+    ) -> None:
+        """Wrap the main provider and the optional performance and prose ones."""
         self.main = main
         self.stage = stage
+        self.prose = prose
         self.stages = stages
         self.model_name = main.model_name
-        self.stage_model_name = stage.model_name
+        self.stage_model_name = stage.model_name if stage is not None else None
+        self.prose_model_name = prose.model_name if prose is not None else None
         self._wait_callback = None
         self._usage_callback = None
         self.usage_records = []
         self.refused: set[str] = set()
+        self._given_up: set[int] = set()
 
     def _children(self) -> list:
-        """Return the main and the performance providers."""
-        return [self.main, self.stage]
+        """Return the main provider and whichever routed ones exist."""
+        return [child for child in (self.main, self.stage, self.prose) if child is not None]
 
     def provider_for_current_call(self):
         """Pick the provider for the call being made now, from the stage the pipeline declared."""
-        stage, _ = current_call_context()
-        return self.stage if stage in self.stages else self.main
+        stage, agent = current_call_context()
+        if self.prose is not None and (stage, agent) in PROSE_CALLS and self._usable(self.prose):
+            return self.prose
+        if self.stage is not None and stage in self.stages and self._usable(self.stage):
+            return self.stage
+        return self.main
+
+    def _usable(self, provider) -> bool:
+        """Say whether a routed provider may still take calls in this run."""
+        if id(provider) in self._given_up:
+            return False
+        quota = getattr(provider, "quota", None)
+        return quota is None or quota[0].available(quota[1])
+
+    def _route(self, call: Callable[[Any], Any]) -> Any:
+        """Make the call on its routed provider, or on the main one once that cannot answer."""
+        provider = self.provider_for_current_call()
+        try:
+            return call(provider)
+        except (ProviderDailyQuotaError, ProviderUnavailableError):
+            if provider is self.main:
+                raise
+            self._given_up.add(id(provider))
+            self.refused.add(provider.model_name)
+            return call(self.main)
 
     def generate_structured(
         self, *, system_instruction: str, prompt: str, schema: type[T], profile: str
     ) -> T:
         """Generate a structured response with the provider this stage belongs to."""
-        return self.provider_for_current_call().generate_structured(
-            system_instruction=system_instruction, prompt=prompt, schema=schema, profile=profile
+        return self._route(
+            lambda provider: provider.generate_structured(
+                system_instruction=system_instruction,
+                prompt=prompt,
+                schema=schema,
+                profile=profile,
+            )
         )
 
     def generate_text(self, *, system_instruction: str, prompt: str, profile: str) -> str:
         """Generate free text with the provider this stage belongs to."""
-        return self.provider_for_current_call().generate_text(
-            system_instruction=system_instruction, prompt=prompt, profile=profile
+        return self._route(
+            lambda provider: provider.generate_text(
+                system_instruction=system_instruction, prompt=prompt, profile=profile
+            )
         )
 
 
@@ -1131,14 +1193,27 @@ def provider_from_settings(settings: Settings):
             if settings.splits_stage
             else None
         )
+        prose_entry = settings.prose_entry
+        prose = (
+            GeminiProvider(
+                prose_entry.api_key,
+                prose_entry.slot.model,
+                rpm_limit=prose_entry.rpm_limit,
+                **shared,
+            )
+            if prose_entry is not None
+            else None
+        )
         if ledger:
             # Without a chain nothing fails over, but every call still counts, so the quota
             # panel and the preflight of asg-generate see this run and every audit.
             slots = {entry.slot.model: entry.slot for entry in settings.quota_entries()}
-            for provider in (main, stage):
+            for provider in (main, stage, prose):
                 if provider is not None:
                     provider.quota = (ledger, slots[provider.model_name])
-        return main if stage is None else RoutedProvider(main, stage)
+        if stage is None and prose is None:
+            return main
+        return RoutedProvider(main, stage, prose=prose)
     entries = settings.quota_entries()
     return FailoverProvider(
         [(entry.slot, _chain_provider(entry, settings)) for entry in entries],

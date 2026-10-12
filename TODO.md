@@ -7,6 +7,15 @@ y los informes `report-evaluations`, `report-story-craft`, `report-simulations` 
 `report-llm-usage` se retiraron. Las cifras de proceso y coste se leen con `asg-report-features`
 (capas P y K) o del JSON del run; la comparación de runs, en StageCraft. 672 tests en verde.
 
+**7.12.0, 2026-10-12: los primeros lectores de fuera.** Once runs 7.10 hechos por amigos en
+otra PC (`Stories/Stagecraft/20261011-23*` a `20261012-16*`, traídos de `ES/`; su log del bot,
+`Stories/telegram-bot.amigos.log`) no gustaron: «lenguaje super rebuscado», nombres en cada
+línea. Medido: 7 de 14 capítulos simulados en el narrador de respaldo (0 de 50 en 7.8–7.9), el
+Writer sin correr en las narrativas porque el crítico no dio notas, 3.052 palabras para «unas
+500», un run muerto por un id de lugar y 9 de 9 audios con 403. 7.12.0 arregla lo que se
+arreglaba sin cuota (ver `packages/stagecraft/CHANGELOG.md`); falta validarlo en real (SIM-21,
+TD-8). 701 tests en verde.
+
 **Estado medido el 2026-10-09 con `asg-stagecraft` 7.9.0 (pipeline 7.9).** Un solo generador,
 Stagecraft, con tres formatos: `narrative`, `script` y `simulated`. La función simulada puede
 llevar inventario de objetos, la guía narrativa tiene una estrategia experimental
@@ -220,6 +229,61 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
 ---
 
 ## Lo siguiente
+
+### TD-8 · Validar en real la prosa para un lector cualquiera
+
+*Área:* top-down · *Cuota:* ~40 llamadas (dos narrativas, con y sin `GEMINI_PROSE_MODEL`) ·
+*Depende de:* —
+
+- **Síntoma.** En los runs 7.10 de los amigos la prosa narrativa pesa: coletillas tras la réplica
+  en el 40–62 % de las líneas (`20261012-163919-de-la-oscuridad-al-mundo`), palabras de 9 letras
+  o más en el 17,8 y el 20,6 % de los dos peores, y «Carmen» 45 veces en 3.052 palabras pedidas
+  como «unas 500». El crítico no dio notas y ningún capítulo pasó por el Writer. 7.12.0 añade el
+  contrato de estilo, `style_request`, el perfil Esencial para lo corto y las notas medidas, todo
+  probado solo con dobles.
+- **Qué hacer.**
+  - Repetir en real el prompt de la cubana (`de-la-oscuridad-al-mundo`) y el de los dinosaurios
+    que murió (`la-regencia-de-las-escamas`), los dos con el mismo modelo, y una vez más con
+    `GEMINI_PROSE_MODEL` (Flash, ~20 peticiones gratis al día).
+  - Llevar `readability_signals` a la capa T de `asg-report-features`, que solo lee disco, para
+    comparar antes y después sin leer a mano.
+  - Si una observación sobrevive a la reescritura, reintentar una vez con ella como corrección
+    (lo que queda de TD-3).
+- **Hecho cuando.** Los dos runs nuevos dan coletillas y nombres repetidos por debajo de los
+  umbrales de `writing/craft_evidence.py`, la cubana sale Esencial y en el registro pedido, el
+  título y el slug van en español, y los amigos la prefieren a ciegas frente a la de 7.10.
+- **Ojo.** 3.5 Flash-Lite ignora la temperatura (ver Ideas): el modelo de prosa es el único
+  mando de estilo que no pasa por el prompt.
+
+### SIM-21 · Validar en real que la narración no cae al respaldo
+
+*Área:* función simulada · *Cuota:* ~120 llamadas (un run simulado) · *Depende de:* —
+
+- **Síntoma.** En 7.10 la revisión editorial rechazaba por un tiempo verbal o por citar una
+  paráfrasis, y tras dos rechazos el capítulo salía del narrador determinista: 7 de 14
+  capítulos, los 4 de `20261012-000926-la-ciudad-perdida` (64 «penso», 5,4 nombres cada 100
+  palabras). Además la función era un ping-pong: «suplicar» contra «ordenar» tres veces cada
+  uno en el primer beat, y la mitad de los beats forzados. 7.12.0 lo arregla con dobles; el
+  replay de las revisiones guardadas aceptaría o entregaría el mejor intento en los 7.
+- **Qué hacer.** Repetir el prompt de los navegantes (`brief.json` de ese run) en real y leer
+  `narration.json`, `narration/*-review-*.json` y `director.jsonl`.
+- **Hecho cuando.** Ningún capítulo con `source: fallback` salvo que el narrador no devolviera
+  texto, ningún pensamiento en inglés en `turns.jsonl`, y el primer beat en estancamiento
+  recibe el giro antes de su tope.
+- **Ojo.** Medir cuántos capítulos salen como `NARRATION_BEST_ATTEMPT`: si son muchos, el
+  revisor sigue marcando como contradicción lo que no lo es, y hay que mirar sus códigos.
+
+### OPS-3 · El audio da 403 en las dos máquinas
+
+*Área:* despliegue · *Cuota:* sin cuota · *Depende de:* —
+
+- **Síntoma.** 9 de 9 historias de los amigos sin audio: `WSServerHandshakeError: 403` de
+  `speech.platform.bing.com` en edge-tts 7.2.8, la última publicada. Pasa igual en esta PC, y
+  probando versiones de Chromium más nuevas en sus constantes también: no es el pin.
+- **Qué hacer.** Probar desde otra red o con VPN para separar un bloqueo por región de un cambio
+  del servicio; si es el servicio, esperar una versión nueva de edge-tts o cambiar de motor de voz
+  en `asg_core/audio.py`.
+- **Hecho cuando.** Un `asg-generate` con audio deja `story.mp3` en las dos máquinas.
 
 ### MED-7 · Métricas de actuación leídas del log
 

@@ -11,6 +11,7 @@ from ..schemas import (
     WorldArtifact,
 )
 from .base import Agent, json_text, story_specification_header
+from .style import style_clause
 
 
 class DrafterAgent(Agent[str]):
@@ -65,8 +66,8 @@ class DrafterAgent(Agent[str]):
                 "the characters speak in the voice recorded in their profile, and give spoken "
                 "exchange its own paragraph under the dialogue-dash convention of the requested "
                 "language rather than summarizing what was said. Break the paragraph at every "
-                "beat — a new action, a new speaker, a shift of attention — instead of "
-                "packing a whole sequence into one block. Hold this to the final chapter: a "
+                "new speaker or shift of attention instead of packing a whole sequence into one "
+                "block. Hold this to the final chapter: a "
                 "resolution is a scene, not an account of how matters ended. Expand Developed and "
                 "Expansive stories through meaningful action, reaction, and consequence rather "
                 "than repetition or decorative filler. Respect world rules, character intentions, "
@@ -74,6 +75,7 @@ class DrafterAgent(Agent[str]):
                 "supplied, deliver each one inside the event it names, through what happens and "
                 "what is said, so the reader is left expecting, or satisfied, without ever being "
                 "told so. Do not expose internal IDs or planning terminology."
+                f"{style_clause(request)}"
             ),
             prompt=(
                 f"{story_specification_header(request)}"
@@ -125,6 +127,7 @@ class WriterAgent(Agent[str]):
                 "block. Coordinate the opening with the previously revised chapter. When PROMISE "
                 "OBLIGATIONS are supplied, the rewrite must still deliver every one of them "
                 "inside the event it names: never drop an expectation the draft already planted."
+                f"{style_clause(request)}"
             ),
             prompt=(
                 f"{story_specification_header(request)}"

@@ -107,6 +107,7 @@ class StageFakeProvider(FakeProvider):
         repeat_turn_once=False,
         beat_never_achieved=False,
         beat_needs_world=False,
+        narration_reviews: list | None = None,
         **kwargs,
     ) -> None:
         """Configure the stage responses and the failures a test wants to force."""
@@ -121,6 +122,9 @@ class StageFakeProvider(FakeProvider):
         self.repeat_turn_once = repeat_turn_once
         self.beat_never_achieved = beat_never_achieved
         self.beat_needs_world = beat_needs_world
+        # Editorial reviews handed out in order (a NarrationReview, or an exception to raise);
+        # once spent, every chapter gets a clean review.
+        self.narration_reviews = list(narration_reviews or ())
         self.check_modes: list[str] = []
         self.casting_number = 0
         self.props_number = 0
@@ -134,7 +138,7 @@ class StageFakeProvider(FakeProvider):
     def generate_structured(self, *, system_instruction, prompt, schema, profile):
         """Route the stage schemas here and leave every other schema to the narrative double."""
         if schema is NarrationReview:
-            return NarrationReview()
+            return self._narration_review()
         if schema is WorldEventAssessment:
             return WorldEventAssessment(
                 compatible=True,
@@ -206,6 +210,13 @@ class StageFakeProvider(FakeProvider):
         return super().generate_text(
             system_instruction=system_instruction, prompt=prompt, profile=profile
         )
+
+    def _narration_review(self) -> NarrationReview:
+        """Hand out the next queued editorial review, raising it when it is an exception."""
+        review = self.narration_reviews.pop(0) if self.narration_reviews else NarrationReview()
+        if isinstance(review, Exception):
+            raise review
+        return review
 
     # -- casting -------------------------------------------------------------------------
 

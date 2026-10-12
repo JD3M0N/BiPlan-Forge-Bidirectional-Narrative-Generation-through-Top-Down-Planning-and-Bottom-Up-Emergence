@@ -13,7 +13,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..formats import ActorMemory, NarrativeVoice, SimulationMode
-from ..schemas import ID_PATTERN
+from ..schemas import ModelId
 
 # What a character contributes in one turn, and who is allowed to perceive it.
 TurnVisibility = Literal["public", "whisper"]
@@ -65,7 +65,7 @@ ItemVerb = Literal["none", "use", "give", "take", "drop", "hide", "show"]
 class SceneCastBrief(BaseModel):
     """One character on stage in a scene, with the objective the script gives them there."""
 
-    character_id: str = Field(pattern=ID_PATTERN)
+    character_id: ModelId
     name: str = Field(min_length=1)
     objective: str = Field(min_length=1)
     public_face: str = ""
@@ -78,7 +78,7 @@ class BeatBrief(BaseModel):
     is the director's own yardstick for whether the scene may move on.
     """
 
-    event_id: str = Field(pattern=ID_PATTERN)
+    event_id: ModelId
     title: str = Field(min_length=1)
     purpose: str = Field(min_length=1)
     outcome: str = Field(min_length=1)
@@ -92,9 +92,9 @@ class BeatBrief(BaseModel):
 class SceneBrief(BaseModel):
     """Everything one scene of the performance is built from, persisted for the audit."""
 
-    scene_id: str = Field(pattern=ID_PATTERN)
+    scene_id: ModelId
     number: int = Field(ge=1)
-    chapter_id: str = Field(pattern=ID_PATTERN)
+    chapter_id: ModelId
     act_number: int = Field(ge=1)
     location_id: str | None = None
     location_name: str = ""
@@ -110,7 +110,7 @@ class RevisedBeat(BaseModel):
     """A changed outcome for an existing, still unperformed event."""
 
     model_config = ConfigDict(extra="forbid")
-    event_id: str = Field(pattern=ID_PATTERN)
+    event_id: ModelId
     outcome: str = Field(min_length=1)
     purpose: str = Field(min_length=1)
     conflict: str = Field(min_length=1)
@@ -122,7 +122,7 @@ class RevisedScene(BaseModel):
     """One remaining scene, kept or omitted without changing its cast or event identities."""
 
     model_config = ConfigDict(extra="forbid")
-    scene_id: str = Field(pattern=ID_PATTERN)
+    scene_id: ModelId
     keep: bool
     setting: str = ""
     beats: list[RevisedBeat] = Field(default_factory=list)
@@ -281,7 +281,7 @@ class KnowledgeGate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(pattern=ID_PATTERN)
+    id: ModelId
     premise_gate_ids: list[str] = Field(default_factory=list)
     initial_premises: list[str] = Field(default_factory=list)
     fact: str = Field(
@@ -396,7 +396,7 @@ class Prop(PropDraft):
 
     # Minted here, never authored: a world object keeps its own ID and a personal one is
     # numbered, so two props can share a name and still be told apart in the log.
-    id: str = Field(pattern=ID_PATTERN)
+    id: ModelId
 
 
 class PropList(BaseModel):
@@ -451,7 +451,7 @@ class ItemAction(BaseModel):
     """
 
     verb: ItemVerb
-    item_id: str = Field(pattern=ID_PATTERN)
+    item_id: ModelId
     item_name: str = Field(min_length=1)
     performer_id: str = ""
     target_id: str = ""
@@ -559,9 +559,9 @@ class StageTurn(ActorTurnDraft):
     # From here on addressed_to holds character IDs: normalize_turn resolves the names the actor
     # wrote, so the log never depends on how a model spelled someone.
     id: str
-    scene_id: str = Field(pattern=ID_PATTERN)
+    scene_id: ModelId
     number: int = Field(ge=1)
-    actor_id: str = Field(pattern=ID_PATTERN)
+    actor_id: ModelId
     # "world" marks what the stage itself does when the director unsticks a scene. It carries an
     # actor_id only so the cast it was witnessed by stays derivable; nobody performed it.
     kind: Literal["actor", "world"] = "actor"
@@ -584,8 +584,8 @@ class StageTurn(ActorTurnDraft):
 class TurnRejection(BaseModel):
     """Why one proposed turn could not be accepted, and what the actor was told to fix."""
 
-    scene_id: str = Field(pattern=ID_PATTERN)
-    actor_id: str = Field(pattern=ID_PATTERN)
+    scene_id: ModelId
+    actor_id: ModelId
     attempt: int = Field(ge=1)
     code: Literal[
         "EMPTY_TURN",
@@ -758,7 +758,7 @@ class DirectorEntry(BaseModel):
     """One call to the director, with what the engine made of it: a line of director.jsonl."""
 
     decision_id: str = ""
-    scene_id: str = Field(pattern=ID_PATTERN)
+    scene_id: ModelId
     beat_event_id: str
     beat_index: int = Field(ge=0)
     mode: Literal["open", "check", "turn", "stall", "final"]
@@ -780,7 +780,7 @@ class DirectorEntry(BaseModel):
 class BeatRecord(BaseModel):
     """What happened to one beat: the direction, every check, and how it closed."""
 
-    event_id: str = Field(pattern=ID_PATTERN)
+    event_id: ModelId
     index: int = Field(ge=0)
     opening_actor_id: str = ""
     notes: list[str] = Field(default_factory=list)
@@ -806,7 +806,7 @@ class RelationshipState(BaseModel):
     incoherently. The history stays in the memory records; the state is what the actor reads.
     """
 
-    character_id: str = Field(pattern=ID_PATTERN)
+    character_id: ModelId
     stance: str = Field(min_length=1)
     reason: str = ""
 
@@ -814,7 +814,7 @@ class RelationshipState(BaseModel):
 class CharacterState(BaseModel):
     """One character's evolving state, written by their own reflection at each scene's end."""
 
-    character_id: str = Field(pattern=ID_PATTERN)
+    character_id: ModelId
     scene_number: int = Field(ge=0)
     emotion: str = ""
     goal: str = ""
@@ -834,7 +834,7 @@ class MemoryRecord(BaseModel):
     """
 
     id: str
-    character_id: str = Field(pattern=ID_PATTERN)
+    character_id: ModelId
     kind: MemoryKind
     scene_number: int = Field(ge=0)
     turn_id: str = ""
@@ -846,7 +846,7 @@ class MemoryRecord(BaseModel):
 class MemoryRetrieval(BaseModel):
     """One retrieval, with the score breakdown that produced it, kept for the audit."""
 
-    character_id: str = Field(pattern=ID_PATTERN)
+    character_id: ModelId
     scene_number: int = Field(ge=0)
     turn_number: int = Field(ge=1)
     query: str
@@ -916,9 +916,9 @@ class ReflectionDraft(BaseModel):
 class ScenePerformance(BaseModel):
     """One performed scene: its turns, its beats and what each actor took away."""
 
-    scene_id: str = Field(pattern=ID_PATTERN)
+    scene_id: ModelId
     number: int = Field(ge=1)
-    chapter_id: str = Field(pattern=ID_PATTERN)
+    chapter_id: ModelId
     turns: list[StageTurn] = Field(default_factory=list)
     beats: list[BeatRecord] = Field(default_factory=list)
     rejected: int = Field(default=0, ge=0)
@@ -971,7 +971,7 @@ class PromiseStoryCheck(BaseModel):
     """A proposed promise judgement anchored in prose and performed turns."""
 
     model_config = ConfigDict(extra="forbid")
-    promise_id: str = Field(pattern=ID_PATTERN)
+    promise_id: ModelId
     opened: bool
     progressed: bool
     paid: bool
@@ -993,7 +993,7 @@ class PromiseStoryAuditDraft(BaseModel):
 class ChapterNarration(BaseModel):
     """One narrated chapter and the performed material it was written from."""
 
-    chapter_id: str = Field(pattern=ID_PATTERN)
+    chapter_id: ModelId
     chapter_index: int = Field(ge=1)
     scene_ids: list[str] = Field(default_factory=list)
     turns_available: int = Field(ge=0)
@@ -1010,9 +1010,11 @@ class NarrationArtifact(BaseModel):
 
     Contract 2 (7.3) adds who was asked to narrate, how the narrator was finally chosen, the
     tone the author asked for, and chapters recorded as absent. A contract 1 file still loads.
+    Contract 4 (7.12): a chapter the review disputes ships as its best narrated attempt, never
+    as the fallback, and each review file records blocking, advisory and discarded findings.
     """
 
-    contract_version: str = "3"
+    contract_version: str = "4"
     narrative_voice: NarrativeVoice
     narrator_character_id: str = ""
     # The name as the person typed it, before it was resolved against the cast.

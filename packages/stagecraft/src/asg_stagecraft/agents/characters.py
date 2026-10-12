@@ -38,7 +38,11 @@ class CharacterDesignerAgent(Agent[CharactersArtifact]):
                 "subplots. Opposition must pursue a goal incompatible with the protagonist's goal. "
                 f"Relationships must use canonical character IDs. {role_labels}"
                 "Do not use scores, sliders, or hidden planning labels. "
-                "Return artifact content in English."
+                f"Write each name, role and voice in {request.language}, because they reach the "
+                "reader, and keep the gender the request gives each role; write the other fields "
+                "in English. Draw names from the culture and period of the world, and avoid the "
+                "stock names generated fiction keeps reusing (Elena, Tomas, Mateo, Marta, Lucia, "
+                "Vance, Vargas) unless the request names them."
             ),
             prompt=(
                 f"{story_specification_header(request, blueprint, audience='characters')}"

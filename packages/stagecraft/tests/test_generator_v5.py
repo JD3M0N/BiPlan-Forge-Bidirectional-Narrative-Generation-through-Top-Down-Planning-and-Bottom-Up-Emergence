@@ -358,13 +358,14 @@ def barely_spoken_prose() -> str:
     # One spoken paragraph in ten: below the dialogue floor without reaching the block ceiling,
     # which is the shape of the live 6.6.0 case that first exercised this channel.
     spoken = "—Nadie mas lo sabe —dijo Ana."
-    narrated = "Ana reviso el archivo sin decir una palabra mas en toda la tarde."
+    narrated = "Reviso el archivo sin decir una palabra mas en toda la tarde."
     return "\n\n".join([spoken, *[narrated] * 9])
 
 
 def scene_prose(label: str = "escena") -> str:
+    # The name once per exchange, then the verb carries the subject: a clean draft since 7.12.
     spoken = "—Nadie mas lo sabe —dijo Ana."
-    return "\n\n".join([spoken, f"Ana cerro el archivo {label}."] * 4)
+    return "\n\n".join([spoken, f"Cerro el archivo {label}."] * 4)
 
 
 _ANCHOR_CHAPTER = re.compile(r"ACT ANCHOR INDEX \((\S+)\)")
@@ -1117,6 +1118,10 @@ def test_the_critic_is_shown_which_drafted_chapters_read_as_summary(tmp_path) ->
     assert NO_DIALOGUE in critic_prompt
     assert [item["chapter_id"] for item in evidence["chapters"]] == ["chapter-1", "chapter-2"]
     assert all(item["observations"] for item in evidence["chapters"])
+    # Found in 7.10: the critic raised no note and every chapter shipped as its first draft.
+    # What was measured reaches the Writer whatever the critic says.
+    report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
+    assert [item["final_source"] for item in report["chapters"]] == ["revision", "revision"]
 
 
 def test_a_dramatized_draft_sends_the_critic_no_craft_observations(tmp_path) -> None:
@@ -1164,8 +1169,11 @@ def test_a_craft_observation_reaches_the_writer_as_a_note_on_that_chapter_alone(
     assert "REVISION NOTES:" in writer_calls[0][1]
     assert "Stage the confrontation as a live spoken scene." in writer_calls[0][1]
 
+    # The measured observation travels too, as a note of its own (7.12).
+    assert "play the key exchange as spoken scene" in writer_calls[0][1]
+
     report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
-    assert report["chapters"][0]["note_ids"] == ["chapter-1-dialogue"]
+    assert report["chapters"][0]["note_ids"] == ["chapter-1-dialogue", "craft_chapter-1"]
     assert report["chapters"][0]["final_source"] == "revision"
     assert report["chapters"][1]["note_ids"] == []
     assert report["chapters"][1]["final_source"] == "draft"
@@ -1277,7 +1285,7 @@ def test_writer_retries_after_a_transient_failure(tmp_path) -> None:
 
 
 def test_chapters_without_notes_skip_the_writer(tmp_path) -> None:
-    provider = FakeProvider()
+    provider = FakeProvider(drafter_outputs=[scene_prose(), scene_prose()])
     run = StoryGenerator(provider, tmp_path).generate(make_request())
     assert [item for item in provider.text_calls if "final Writer" in item[0]] == []
     report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
@@ -1294,7 +1302,10 @@ def test_chapters_without_notes_skip_the_writer(tmp_path) -> None:
 
 def test_a_note_with_only_event_ids_reaches_just_the_owning_chapter(tmp_path) -> None:
     """An untargeted chapter list does not make an event-scoped note global."""
-    provider = FakeProvider(story_review=event_scoped_story_review())
+    provider = FakeProvider(
+        story_review=event_scoped_story_review(),
+        drafter_outputs=[scene_prose(), scene_prose()],
+    )
     run = StoryGenerator(provider, tmp_path).generate(make_request())
     report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
     by_chapter = {item["chapter_id"]: item for item in report["chapters"]}
@@ -1338,6 +1349,40 @@ def test_analyst_prompt_separates_explicit_constraints_and_inferences() -> None:
     audit = [item for item in provider.structured_calls if item[0] == "StoryRequest"][1]
     assert json.loads(audit[2])["original"] == raw
     assert json.loads(audit[2])["extraction"]["premise"] == analyzed.premise
+
+
+@pytest.mark.parametrize(
+    ("raw", "profile"),
+    [
+        ("Escribe una historia corta de unas 500 palabras con cubanismos.", "essential"),
+        ("Escribe un drama familiar en 900 palabras.", "essential"),
+        ("Escribe un drama familiar con cubanismos.", "developed"),
+    ],
+    ids=["short-story", "word-count", "no-length"],
+)
+def test_a_short_request_is_essential_and_its_style_keeps_the_author_words(raw, profile) -> None:
+    """Found in 7.10: "historia corta de unas 500 palabras" came back Developed, 3,052 words."""
+    analyzed = make_request().model_copy(
+        update={"narrative_profile": NarrativeProfile.DEVELOPED, "style_request": "con cubanismos"}
+    )
+    result = AnalystAgent(FakeProvider(analyzed_request=analyzed)).run(raw)
+    assert result.narrative_profile.value == profile
+    assert result.style_request == "con cubanismos"
+    assert "style_request" not in result.agent_spec()
+
+
+def test_the_author_style_reaches_every_prose_writer_and_the_critic(tmp_path) -> None:
+    request = make_request().model_copy(update={"style_request": "lenguaje jovial con cubanismos"})
+    provider = FakeProvider(story_review=major_story_review())
+    StoryGenerator(provider, tmp_path).generate(request)
+    prose_systems = [system for system, _ in provider.text_calls]
+    assert prose_systems
+    assert all("STYLE FOR THE READER" in system for system in prose_systems)
+    assert all("lenguaje jovial con cubanismos" in system for system in prose_systems)
+    critic_prompt = structured_prompt(provider, "StoryReview")
+    assert (
+        "STYLE REQUEST (the author's own words):\nlenguaje jovial con cubanismos" in critic_prompt
+    )
 
 
 def test_analyst_uses_fidelity_correction_before_returning_request() -> None:

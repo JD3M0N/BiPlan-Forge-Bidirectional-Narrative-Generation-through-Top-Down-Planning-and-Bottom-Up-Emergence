@@ -8,7 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from .formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
-from .planning.catalog_types import ID_PATTERN, FunctionalRole
+from .planning.catalog_types import ID_PATTERN, FunctionalRole, ModelId
 from .planning.profiles import NarrativeProfile
 from .version import GENERATOR_NAME, GENERATOR_VERSION, PIPELINE_VERSION
 
@@ -44,16 +44,30 @@ class StoryRequest(BaseModel):
             "Optional inferred creative proposals, never user requirements or established facts."
         ),
     )
+    # 7.12. The only field kept in the author's language: "lenguaje jovial con cubanismos"
+    # reached the writers as the English label "Jovial", and the register was lost.
+    style_request: str = Field(
+        default="",
+        description=(
+            "The user's own instructions about how the story is written (register, voice, "
+            "slang, vocabulary, audience, brevity), copied verbatim and untranslated. Empty "
+            "when the request says nothing about how to write. Never plot facts."
+        ),
+    )
 
     def agent_spec(self) -> dict:
-        """Return trusted downstream data without replaying the raw prompt."""
-        return self.model_dump(mode="json", exclude={"original_prompt"})
+        """Return trusted downstream data without replaying the raw prompt.
+
+        style_request is left out: only the agents that write the prose receive it, each as an
+        instruction of its own rather than one more JSON field.
+        """
+        return self.model_dump(mode="json", exclude={"original_prompt", "style_request"})
 
 
 class SkeletonMatch(BaseModel):
     """Auditable relevance score for one plot skeleton against a story request."""
 
-    skeleton_id: str = Field(pattern=ID_PATTERN)
+    skeleton_id: ModelId
     score: float = Field(ge=0, le=1)
     lexical_score: float = Field(ge=0, le=1)
     semantic_score: float | None = Field(default=None, ge=0, le=1)
@@ -102,7 +116,7 @@ class NarrativeBlueprint(NarrativeBlueprintDraft):
 class Location(BaseModel):
     """Represent Location data and behavior."""
 
-    id: str = Field(pattern=ID_PATTERN)
+    id: ModelId
     name: str = Field(min_length=1)
     description: str = Field(min_length=1)
 
@@ -110,7 +124,7 @@ class Location(BaseModel):
 class StoryObject(BaseModel):
     """Represent StoryObject data and behavior."""
 
-    id: str = Field(pattern=ID_PATTERN)
+    id: ModelId
     name: str = Field(min_length=1)
     description: str = Field(min_length=1)
 
@@ -140,7 +154,7 @@ class WorldArtifact(BaseModel):
 class CharacterProfile(BaseModel):
     """Represent CharacterProfile data and behavior."""
 
-    id: str = Field(pattern=ID_PATTERN)
+    id: ModelId
     name: str = Field(min_length=1)
     role: str
     goal: str
@@ -167,8 +181,8 @@ class CharacterProfile(BaseModel):
 class CharacterRelationship(BaseModel):
     """Represent CharacterRelationship data and behavior."""
 
-    source_character_id: str = Field(pattern=ID_PATTERN)
-    target_character_id: str = Field(pattern=ID_PATTERN)
+    source_character_id: ModelId
+    target_character_id: ModelId
     description: str = Field(min_length=1)
 
 
@@ -201,7 +215,7 @@ class CharactersArtifact(BaseModel):
 class ChapterDraft(BaseModel):
     """One chapter as the planner proposed it, before graph.py has judged the plan."""
 
-    id: str = Field(pattern=ID_PATTERN)
+    id: ModelId
     order: int = Field(ge=1)
     title: str = Field(min_length=1)
     summary: str = Field(min_length=1)
@@ -225,9 +239,9 @@ class ChapterPlan(ChapterDraft):
 class PlotEvent(BaseModel):
     """Represent PlotEvent data and behavior."""
 
-    id: str = Field(pattern=ID_PATTERN)
+    id: ModelId
     order: int = Field(ge=1)
-    chapter_id: str = Field(pattern=ID_PATTERN)
+    chapter_id: ModelId
     title: str = Field(min_length=1)
     description: str = Field(min_length=1)
     purpose: str = Field(min_length=1)
@@ -261,8 +275,8 @@ class PlotEvent(BaseModel):
 class EventDependency(BaseModel):
     """Represent EventDependency data and behavior."""
 
-    source_event_id: str = Field(pattern=ID_PATTERN)
-    target_event_id: str = Field(pattern=ID_PATTERN)
+    source_event_id: ModelId
+    target_event_id: ModelId
     relation: Literal["causal", "temporal"]
 
 
@@ -322,7 +336,7 @@ class PromiseOpening(PromiseBeat):
 class PromiseProgress(PromiseBeat):
     """One signposted advance that keeps a promise alive between opening and payoff."""
 
-    id: str = Field(pattern=ID_PATTERN)
+    id: ModelId
     observable_delta: str = Field(min_length=1)
     new_cost_or_information: str = Field(min_length=1)
 
@@ -339,7 +353,7 @@ class PromisePayoff(PromiseBeat):
 class PromiseContract(BaseModel):
     """One expectation the story opens, signposts, and pays off."""
 
-    id: str = Field(pattern=ID_PATTERN)
+    id: ModelId
     kind: PromiseKind
     subject: str = Field(min_length=1)
     dramatic_question: str = Field(min_length=1)
@@ -351,7 +365,7 @@ class PromiseContract(BaseModel):
 class PromiseLedgerDraft(BaseModel):
     """A promise ledger as the model proposed it, before promises.py has judged it."""
 
-    primary_promise_id: str = Field(pattern=ID_PATTERN)
+    primary_promise_id: ModelId
     promises: list[PromiseContract] = Field(min_length=2, max_length=8)
 
 
@@ -372,7 +386,7 @@ class PromiseLedger(PromiseLedgerDraft):
 class PromiseCheck(BaseModel):
     """One critic verdict on whether the draft honored a promise of the ledger."""
 
-    promise_id: str = Field(pattern=ID_PATTERN)
+    promise_id: ModelId
     opened: bool
     progressed: bool
     paid: bool
@@ -383,7 +397,7 @@ class PromiseCheck(BaseModel):
 class PromiseAuditEntry(BaseModel):
     """One promise of the ledger next to the verdict the critic returned for it."""
 
-    promise_id: str = Field(pattern=ID_PATTERN)
+    promise_id: ModelId
     kind: PromiseKind
     primary: bool
     verdict: Literal["fulfilled", "weak", "broken"]
@@ -417,7 +431,7 @@ class ConstraintCheck(BaseModel):
 class RevisionNote(BaseModel):
     """One actionable English-language instruction for plan or prose revision."""
 
-    id: str = Field(pattern=ID_PATTERN)
+    id: ModelId
     priority: Literal["critical", "major", "minor"]
     category: Literal[
         "user_constraint",
@@ -458,7 +472,7 @@ class PlanReview(BaseModel):
 class ChapterPresentation(BaseModel):
     """Localized public title for one internally planned chapter."""
 
-    chapter_id: str = Field(pattern=ID_PATTERN)
+    chapter_id: ModelId
     title: str = Field(min_length=1)
 
 
@@ -556,14 +570,14 @@ class ScriptScene(ScriptSceneDraft):
     materialize_act mints the identity once the anchors and staging hold.
     """
 
-    id: str = Field(pattern=ID_PATTERN)
+    id: ModelId
     number: int = Field(ge=1)
 
 
 class ActScript(BaseModel):
     """One act script.py already validated: a chapter staged as scenes."""
 
-    chapter_id: str = Field(pattern=ID_PATTERN)
+    chapter_id: ModelId
     number: int = Field(ge=1)
     title: str = Field(min_length=1)
     scenes: list[ScriptScene] = Field(min_length=1)
@@ -604,7 +618,7 @@ class ScriptPresentation(StoryPresentation):
 class PlayCastMember(BaseModel):
     """One member of the dramatis personae, as printed in script.json."""
 
-    character_id: str = Field(pattern=ID_PATTERN)
+    character_id: ModelId
     name: str = Field(min_length=1)
     description: str = ""
 
@@ -630,7 +644,7 @@ class PlayScript(BaseModel):
 class ActMetrics(BaseModel):
     """Record observed act size and staging without defining a target."""
 
-    chapter_id: str = Field(pattern=ID_PATTERN)
+    chapter_id: ModelId
     scenes: int = Field(ge=0)
     events: int = Field(ge=0)
     lines: int = Field(default=0, ge=0)
@@ -642,7 +656,7 @@ class ActMetrics(BaseModel):
 class CharacterStageMetrics(BaseModel):
     """Record how much stage time one character received, across the whole script."""
 
-    character_id: str = Field(pattern=ID_PATTERN)
+    character_id: ModelId
     scenes: int = Field(default=0, ge=0)
     lines: int = Field(default=0, ge=0)
     words: int = Field(default=0, ge=0)
@@ -685,7 +699,7 @@ class StoryReview(BaseModel):
 class ChapterCraftEvidence(BaseModel):
     """Craft deficits observed in one drafted chapter, worded for the critic."""
 
-    chapter_id: str = Field(pattern=ID_PATTERN)
+    chapter_id: ModelId
     observations: list[str] = Field(default_factory=list)
 
 
@@ -699,7 +713,7 @@ class CraftEvidenceArtifact(BaseModel):
 class ChapterMetrics(BaseModel):
     """Record observed chapter size and prose craft without defining a target."""
 
-    chapter_id: str = Field(pattern=ID_PATTERN)
+    chapter_id: ModelId
     words: int = Field(ge=0)
     events: int = Field(ge=0)
     paragraphs: int = Field(default=0, ge=0)
@@ -761,7 +775,7 @@ class ChapterRevisionAttempt(BaseModel):
 class ChapterRevisionResult(BaseModel):
     """Summarize every Writer attempt and the chapter body ultimately delivered."""
 
-    chapter_id: str = Field(pattern=ID_PATTERN)
+    chapter_id: ModelId
     chapter_index: int = Field(ge=1)
     note_ids: list[str] = Field(default_factory=list)
     draft_words: int
@@ -870,6 +884,10 @@ class RunMetadata(BaseModel):
     # key or pace of its own (GEMINI_STAGE_*, 7.4). None means the performance ran on `model`, as
     # every run before 7.4 did; llm_calls.jsonl names the model of each call.
     stage_model: str | None = None
+    # The model the reader-facing prose was routed to (GEMINI_PROSE_MODEL, 7.12). None means the
+    # prose ran on `model`; models_used says whether the prose model really answered, since it
+    # falls back to `model` once its small free allowance is spent.
+    prose_model: str | None = None
     # Every model that answered at least one call, sorted (7.7). A provider chain can fail over
     # mid-run, so a run whose list, without stage_model, has more than one model mixed models
     # and is never paired with a single-model run.

@@ -75,7 +75,10 @@ class DramaCriticAgent(Agent[StoryReview]):
                 "notes in English; never rewrite the story. Check every explicit constraint plus "
                 "causal and world continuity, character motivation and agency, dramatic structure, "
                 "pacing and tension, setup/payoff, qualitative narrative-profile compliance, "
-                "originality, voice, requested-language consistency, and stray anglicisms. For "
+                "originality, voice, requested-language consistency, stray anglicisms, and "
+                "readability for a general reader: ornate or abstract wording, explained "
+                "emotions and a register other than the one in STYLE REQUEST are voice_style "
+                "notes. For "
                 "Developed and Expansive profiles, examine every planned event of each chapter "
                 "individually: did it receive its own visible action, reaction, and consequence, "
                 "or was it absorbed into a neighboring event's beat or reduced to a passing "
@@ -112,6 +115,11 @@ class DramaCriticAgent(Agent[StoryReview]):
                 + (
                     f"\n\nPROMISE OBLIGATIONS:\n{promise_obligations}"
                     if promise_obligations
+                    else ""
+                )
+                + (
+                    f"\n\nSTYLE REQUEST (the author's own words):\n{request.style_request}"
+                    if request.style_request.strip()
                     else ""
                 )
                 + f"\n\nDRAFT:\n{draft}"

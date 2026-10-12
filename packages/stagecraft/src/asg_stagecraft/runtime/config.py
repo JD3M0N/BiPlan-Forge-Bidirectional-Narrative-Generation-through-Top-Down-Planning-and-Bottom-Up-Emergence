@@ -59,6 +59,14 @@ class Settings:
     stage_model: str = ""
     stage_api_key: str = ""
     stage_rpm_limit: int = 0
+    # The model that writes the prose a reader sees (GEMINI_PROSE_MODEL, 7.12): drafted and
+    # revised chapters and the simulated narration. Empty means the main model. Its free daily
+    # allowance is far smaller than Flash-Lite's, so it has its own cap and falls back to the main
+    # model once spent.
+    prose_model: str = ""
+    prose_api_key: str = ""
+    prose_rpm_limit: int = 0
+    prose_daily_requests: int = 20
     # The ordered provider chain (ASG_LLM_CHAIN) and the ledger that keeps its spending.
     # Empty means the single Gemini provider every run before 7.7 used.
     chain: tuple[ChainEntry, ...] = ()
@@ -119,7 +127,29 @@ class Settings:
         if stage is not None and stage.slot.key not in {entry.slot.key for entry in entries}:
             gemini = next(i for i, entry in enumerate(entries) if entry.slot.provider == "gemini")
             entries.insert(gemini + 1, stage)
+        prose = self.prose_entry
+        if prose is not None and prose.slot.key not in {entry.slot.key for entry in entries}:
+            entries.append(prose)
         return entries
+
+    @property
+    def prose_entry(self) -> ChainEntry | None:
+        """Return the prose model's slot when it differs from the main one, without a chain."""
+        if self.chain or not self.splits_prose:
+            return None
+        slot = QuotaSlot(
+            "gemini", self.prose_model, "pacific_day", max_requests=self.prose_daily_requests
+        )
+        return ChainEntry(
+            slot,
+            self.prose_api_key or self.api_key,
+            rpm_limit=self.prose_rpm_limit or self.rpm_limit,
+        )
+
+    @property
+    def splits_prose(self) -> bool:
+        """Say whether the reader-facing prose runs on a model of its own."""
+        return bool(self.prose_model) and self.prose_model != self.model
 
     @property
     def has_credentials(self) -> bool:
@@ -229,6 +259,10 @@ def load_settings(start: Path | None = None, *, require_api_key: bool = True) ->
         stage_model=os.getenv("GEMINI_STAGE_MODEL", "").strip(),
         stage_api_key=os.getenv("GEMINI_STAGE_API_KEY", "").strip(),
         stage_rpm_limit=_integer("GEMINI_STAGE_RPM_LIMIT", 0),
+        prose_model=os.getenv("GEMINI_PROSE_MODEL", "").strip(),
+        prose_api_key=os.getenv("GEMINI_PROSE_API_KEY", "").strip(),
+        prose_rpm_limit=_integer("GEMINI_PROSE_RPM_LIMIT", 0),
+        prose_daily_requests=_integer("GEMINI_PROSE_DAILY_REQUESTS", 20),
         chain=chain,
         gemini_daily_requests=_integer("GEMINI_DAILY_REQUESTS", 500),
         budget_path=root / ".cache" / "llm_budget.sqlite3",

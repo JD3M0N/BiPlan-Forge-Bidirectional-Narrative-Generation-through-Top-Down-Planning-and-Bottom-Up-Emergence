@@ -2,10 +2,14 @@ import pytest
 from asg_stagecraft.schemas import ChapterPlan
 from asg_stagecraft.writing.craft_evidence import (
     BLOCK_PARAGRAPHS,
+    EMOTION_TAGS,
     NO_DIALOGUE,
     RARE_DIALOGUE,
+    REPEATED_NAMES,
+    SIMILE_CHAINS,
     chapter_observations,
     craft_evidence,
+    craft_notes,
 )
 
 DASH = "—"
@@ -42,11 +46,33 @@ def narration(words_per_paragraph: int, paragraphs: int = 4) -> str:
         (narration(150), [NO_DIALOGUE, BLOCK_PARAGRAPHS]),
         (scene(), []),
         ("", []),
+        # Readability (7.12), each shaped on what the 7.10 readers rejected.
+        (
+            "\n\n".join([f"{DASH}Sube {DASH}dijo Ana.", "Ana subio los escalones."] * 4),
+            [REPEATED_NAMES],
+        ),
+        (
+            "\n\n".join([f"{DASH}Sube {DASH}dijo, con una mezcla de miedo y rabia.", "Subio."] * 4),
+            [EMOTION_TAGS],
+        ),
+        (
+            "\n\n".join([f"{DASH}Sube {DASH}dijo.", "Subio como si flotara, como un nino."] * 4),
+            [SIMILE_CHAINS],
+        ),
     ],
-    ids=["silent-chapter", "barely-speaks", "block-paragraphs", "dramatized-chapter", "empty-body"],
+    ids=[
+        "silent-chapter",
+        "barely-speaks",
+        "block-paragraphs",
+        "dramatized-chapter",
+        "empty-body",
+        "name-in-every-sentence",
+        "explained-emotions",
+        "chained-similes",
+    ],
 )
 def test_chapter_observations(body, expected) -> None:
-    assert chapter_observations(body) == expected
+    assert chapter_observations(body, ["Ana"]) == expected
 
 
 def test_the_paragraph_ceiling_reaches_the_prose_the_drafter_actually_writes() -> None:
@@ -69,9 +95,10 @@ def test_the_evidence_block_names_only_the_chapters_that_narrate() -> None:
 
 def test_no_measurement_ever_reaches_the_prompt() -> None:
     evidence = craft_evidence([chapter("capitulo_1", 1)], [narration(150)])
+    notes = craft_notes(evidence)
     wording = "".join(
         item for observation in evidence.chapters[0].observations for item in observation
-    )
+    ) + "".join(note.evidence + note.instruction for note in notes)
 
     assert not any(character.isdigit() for character in wording)
     assert "%" not in evidence.prompt_block

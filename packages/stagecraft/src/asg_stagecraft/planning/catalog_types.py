@@ -1,10 +1,33 @@
 """Independent catalog types shared by artifacts and narrative planning."""
 
+import re
+import unicodedata
 from enum import StrEnum
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 ID_PATTERN = r"^[a-z0-9][a-z0-9_-]*$"
+
+
+def slug_id(value: object) -> object:
+    """Turn a near-miss id into its one valid form; valid ids and non-strings pass untouched.
+
+    Gemini does not enforce the schema's pattern: a 7.10 run died at the world stage because a
+    location id came back with capitals or accents twice in a row. "Sala Del Trono" has exactly
+    one correct reading, so it is normalized rather than rejected.
+    """
+    if not isinstance(value, str) or re.fullmatch(ID_PATTERN, value):
+        return value
+    ascii_text = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
+    slug = re.sub(r"[^a-z0-9_-]+", "_", ascii_text.lower()).strip("_-")
+    return slug or value
+
+
+# Every id a model writes. The pattern still travels in the JSON schema; the validator only
+# rescues values that would have failed it. Field goes first: placed after the validator,
+# pydantic drops the pattern from the schema sent to the model.
+ModelId = Annotated[str, Field(pattern=ID_PATTERN), BeforeValidator(slug_id)]
 
 
 class GuidanceStrategy(StrEnum):

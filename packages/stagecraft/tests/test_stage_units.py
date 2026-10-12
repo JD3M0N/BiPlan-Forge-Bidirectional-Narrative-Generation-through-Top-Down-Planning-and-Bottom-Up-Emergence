@@ -16,6 +16,7 @@ from asg_stagecraft.stage.casting import (
     gates_known_by_discoverer,
     materialize_bible,
 )
+from asg_stagecraft.stage.editorial import editorial_verdict, strip_markers
 from asg_stagecraft.stage.fallback import narrate
 from asg_stagecraft.stage.inventory import StageInventory
 from asg_stagecraft.stage.memory import RECENT_REFLECTIONS, RETRIEVED_RECORDS, CharacterMemory
@@ -33,6 +34,7 @@ from asg_stagecraft.stage.schemas import (
     ItemAction,
     ItemActionDraft,
     KnowledgeGate,
+    NarrationReview,
     PerformanceArtifact,
     PerformanceSettings,
     Prop,
@@ -337,6 +339,34 @@ def test_a_first_person_stage_direction_is_repaired_or_rejected(action, repaired
     assert str(error.value).isascii()
 
 
+@pytest.mark.parametrize(
+    ("fields", "rejected"),
+    [
+        ({"speech": "No.", "thought": "she is sharp, but she needs my route to the ship"}, True),
+        ({"speech": "I will not give you the map and that is final."}, True),
+        ({"speech": "Te lo dije: el Sauropod Pulley Works no aguanta mas."}, False),
+        ({"speech": "OK.", "thought": "No me cree"}, False),
+    ],
+    ids=["english-thought", "english-speech", "foreign-name", "too-short-to-judge"],
+)
+def test_a_turn_outside_the_fiction_language_is_rejected(fields, rejected) -> None:
+    """Found in 7.10: actor thoughts in English reached the fallback prose."""
+    draft = act(**fields)
+    if not rejected:
+        validate_turn(draft, previous_speech=[], language="Spanish")
+        return
+    with pytest.raises(TurnIssue) as error:
+        validate_turn(draft, previous_speech=[], language="Spanish")
+    assert error.value.code == "WRONG_LANGUAGE"
+    assert str(error.value).isascii()
+
+
+def test_copied_log_marks_are_stripped_and_internal_ids_still_block() -> None:
+    marked = "[clave] Un golpe sacude el barco.\n[Ana piensa: Miente]"
+    assert strip_markers(marked) == "Un golpe sacude el barco.\nMiente"
+    assert not editorial_verdict(NarrationReview(), "Ocurrio en chapter_2.", []).accepted
+
+
 def test_the_first_person_detector_is_conservative_by_design() -> None:
     """A bare first-person verb gets through: the documented blind spot, not a bug."""
     validate_turn(act(action="Saco una astilla del bolsillo.", speech="Algo."), previous_speech=[])
@@ -468,6 +498,25 @@ def test_a_world_event_does_not_count_as_anyone_having_moved() -> None:
         turn("ana", action="Se abre la puerta.", number=2).model_copy(update={"kind": "world"}),
     ]
     assert policy.next_actor(on_stage=["ana", "bruno"], turns=history, requested="ana") == "ana"
+
+
+@pytest.mark.parametrize(
+    ("moves", "deadlocked"),
+    [
+        # Verbatim shape of the 7.10 navigators' first scene.
+        ([("ana", "plead"), ("bruno", "command")] * 2, True),
+        ([("ana", "plead"), ("bruno", "command"), ("ana", "concede"), ("bruno", "command")], False),
+        ([("ana", "plead"), ("bruno", "command"), ("cora", "plead"), ("bruno", "command")], False),
+        ([("ana", "plead"), ("bruno", "command")], False),
+    ],
+    ids=["standoff", "someone-gives-ground", "third-voice", "too-early"],
+)
+def test_two_characters_trading_the_same_moves_is_a_deadlock(moves, deadlocked) -> None:
+    history = [
+        turn(actor, speech="Algo.", number=number).model_copy(update={"tactic": tactic})
+        for number, (actor, tactic) in enumerate(moves, 1)
+    ]
+    assert policy.is_deadlocked(history) is deadlocked
 
 
 def test_a_scene_without_a_cast_is_a_programming_error() -> None:
@@ -731,14 +780,50 @@ def test_a_dossier_without_a_public_face_is_not_playable() -> None:
 # -- the deterministic narrator ----------------------------------------------------------
 
 
-def test_the_fallback_narrator_renders_speech_action_and_thought() -> None:
-    prose = narrate(
-        [turn("ana", speech="Nadie mas lo sabe.", action="cierra el archivo", thought="Miente")],
-        NAMES,
-    )
-    assert "—Nadie mas lo sabe —dijo Ana." in prose
-    assert "Ana cierra el archivo." in prose
-    assert "Ana penso que miente." in prose
+FULL_NAMES = {"ana": "Ana Robles", "bruno": "Lord Bruno Vane", "cora": "Cora Lis"}
+
+
+@pytest.mark.parametrize(
+    ("turns", "expected"),
+    [
+        (
+            [
+                turn(
+                    "ana", speech="Nadie mas lo sabe.", action="cierra el archivo", thought="Miente"
+                )
+            ],
+            "Ana Robles cierra el archivo. —Nadie mas lo sabe. *Miente*, piensa.",
+        ),
+        (
+            [turn("ana", speech="Hola."), turn("ana", speech="Otra vez.", number=2)],
+            "—Hola —dice Ana Robles.\n\n—Otra vez —dice Ana.",
+        ),
+        (
+            [turn("bruno", speech="Uno."), turn("bruno", thought="Ya basta", number=2)],
+            "—Uno —dice Lord Bruno Vane.\n\n*Ya basta*, piensa Lord Bruno.",
+        ),
+        (
+            [turn("ana", speech="No.", thought="she is sharp, but she needs my route to the ship")],
+            "—No —dice Ana Robles.",
+        ),
+        (
+            [
+                turn(
+                    "ana",
+                    speech="Calla.",
+                    action="se acerca",
+                    visibility="whisper",
+                    addressed=["cora"],
+                )
+            ],
+            "Ana Robles se acerca. —Calla —dice en voz baja a Cora Lis.",
+        ),
+    ],
+    ids=["one-paragraph-per-turn", "short-name-after", "title-kept", "foreign-thought", "whisper"],
+)
+def test_the_fallback_narrator_reads_as_prose(turns, expected) -> None:
+    """Found in 7.10: the fallback named a character in every line and wrote 'penso que'."""
+    assert narrate(turns, FULL_NAMES, "Spanish") == expected
 
 
 def test_the_fallback_narrator_invents_nothing_for_an_empty_log() -> None:
@@ -845,6 +930,10 @@ def test_the_narrator_log_marks_the_turns_the_beat_turned_on() -> None:
     turns = [turn("ana", speech="Una."), turn("bruno", speech="Dos.", number=2)]
     log = scene_log(turns, NAMES, thoughts=True, key_ids={"chapter-1-scene-1-t002"})
     assert log.splitlines() == ["Ana: Una.", "[clave]", "Bruno: Dos."]
+    # The narrator reads a name the way prose would use it: in full once, short after (7.12).
+    again = [*turns, turn("ana", speech="Tres.", number=3)]
+    short = scene_log(again, FULL_NAMES, thoughts=True, short_names=True).splitlines()
+    assert short == ["Ana Robles: Una.", "Lord Bruno Vane: Dos.", "Ana: Tres."]
 
 
 @pytest.mark.parametrize(

@@ -19,6 +19,7 @@ from __future__ import annotations
 import re
 
 from ..planning.skeleton_match import normalize
+from .language import is_foreign
 from .memory import tokens
 from .schemas import ActorTurnDraft
 
@@ -156,6 +157,7 @@ def validate_turn(
     *,
     previous_speech: list[str],
     previous_actions: list[str] | None = None,
+    language: str = "",
 ) -> None:
     """Accept one normalized turn, or raise a TurnIssue saying in English what to fix."""
     if turn.visibility == "whisper" and not turn.addressed_to:
@@ -167,6 +169,21 @@ def validate_turn(
     ):
         raise TurnIssue(
             "OUT_OF_FICTION", "the turn refers to code or an assistant task outside the fiction"
+        )
+    foreign = [
+        label
+        for label, text in (
+            ("speech", turn.speech),
+            ("action", turn.action),
+            ("thought", turn.thought),
+        )
+        if is_foreign(text, language)
+    ]
+    if foreign:
+        raise TurnIssue(
+            "WRONG_LANGUAGE",
+            f"the {', '.join(foreign)} is not in {language}; say, do and think everything in "
+            f"{language}, the language of the fiction",
         )
     if not turn.speech and not turn.action:
         raise TurnIssue(

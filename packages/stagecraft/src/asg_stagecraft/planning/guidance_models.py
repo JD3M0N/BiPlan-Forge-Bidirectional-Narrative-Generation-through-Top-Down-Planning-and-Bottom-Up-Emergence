@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .catalog_types import ID_PATTERN, FunctionalRole, PlotSkeleton
+from .catalog_types import FunctionalRole, ModelId, PlotSkeleton
 
 
 class GuidanceModel(BaseModel):
@@ -16,7 +16,7 @@ class GuidanceModel(BaseModel):
 class RelevanceJudgment(GuidanceModel):
     """Record relevance separately from conflict with explicit requirements."""
 
-    skeleton_id: str = Field(pattern=ID_PATTERN)
+    skeleton_id: ModelId
     relevance: float = Field(ge=0, le=1)
     status: Literal["pertinent", "weak", "incompatible"]
     evidence: str = Field(min_length=1)
@@ -64,7 +64,7 @@ class RetrievalArtifact(GuidanceModel):
 class PatternSelection(GuidanceModel):
     """Describe the contribution of a pattern at its request-specific scope."""
 
-    skeleton_id: str = Field(pattern=ID_PATTERN)
+    skeleton_id: ModelId
     scope: Literal["principal", "secondary", "local"]
     evidence: str = Field(min_length=1)
     contribution: str = Field(min_length=1)
@@ -95,7 +95,7 @@ class RoleProposal(GuidanceModel):
 class AdaptedPrompt(GuidanceModel):
     """Tie an adapted question or movement to an item in a selected pattern."""
 
-    skeleton_id: str = Field(pattern=ID_PATTERN)
+    skeleton_id: ModelId
     source_index: int = Field(ge=0)
     adaptation: str = Field(min_length=1)
 

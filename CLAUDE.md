@@ -301,8 +301,9 @@ A esa lista, el guion y el simulado añaden los suyos.
   Los rasgos T de `asg-evaluation` las recalculan desde `story.md`, así que también miden los
   runs anteriores a 6.5.0, que no las traen.
 
-`version.py` fija `PIPELINE_VERSION` (7.11) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.11).
-Desde 7.11 un run nuevo ya no trae `evaluation.json`.
+`version.py` fija `PIPELINE_VERSION` (7.12) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.12).
+Desde 7.11 un run nuevo ya no trae `evaluation.json`; 7.12 añade `style_request` a
+`request.json`, `prose_model` a `metadata.json` y el contrato 4 de `narration.json`.
 `StoryRun` se niega a abrir un run incompleto o de una versión no soportada. Si cambias el
 conjunto de artefactos o su significado, sube la versión en vez de romper los runs ya generados:
 son datos de la tesis. Una limpieza que no toca artefactos sube solo el parche de
@@ -340,6 +341,14 @@ esquema Pydantic, y `generate_text`) e implementa `GeminiProvider`. Lo que impor
     ve uno solo. Ningún agente ni doble de test sabe del reparto.
   - `metadata.json` lo registra en `stage_model`, que es `None` si la función usó `model`. El eje
     `stage_model` de `evaluation/pairing.py` impide emparejar funciones de modelos distintos.
+- **La prosa que lee el lector puede ir con un modelo propio** (7.12), `GEMINI_PROSE_MODEL`.
+  - Solo las llamadas de `PROSE_CALLS` (capítulos del Drafter, Writer y narrador, no su revisión)
+    van a ese modelo, por etapa y agente, en el mismo `RoutedProvider`.
+  - Tiene su propio tope diario (`GEMINI_PROSE_DAILY_REQUESTS`, 20 por defecto: el gratuito de
+    Flash). Cuando se agota, o cuando el modelo de la función o de la prosa da un 401/403,
+    `RoutedProvider` pasa esa ruta al principal durante el resto del run, sin perderlo.
+  - `metadata.json` lo registra en `prose_model`; el eje `prose_model` de `pairing.py` solo lo da
+    por usado si aparece en `models_used`. Sin cadena; con `ASG_LLM_CHAIN` se ignora.
 - **La cadena de proveedores** (7.7), `ASG_LLM_CHAIN=gemini,groq,mistral`.
   - `FailoverProvider` prueba sus ranuras (proveedor y modelo; Groq da una por modelo) en orden.
     Si una da un 429 diario o mensual (`ProviderDailyQuotaError`), la misma llamada se repite en
@@ -412,6 +421,17 @@ que saber antes de tocar `stage/`:
 - **El respaldo es contrato.** Si el casting, la utilería o la narración no pueden correr,
   `stage/casting.py`, `stage/props.py` y `stage/fallback.py` derivan un resultado determinista.
   El run lo registra y sigue.
+- **La revisión editorial nunca manda al respaldo un capítulo que el narrador escribió** (7.12).
+  En 7.10 lo hizo con 7 de 14 capítulos: la historia de los navegantes salió entera del
+  respaldo. `stage/editorial.py` descarta el hallazgo que no puede citar, solo bloquean
+  `INVENTED_EVENT` y `CONTRADICTION`, una revisión que falla acepta el capítulo y, agotados los
+  intentos, se entrega el de menos hallazgos. El respaldo queda para cuando no hubo texto. No
+  vuelvas a rechazar por un hallazgo leve.
+- **Prosa para un lector cualquiera** (7.12). `agents/style.py` es el contrato de estilo del
+  Drafter, el Writer y el Narrator, y `request.style_request` lleva el registro que pidió la
+  persona, literal. `writing/craft_evidence.craft_notes` convierte cada observación medida
+  (también nombres repetidos, coletillas y símiles) en una nota para el Writer aunque el
+  crítico no dé ninguna.
 - **Ninguna cifra viaja a un prompt**, como en el resto del pipeline, y un test lo comprueba
   sobre las etapas nuevas.
 - **El inventario es opcional y el código es el árbitro** (7.6). `inventory=True` añade la etapa

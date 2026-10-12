@@ -45,6 +45,7 @@ from .runtime.errors import (
     PlotValidationError,
     RunCancelledError,
     RunInterruptedError,
+    StructuredResponseError,
 )
 from .runtime.progress import PipelineEvent, PipelineEventCallback, ProgressCallback, ProgressUpdate
 from .runtime.provider import COUNT_TOKENS_OPERATION, call_context
@@ -81,7 +82,7 @@ from .version import SUPPORTED_PIPELINE_VERSIONS
 from .writing.acceptance import writer_candidate_issue, writer_fallback_warning
 from .writing.assembly import assemble_story
 from .writing.audit import story_metrics, word_count
-from .writing.craft_evidence import craft_evidence
+from .writing.craft_evidence import character_names, craft_evidence, craft_notes
 
 T = TypeVar("T")
 
@@ -131,6 +132,9 @@ PLAN_ATTEMPTS_BY_PROFILE: dict[NarrativeProfile, int] = {
 # to repair than a rejected plan: one repair round is enough, and the stage degrades rather than
 # spending more of the quota on prose guidance the story can do without.
 PROMISE_ATTEMPTS = 2
+# The world has no repair prompt of its own: the provider already resends the validation errors,
+# so a second stage attempt is a fresh draw. 7.10 lost a run to one bad location id here.
+WORLD_ATTEMPTS = 2
 
 
 class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
@@ -446,6 +450,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
             narrative_voice=self.narrative_voice if self._simulated else None,
             actor_memory=self.actor_memory if self._simulated else None,
             stage_model=stage_model if self._simulated else None,
+            prose_model=getattr(self.provider, "prose_model_name", None),
         )
         # Every axis a run can differ on, including the ledger, guidance and audio switches
         # that no other artifact records (7.3). Written first, so a failed run keeps it too.
@@ -578,7 +583,16 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
             """Generate the world for the bound story request."""
             return WorldBuilderAgent(self.provider).run(request)
 
-        world = self._call_agent("world", build_world)
+        for attempt in range(1, WORLD_ATTEMPTS + 1):
+            try:
+                world = self._call_agent("world", build_world)
+                break
+            except StructuredResponseError as exc:
+                self.repository.save_data(
+                    f"world_attempt-{attempt:03d}-validation.json", exc.details
+                )
+                if attempt == WORLD_ATTEMPTS:
+                    raise
         self.repository.save_json("world.json", world)
         self.repository.complete_stage("world")
         return world
@@ -989,7 +1003,9 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
         """
         assert self.repository is not None
         self._notify(78, "critique", "Analizando el drama del borrador completo")
-        evidence = craft_evidence(plan.chapters, draft_bodies)
+        evidence = craft_evidence(
+            plan.chapters, draft_bodies, character_names(characters.characters)
+        )
         self.repository.save_json("craft_evidence.json", evidence)
         obligations = critic_obligations(ledger)
         try:
@@ -1022,13 +1038,15 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
             self.repository.add_warning(warning)
             self._emit("quality_fallback", warning, stage=self.progress["stage"])
             return draft_bodies
+        # review.json keeps what the critic said; the Writer also gets what was measured.
+        measured = review.model_copy(update={"notes": [*review.notes, *craft_notes(evidence)]})
         return self._revise_chapters(
             request,
             characters,
             plan,
             presentation,
             draft_bodies,
-            review,
+            measured,
             ledger,
         )
 

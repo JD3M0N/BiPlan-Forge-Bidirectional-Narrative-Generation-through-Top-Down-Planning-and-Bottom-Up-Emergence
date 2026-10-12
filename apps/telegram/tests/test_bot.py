@@ -88,8 +88,12 @@ def test_queue_keeps_one_request_per_person_recovers_once_and_reports_failures(t
     second = queue.enqueue(2, 8, "simulated", "Segunda")
     assert queue.ahead(second) == 1
     assert queue.claim()["id"] == first
-    # A restart while running requeues the job once; a second restart gives up.
-    assert [j["status"] for j in queue.recover()] == ["queued"]
+    # A restart while running requeues the job once and closes the run it left half-written;
+    # a second restart gives up.
+    queue.attach_run(first, tmp_path / "cortado")
+    assert [(j["status"], j["run_dir"]) for j in queue.recover()] == [
+        ("queued", str(tmp_path / "cortado"))
+    ]
     assert queue.claim()["id"] == first
     assert [j["status"] for j in queue.recover()] == ["failed"]
     assert queue.cancel(8) == "queued" and queue.claim() is None

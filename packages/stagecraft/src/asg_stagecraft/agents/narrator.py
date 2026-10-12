@@ -15,6 +15,7 @@ from ..formats import NarrativeVoice
 from ..schemas import ChapterPlan, StoryRequest
 from ..stage.schemas import NarrationReview
 from .base import Agent, json_text
+from .style import style_clause
 
 _VOICE_CLAUSES: dict[NarrativeVoice, str] = {
     NarrativeVoice.OMNISCIENT: (
@@ -108,18 +109,21 @@ class NarratorAgent(Agent[str]):
                 "the log is what happened. "
                 "Curate, do not transcribe: the finished chapter should be shorter than the log. "
                 "Moments marked [clave] are the ones the chapter turns on; play those in full, "
-                "as scene. Compress everything else - a standoff where both sides repeat their "
-                "position, a gesture made again - into a sentence or cut it. Render a recorded "
+                "as scene, and never copy the mark itself into the prose. Compress everything "
+                "else - a standoff where both sides repeat their position, a gesture made "
+                "again - into a sentence or cut it. Render a recorded "
                 "thought only where it changes what the reader understands, and never attach a "
                 "thought to every line or gesture. A line in parentheses with no speaker is "
                 "something the world did: tell it in the narration's own tense, like everything "
                 "else. "
                 "Write it as scene, not as summary: keep the spoken exchanges as dialogue under "
-                "the dialogue-dash convention of the language, give each beat its own paragraph, "
-                "and let what characters do carry what they feel. Hold this through the last "
+                "the dialogue-dash convention of the language, start a new paragraph for each "
+                "new speaker or shift of attention, and let what characters do carry what they "
+                "feel. Hold this through the last "
                 "chapter: an ending is a scene, not an account of how matters turned out. "
                 "If a question remains open in the log, leave it open. Do not expose "
                 "internal IDs, turn identifiers or planning terminology."
+                f"{style_clause(request)}"
             ),
             prompt=(
                 "PREMISA Y REGLAS (son contexto, no sucesos ya ocurridos):\n"
@@ -137,12 +141,15 @@ class NarratorAgent(Agent[str]):
             system_instruction=(
                 "Review a narrated chapter against ONLY the supplied visible "
                 "turns, premise and rules. "
-                "Flag invented events, omitted decisive consequences, "
-                "contradictions, internal markers, "
-                "repeated exchanges and wrong grammatical person or perspective. "
+                "The narrator is meant to curate: cutting lines, merging exchanges, compressing "
+                "time and leaving out thoughts are its job, never a finding. Flag only invented "
+                "events, contradictions of the turns, a consequence the rest of the story depends "
+                "on that the chapter drops entirely, internal markers, repeated exchanges and "
+                "wrong grammatical person or perspective. "
                 "Premise is context, "
-                "not performed events. Each finding needs an exact prose quote, or source turn IDs "
-                "for an omission. Instructions must repair presentation without inventing events. "
+                "not performed events. Each finding needs an exact prose quote copied from the "
+                "story, or source turn IDs for an omission. Return no findings when the chapter "
+                "is faithful. Instructions must repair presentation without inventing events. "
                 "Dialogue may use first person under any voice. Thoughts may "
                 "appear only when supplied. "
                 "A character's claim remains a claim; do not certify it as objective truth. "

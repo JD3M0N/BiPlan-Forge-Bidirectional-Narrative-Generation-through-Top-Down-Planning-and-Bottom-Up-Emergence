@@ -14,7 +14,7 @@ from asg_stagecraft.runtime.errors import (
     StructuredResponseError,
 )
 from asg_stagecraft.runtime.provider import GeminiProvider, _gemini_response_schema
-from asg_stagecraft.schemas import LLMUsageRecord, StoryRequest
+from asg_stagecraft.schemas import ID_PATTERN, LLMUsageRecord, Location, StoryRequest, WorldArtifact
 
 # The 429 body Gemini returned in the three corpus runs filed as billing limits: its text asks
 # to check "plan and billing details", but its quota ID is the free tier's daily request cap.
@@ -86,6 +86,21 @@ def test_gemini_schema_omits_unsupported_additional_properties() -> None:
 
     assert not contains_additional_properties(schema)
     assert schema["properties"]["narrative_profile"]["$ref"] == "#/$defs/NarrativeProfile"
+
+
+@pytest.mark.parametrize(
+    ("written", "stored"),
+    [
+        ("sala_trono", "sala_trono"),
+        ("Sala Del Trono", "sala_del_trono"),
+        ("Muelle Ñu-4", "muelle_nu-4"),
+    ],
+)
+def test_a_near_miss_id_is_normalized_and_the_pattern_still_travels(written, stored) -> None:
+    """Found in 7.10: a location id with capitals or accents killed the run at the world stage."""
+    assert Location(id=written, name="Sala", description="x").id == stored
+    location = _gemini_response_schema(WorldArtifact)["$defs"]["Location"]
+    assert location["properties"]["id"]["pattern"] == ID_PATTERN
 
 
 @pytest.mark.parametrize(
@@ -380,6 +395,31 @@ def test_the_performance_goes_to_its_own_model_and_everything_else_to_the_main_o
     ]
 
 
+def test_reader_prose_goes_to_its_model_until_that_model_cannot_answer() -> None:
+    """7.12: the prose model has ~20 free calls a day; once spent the run goes on, on main."""
+    main = provider_with(response=SimpleNamespace(text="principal", usage_metadata=None))
+    main.model_name = "main-model"
+    prose = provider_with(response=SimpleNamespace(text="prosa", usage_metadata=None))
+    prose.model_name = "prose-model"
+    routed = provider_module.RoutedProvider(main, prose=prose)
+    ask = {"system_instruction": "s", "prompt": "p", "profile": "prose"}
+    with provider_module.call_context("drafting", "drafter"):
+        assert routed.generate_text(**ask) == "prosa"
+    for stage_name, agent in [("narration", "narrator_review"), ("promises", "drafter")]:
+        with provider_module.call_context(stage_name, agent):
+            assert routed.generate_text(**ask) == "principal"
+
+    def spent(**_):
+        raise ProviderDailyQuotaError("cuota diaria agotada")
+
+    prose.generate_text = spent
+    for stage_name, agent in [("narration", "narrator"), ("revision", "writer")]:
+        with provider_module.call_context(stage_name, agent):
+            assert routed.generate_text(**ask) == "principal"
+    assert routed.refused == {"prose-model"}
+    assert routed.prose_model_name == "prose-model" and routed.stage_model_name is None
+
+
 def test_the_routed_pair_shares_one_usage_list_and_the_run_callbacks() -> None:
     routed, main, stage = routed_pair()
     seen, waits = [], []
@@ -445,6 +485,24 @@ def test_the_factory_builds_one_provider_until_the_performance_differs(monkeypat
         "k",
     )
     assert routed.stage_model_name == "gemini-3.1-flash-lite"
+
+    RecordingGemini.built = []
+    prose = Settings(
+        api_key="k",
+        model="gemini-3.5-flash-lite",
+        output_root=tmp_path,
+        prose_model="gemini-3.6-flash",
+        prose_rpm_limit=5,
+        budget_path=tmp_path / "budget.sqlite3",
+    )
+    routed = provider_module.provider_from_settings(prose)
+    assert (routed.stage, routed.prose_model_name) == (None, "gemini-3.6-flash")
+    # Its own small daily cap, so the ledger knows when to hand the prose back to main.
+    assert (routed.prose.quota[1].key, routed.prose.quota[1].max_requests) == (
+        "gemini:gemini-3.6-flash",
+        20,
+    )
+    assert RecordingGemini.built[1]["rpm_limit"] == 5
 
 
 def test_each_model_and_key_has_its_own_rpm_window(monkeypatch) -> None:

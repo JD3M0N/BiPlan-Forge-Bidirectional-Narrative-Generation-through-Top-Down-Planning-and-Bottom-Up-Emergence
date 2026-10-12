@@ -162,3 +162,59 @@ def craft_metrics(markdown: str) -> CraftMetrics:
         words_per_sentence=round(words / sentences, AVERAGE_DIGITS) if sentences else 0.0,
         words_per_paragraph=round(words / len(paragraphs), AVERAGE_DIGITS),
     )
+
+
+# A dialogue line whose tag goes on to explain the feeling: "—... —dijo, con una mezcla de...".
+_EMOTION_TAG = re.compile(
+    r"[" + DIALOGUE_DASHES + r"][^" + DIALOGUE_DASHES + r"\n]+[" + DIALOGUE_DASHES + r"]"
+    r"[^.\n]*?\bcon\s+(?:una|un)\s",
+    re.IGNORECASE,
+)
+# Comparisons the reader notices: "como si...", "como un...", "como una...".
+_SIMILE = re.compile(r"\bcomo\s+(?:si|una?)\b", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class ReadabilitySignals:
+    """How heavy a prose body reads, in figures no prompt ever receives (7.12).
+
+    Added after readers outside the project called the stories hard to read. Measured on the
+    corpus: name_repeat_ratio has a p90 of 0.20 in the 6.x Top-Down chapters and 0.5 to 0.8 in
+    the 7.10 fallback narration; tagged_dialogue_ratio reached 0.6 in the 7.10 narrative runs.
+    """
+
+    name_repeat_ratio: float
+    tagged_dialogue_ratio: float
+    similes_per_100_words: float
+
+
+def readability_signals(
+    markdown: str, names: list[str] | tuple[str, ...] = ()
+) -> ReadabilitySignals:
+    """Measure repeated names, emotion-explaining dialogue tags and simile density.
+
+    name_repeat_ratio is the share of sentences that name a character already named in the
+    sentence before, which is what a reader feels as "the name in every line".
+    """
+    paragraphs = prose_paragraphs(markdown)
+    words = sum(len(paragraph.split()) for paragraph in paragraphs)
+    patterns = [re.compile(r"\b" + re.escape(name) + r"\b") for name in names if name.strip()]
+    previous: set[int] = set()
+    repeats = sentences = 0
+    for paragraph in paragraphs:
+        for sentence in split_sentences(paragraph):
+            sentences += 1
+            current = {index for index, pattern in enumerate(patterns) if pattern.search(sentence)}
+            repeats += bool(current & previous)
+            previous = current
+    dialogue = [paragraph for paragraph in paragraphs if opens_with_dash(paragraph)]
+    tagged = sum(bool(_EMOTION_TAG.search(paragraph)) for paragraph in dialogue)
+    return ReadabilitySignals(
+        name_repeat_ratio=round(repeats / sentences, RATIO_DIGITS) if sentences else 0.0,
+        tagged_dialogue_ratio=round(tagged / len(dialogue), RATIO_DIGITS) if dialogue else 0.0,
+        similes_per_100_words=(
+            round(100 * len(_SIMILE.findall(" ".join(paragraphs))) / words, AVERAGE_DIGITS)
+            if words
+            else 0.0
+        ),
+    )

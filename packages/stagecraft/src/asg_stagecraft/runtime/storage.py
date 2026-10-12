@@ -34,6 +34,7 @@ class ArtifactRepository:
         narrative_voice: NarrativeVoice | None = None,
         actor_memory: ActorMemory | None = None,
         stage_model: str | None = None,
+        prose_model: str | None = None,
     ) -> None:
         """Initialize the ArtifactRepository instance."""
         now = datetime.now(UTC)
@@ -53,6 +54,7 @@ class ArtifactRepository:
             narrative_voice=narrative_voice,
             actor_memory=actor_memory,
             stage_model=stage_model,
+            prose_model=prose_model,
         )
         self.manifest: dict = {
             "pipeline_version": PIPELINE_VERSION,

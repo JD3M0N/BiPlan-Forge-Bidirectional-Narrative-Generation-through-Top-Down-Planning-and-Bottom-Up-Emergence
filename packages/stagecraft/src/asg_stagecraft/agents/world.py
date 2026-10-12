@@ -19,7 +19,10 @@ class WorldBuilderAgent(Agent[WorldArtifact]):
                 "Give Expansive stories enough distinct settings and consequential elements to "
                 "support the main plot, meaningful subplots, and broad world consequences. Include "
                 "only elements that affect choices or consequences. Give locations and objects "
-                "stable lowercase IDs. Return artifact content in English."
+                "stable IDs made only of lowercase ASCII letters, digits, underscores and hyphens. "
+                f"Write every location and object name in {request.language}, as a speaker of it "
+                "would say it, because those names reach the reader; write the other fields in "
+                "English."
             ),
             prompt=story_specification_header(request),
             schema=WorldArtifact,

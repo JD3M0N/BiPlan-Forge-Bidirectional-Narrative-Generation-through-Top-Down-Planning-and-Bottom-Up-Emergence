@@ -63,3 +63,29 @@ def _last_spoke(turns: list[StageTurn], character_id: str) -> int:
         if turns[index].actor_id == character_id:
             return index
     return -1
+
+
+# How many of the beat's last actor turns must show two characters trading the same moves before
+# the director is asked to turn the scene, instead of waiting for its next scheduled check.
+DEADLOCK_WINDOW = 4
+
+
+def is_deadlocked(turns: list[StageTurn], *, window: int = DEADLOCK_WINDOW) -> bool:
+    """Say whether two characters are trading the same moves, each repeating their own tactic.
+
+    Found in the 7.10 navigators run: "plead" against "command" three times each, ten turns of
+    the same argument before the beat cap forced it. Repetition checks only compare an actor
+    with itself, and these lines were worded differently each time; the tactics were not.
+    """
+    moved = [turn for turn in turns if turn.kind == "actor"][-window:]
+    if len(moved) < window:
+        return False
+    actors = [turn.actor_id for turn in moved]
+    if len(set(actors)) != 2 or any(
+        left == right for left, right in zip(actors, actors[1:], strict=False)
+    ):
+        return False
+    return all(
+        moved[index].tactic and moved[index].tactic == moved[index + 2].tactic
+        for index in range(window - 2)
+    )

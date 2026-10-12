@@ -12,6 +12,7 @@ from asg_stagecraft.brief import PRONOUN_LABELS, ROLE_LABELS
 from asg_stagecraft.runtime.config import load_settings
 from asg_stagecraft.runtime.errors import ASGError, RunCancelledError
 from asg_stagecraft.runtime.provider import provider_from_settings
+from asg_stagecraft.tools.recovery import discard_stalled_run
 from pydantic import ValidationError
 
 # The two approaches a participant can pick, by the story format that implements each.
@@ -116,6 +117,7 @@ class StagecraftGenerator:
         *,
         on_progress: Progress | None = None,
         should_cancel: Callable[[], bool] | None = None,
+        on_run_created: Callable[[Path], None] | None = None,
     ) -> Path:
         """Run the pipeline and return the run directory, or raise GenerationFailure."""
         if story_format not in METHODS:
@@ -132,6 +134,7 @@ class StagecraftGenerator:
                 on_progress=(lambda u: on_progress(u.percent, u.description))
                 if on_progress
                 else None,
+                on_run_created=on_run_created,
                 should_cancel=should_cancel,
             ).run_dir
         except RunCancelledError as error:
@@ -141,3 +144,10 @@ class StagecraftGenerator:
         finally:
             # Each run already wrote its usage to disk; keeping it would only grow memory.
             self._provider.usage_records.clear()
+
+    def close_interrupted(self, run_dir: Path) -> None:
+        """Mark a run a restart cut short as failed; a run already closed is left alone."""
+        try:
+            discard_stalled_run(run_dir)
+        except (ASGError, OSError, ValueError):
+            pass

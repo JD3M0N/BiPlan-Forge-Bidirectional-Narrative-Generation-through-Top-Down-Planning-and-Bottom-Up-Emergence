@@ -119,6 +119,12 @@ class JobQueue:
                 db.execute("UPDATE jobs SET cancel=1 WHERE id=?", (row["id"],))
             return row["status"]
 
+    def attach_run(self, job_id: int, run_dir: Path) -> None:
+        """Remember the run directory a job is writing, so a restart can close it."""
+        self._run(
+            "UPDATE jobs SET run_dir=?, updated_at=? WHERE id=?", (str(run_dir), _now(), job_id)
+        )
+
     def cancel_requested(self, job_id: int) -> bool:
         """Tell the running pipeline whether its participant asked to stop."""
         return bool(self._run("SELECT cancel FROM jobs WHERE id=?", (job_id,))[0][0])
@@ -155,6 +161,9 @@ class StoryWorker:
     async def run(self) -> None:
         """Process the queue forever; a failing job never stops the worker."""
         for job in self.queue.recover():
+            if job.get("run_dir"):
+                # The interrupted run would stay "running" forever: the retry writes a new one.
+                await asyncio.to_thread(self.generator.close_interrupted, Path(job["run_dir"]))
             text = (
                 "El bot se reinició: tu historia vuelve a la cola."
                 if job["status"] == "queued"
@@ -202,6 +211,7 @@ class StoryWorker:
                 job["story_format"],
                 on_progress=on_progress,
                 should_cancel=lambda: self.queue.cancel_requested(job["id"]),
+                on_run_created=lambda run_dir: self.queue.attach_run(job["id"], run_dir),
             )
         except GenerationCancelled:
             self.queue.finish(job["id"], "cancelled")

@@ -33,6 +33,22 @@ _DIRECTION_RULES = (
 )
 
 
+def genre_clause(genre: str) -> str:
+    """Point the notes at what the requested genre lives on, or say nothing without one.
+
+    7.12: the navigators run asked for adventure and "a city in the sky", and every scene was
+    the crew arguing on deck. The director only gives motives, so this shapes which motive it
+    picks; it never adds an event, which SIM-2 keeps out of the director's hands.
+    """
+    if not genre.strip():
+        return ""
+    return (
+        f" The story is {genre.strip()}: let your notes favour what that genre lives on - action, "
+        "danger, discovery, wonder or humour, as it fits - over characters restating an "
+        "argument they have already made."
+    )
+
+
 # What each rung of the escalation ladder asks for, on top of reading the clauses. The ladder
 # exists because the first real runs deadlocked: the notes set one character pressing and
 # another resisting, nobody ever had a reason to cross, and four beats in twelve were closed
@@ -69,14 +85,14 @@ class StageManagerAgent(Agent[BeatDirection]):
 
     name = "stage_manager"
 
-    def open_beat(self, context: str, language: str) -> BeatDirection:
+    def open_beat(self, context: str, language: str, genre: str = "") -> BeatDirection:
         """Choose who moves first in a beat and give them a reason to."""
         return self.provider.generate_structured(
             system_instruction=(
                 "You are the Stage Manager of an improvised performance. The scene below has to "
                 f"reach one particular thing happening. The actors speak {language} and are "
                 "improvising: they do not know what that thing is, and they must not be told. "
-                f"{_DIRECTION_RULES} "
+                f"{_DIRECTION_RULES}{genre_clause(genre)} "
                 "Choose which character moves first — whoever has the strongest reason to act "
                 f"right now — and give at most two notes, written in {language}. Then, for each "
                 f"character on stage, restate in {language} what they want right now, from their "
@@ -88,7 +104,9 @@ class StageManagerAgent(Agent[BeatDirection]):
             profile="review",
         )
 
-    def check(self, context: str, language: str, *, mode: str = "check") -> BeatCheckDraft:
+    def check(
+        self, context: str, language: str, *, mode: str = "check", genre: str = ""
+    ) -> BeatCheckDraft:
         """Read the beat clause by clause, and escalate as far as the mode allows.
 
         The modes are the rungs of the engine's escalation ladder. "check" only reads and nudges;
@@ -113,7 +131,7 @@ class StageManagerAgent(Agent[BeatDirection]):
                 "A spoken claim, intention or thought is not a world fact. "
                 f"Write your clauses and notes in {language}; when the beat lists fixed clauses, "
                 "copy each one as given. "
-                f"{_DIRECTION_RULES}"
+                f"{_DIRECTION_RULES}{genre_clause(genre)}"
                 f"{_MODE_CLAUSES[mode].format(language=language)}"
             ),
             prompt=context,

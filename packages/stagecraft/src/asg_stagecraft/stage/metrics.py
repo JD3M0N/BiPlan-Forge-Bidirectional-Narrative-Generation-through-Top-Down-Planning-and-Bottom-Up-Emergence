@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 
 from ..formats import ActorMemory, NarrativeVoice
 from ..planning.profiles import NarrativeProfile
-from ..schemas import ID_PATTERN
+from ..schemas import ModelId
 from .casting import gates_known_by_discoverer
 from .memory import CharacterMemory
 from .perception import item_moves
@@ -51,7 +51,7 @@ from .validation import (
 class ActorMetrics(BaseModel):
     """What one character did across the whole performance."""
 
-    character_id: str = Field(pattern=ID_PATTERN)
+    character_id: ModelId
     scenes: int = Field(default=0, ge=0)
     turns: int = Field(default=0, ge=0)
     speech_words: int = Field(default=0, ge=0)
@@ -70,8 +70,8 @@ class ActorMetrics(BaseModel):
 class SceneMetrics(BaseModel):
     """What one scene produced, beat by beat."""
 
-    scene_id: str = Field(pattern=ID_PATTERN)
-    chapter_id: str = Field(pattern=ID_PATTERN)
+    scene_id: ModelId
+    chapter_id: ModelId
     turns: int = Field(default=0, ge=0)
     beats: int = Field(default=0, ge=0)
     beats_achieved: int = Field(default=0, ge=0)
