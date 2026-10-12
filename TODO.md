@@ -4,7 +4,7 @@
 `asg-telegram` 5.0.0. El bot solo crea historias (Top-Down o híbrido, libre o guiada, con audio)
 y las compara a ciegas por pares; la consola, la evaluación 1-10, los estudios `rolling`/`pack`
 y los informes `report-evaluations`, `report-story-craft`, `report-simulations` y
-`report-llm-usage` se retiraron. Las cifras de proceso y coste se leen con `report-features`
+`report-llm-usage` se retiraron. Las cifras de proceso y coste se leen con `asg-report-features`
 (capas P y K) o del JSON del run; la comparación de runs, en StageCraft. 672 tests en verde.
 
 **Estado medido el 2026-10-09 con `asg-stagecraft` 7.9.0 (pipeline 7.9).** Un solo generador,
@@ -199,7 +199,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   MED-5, también el mismo plan.
 - **A ciegas.** Para comparar:
   - la comparación de runs de StageCraft (`asg-studio`) sobre `story.md`;
-  - `report-features` para la artesanía (capa T), la función (capa P) y el coste (capa K).
+  - `asg-report-features` para la artesanía (capa T), la función (capa P) y el coste (capa K).
 - **Ruido.** La réplica de doce historias de 6.6.0 dio hasta 16 puntos de diferencia entre dos
   corridas del mismo prompt y la misma versión. Una diferencia de medianas menor de unos cinco
   puntos, con n=9, no se interpreta.
@@ -238,7 +238,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
     (cerrado en 7.9, pero conviene vigilarlo), emociones repetidas entre escenas y cesiones
     por acto (SIM-19).
 - **Qué hacer.** Calcularlas en `asg_evaluation.simulation_report` (capa P de
-  `report-features`), que solo lee disco, desde `turns.jsonl`,
+  `asg-report-features`), que solo lee disco, desde `turns.jsonl`,
   `contexts.jsonl`, `director.jsonl`, `cast_bible.json` y `story.md`:
   - recuerdos y caracteres por contexto de actor;
   - turnos con destinatario y turnos respondidos;
@@ -471,7 +471,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   - escriba un manifiesto con cada celda, su run y su configuración.
 - **Hecho cuando.**
   - Una matriz interrumpida a mitad se completa al relanzarla, sin repetir runs.
-  - Su manifiesto basta para pasar los runs a StageCraft y a `report-features` por celda.
+  - Su manifiesto basta para pasar los runs a StageCraft y a `asg-report-features` por celda.
 
 ---
 
@@ -504,7 +504,7 @@ versión definitiva del generador
   verifica que cada cita es literal, pero nadie ha comprobado todavía que sus interpretaciones
   sean correctas ni que sean estables: la demo ficticia no valida su calidad.
 - **Qué hacer.**
-  - Revisar a mano una muestra con `audit-feature-extraction`, incluidas contradicciones, ceros
+  - Revisar a mano una muestra con `asg-audit-features`, incluidas contradicciones, ceros
     y fenómenos omitidos.
   - Medir la estabilidad repitiendo la extracción (`--force`, `--second`) en un subconjunto.
   - Contrastar con los logs de la función cuando describan lo mismo.
@@ -667,7 +667,7 @@ versión definitiva del generador
   - Persistir las memorias al cerrar cada escena.
   - Al reanudar, leer las escenas completas, reconstruir memorias y estados, y seguir desde la
     primera escena que falte.
-  - Que `recover-story-runs` ofrezca reanudar, además de cerrar o descartar.
+  - Que `asg-recover` ofrezca reanudar, además de cerrar o descartar.
 - **Hecho cuando.** Un run simulado interrumpido se retoma sin repetir ninguna llamada ya hecha, y
   hay un test con un proveedor falso que muere a mitad de la obra.
 
@@ -966,7 +966,7 @@ cuota gratuita · *Depende de:* SIM-1, SIM-2, SIM-14, MED-3; mejor con MED-5
 - **Qué hacer.**
   - Una matriz con los mismos prompts canónicos en `narrative` y en `simulated`, mismo perfil e,
     idealmente, mismo plan (MED-5), siguiendo el protocolo.
-  - Leer la comparación a ciegas y las cifras de `report-features` (capas T y P):
+  - Leer la comparación a ciegas y las cifras de `asg-report-features` (capas T y P):
     `script_echo` (si sale alto, los actores recitaron y la simulación no aporta) y
     `beat_completion_ratio`.
   - Leer también el coste por agente (capa K), y si el último capítulo es el más mudo o el más
@@ -1040,7 +1040,7 @@ gratuita · *Depende de:* MED-5, MED-7
     cerró SIM-9 y SIM-10), y la que cierre SIM-6 y SIM-11.
   - Usar tres prompts de géneros distintos: 03 (misterio), 04 (drama) y 01 (fantasía).
   - Añadir como brazo el presupuesto de pensamiento del actor (SIM-4).
-  - Leer MED-7, `report-features` (capas P y K) y la comparación a ciegas.
+  - Leer MED-7, `asg-report-features` (capas P y K) y la comparación a ciegas.
 - **Hecho cuando.** Hay una tabla por versión en `docs/resumen.md` y una decisión
   escrita sobre qué mecanismo se queda.
 - **Ojo.** En el prompt 03 el brazo base pueden ser los propios runs 7.1: con `--plan-from` sobre
@@ -1089,13 +1089,13 @@ MED-8 y la revisión de MED-9
   investigador abre la votación, presenta pares a ciegas con una pregunta cada vez. Todavía no
   hay ni una historia ni un voto reales.
 - **Qué hacer.**
-  - Arrancar el bot en la PC del investigador (`iniciar-bot.bat`) y pedir a los participantes
+  - Arrancar el bot en la PC del investigador (`asg-telegram`) y pedir a los participantes
     que creen historias, una por una.
-  - Añadir dos líneas base de un solo prompt (`generate-baseline` y `evaluation-study add`) y
+  - Añadir dos líneas base de un solo prompt (`asg-baseline` y `asg-study add`) y
     excluir lo que no deba entrar.
-  - `evaluation-study open` cuando haya bastantes historias; votar hasta el tope de 15 preguntas
+  - `asg-study open` cuando haya bastantes historias; votar hasta el tope de 15 preguntas
     por lector; `close` y `export`. Guía en [apps/telegram/README.md](apps/telegram/README.md).
-  - `report-preferences`: cobertura, abstenciones, acuerdo e intervalos por lector, con y sin el
+  - `asg-preferences`: cobertura, abstenciones, acuerdo e intervalos por lector, con y sin el
     autor. No inventar un ranking global si el grafo queda desconectado.
 - **Hecho cuando.** El estudio real publica las tres preferencias con su cobertura y
   limitaciones.
@@ -1127,7 +1127,7 @@ MED-8 y la revisión de MED-9
 *Área:* experimento · *Cuota:* ranking sin cuota con extracciones compatibles · *Depende de:*
 EXP-7
 
-- **Síntoma.** `rank-stories --study` ya ordena por los comandos públicos las once historias de
+- **Síntoma.** `asg-rank --study` ya ordena por los comandos públicos las once historias de
   la demo, pero las fichas de las diez mejores salen vacías y no hay corpus real extraído.
 - **Qué hacer.**
   - Aplicar el juez al corpus real elegible y publicar tres rankings principales y el combinado
@@ -1160,7 +1160,7 @@ EXP-7
 - **Qué hacer.**
   - Un informe de solo lectura en `evaluation` que liste esas anomalías, para que cada informe de
     la tesis diga qué excluye y por qué.
-  - Nunca borrar datos. Lo que se corrija, con `recover-story-runs` y dejando rastro.
+  - Nunca borrar datos. Lo que se corrija, con `asg-recover` y dejando rastro.
   - Poner código propio a los warnings de los runs nuevos, en la próxima subida de `PIPELINE_VERSION`.
 - **Hecho cuando.** El inventario sale limpio, o cada anomalía tiene una decisión escrita.
 

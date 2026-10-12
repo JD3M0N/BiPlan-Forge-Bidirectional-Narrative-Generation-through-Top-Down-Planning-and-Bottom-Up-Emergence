@@ -48,7 +48,7 @@ pipeline soportada (`SUPPORTED_PIPELINE_VERSIONS`: de 5.0 a 7.5).
 
 El resto de opciones de la fachada (`narrative_profile`, `promise_ledger`, `audio`,
 `script_method`, `narrative_voice`, `actor_memory`, `turns_per_beat`) tienen su opción en
-`generate-story` o su variable `ASG_*` en `.env.example`; ver [commands.md](../../commands.md).
+`asg-generate` o su variable `ASG_*` en `.env.example`; ver `asg-help`.
 
 ## Plan y garantías
 

@@ -89,7 +89,7 @@ try {
         Copy-Item -LiteralPath ".env.example" -Destination ".env"
     }
     Write-Host "Entorno listo: $envPython" -ForegroundColor Green
-    Write-Host "Configura .env y arranca el bot con iniciar-bot.bat. Consulta apps/telegram/README.md."
+    Write-Host "Configura .env y arranca el bot con asg-telegram. asg-help lista todos los comandos."
 } finally {
     Pop-Location
 }

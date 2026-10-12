@@ -22,11 +22,11 @@ inscriben a mano; cualquier otro run completo en prosa también:
 
 ```powershell
 $db = "Evaluations/estudio/study.sqlite3"
-generate-baseline "PREMISA" --output Stories/Baseline/01   # consume cuota
-evaluation-study --db $db add Stories/Baseline/01
-evaluation-study --db $db status
-evaluation-study --db $db exclude ID      # fuera del conjunto; include lo devuelve
-evaluation-study --db $db author ID_DE_TELEGRAM_DEL_INVESTIGADOR
+asg-baseline "PREMISA" --output Stories/Baseline/01   # consume cuota
+asg-study --db $db add Stories/Baseline/01
+asg-study --db $db status
+asg-study --db $db exclude ID      # fuera del conjunto; include lo devuelve
+asg-study --db $db author ID_DE_TELEGRAM_DEL_INVESTIGADOR
 ```
 
 La base se crea sola la primera vez que se abre. Solo admite runs completos en prosa
@@ -35,9 +35,9 @@ La base se crea sola la primera vez que se abre. Solo admite runs completos en p
 ### 2. Votar
 
 ```powershell
-evaluation-study --db $db open    # congela el conjunto (huella sha256) y abre /evaluar
-evaluation-study --db $db close
-evaluation-study --db $db export Evaluations/estudio/datos.json
+asg-study --db $db open    # congela el conjunto (huella sha256) y abre /evaluar
+asg-study --db $db close
+asg-study --db $db export Evaluations/estudio/datos.json
 ```
 
 Las preguntas se asignan de una en una cuando el lector las pide, sin lista previa de lectores:
@@ -53,10 +53,10 @@ La exportación es seudónima: sin IDs de Telegram ni rutas locales.
 ### 3. Rasgos
 
 ```powershell
-extract-story-features --study $db --dry-run   # cuántas llamadas costará
-extract-story-features --study $db             # consume cuota; reanudable
-audit-feature-extraction Evaluations/estudio/features/ID.json --output revision.json
-report-features Stories --study $db --json tabla.json --csv tabla.csv --horizontal horizontal.json
+asg-features --study $db --dry-run   # cuántas llamadas costará
+asg-features --study $db             # consume cuota; reanudable
+asg-audit-features Evaluations/estudio/features/ID.json --output revision.json
+asg-report-features Stories --study $db --json tabla.json --csv tabla.csv --horizontal horizontal.json
 ```
 
 - Solo los 27 rasgos `núcleo` de las capas T, R y X entran al juez; T01 (palabras) controla la
@@ -64,29 +64,29 @@ report-features Stories --study $db --json tabla.json --csv tabla.csv --horizont
 - Cada medida guarda valor, unidad, evidencias y estado: `measured` (incluido cero),
   `not_applicable`, `missing` o `failed`. Una cita que no está en el texto se repara una vez y,
   si sigue mal, queda como fallo, nunca como cero.
-- `audit-feature-extraction --second OTRA.json` compara dos extracciones del mismo texto
-  (test-retest). `extract-story-features --root RUTA` mide un corpus fuera del estudio.
+- `asg-audit-features --second OTRA.json` compara dos extracciones del mismo texto
+  (test-retest). `asg-features --root RUTA` mide un corpus fuera del estudio.
 
 ### 4. Preferencias, juez y ranking
 
 ```powershell
-report-preferences $db --output preferencias.json --bootstrap 1000
-fit-preference-judge $db --output juez.json
-rank-stories juez.json Stories --study $db --output ranking.json
+asg-preferences $db --output preferencias.json --bootstrap 1000
+asg-judge $db --output juez.json
+asg-rank juez.json Stories --study $db --output ranking.json
 ```
 
 - Bradley–Terry regularizado por criterio, con intervalos remuestreando lectores, y el acuerdo
   sobre los mismos pares, con y sin el investigador. Sin grafo conectado no hay orden global.
 - Tres regresiones logísticas L2 sobre diferencias de rasgos, validadas dejando fuera historias
   y familias de premisa, frente al azar y a la longitud sola.
-- `rank-stories` ordena el corpus y prepara las fichas de las diez primeras (`ranking.md`).
+- `asg-rank` ordena el corpus y prepara las fichas de las diez primeras (`ranking.md`).
 - Un juez que no generaliza es un resultado válido: se marca exploratorio.
 
 ## Módulos
 
 | Módulo | Qué hace |
 |---|---|
-| `study.py`, `study_cli.py` | el estudio por pares y `evaluation-study` |
+| `study.py`, `study_cli.py` | el estudio por pares y `asg-study` |
 | `features.py`, `voice_attribution.py` | el extractor de rasgos con cita |
 | `feature_report.py`, `feature_cli.py`, `feature_audit.py` | tabla de rasgos, análisis horizontal y auditoría |
 | `preferences.py` | Bradley–Terry, acuerdo e intervalos |

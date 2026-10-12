@@ -67,7 +67,7 @@ def _sources(args) -> list[tuple[str, Path]]:
             raise ValueError("No existe el estudio.")
         repository = StudyRepository(args.study)
         if repository.info()["snapshot"] is None:
-            raise ValueError("Primero abre la votación: evaluation-study open congela el conjunto.")
+            raise ValueError("Primero abre la votación: asg-study open congela el conjunto.")
         return [
             (s["text"], args.study.parent / "features" / f"{s['id']}.json")
             for s in repository.export()["stories"]

@@ -33,7 +33,7 @@ No hay clave, perfiles ni opciones: lo demás se fija en el `.env`.
 
    Las variables `ASG_*` (perfil, visión, memoria, turnos por beat…) fijan las opciones de todas
    las historias.
-3. Una vez: `.\setup.ps1`. Después, doble clic en `iniciar-bot.bat` (o `asg-telegram`).
+3. Una vez: `.\setup.ps1`. Después: `asg-telegram`.
 
 Se genera **una historia a la vez**, por orden de llegada; cada persona tiene como mucho una
 solicitud en marcha. La cola vive en `Stories/telegram_jobs.sqlite3`: si el bot se reinicia, una
@@ -53,18 +53,18 @@ El estudio es un archivo SQLite (`ASG_EVALUATION_STUDY`). Los comandos, desde la
 
 ```powershell
 $db = "Evaluations/estudio/study.sqlite3"
-evaluation-study --db $db status                 # fase, historias, votos
-generate-baseline "PREMISA" --output Stories/Baseline/01   # línea base de un solo prompt
-evaluation-study --db $db add Stories/Baseline/01          # inscribirla
-evaluation-study --db $db exclude ID             # sacar una historia antes de abrir
-evaluation-study --db $db author TU_ID_DE_TELEGRAM   # para el acuerdo sin el autor
-evaluation-study --db $db open                   # congela el conjunto y abre la votación
-evaluation-study --db $db close                  # cierra la votación
+asg-study --db $db status                 # fase, historias, votos
+asg-baseline "PREMISA" --output Stories/Baseline/01   # línea base de un solo prompt
+asg-study --db $db add Stories/Baseline/01          # inscribirla
+asg-study --db $db exclude ID             # sacar una historia antes de abrir
+asg-study --db $db author TU_ID_DE_TELEGRAM   # para el acuerdo sin el autor
+asg-study --db $db open                   # congela el conjunto y abre la votación
+asg-study --db $db close                  # cierra la votación
 ```
 
 Con la votación cerrada, el análisis sigue en
-[packages/evaluation](../../packages/evaluation/README.md): `report-preferences`,
-`extract-story-features`, `fit-preference-judge` y `rank-stories`.
+[packages/evaluation](../../packages/evaluation/README.md): `asg-preferences`,
+`asg-features`, `asg-judge` y `asg-rank`.
 
 ## Código
 

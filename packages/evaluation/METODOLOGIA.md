@@ -195,10 +195,10 @@ El protocolo tiene tres fases, y el investigador decide cuándo pasar de una a o
    enfoque (Top-Down o híbrido) y la forma (prompt libre u obra guiada). Cada historia queda
    inscrita como suya. El investigador añade las líneas base de un solo prompt y puede excluir
    las que no deban entrar.
-2. **Votación.** `evaluation-study open` congela el conjunto con su huella. Desde ahí, `/evaluar`
+2. **Votación.** `asg-study open` congela el conjunto con su huella. Desde ahí, `/evaluar`
    presenta pares a ciegas, con texto y audio, y una pregunta cada vez, con las formulaciones de
    la planilla. Nadie compara su propia historia, y «Ya la conocía» la cambia por otra.
-3. **Cierre.** `evaluation-study close` y la exportación seudónima.
+3. **Cierre.** `asg-study close` y la exportación seudónima.
 
 **Asignación.** Las preguntas se asignan de una en una cuando el lector las pide, así que puede
 votar cualquiera, haya aportado o no.

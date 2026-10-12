@@ -44,13 +44,14 @@ python -m pip install -r requirements-dev.txt   # los 5 paquetes en editable + p
 Copiar `.env.example` a `.env`. `GEMINI_API_KEY` solo hace falta para generar de verdad: los
 tests usan proveedores falsos.
 
-Comandos (opciones completas en [commands.md](commands.md)):
+Comandos (`asg-help` los lista todos; `--help` da las opciones de cada uno):
 
-- `generate-story`, `generate-baseline`, `recover-story-runs`, `recompute-simulation-metrics`,
-  `llm-budget`, `extract-story-features` (Stagecraft).
-- `evaluation-study`, `report-features`, `audit-feature-extraction`, `report-preferences`,
-  `fit-preference-judge`, `rank-stories` (evaluation).
-- `asg-telegram` (o `iniciar-bot.bat`) y `asg-studio` (apps).
+- `asg-generate`, `asg-baseline`, `asg-recover`, `asg-recompute`,
+  `asg-budget`, `asg-features` (Stagecraft).
+- `asg-study`, `asg-report-features`, `asg-audit-features`, `asg-preferences`,
+  `asg-judge`, `asg-rank` (evaluation).
+- `asg-telegram`, `asg-studio` (apps) y `asg-help` (core). Todo comando nuevo empieza por
+  `asg-` y se añade a `asg_core/help.py`; un test cruza esa lista con los `pyproject.toml`.
 
 ### Calidad: ejecutar siempre antes de dar por terminado un cambio
 
@@ -60,7 +61,6 @@ Comandos (opciones completas en [commands.md](commands.md)):
 ```
 
 - `quality.ps1` se sitúa en la raíz por su cuenta y no corta en el primer fallo, igual que CI.
-  `make test` delega en él.
 - `.github/workflows/quality.yml` corre las mismas cuatro comprobaciones en `windows-latest` con
   Python 3.12, en cada push a `main` y en cada pull request, llamando a `run-tests.ps1` igual que
   en local. Un status check `quality` en rojo bloquea el merge.
@@ -309,7 +309,7 @@ son datos de la tesis. Una limpieza que no toca artefactos sube solo el parche d
 `__version__`, como 7.1.1.
 
 Las 160 ejecuciones anteriores al renombrado siguen en `Stories/Top-Down/` y se siguen leyendo.
-`recover-story-runs --stories Stories/Top-Down` las recupera.
+`asg-recover --stories Stories/Top-Down` las recupera.
 
 ### Top-Down: proveedor y cuota
 
@@ -347,7 +347,7 @@ esquema Pydantic, y `generate_text`) e implementa `GeminiProvider`. Lo que impor
     ranura queda fuera solo en ese proceso: Groq da 403 a redes bloqueadas aunque la clave valga.
   - `runtime/budget.py` es el libro: SQLite en `.cache/llm_budget.sqlite3`, compartido entre
     procesos. Salta una ranura agotada sin gastar la petición, con una ventana por proveedor.
-    Los topes son configuración, nunca constantes. `llm-budget` lo muestra.
+    Los topes son configuración, nunca constantes. `asg-budget` lo muestra.
   - `OpenAICompatibleProvider` habla con Groq y Mistral sobre httpx. Comparte con
     `GeminiProvider` la base `_RecordingProvider`, que reintenta, valida y registra.
   - `metadata.json` guarda `models_used`. Un run que saltó de modelo tiene el eje `model`
@@ -355,9 +355,9 @@ esquema Pydantic, y `generate_text`) e implementa `GeminiProvider`. Lo que impor
   - Con cadena, `GEMINI_STAGE_MODEL` no enruta la función: es la segunda ranura de Gemini, justo
     tras la principal, y todas las llamadas siguen un solo orden (3.5 → 3.1 → Groq → Mistral).
   - Con la cadena vacía no hay failover, pero desde 7.8.3 cada `GeminiProvider` apunta sus
-    intentos en el libro (`provider.quota`), así que `llm-budget` y las auditorías también
+    intentos en el libro (`provider.quota`), así que `asg-budget` y las auditorías también
     cuentan. Con cadena lo apunta solo `FailoverProvider`: no dupliques el cargo.
-  - `generate-story` se niega a arrancar (código 3) si lo que queda hoy no alcanza para la
+  - `asg-generate` se niega a arrancar (código 3) si lo que queda hoy no alcanza para la
     media de ese formato (`tools/budget.preflight`); `--force` lo salta.
 
 Los tests inyectan un `FakeProvider` (ver `packages/stagecraft/tests/test_generator_v5.py`), que es
@@ -451,8 +451,8 @@ que saber antes de tocar `stage/`:
 ### Telegram: el bot del estudio
 
 - **Solo crea historias y las compara.** Sin clave, perfiles ni opciones por usuario: todo sale
-  del `.env`. Corre en la PC del investigador (`iniciar-bot.bat`), que abre y cierra la votación
-  con `evaluation-study`.
+  del `.env`. Corre en la PC del investigador (`asg-telegram`), que abre y cierra la votación
+  con `asg-study`.
 - Crear: `handlers.py` ofrece Top-Down (`narrative`) o Híbrido (`simulated`), y prompt libre u
   obra guiada. `wizard.py` es el asistente como máquina de estados pura (`start`, `answer`,
   `press`) y devuelve un `StoryOutline`.
@@ -553,7 +553,7 @@ que saber antes de tocar `stage/`:
   formateado en un README de paquete hace fallar `ruff format --check`. `docs/` y `Stories/`
   están excluidos en `pyproject.toml`.
 - **`README.md` es la portada del cierre:** qué es, estructura y puesta en marcha, en pocas
-  líneas. El detalle vive en `commands.md` y en el README de cada paquete; guárdalo en UTF-8.
+  líneas. El detalle vive en `asg-help` y en el README de cada paquete. **No se modifica más.**
 - **`.gitignore` ignora `docs/*` salvo siete archivos en lista blanca.** Si creas un doc nuevo en
   `docs/` y quieres que se versione, añádelo también a esa lista.
 - **`.cache/` contiene sqlite y cachés de pytest de experimentos previos**
@@ -631,7 +631,6 @@ que saber antes de tocar `stage/`:
   tesis, con su planilla de rasgos y su estado del arte.
 - [packages/evaluation/README.md](packages/evaluation/README.md): la evaluación paso a paso.
 - [apps/telegram/README.md](apps/telegram/README.md): el bot y la operación del estudio.
-- [commands.md](commands.md): los comandos, en una línea cada uno.
 
 El informe de artesanía de la prosa (6.5.0 contra 6.6.0 y su réplica de ruido), la calibración de
 perfiles de 6.0 y el recorrido de etapas de 6.2 se retiraron en 7.1.1 porque describían

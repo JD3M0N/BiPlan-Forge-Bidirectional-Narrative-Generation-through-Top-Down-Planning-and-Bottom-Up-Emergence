@@ -18,12 +18,12 @@ dependencies = [
 ]
 
 [project.scripts]
-extract-story-features = "asg_stagecraft.tools.extract_features:main"
-generate-baseline = "asg_stagecraft.tools.baseline:main"
-generate-story = "asg_stagecraft.tools.generate:main"
-recover-story-runs = "asg_stagecraft.tools.recovery:main"
-llm-budget = "asg_stagecraft.tools.budget:main"
-recompute-simulation-metrics = "asg_stagecraft.tools.recompute:main"
+asg-features = "asg_stagecraft.tools.extract_features:main"
+asg-baseline = "asg_stagecraft.tools.baseline:main"
+asg-generate = "asg_stagecraft.tools.generate:main"
+asg-recover = "asg_stagecraft.tools.recovery:main"
+asg-budget = "asg_stagecraft.tools.budget:main"
+asg-recompute = "asg_stagecraft.tools.recompute:main"
 
 [tool.hatch.version]
 path = "src/asg_stagecraft/version.py"

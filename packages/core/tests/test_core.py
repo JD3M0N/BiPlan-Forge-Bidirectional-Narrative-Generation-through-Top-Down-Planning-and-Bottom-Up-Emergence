@@ -326,3 +326,23 @@ def test_threads_take_the_lock_one_at_a_time(tmp_path):
         list(pool.map(critical_section, range(24)))
     assert overlaps == 0
     assert not (tmp_path / "evaluation.json.lock").exists()
+
+
+def test_asg_help_lists_exactly_the_published_commands():
+    import re
+    from pathlib import Path
+
+    from asg_core.help import COMMANDS
+
+    root = Path(__file__).resolve().parents[3]
+    published = set()
+    for project in root.glob("*/*/pyproject.toml"):
+        text = project.read_text(encoding="utf-8")
+        section = (
+            text.split("[project.scripts]")[1].split("\n[")[0]
+            if "[project.scripts]" in text
+            else ""
+        )
+        published |= set(re.findall(r"^([\w-]+)\s*=", section, re.M))
+    assert {name for name, _ in COMMANDS} == published
+    assert all(name.startswith("asg-") for name in published)

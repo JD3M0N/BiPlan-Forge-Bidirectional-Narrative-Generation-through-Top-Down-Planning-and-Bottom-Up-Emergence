@@ -26,7 +26,7 @@ simulada tiene modelo propio (`GEMINI_STAGE_MODEL`), la cabecera lo muestra junt
   prompt libre, más el riel de opciones: formato, perfil, narración (visión, personaje de la
   visión y tono del narrador), simulación (memoria y turnos por beat), planificación (ledger y
   guía) y audio (voz, con muestra). Al añadir un personaje al reparto, aparece en el selector del
-  personaje de la visión. «Ver prompt» enseña el prompt exacto y el comando `generate-story`
+  personaje de la visión. «Ver prompt» enseña el prompt exacto y el comando `asg-generate`
   equivalente; **Estrenar** (o Ctrl+Enter) encola la función.
 - **Funciones.** Todas las funciones de `Stories/Stagecraft` y `Stories/Top-Down`, con su lector:
   la historia, el log de la función (con «ver como», que atenúa lo que una visión no ve), las

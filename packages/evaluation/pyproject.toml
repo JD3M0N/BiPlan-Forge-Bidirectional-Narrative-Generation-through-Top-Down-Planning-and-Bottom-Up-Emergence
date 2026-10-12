@@ -17,12 +17,12 @@ dependencies = [
 ]
 
 [project.scripts]
-evaluation-study = "asg_evaluation.study_cli:main"
-report-features = "asg_evaluation.feature_cli:main"
-report-preferences = "asg_evaluation.learning_cli:human_main"
-fit-preference-judge = "asg_evaluation.learning_cli:train_main"
-rank-stories = "asg_evaluation.learning_cli:rank_main"
-audit-feature-extraction = "asg_evaluation.feature_audit:main"
+asg-study = "asg_evaluation.study_cli:main"
+asg-report-features = "asg_evaluation.feature_cli:main"
+asg-preferences = "asg_evaluation.learning_cli:human_main"
+asg-judge = "asg_evaluation.learning_cli:train_main"
+asg-rank = "asg_evaluation.learning_cli:rank_main"
+asg-audit-features = "asg_evaluation.feature_audit:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/asg_evaluation"]

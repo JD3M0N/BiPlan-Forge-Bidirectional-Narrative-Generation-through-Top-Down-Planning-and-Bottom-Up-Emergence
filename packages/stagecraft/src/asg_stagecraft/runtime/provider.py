@@ -1133,7 +1133,7 @@ def provider_from_settings(settings: Settings):
         )
         if ledger:
             # Without a chain nothing fails over, but every call still counts, so the quota
-            # panel and the preflight of generate-story see this run and every audit.
+            # panel and the preflight of asg-generate see this run and every audit.
             slots = {entry.slot.model: entry.slot for entry in settings.quota_entries()}
             for provider in (main, stage):
                 if provider is not None:

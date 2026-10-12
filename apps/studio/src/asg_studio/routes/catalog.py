@@ -59,9 +59,9 @@ def _quoted(value: str) -> str:
 
 
 def command_line(job: JobRequest) -> str:
-    """Write the generate-story command that would run the same request from a terminal."""
+    """Write the asg-generate command that would run the same request from a terminal."""
     options, defaults = job.options, GenerationOptions()
-    parts = ["generate-story"]
+    parts = ["asg-generate"]
     parts += ["--brief", "brief.json"] if job.mode == "brief" else [_quoted(job.prompt.strip())]
     flags = [
         ("--format", options.story_format.value, options.story_format != defaults.story_format),

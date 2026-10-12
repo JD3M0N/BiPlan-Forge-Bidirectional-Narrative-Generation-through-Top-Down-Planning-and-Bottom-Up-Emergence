@@ -110,7 +110,7 @@ def test_the_preview_shows_the_prompt_and_the_equivalent_command(stories) -> Non
     with client_for(stories) as client:
         preview = client.post("/api/preview", json=body, headers=WRITE).json()
     assert "Reparto (usa exactamente estos nombres" in preview["prompt"]
-    assert preview["command"].startswith("$env:ASG_PROMISE_LEDGER='false'; generate-story --brief")
+    assert preview["command"].startswith("$env:ASG_PROMISE_LEDGER='false'; asg-generate --brief")
     assert "--voice first_person" in preview["command"]
     assert "--narrator Ana" in preview["command"]
     assert "--tone 'como un samurai'" in preview["command"]
