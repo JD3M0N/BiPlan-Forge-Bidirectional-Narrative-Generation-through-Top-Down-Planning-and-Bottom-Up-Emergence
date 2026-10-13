@@ -183,8 +183,13 @@ class Settings:
         )
 
     def model_summary(self, *, simulated: bool) -> str:
-        """Name the model a run uses, and the performance's own when a simulated run has one."""
-        main = " → ".join(e.slot.key for e in self.resolved_chain()) or self.model
+        """Name the model a run uses, and the performance's own when a simulated run has one.
+
+        With a chain the stage model is only the next slot, so the order is what is shown.
+        """
+        if self.chain:
+            return " → ".join(entry.slot.key for entry in self.quota_entries())
+        main = self.model
         if simulated and self.splits_stage:
             return f"{main} (función: {self.effective_stage_model})"
         return main

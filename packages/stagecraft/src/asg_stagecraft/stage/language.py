@@ -20,7 +20,9 @@ _ENGLISH = frozenset(
 _SPANISH = frozenset(
     "el la los las y es son era eran ser estar esta este esto que de del con para por no pero "
     "tu su sus ella ellos lo le les se nos mi me yo un una unos unas al en como si cuando "
-    "donde quien porque muy ya hay fue ha han mas sin sobre entre hasta desde".split()
+    "donde quien porque muy ya hay fue ha han mas sin sobre entre hasta desde "
+    # The accented forms, which are how a model actually writes them.
+    "más está están qué él sí tú cómo dónde quién aquí también".split()
 )
 _WORD = re.compile(r"[a-zà-ÿ]+")
 # Below this many function words a line says too little to judge, and is left alone.

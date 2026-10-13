@@ -301,7 +301,7 @@ class ScriptStagesMixin:
             raise
         except Exception as exc:
             warning = (
-                "La critica del guion no pudo completarse; se entrego el borrador por actos "
+                "La crítica del guion no pudo completarse; se entregó el borrador por actos "
                 f"({type(exc).__name__})."
             )
             self.repository.add_warning(warning)

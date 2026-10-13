@@ -21,6 +21,18 @@ BLOCKING_CODES = frozenset({"INVENTED_EVENT", "CONTRADICTION"})
 _KEY_MARK = re.compile(r"\[clave\][ \t]*", re.I)
 _THOUGHT_LABEL = re.compile(r"\[[^]\n]+? piensa:\s*([^]\n]*)\]")
 _INTERNAL_ID = re.compile(r"\b(?:chapter|scene|event)[_-]\d+", re.I)
+# Spanish dialogue tags after a dash: present-tense speech verbs, and any preterite in -o.
+# Every voice narrates in the past; in 7.12.1 a chapter came back as a dash line and
+# "dice Ines" turn after turn, a present-tense transcript next to a chapter in the past,
+# and the review let it through.
+_PRESENT_TAG = re.compile(
+    r"—\s*(?:dice|pregunta|responde|contesta|murmura|susurra|grita|exclama|añade|"
+    r"replica|ordena|insiste)\b",
+    re.I,
+)
+_PAST_TAG = re.compile(r"—\s*\w+ó\b", re.I)
+# Below this many present tags a chapter has not settled into the present, it slipped once.
+_MIN_PRESENT_TAGS = 3
 
 
 @dataclass
@@ -58,7 +70,7 @@ def strip_markers(story: str) -> str:
 
 
 def editorial_verdict(
-    review: NarrationReview, story: str, turns: list[StageTurn]
+    review: NarrationReview, story: str, turns: list[StageTurn], language: str = ""
 ) -> EditorialVerdict:
     """Sort findings into blocking and advisory, dropping the ones the source cannot support."""
     known = {turn.id for turn in turns}
@@ -74,7 +86,20 @@ def editorial_verdict(
             verdict.advisory.append(line)
     if _INTERNAL_ID.search(story):
         verdict.blocking.append("INTERNAL_MARKER: remove internal identifiers from the prose")
+    if _in_present(story, language):
+        verdict.blocking.append(
+            "WRONG_TENSE: narrate in the past tense, dialogue tags included ('dijo', never "
+            "'dice'), and curate the exchanges instead of rendering every turn"
+        )
     return verdict
+
+
+def _in_present(story: str, language: str) -> bool:
+    """Say whether a Spanish chapter tags its dialogue in the present rather than the past."""
+    if not language.strip().lower().startswith(("spanish", "espa")):
+        return False
+    present = len(_PRESENT_TAG.findall(story))
+    return present >= _MIN_PRESENT_TAGS and present > len(_PAST_TAG.findall(story))
 
 
 def _unsupported(quote: str, turn_ids: list[str], story: str, known: set[str]) -> str:
@@ -88,10 +113,16 @@ def _unsupported(quote: str, turn_ids: list[str], story: str, known: set[str]) -
     return ""
 
 
+_TYPOGRAPHY = str.maketrans(
+    {"“": '"', "”": '"', "«": '"', "»": '"', "‘": "'", "’": "'", "—": "-", "–": "-"}
+)
+_DASH_SPACING = re.compile(r" ?- ?")
+
+
 def _normalized(text: str) -> str:
-    """Compare quotes without tripping on spacing or typographic quote marks."""
-    text = text.replace("“", '"').replace("”", '"').replace("’", "'")
-    return " ".join(text.split()).casefold()
+    """Compare quotes without tripping on spacing, quote styles or dialogue dashes."""
+    spaced = " ".join(text.translate(_TYPOGRAPHY).split())
+    return _DASH_SPACING.sub("-", spaced).casefold()
 
 
 def review_turns(turns: list[StageTurn]) -> list[dict]:

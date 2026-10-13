@@ -473,11 +473,11 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
         )
 
     def _report_wait(self, seconds: int, reason: str) -> None:
-        """Report provider quota waits through the pipeline progress channel."""
+        """Report provider retry waits through the pipeline progress channel."""
         self._notify(
             self.progress["percent"],
             "rate_limit",
-            f"Esperando cuota: {seconds}s ({reason})",
+            f"Esperando {seconds}s: {reason}",
         )
 
     def _configure_provider_callbacks(self) -> None:
@@ -1404,7 +1404,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
     def _call_agent(self, name: str, function: Callable[[], T]) -> T:
         """Emit an agent event and run the agent, tagging its model calls with stage and agent."""
         self._checkpoint()
-        self._emit("agent_called", f"se llamo al agente {name}", stage=self.progress["stage"])
+        self._emit("agent_called", f"se llamó al agente {name}", stage=self.progress["stage"])
         with call_context(self.progress["stage"], name):
             return function()
 

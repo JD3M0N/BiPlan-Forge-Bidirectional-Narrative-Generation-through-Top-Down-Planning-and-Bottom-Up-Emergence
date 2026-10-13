@@ -25,6 +25,8 @@ from .validation import similarity
 KNOWLEDGE_OVERLAP = 0.4
 # A holder cannot deduce or discover what they already hold.
 LEARNED_ON_STAGE = frozenset({"deduction", "discovery"})
+# The verb each way of learning on stage takes in a correction sent back to the model.
+_LEARNS = {"deduction": "works out", "discovery": "discovers"}
 
 
 def materialize_bible(
@@ -128,17 +130,23 @@ def _validate_coverage(dossiers: list[ActorDossier], required: list[str]) -> Non
 
 
 def _validate_playable(dossiers: list[ActorDossier]) -> None:
-    """Require every dossier to carry something an actor can actually play."""
-    offenders = [
-        item.character_id
-        for item in dossiers
-        if not item.want.strip() or not item.voice.strip() or not item.public_face.strip()
-    ]
+    """Require every dossier to carry something an actor can actually play.
+
+    The correction names each empty field: in 7.12 a repair that only said "a want, a voice or
+    a public_face" got back eight dossiers with every public_face blank.
+    """
+    offenders = []
+    for item in sorted(dossiers, key=lambda dossier: dossier.character_id):
+        empty = [
+            name for name in ("want", "voice", "public_face") if not getattr(item, name).strip()
+        ]
+        if empty:
+            offenders.append(f"{item.character_id} ({', '.join(empty)})")
     if offenders:
         raise ValueError(
-            f"the dossiers for {', '.join(sorted(offenders))} lack a playable want, a voice or a "
-            "public_face; a want is a concrete thing the character pursues, a voice says how they "
-            "speak, and public_face is what anyone sees of them at a glance"
+            f"these dossiers leave fields empty: {'; '.join(offenders)}; fill them and keep "
+            "every other field: a want is a concrete thing the character pursues, a voice says "
+            "how they speak, and public_face is what anyone sees of them at a glance"
         )
 
 
@@ -206,8 +214,8 @@ def _validate_gate_logic(gates: list[KnowledgeGate], plan: StoryPlan) -> None:
         holders = set(gate.known_by)
         if gate.how in LEARNED_ON_STAGE and gate.revealed_by in holders:
             problems.append(
-                f"gate {gate.id}: {gate.revealed_by} {gate.how}s this fact on stage, so they "
-                "cannot already know it; remove them from known_by"
+                f"gate {gate.id}: {gate.revealed_by} {_LEARNS[gate.how]} this fact on stage, "
+                "so they cannot already know it; remove them from known_by"
             )
         if gate.how == "confession" and gate.revealed_by not in holders:
             problems.append(
@@ -235,7 +243,7 @@ def _validate_no_handed_answers(dossiers: list[ActorDossier], gates: list[Knowle
             if similarity(item, gate.fact) >= KNOWLEDGE_OVERLAP:
                 problems.append(
                     f"{gate.revealed_by} starts out knowing what gate {gate.id} says they "
-                    f"{gate.how} on stage; remove it from their initial_knowledge"
+                    f"{_LEARNS[gate.how]} on stage; remove it from their initial_knowledge"
                 )
                 break
     if problems:

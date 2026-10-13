@@ -135,6 +135,17 @@ class ProviderUnavailableError(ProviderError):
     code = "PROVIDER_UNAVAILABLE"
 
 
+class ProviderOverloadedError(ProviderError):
+    """Signal a provider that kept answering 5xx through every retry, so a chain can move on.
+
+    Found in the 7.12 validation run: gemini-3.5-flash-lite answered 503 and 504 to most calls
+    for minutes while the next slot of the chain, another model with its own capacity, sat
+    idle. Unlike a spent quota, it says nothing about the next call, so nothing is marked out.
+    """
+
+    code = "PROVIDER_OVERLOADED"
+
+
 class GeminiDailyQuotaError(ProviderDailyQuotaError):
     """Represent GeminiDailyQuotaError data and behavior."""
 

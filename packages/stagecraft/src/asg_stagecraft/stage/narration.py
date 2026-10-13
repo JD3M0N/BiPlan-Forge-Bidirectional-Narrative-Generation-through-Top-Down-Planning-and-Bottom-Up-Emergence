@@ -84,7 +84,7 @@ def choose_narrator(
         if chosen and witnessed_anything(chosen, scenes, presence):
             return NarratorChoice(chosen, "requested")
         warning = (
-            f"[NARRATOR_FALLBACK] {names.get(chosen, chosen)} no presencio ninguna escena"
+            f"[NARRATOR_FALLBACK] {names.get(chosen, chosen)} no presenció ninguna escena"
             if chosen
             else f"[NARRATOR_FALLBACK] Nadie del reparto responde al nombre {requested!r}"
         )

@@ -160,7 +160,9 @@ class SimulationStagesMixin:
                 )
                 feedback = (
                     "\n\nCASTING REPAIR REQUIRED. RETURN A COMPLETE REPLACEMENT CAST BIBLE. "
-                    f"The previous one was rejected: {issue}"
+                    f"The previous one was rejected: {issue}. Correct what the error names and "
+                    "keep every other field of the rejected candidate as it was.\n"
+                    f"REJECTED CANDIDATE:\n{draft.model_dump_json()}"
                 )
                 continue
             self.repository.save_json("cast_bible.json", bible)
@@ -233,7 +235,9 @@ class SimulationStagesMixin:
                 )
                 feedback = (
                     "\n\nPROPS REPAIR REQUIRED. RETURN A COMPLETE REPLACEMENT PROP LIST. "
-                    f"The previous one was rejected: {issue}"
+                    f"The previous one was rejected: {issue}. Correct what the error names and "
+                    "keep everything else of the rejected candidate as it was.\n"
+                    f"REJECTED CANDIDATE:\n{draft.model_dump_json()}"
                 )
                 continue
             self.repository.save_json("props.json", props)
@@ -908,11 +912,11 @@ class SimulationStagesMixin:
         """Report a chapter left out because this point of view saw nothing of it."""
         assert self.repository is not None
         reason = (
-            f"{names.get(narrator, narrator)} no presencio ninguna de sus escenas"
+            f"{names.get(narrator, narrator)} no presenció ninguna de sus escenas"
             if narrator
-            else "no tiene ningun turno representado"
+            else "no tiene ningún turno representado"
         )
-        warning = f"[NARRATOR_ABSENT] Capitulo {index}: {reason}; se omite de la historia."
+        warning = f"[NARRATOR_ABSENT] Capítulo {index}: {reason}; se omite de la historia."
         self.repository.add_warning(warning)
         self._emit("narrator_absent", warning, stage="narration")
 
@@ -994,14 +998,14 @@ class SimulationStagesMixin:
                     {"accepted": True, "review_unavailable": type(exc).__name__},
                 )
                 warning = (
-                    f"[NARRATION_REVIEW_UNAVAILABLE] Capitulo {index}: "
-                    "se acepto el capitulo sin revision editorial."
+                    f"[NARRATION_REVIEW_UNAVAILABLE] Capítulo {index}: "
+                    "se aceptó el capítulo sin revisión editorial."
                 )
                 self.repository.add_warning(warning)
                 self._emit("narration_review_unavailable", warning, stage="narration")
                 self.repository.save_text(f"narration/chapter-{index:03d}.md", candidate)
                 return candidate, attempt, "narrator"
-            verdict = editorial_verdict(review, candidate, visible)
+            verdict = editorial_verdict(review, candidate, visible, request.language)
             self.repository.save_data(
                 f"narration/chapter-{index:03d}-review-{attempt:03d}.json",
                 {"review": review.model_dump(mode="json"), **verdict.as_record()},
@@ -1019,7 +1023,7 @@ class SimulationStagesMixin:
             # corrections. Model prose with a disputed detail still reads better than the log.
             blocking, attempt, body = min(candidates, key=lambda item: (item[0], -item[1]))
             warning = (
-                f"[NARRATION_BEST_ATTEMPT] Capitulo {index}: se entrego el intento {attempt} "
+                f"[NARRATION_BEST_ATTEMPT] Capítulo {index}: se entregó el intento {attempt} "
                 f"con {blocking} observaciones editoriales sin resolver."
             )
             self.repository.add_warning(warning)
@@ -1027,7 +1031,7 @@ class SimulationStagesMixin:
             self.repository.save_text(f"narration/chapter-{index:03d}.md", body)
             return body, attempt, "narrator"
         body = fallback.narrate(visible, names, request.language)
-        warning = f"[NARRATION_FALLBACK] Capitulo {index}: se narro con el narrador de respaldo."
+        warning = f"[NARRATION_FALLBACK] Capítulo {index}: se narró con el narrador de respaldo."
         self.repository.add_warning(warning)
         self._emit("narration_fallback", warning, stage="narration")
         self.repository.save_text(f"narration/chapter-{index:03d}.md", body)

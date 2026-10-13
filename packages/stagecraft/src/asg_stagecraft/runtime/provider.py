@@ -24,6 +24,7 @@ from .errors import (
     GeminiTPMError,
     ProviderDailyQuotaError,
     ProviderError,
+    ProviderOverloadedError,
     ProviderUnavailableError,
     StructuredResponseError,
 )
@@ -155,6 +156,16 @@ def _gemini_response_schema(schema: type[BaseModel]) -> dict:
     return sanitize(schema.model_json_schema())
 
 
+# Retries a 5xx earns on a chain slot with another slot behind it. In the 7.12 validation run
+# the full GEMINI_MAX_RETRIES with backoff cost about a minute per overloaded call.
+CHAINED_SERVER_RETRIES = 1
+
+
+def _is_server_error(status: object) -> bool:
+    """Say whether a status is a 5xx, the provider's fault rather than the request's."""
+    return isinstance(status, int) and 500 <= status < 600
+
+
 def _safe_provider_error(exc: Exception) -> ProviderError:
     """Classify provider failures without exposing request or credential data."""
     message = str(exc).casefold()
@@ -181,6 +192,9 @@ def _safe_provider_error(exc: Exception) -> ProviderError:
     elif status == 404:
         summary = "Gemini no encontró el modelo o recurso configurado."
         recommendation = "Comprueba GEMINI_MODEL y, si la usas, GEMINI_STAGE_MODEL."
+    elif _is_server_error(status):
+        summary = "Gemini siguió saturado tras los reintentos."
+        recommendation = "Vuelve a intentarlo más tarde o añade otro modelo a ASG_LLM_CHAIN."
     elif any(token in message for token in ("quota", "rate limit", "resource_exhausted", "429")):
         summary = "Gemini rechazó la solicitud por cuota o límite de uso."
         recommendation = "Espera unos minutos o revisa la cuota del proyecto de Gemini."
@@ -190,7 +204,14 @@ def _safe_provider_error(exc: Exception) -> ProviderError:
     else:
         summary = "Gemini no pudo completar la solicitud."
         recommendation = "Vuelve a intentarlo y consulta el registro local si persiste."
-    return (ProviderUnavailableError if refused else ProviderError)(
+    error_type = (
+        ProviderUnavailableError
+        if refused
+        else ProviderOverloadedError
+        if _is_server_error(status)
+        else ProviderError
+    )
+    return error_type(
         summary,
         details={
             "exception_type": type(exc).__name__,
@@ -289,6 +310,9 @@ class _RecordingProvider:
         """Set the retry tuning, the RPM limiter and the recording state of every provider."""
         self.model_name = model_name
         self.max_retries = max_retries
+        # Retries a 5xx earns; a chain lowers it on every slot with another one behind it,
+        # since moving on is quicker than waiting out an overloaded model.
+        self.server_error_retries = max_retries
         self.max_retry_delay = max_retry_delay
         self._limiter = limiter
         self.wait_callback: Callable[[int, str], None] | None = None
@@ -315,6 +339,14 @@ class _RecordingProvider:
     def _retry_details(self, exc: Exception) -> dict[str, object]:
         """Read the status, delay and quota diagnostics a failed request carries."""
         return retry_details(exc)
+
+    def _wait_reason(self, status: object) -> str:
+        """Say why a retry waits: an overloaded server is not a spent quota."""
+        if status == 429:
+            return f"límite por minuto de {self.provider_label}"
+        if _is_server_error(status):
+            return f"{self.provider_label} saturado ({status})"
+        return f"fallo transitorio de {self.provider_label}"
 
     def _is_spent_quota(self, exc: Exception, details: dict) -> bool:
         """Say whether a 429 names an allowance that no retry within minutes can recover."""
@@ -457,10 +489,15 @@ class _RecordingProvider:
                 permanent_quota = status == 429 and self._is_spent_quota(exc, details)
                 transient = (
                     status in {408, 429}
-                    or (isinstance(status, int) and 500 <= status < 600)
+                    or _is_server_error(status)
                     or _is_transient_transport_error(exc)
                 )
-                if permanent_quota or not transient or attempt >= max_retries:
+                budget = (
+                    min(max_retries, self.server_error_retries)
+                    if _is_server_error(status)
+                    else max_retries
+                )
+                if permanent_quota or not transient or attempt >= budget:
                     if status == 429:
                         error_type = self._quota_error_type(exc, details)
                         if self.quota and issubclass(error_type, ProviderDailyQuotaError):
@@ -485,7 +522,7 @@ class _RecordingProvider:
                         details={**details, "model": self.model_name},
                         recommendations=["Reanuda el trabajo cuando se restablezca la cuota."],
                     ) from exc
-                countdown_wait(delay, f"reintento solicitado por {self.provider_label}", callback)
+                countdown_wait(delay, self._wait_reason(status), callback)
                 pending_wait = delay
 
     def _invoke_structured(
@@ -873,6 +910,12 @@ class OpenAICompatibleProvider(_RecordingProvider):
                     "puede ser un bloqueo de la red o del país desde el que se llama."
                 ],
             )
+        if _is_server_error(details.get("status")):
+            return ProviderOverloadedError(
+                f"{self.provider_label} siguió saturado tras los reintentos.",
+                details=details,
+                recommendations=["Vuelve a intentarlo más tarde."],
+            )
         return ProviderError(
             f"{self.provider_label} no pudo completar la solicitud.",
             details=details,
@@ -993,6 +1036,11 @@ class RoutedProvider(_ProviderGroup):
             self._given_up.add(id(provider))
             self.refused.add(provider.model_name)
             return call(self.main)
+        except ProviderOverloadedError:
+            # Only this call moves: an overload says nothing about the next one.
+            if provider is self.main:
+                raise
+            return call(self.main)
 
     def generate_structured(
         self, *, system_instruction: str, prompt: str, schema: type[T], profile: str
@@ -1034,6 +1082,8 @@ class FailoverProvider(_ProviderGroup):
     until its window resets and the same call is repeated on the next slot. A slot that
     refuses access (401 or 403) is skipped for the rest of this process only: a blocked network
     or a fixed key can change before the provider's window does, so the ledger never hears of it.
+    A slot that has already answered here is never a blocked key, so its 403, like a 5xx that
+    outlasted the retries, moves only that call to the next slot.
     """
 
     def __init__(self, entries: list[tuple[QuotaSlot, object]], ledger: QuotaLedger) -> None:
@@ -1042,11 +1092,16 @@ class FailoverProvider(_ProviderGroup):
             raise ValueError("A provider chain needs at least one slot")
         self.entries = entries
         self.ledger = ledger
+        for _, provider in entries[:-1]:
+            if hasattr(provider, "server_error_retries"):
+                provider.server_error_retries = min(provider.max_retries, CHAINED_SERVER_RETRIES)
         self.model_name = entries[0][1].model_name
         self._wait_callback = None
         self._usage_callback = None
         self.usage_records = []
         self.refused: set[str] = set()
+        # Slots that have answered at least once here, so a later 403 cannot be a blocked key.
+        self.answered: set[str] = set()
 
     def _children(self) -> list:
         """Return the provider of every slot."""
@@ -1066,26 +1121,46 @@ class FailoverProvider(_ProviderGroup):
 
     def _call(self, method: str, estimated_tokens: int, **kwargs):
         """Run one call on the first slot with allowance, failing over on a spent quota."""
+        passing: ProviderError | None = None
         for index, (slot, provider) in enumerate(self.entries):
             if not self._usable(slot, estimated_tokens):
                 continue
             before = len(self.usage_records)
             try:
-                return getattr(provider, method)(**kwargs)
+                result = getattr(provider, method)(**kwargs)
+                self.answered.add(slot.key)
+                return result
+            except ProviderOverloadedError as exc:
+                # Only this call moves on: the slot keeps its place for the next one.
+                passing = exc
+                self._announce(index, estimated_tokens, f"{slot.key} saturado")
+            except ProviderUnavailableError as exc:
+                if slot.key in self.answered:
+                    # A slot that has answered in this process is not blocked; found in 7.12,
+                    # when both Gemini models sent one 403 each in the middle of a 503 storm
+                    # and the run died at scene 5 with most of the day's quota left.
+                    passing = exc
+                    self._announce(index, estimated_tokens, f"{slot.key} rechazó esta llamada")
+                else:
+                    self.refused.add(slot.key)
+                    self._announce(index, estimated_tokens, f"{slot.key} rechaza el acceso")
             except ProviderDailyQuotaError as exc:
                 self.ledger.mark_exhausted(slot, retry_after=exc.details.get("retry_delay"))
                 self._announce(index, estimated_tokens, f"{slot.key} agotado")
-            except ProviderUnavailableError:
-                self.refused.add(slot.key)
-                self._announce(index, estimated_tokens, f"{slot.key} rechaza el acceso")
             finally:
                 self._record_spent(slot, before)
+        if passing is not None:
+            # Degradable, unlike a spent chain: the run may lose this call, not the whole day.
+            raise passing
         resets = [
             self.ledger.exhausted_until(slot) or self.ledger.resets_at(slot)
             for slot, _ in self.entries
         ]
+        every_refused = all(slot.key in self.refused for slot, _ in self.entries)
         raise ProviderDailyQuotaError(
-            "Ningún proveedor de la cadena pudo atender la llamada: cupo agotado o acceso "
+            "Ningún proveedor de la cadena aceptó el acceso."
+            if every_refused
+            else "Ningún proveedor de la cadena pudo atender la llamada: cupo agotado o acceso "
             "rechazado.",
             details={
                 "slots": [slot.key for slot, _ in self.entries],

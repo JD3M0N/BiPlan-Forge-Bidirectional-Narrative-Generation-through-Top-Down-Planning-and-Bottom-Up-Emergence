@@ -234,13 +234,19 @@ def request_problem(
     return None
 
 
+def print_banner(args: argparse.Namespace) -> None:
+    """Greet, and show the example prompt only when one is about to be typed in."""
+    print("Generador automático de historias — Stagecraft")
+    if not (args.prompt or args.brief or args.plan_from):
+        print("\nEjemplo de prompt ideal:\n")
+        print(f"  {EXAMPLE_PROMPT}\n")
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the command-line entry point."""
     use_utf8_output()
     args = parser().parse_args(argv)
-    print("Generador automático de historias — Stagecraft")
-    print("\nEjemplo de prompt ideal:\n")
-    print(f"  {EXAMPLE_PROMPT}\n")
+    print_banner(args)
     if (args.brief and args.prompt) or (args.plan_from and (args.prompt or args.brief)):
         print("Error: usa un prompt o --brief, no los dos.", file=sys.stderr)
         return 2

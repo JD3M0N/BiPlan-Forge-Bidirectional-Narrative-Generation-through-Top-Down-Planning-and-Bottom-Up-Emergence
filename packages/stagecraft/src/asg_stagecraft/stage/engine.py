@@ -96,8 +96,8 @@ CODA_NOTE = (
 )
 # Used only when the director was asked to name who must change and did not.
 FALLBACK_TURN_NOTE = (
-    "Tu tactica no produce cambios. Prueba otra accion desde lo que sabes y quieres; "
-    "asume su coste y deja que los demas respondan."
+    "Tu táctica no produce cambios. Prueba otra acción desde lo que sabes y quieres; "
+    "asume su coste y deja que los demás respondan."
 )
 
 # How much of a gate's fact a director's clause must carry to count as that gate. The director
@@ -344,7 +344,7 @@ class PerformanceEngine:
             if at_cap:
                 if self.simulation_mode is SimulationMode.ADAPTIVE:
                     record.missing = list(verdict.missing)
-                    self._emit("beat_unreached", f"{run.brief.scene_id} no alcanzo {beat.event_id}")
+                    self._emit("beat_unreached", f"{run.brief.scene_id} no alcanzó {beat.event_id}")
                 else:
                     self._resolve_stall(run, index, beat, record, verdict)
                 return record
@@ -395,8 +395,8 @@ class PerformanceEngine:
         record.evidence = list(final.evidence)
         record.proofs = list(final.proofs)
         self.warnings.append(
-            f"[BEAT_FORCED] {run.brief.scene_id}: el beat {beat.event_id} no se alcanzo "
-            f"ni con la intervencion del mundo."
+            f"[BEAT_FORCED] {run.brief.scene_id}: el beat {beat.event_id} no se alcanzó "
+            f"ni con la intervención del mundo."
         )
         self._emit("beat_forced", f"{run.brief.scene_id} forzo {beat.event_id}")
 
@@ -405,7 +405,7 @@ class PerformanceEngine:
         record.achieved = True
         record.evidence = list(verdict.evidence)
         record.proofs = list(verdict.proofs)
-        self._emit("beat_achieved", f"{run.brief.scene_id} alcanzo {record.event_id}")
+        self._emit("beat_achieved", f"{run.brief.scene_id} alcanzó {record.event_id}")
 
     def _play_coda(self, run: _SceneRun, *, open_ending: bool = False) -> int:
         """Give the play's ending a scene: the most involved characters answer the outcome."""
@@ -618,8 +618,8 @@ class PerformanceEngine:
                     )
                 self._note_failure(actor_id)
                 feedback = (
-                    "\n\nCORRECCION: el intento anterior no pudo completarse. Vuelve a hacer tu "
-                    "movimiento, mas corto y directo."
+                    "\n\nCORRECCIÓN: el intento anterior no pudo completarse. Vuelve a hacer tu "
+                    "movimiento, más corto y directo."
                 )
                 continue
             self._failures = 0
@@ -663,7 +663,7 @@ class PerformanceEngine:
                             "normalized": candidate.model_dump(mode="json"),
                         }
                     )
-                feedback = f"\n\nCORRECCION:\n{issue}\nVuelve a hacer tu movimiento."
+                feedback = f"\n\nCORRECCIÓN:\n{issue}\nVuelve a hacer tu movimiento."
                 continue
             turn = StageTurn(
                 **candidate.model_dump(exclude={"item_action", "item_actions"}),

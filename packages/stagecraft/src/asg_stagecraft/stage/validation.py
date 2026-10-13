@@ -386,5 +386,5 @@ def validate_state_evidence(candidate: ActorTurnDraft) -> None:
         raise TurnIssue(
             "INVALID_STATE_EVIDENCE",
             "Cita un fragmento exacto de tu pensamiento, "
-            "accion o palabras que fundamente el cambio; deja vacio lo que no cambio.",
+            "acción o palabras que fundamente el cambio; deja vacío lo que no cambió.",
         )

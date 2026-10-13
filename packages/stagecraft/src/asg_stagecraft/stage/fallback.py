@@ -47,7 +47,7 @@ def narrate(turns: list[StageTurn], names: dict[str, str], language: str = "") -
                 addressed = ", ".join(calls.name(item) for item in turn.addressed_to)
                 tag = tag or " —dice"
                 tag += f" en voz baja a {addressed}" if addressed else " en voz baja"
-            sentences.append(f"—{_strip_final_stop(turn.speech)}{tag}.")
+            sentences.append(_sentence(f"—{_strip_final_stop(turn.speech)}{tag}"))
             named = named or bool(tag)
         thought = turn.thought.strip()
         if thought and not is_foreign(thought, language):

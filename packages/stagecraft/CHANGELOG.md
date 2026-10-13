@@ -1,5 +1,68 @@
 # Historial de cambios
 
+## 7.12.1
+
+Arreglos que salieron del primer run real de 7.12 (`20261013-125004-la-ciudad-perdida`, el
+prompt de los navegantes, cancelado en la escena 1) y de su repetición. Sin cambios de
+artefactos.
+
+- **Un modelo saturado ya no frena la función.** Durante minutos `gemini-3.5-flash-lite` dio
+  503 y 504 a 15 de 24 llamadas de la función mientras `gemini-3.1-flash-lite`, la siguiente
+  ranura de la cadena, no recibía ninguna. Un 5xx que agota los reintentos es ahora
+  `ProviderOverloadedError` (`PROVIDER_OVERLOADED`): `FailoverProvider` y `RoutedProvider`
+  repiten esa llamada en la ranura siguiente sin marcar la primera, y si nadie responde el
+  error sigue siendo degradable, no una cuota agotada. Una ranura con otra detrás reintenta
+  un 5xx una sola vez (`CHAINED_SERVER_RETRIES`) en vez de agotar `GEMINI_MAX_RETRIES` con
+  espera creciente, que costaba alrededor de un minuto por llamada; la última conserva todos.
+- **Un 403 suelto ya no mata el run.** La repetición de los navegantes
+  (`20261013-131347`) murió en la escena 5 con `PROVIDER_DAILY_QUOTA_EXHAUSTED` y 718
+  peticiones libres: en plena tormenta de 503, los dos modelos dieron un 403 cada uno y la
+  cadena los dejó fuera para todo el proceso, como al Groq bloqueado por red de 7.9.1. Una
+  ranura que ya respondió en este proceso no es una clave bloqueada: su 403 mueve solo esa
+  llamada y, si nadie la atiende, el error es degradable. Cuando todas rechazan el acceso, el
+  mensaje ya no dice «cupo agotado».
+- **La espera dice por qué espera.** Cada 503 salía como «Esperando cuota (reintento
+  solicitado por Gemini)»; ahora «Esperando 3s: Gemini saturado (503)», «límite por minuto» o
+  «fallo transitorio». `asg-generate` muestra el orden real de la cadena en vez de un
+  «función: …» que con cadena no enruta nada, y solo enseña el prompt de ejemplo cuando se va
+  a escribir uno.
+- **El casting se repara sobre su propio candidato.** La corrección pedía una biblia nueva sin
+  enseñar la rechazada: el segundo intento arregló las compuertas, dejó vacío el
+  `public_face` de los ocho dossieres y pasó el `want` al inglés, y el run cayó al reparto
+  derivado, sin compuertas. Casting y utilería reciben ahora el candidato rechazado, como el
+  plan, y la corrección nombra cada campo vacío por dossier.
+- Los mensajes de compuertas que se reinyectan dicen «works out» y «discovers», no
+  «deductions» y «discoverys».
+- **La revisión editorial define los dos códigos que bloquean.** En las revisiones 7.10 de los
+  navegantes, la única `CONTRADICTION` era un cambio de presente a pasado, y entre los nueve
+  `INVENTED_EVENT` había el viento en las jarcias, una descripción del cielo y uno que admitía
+  que las acciones estaban en el log. Ahora el prompt dice que ambiente, detalle sensorial y
+  motivo evidente no son sucesos, y que tiempo verbal, redacción u orden no son contradicción.
+- **Un capítulo narrado en presente se reintenta.** El capítulo 2 del misterio del tren
+  (`20261013-145340`) salió como transcripción en presente («—…—dice Inés» en cada línea) junto
+  a un capítulo 1 en pasado, y la revisión no dio ningún hallazgo. `editorial_verdict` bloquea
+  con `WRONG_TENSE` cuando en español las acotaciones en presente dominan a los pretéritos; de
+  los 59 capítulos narrados del corpus solo marca ese. Agotados los intentos, se entrega el
+  mejor, como cualquier otro bloqueo.
+- La revisión editorial compara citas sin tropezar con «», ‘’ ni rayas de diálogo, y el
+  narrador de respaldo ya no escribe «—¿Vienes?.».
+- **El actor lee español con tildes.** El contexto del turno, la reflexión, las correcciones
+  y las notas de reserva estaban escritos sin tildes («LO QUE QUIERES AQUI», «COMO ESTAS»,
+  «Mirala hacia atras», «que has hecho», «CORRECCION»), y la reflexión es de donde sale la
+  memoria en primera persona del personaje. También los avisos `BEAT_FORCED`,
+  `NARRATION_FALLBACK` y `NARRATOR_FALLBACK`. Cambia el texto de esos prompts.
+- «Lo que ya decidiste sigue vigente… no repitas la misma conversación» ya no llega al actor
+  que abre su primera escena: solo cuando ha movido en ella o trae un compromiso o una versión
+  de escenas anteriores.
+- El detector de idioma cuenta las formas acentuadas («más», «está», «él»), que antes no
+  sumaban como español.
+- El analista conserva entre paréntesis la palabra de la persona para cada papel que nombra:
+  «la revisora Inés Robles» pasó por «conductor» y volvió como «Jefa de tren» (TD-2).
+- Personajes: los títulos y rangos inventados también van en el idioma de la ficción
+  («Warden» llegó al reparto y a un título de capítulo), un pueblo inventado tiene nombres
+  propios y ningún personaje lleva el de una figura histórica real (salieron Rodrigo de Triana
+  y Hernando de Alarcón).
+
 ## 7.12.0
 
 Pipeline 7.12. Responde a los primeros lectores de fuera del proyecto (11 runs 7.10 de

@@ -16,6 +16,13 @@ Writer sin correr en las narrativas porque el crítico no dio notas, 3.052 palab
 arreglaba sin cuota (ver `packages/stagecraft/CHANGELOG.md`); falta validarlo en real (SIM-21,
 TD-8). 701 tests en verde.
 
+**7.12.1, 2026-10-13: la primera validación real de 7.12.** Tres runs simulados con Gemini en
+plena tormenta de 503 (`20261013-125004`, `131347` y `145340`); solo el misterio del tren
+terminó. De ellos salieron los arreglos de 7.12.1: la cadena salta un modelo saturado o un 403
+suelto sin matar el run, el casting se repara sobre su candidato, la revisión rechaza un
+capítulo en presente, y el actor lee su contexto con tildes. Resultados en SIM-21. 705 tests
+en verde.
+
 **Estado medido el 2026-10-09 con `asg-stagecraft` 7.9.0 (pipeline 7.9).** Un solo generador,
 Stagecraft, con tres formatos: `narrative`, `script` y `simulated`. La función simulada puede
 llevar inventario de objetos, la guía narrativa tiene una estrategia experimental
@@ -265,6 +272,20 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   palabras). Además la función era un ping-pong: «suplicar» contra «ordenar» tres veces cada
   uno en el primer beat, y la mitad de los beats forzados. 7.12.0 lo arregla con dobles; el
   replay de las revisiones guardadas aceptaría o entregaría el mejor intento en los 7.
+- **Medido en 7.12.1, 2026-10-13**, con 3.5 Flash-Lite dando 503 a más de la mitad de las
+  llamadas:
+  - Los navegantes, dos veces: `125004` se canceló en la escena 1 con el casting en respaldo
+    (arreglado: la reparación ve su candidato) y `131347` murió en la escena 5 por dos 403
+    sueltos (arreglado: una ranura que ya respondió no se bloquea). Ninguno llegó a narrar.
+    En sus 37 turnos, ningún pensamiento en inglés; el primer beat recibe el giro del director
+    en el turno 6, antes del tope de 8.
+  - El misterio del tren (`145340`, par de `20261011-233750` de 7.10): 2 de 2 capítulos del
+    narrador (7.10: 1 de 2), ningún `NARRATION_BEST_ATTEMPT`, revisiones sin hallazgos, 0 de 31
+    pensamientos en inglés y nombre repetido en frase seguida en el 18 % de las frases (7.10:
+    40 %). Los dos beats forzados coinciden con comprobaciones del director que los dos modelos
+    rechazaron con 503: miden la caída de Gemini, no la función.
+  - Falta el run completo de los navegantes; `125004` quedó en `running` y se puede cerrar con
+    `asg-recover --discard`.
 - **Qué hacer.** Repetir el prompt de los navegantes (`brief.json` de ese run) en real y leer
   `narration.json`, `narration/*-review-*.json` y `director.jsonl`.
 - **Hecho cuando.** Ningún capítulo con `source: fallback` salvo que el narrador no devolviera
@@ -671,6 +692,13 @@ versión definitiva del generador
     Investigaciones de Elara»);
   - los pensamientos se narran como «Mara Vela pensaba que necesitaba comprobar…»;
   - `dialogue_survival` es 1,0 en los dos runs 7.8: el narrador transcribe.
+- **Medido en 7.12.1** (`20261013-145340-el-compartimento-cerrado`): `dialogue_survival` 0,94;
+  los dos capítulos reproducen turno a turno, y el segundo en presente con «—dice Inés» tras
+  cada réplica, el formato del narrador de respaldo. El presente ya se rechaza
+  (`WRONG_TENSE`); la transcripción no, porque bloquearla mandaría a reintento casi todo
+  capítulo. Además, el capítulo 1 se titula como la historia («El compartimento cerrado» dos
+  veces seguidas, como en 6 historias Top-Down): no se toca de paso, porque los encabezados
+  `##` son los que `parse_chapter_bodies` y los lectores de evaluación usan para partir capítulos.
 - **Hecho cuando.** En el par de SIM-1 no hay nombres fuera del reparto ni cambios de género, y la
   auditoría no marca ninguna pista clave eliminada.
 
@@ -1000,6 +1028,12 @@ versión definitiva del generador
     eco de…».
   - **Títulos.** El prompt de Sir Aldren corrió 15 veces, y 10 se titulan «Las cenizas del
     juramento».
+  - **Nombres históricos y pueblos sin nombre propio** (7.12.1, prompt de los navegantes). Dos
+    repartos seguidos sacan figuras reales o casi: Rodrigo de Triana, Hernando de Alarcón,
+    Alonso de Ribera y dos veces «Catalina de Eraso». La civilización del cielo, que el prompt
+    pide «super novedosa», se llama «San Salvador» y su gente «Aldonza de Mendoza» o «Selene de
+    Valdés». El prompt de personajes lo prohíbe desde 7.12.1 y el segundo run lo ignoró:
+    un prompt no basta.
   - **Importa para la tesis:** la creatividad es una de las seis métricas humanas.
 - **Qué hacer.**
   - Medir primero: nombres, aperturas y títulos repetidos entre runs, en un informe de

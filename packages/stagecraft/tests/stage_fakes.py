@@ -98,6 +98,7 @@ class StageFakeProvider(FakeProvider):
         self,
         *args,
         fail_casting_call: set[int] | None = None,
+        unplayable_casting_once=False,
         fail_props_call: set[int] | None = None,
         fail_actor_call: set[int] | None = None,
         fail_director=False,
@@ -113,6 +114,7 @@ class StageFakeProvider(FakeProvider):
         """Configure the stage responses and the failures a test wants to force."""
         super().__init__(*args, **kwargs)
         self.fail_casting_calls = set(fail_casting_call or ())
+        self.unplayable_casting_once = unplayable_casting_once
         self.fail_props_calls = set(fail_props_call or ())
         self.fail_actor_calls = set(fail_actor_call or ())
         self.fail_narrator_calls = set(fail_narrator_call or ())
@@ -239,7 +241,9 @@ class StageFakeProvider(FakeProvider):
                 moral_line="will not hand anyone over",
                 secret=f"{character_id} took the file" if character_id == ids[0] else "",
                 secret_from=ids[1:2] if character_id == ids[0] else [],
-                public_face="una archivera de mediana edad, con gafas y la voz baja",
+                public_face=""
+                if self.unplayable_casting_once and self.casting_number == 1
+                else "una archivera de mediana edad, con gafas y la voz baja",
                 voice="clipped, concrete, never raises her voice",
                 mannerisms=["taps the folder"],
                 tactics=["reason", "press", "threaten"],

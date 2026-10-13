@@ -39,10 +39,12 @@ class CharacterDesignerAgent(Agent[CharactersArtifact]):
                 f"Relationships must use canonical character IDs. {role_labels}"
                 "Do not use scores, sliders, or hidden planning labels. "
                 f"Write each name, role and voice in {request.language}, because they reach the "
-                "reader, and keep the gender the request gives each role; write the other fields "
-                "in English. Draw names from the culture and period of the world, and avoid the "
-                "stock names generated fiction keeps reusing (Elena, Tomas, Mateo, Marta, Lucia, "
-                "Vance, Vargas) unless the request names them."
+                "reader, invented titles and ranks included, and keep the gender the request "
+                "gives each role; write the other fields in English. Draw names from the culture "
+                "and period of the world; a people the story invents gets names of its own, not "
+                "those of the travellers who meet it. Never give a character the name of a real "
+                "historical figure, and avoid the stock names generated fiction keeps reusing "
+                "(Elena, Tomas, Mateo, Marta, Lucia, Vance, Vargas) unless the request names them."
             ),
             prompt=(
                 f"{story_specification_header(request, blueprint, audience='characters')}"

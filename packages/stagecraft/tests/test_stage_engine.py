@@ -341,8 +341,8 @@ def test_the_director_restates_each_objective_in_the_fiction_language() -> None:
     )
     stage.engine().perform_scene(scene())
     contexts = dict(reversed(stage.moves))
-    assert "LO QUE QUIERES AQUI: que Bruno suelte la carpeta" in contexts["ana"]
-    assert "LO QUE QUIERES AQUI: lo que Bruno quiere" in contexts["bruno"]
+    assert "LO QUE QUIERES AQUÍ: que Bruno suelte la carpeta" in contexts["ana"]
+    assert "LO QUE QUIERES AQUÍ: lo que Bruno quiere" in contexts["bruno"]
 
 
 def test_a_reflected_stance_reaches_the_actor_by_name_in_a_labelled_state() -> None:
@@ -366,7 +366,7 @@ def test_a_reflected_stance_reaches_the_actor_by_name_in_a_labelled_state() -> N
         if "Con Ana: recelo" in line
     )
     assert "Te sientes: tensa." in state
-    assert "Cambiarias de idea si: me mienten otra vez." in state
+    assert "Cambiarías de idea si: me mienten otra vez." in state
     assert "_" not in state and "Si me" not in state
 
 
@@ -678,7 +678,7 @@ def test_an_impossible_move_is_sent_back_with_its_code_and_repaired() -> None:
     performance = engine.perform_scene(props_scene())
     assert [item.code for item in rejections] == ["ITEM_NOT_HELD"]
     # The actor was told, in English, what to fix, and its repaired turn joined the log.
-    assert "CORRECCION" in stage.moves[1][0] or performance.turns
+    assert "CORRECCIÓN" in stage.moves[1][0] or performance.turns
     assert performance.turns[0].item_action is None
     assert performance.rejected == 1
 

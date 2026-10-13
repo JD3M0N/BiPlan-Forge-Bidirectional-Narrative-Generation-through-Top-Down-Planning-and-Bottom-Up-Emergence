@@ -64,12 +64,12 @@ class ActorAgent(Agent[ActorTurnDraft]):
         return self.provider.generate_structured(
             system_instruction=system_instruction,
             prompt=(
-                "La escena ha terminado. Mirala hacia atras desde dentro de ti.\n\n"
+                "La escena ha terminado. Mírala hacia atrás desde dentro de ti.\n\n"
                 f"{scene_log}\n\n"
-                f"Escribe en primera persona y en {language}: que has hecho y que te ha pasado, "
-                "que crees ahora que antes no creias, y como te has quedado con cada uno de los "
-                "que estaban ahi. Declara tu objetivo, compromiso, version que sostienes y que "
-                "te haria reconsiderar. Cuenta solo lo que tu has vivido o te han dicho "
+                f"Escribe en primera persona y en {language}: qué has hecho y qué te ha pasado, "
+                "qué crees ahora que antes no creías, y cómo te has quedado con cada uno de los "
+                "que estaban ahí. Declara tu objetivo, compromiso, versión que sostienes y qué "
+                "te haría reconsiderar. Cuenta solo lo que tú has vivido o te han dicho "
                 "en esta escena. Incluye en evidence citas exactas de lo que presenciaste "
                 "para justificar cambios; si no hay evidencia, conserva el estado anterior."
             ),

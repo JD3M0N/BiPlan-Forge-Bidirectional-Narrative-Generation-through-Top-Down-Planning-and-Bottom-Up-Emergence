@@ -168,7 +168,7 @@ class FakeGenerator:
         run_dir.mkdir(parents=True, exist_ok=True)
         on_run_created(run_dir)
         on_progress(ProgressUpdate(10, "analysis", "Analizando la solicitud"))
-        on_event(PipelineEvent("agent_called", "se llamo al agente analyst", stage="analysis"))
+        on_event(PipelineEvent("agent_called", "se llamó al agente analyst", stage="analysis"))
         on_event(
             PipelineEvent(
                 "artifact_updated", "turno", stage="performance", artifact="stage/s/turns.jsonl"

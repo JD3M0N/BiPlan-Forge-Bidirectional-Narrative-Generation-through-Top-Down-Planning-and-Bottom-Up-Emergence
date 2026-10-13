@@ -34,6 +34,7 @@ from asg_stagecraft.stage.schemas import (
     ItemAction,
     ItemActionDraft,
     KnowledgeGate,
+    NarrationFinding,
     NarrationReview,
     PerformanceArtifact,
     PerformanceSettings,
@@ -346,8 +347,9 @@ def test_a_first_person_stage_direction_is_repaired_or_rejected(action, repaired
         ({"speech": "I will not give you the map and that is final."}, True),
         ({"speech": "Te lo dije: el Sauropod Pulley Works no aguanta mas."}, False),
         ({"speech": "OK.", "thought": "No me cree"}, False),
+        ({"speech": "Sí, él está con The Iron Duke of the North."}, False),
     ],
-    ids=["english-thought", "english-speech", "foreign-name", "too-short-to-judge"],
+    ids=["english-thought", "english-speech", "foreign-name", "too-short-to-judge", "accents"],
 )
 def test_a_turn_outside_the_fiction_language_is_rejected(fields, rejected) -> None:
     """Found in 7.10: actor thoughts in English reached the fallback prose."""
@@ -365,6 +367,18 @@ def test_copied_log_marks_are_stripped_and_internal_ids_still_block() -> None:
     marked = "[clave] Un golpe sacude el barco.\n[Ana piensa: Miente]"
     assert strip_markers(marked) == "Un golpe sacude el barco.\nMiente"
     assert not editorial_verdict(NarrationReview(), "Ocurrio en chapter_2.", []).accepted
+    # A reviewer quoting Spanish dialogue with other quote marks still quotes the candidate.
+    review = NarrationReview(
+        findings=[NarrationFinding(code="CONTRADICTION", quote='"Ve" - dijo', correction="x")]
+    )
+    assert editorial_verdict(review, "«Ve» —dijo Ana.", []).blocking
+    # Found in 7.12.1: a chapter tagged every line in the present, next to one in the past.
+    present = "\n\n".join(f"—Uno —dice Ana.\n\n—Dos —pregunta Bruno. {n}" for n in range(2))
+    verdict = editorial_verdict(NarrationReview(), present, [], "Spanish")
+    assert [line.split(":")[0] for line in verdict.blocking] == ["WRONG_TENSE"]
+    past = present.replace("dice", "dijo")
+    assert editorial_verdict(NarrationReview(), past, [], "Spanish").accepted
+    assert editorial_verdict(NarrationReview(), present, [], "English").accepted
 
 
 def test_the_first_person_detector_is_conservative_by_design() -> None:
@@ -724,7 +738,7 @@ def test_the_detective_cannot_already_know_what_she_deduces() -> None:
     """The run-1 gate: known_by the detective, who was also the one to deduce it."""
     with pytest.raises(ValueError) as error:
         cast_with(gate(known_by=["ana"], revealed_by="ana", how="deduction"))
-    assert "cannot already know" in str(error.value)
+    assert "ana works out this fact on stage, so they cannot already know" in str(error.value)
     assert str(error.value).isascii()
 
 
@@ -774,7 +788,7 @@ def test_a_dossier_without_a_public_face_is_not_playable() -> None:
     draft = CastBibleDraft(dossiers=[dossier(holder, public_face="")])
     with pytest.raises(ValueError) as error:
         materialize_bible(draft, cast_ids=[holder], characters=characters, plan=plan)
-    assert "public_face" in str(error.value)
+    assert f"{holder} (public_face)" in str(error.value)
 
 
 # -- the deterministic narrator ----------------------------------------------------------
@@ -818,8 +832,19 @@ FULL_NAMES = {"ana": "Ana Robles", "bruno": "Lord Bruno Vane", "cora": "Cora Lis
             ],
             "Ana Robles se acerca. —Calla —dice en voz baja a Cora Lis.",
         ),
+        (
+            [turn("ana", action="se gira", speech="¿Vienes?")],
+            "Ana Robles se gira. —¿Vienes?",
+        ),
     ],
-    ids=["one-paragraph-per-turn", "short-name-after", "title-kept", "foreign-thought", "whisper"],
+    ids=[
+        "one-paragraph-per-turn",
+        "short-name-after",
+        "title-kept",
+        "foreign-thought",
+        "whisper",
+        "question-keeps-its-mark",
+    ],
 )
 def test_the_fallback_narrator_reads_as_prose(turns, expected) -> None:
     """Found in 7.10: the fallback named a character in every line and wrote 'penso que'."""
@@ -911,6 +936,9 @@ def test_a_line_already_answered_is_not_shown_again() -> None:
         turn("bruno", speech="Nadie.", number=2),
     ]
     assert "TE ACABAN DE DECIR" not in _context_for("bruno", spoken)
+    # Found in 7.12: an actor opening its first scene was told not to repeat itself.
+    assert "ya decidiste" in _context_for("bruno", spoken)
+    assert "ya decidiste" not in _context_for("bruno", spoken[:1])
 
 
 def test_an_action_written_as_a_sentence_reads_on_after_the_name() -> None:

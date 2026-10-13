@@ -178,7 +178,11 @@ class FlakyModels(FakeModels):
         return SimpleNamespace(text="respuesta", usage_metadata=None)
 
 
-def test_a_transient_transport_error_is_retried_then_succeeds() -> None:
+def test_a_transient_transport_error_is_retried_then_succeeds(monkeypatch) -> None:
+    reasons = []
+    monkeypatch.setattr(
+        provider_module, "countdown_wait", lambda delay, reason, callback: reasons.append(reason)
+    )
     provider = provider_with()
     provider.max_retries = 3
     provider._client.models = FlakyModels()
@@ -188,6 +192,9 @@ def test_a_transient_transport_error_is_retried_then_succeeds() -> None:
     )
     assert len(provider._client.models.generate_calls) == 2
     assert [record.status for record in provider.usage_records] == ["failed", "succeeded"]
+    # Found in 7.12: every 503 was reported as a quota wait.
+    assert reasons == ["fallo transitorio de Gemini"]
+    assert provider._wait_reason(503) == "Gemini saturado (503)"
 
 
 def test_a_transport_error_that_never_recovers_is_wrapped_and_reported() -> None:
@@ -622,6 +629,41 @@ def test_a_slot_that_refuses_access_is_skipped_for_the_rest_of_the_run(tmp_path)
     assert len(groq._client.bodies) == 1
     assert notices == ["groq:openai/gpt-oss-120b rechaza el acceso; sigo con mistral:small"]
     assert ledger.exhausted_until(slots[0]) is None
+    # Found in 7.12: a slot that has answered is not blocked, so its 403 moves only that call.
+    groq._client = FakeHTTP([(200, completion("groq")), (403, blocked), (200, completion("groq"))])
+    chain = provider_module.FailoverProvider(
+        list(zip(slots, [groq, QuotaFake("small")], strict=True)), ledger
+    )
+    assert [chain.generate_text(**ask) for _ in range(3)] == ["groq", "small", "groq"]
+
+
+def test_an_overloaded_slot_hands_over_only_the_call_it_failed(tmp_path) -> None:
+    """Found in 7.12: 3.5 Flash-Lite answered 503 for minutes while 3.1 sat idle."""
+
+    def groq(replies):
+        provider = provider_module.OpenAICompatibleProvider(
+            "fake-key", "openai/gpt-oss-120b", "https://groq.invalid", label="Groq", max_retries=3
+        )
+        provider._limiter = None
+        provider._client = FakeHTTP(replies)
+        return provider
+
+    ledger = QuotaLedger(tmp_path / "budget.sqlite3")
+    first = groq([(503, ""), (503, ""), (200, completion("groq"))])
+    slots = [QuotaSlot("groq", "openai/gpt-oss-120b"), QuotaSlot("mistral", "small")]
+    chain = provider_module.FailoverProvider(
+        list(zip(slots, [first, QuotaFake("small")], strict=True)), ledger
+    )
+    ask = {"system_instruction": "s", "prompt": "p", "profile": "prose"}
+    # With a slot behind it, one retry and then the next slot: the 200 is left for later.
+    assert [chain.generate_text(**ask) for _ in range(2)] == ["small", "groq"]
+    assert len(first._client.bodies) == 3
+    assert ledger.exhausted_until(slots[0]) is None
+    # The last slot keeps its whole budget, and an overload stays a degradable error.
+    lonely = groq([(503, "")] * 4)
+    with pytest.raises(provider_module.ProviderOverloadedError):
+        provider_module.FailoverProvider([(slots[0], lonely)], ledger).generate_text(**ask)
+    assert len(lonely._client.bodies) == 4
 
 
 class FakeHTTP:

@@ -174,21 +174,25 @@ def actor_turn_context(
         blocks.append("LO QUE LLEVAS:\n" + "\n".join(f"- {prop_line(item)}" for item in held))
     if in_reach:
         blocks.append("LO QUE VES:\n" + "\n".join(f"- {prop_line(item)}" for item in in_reach))
-    blocks.append(f"LO QUE QUIERES AQUI: {strip_internal_ids(objective)}")
-    blocks.append(
-        "Lo que ya decidiste sigue vigente: juega su coste o una nueva "
-        "prueba, no repitas la misma conversion. Puedes actuar en "
-        "silencio."
-    )
+    blocks.append(f"LO QUE QUIERES AQUÍ: {strip_internal_ids(objective)}")
+    # Only once there is something decided: the 7.12 run told an actor opening its first scene
+    # not to repeat a conversation it had never had.
+    moved = any(turn.actor_id == character_id for turn in witnessed if turn.kind == "actor")
+    if moved or (state and (state.commitment or state.cover_story)):
+        blocks.append(
+            "Lo que ya decidiste sigue vigente: juega su coste o una nueva "
+            "prueba, no repitas la misma conversación. Puedes actuar en "
+            "silencio."
+        )
     if len(scene.cast) == 1:
         blocks.append(
-            "Estas a solas. Prioriza una accion concreta; no necesitas explicarla en voz alta."
+            "Estás a solas. Prioriza una acción concreta; no necesitas explicarla en voz alta."
         )
     if state:
-        blocks.append(f"COMO ESTAS: {_state_line(state, names)}")
+        blocks.append(f"CÓMO ESTÁS: {_state_line(state, names)}")
     if gate_facts:
         blocks.append(
-            "LO QUE SABES Y OTROS QUIZA NO:\n" + "\n".join(f"- {item}" for item in gate_facts)
+            "LO QUE SABES Y OTROS QUIZÁ NO:\n" + "\n".join(f"- {item}" for item in gate_facts)
         )
     if memories:
         blocks.append("LO QUE RECUERDAS:\n" + "\n".join(f"- {item.text}" for item in memories))
@@ -396,8 +400,8 @@ def _state_line(state: CharacterState, names: dict[str, str]) -> str:
         ("Te sientes", state.emotion),
         ("Ahora intentas", state.goal),
         ("Te has jurado", state.commitment),
-        ("Lo que sostienes ante los demas", state.cover_story),
-        ("Cambiarias de idea si", _without_leading_if(state.change_condition)),
+        ("Lo que sostienes ante los demás", state.cover_story),
+        ("Cambiarías de idea si", _without_leading_if(state.change_condition)),
     )
     pieces = [f"{label}: {_bare(value)}" for label, value in labelled if _bare(value)]
     pieces.extend(

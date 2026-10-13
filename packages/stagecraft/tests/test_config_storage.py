@@ -114,6 +114,11 @@ def test_the_performance_reads_its_own_model_key_and_pace(tmp_path, monkeypatch)
     )
     # Only a simulated run has a performance, so any other run names the main model alone.
     assert settings.model_summary(simulated=False) == "gemini-3.5-flash-lite"
+    # With a chain the stage model is only the next slot, not the performance's model.
+    monkeypatch.setenv("ASG_LLM_CHAIN", "gemini")
+    assert load_settings(root).model_summary(simulated=True) == (
+        "gemini:gemini-3.5-flash-lite → gemini:gemini-3.1-flash-lite"
+    )
 
 
 def test_a_blank_number_keeps_its_default(tmp_path, monkeypatch) -> None:

@@ -150,7 +150,7 @@ def test_a_character_who_witnessed_nothing_cannot_narrate() -> None:
         presence=presence,
     )
     assert choice.source == "most_turns"
-    assert "Eva Ruiz no presencio ninguna escena" in choice.warning
+    assert "Eva Ruiz no presenció ninguna escena" in choice.warning
 
 
 def test_a_voice_told_from_nobody_needs_no_narrator() -> None:

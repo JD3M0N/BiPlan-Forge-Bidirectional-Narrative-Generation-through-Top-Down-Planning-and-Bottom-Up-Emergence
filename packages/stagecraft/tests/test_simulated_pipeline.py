@@ -236,6 +236,15 @@ def test_casting_degrades_to_a_derived_bible(tmp_path) -> None:
     assert run.story_path.is_file()
 
 
+def test_a_rejected_casting_is_repaired_from_its_own_candidate(tmp_path) -> None:
+    """Found in 7.12: a repair drawn from scratch fixed the gates and blanked every face."""
+    provider = StageFakeProvider(story_review=major_story_review(), unplayable_casting_once=True)
+    run, _ = generate(tmp_path, provider)
+    repair = [call[2] for call in provider.structured_calls if call[0] == "CastBibleDraft"][1]
+    assert "(public_face)" in repair and "REJECTED CANDIDATE:" in repair
+    assert read_json(run, "cast_bible.json")["fallback"] is False
+
+
 def test_a_rejected_turn_is_repaired_and_recorded(tmp_path) -> None:
     provider = StageFakeProvider(story_review=major_story_review(), empty_turn_once=True)
     run, _ = generate(tmp_path, provider)
