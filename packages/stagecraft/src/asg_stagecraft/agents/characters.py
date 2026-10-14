@@ -17,8 +17,13 @@ class CharacterDesignerAgent(Agent[CharactersArtifact]):
         world: WorldArtifact,
         blueprint: NarrativeBlueprint | CompositionArtifact | None = None,
         feedback: str = "",
+        *,
+        authored_cast: str = "",
     ) -> CharactersArtifact:
-        """Design the cast; feedback, only on a repair, names what the last cast left out."""
+        """Design the cast; feedback, only on a repair, names what the last cast left out.
+
+        authored_cast is the cast block of a structured brief, empty for a free prompt.
+        """
         role_labels = ""
         if blueprint is not None:
             vocabulary = ", ".join(functional_role_vocabulary())
@@ -49,6 +54,7 @@ class CharacterDesignerAgent(Agent[CharactersArtifact]):
             prompt=(
                 f"{story_specification_header(request, blueprint, audience='characters')}"
                 f"\n\nWORLD:\n{json_text(world)}"
+                f"{authored_cast}"
                 f"{feedback}"
             ),
             schema=CharactersArtifact,

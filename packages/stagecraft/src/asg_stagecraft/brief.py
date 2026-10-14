@@ -160,6 +160,27 @@ class StoryBrief(BaseModel):
         return "\n".join(lines)
 
 
+def authored_cast_block(brief: StoryBrief | None) -> str:
+    """Hand the cast the author wrote, verbatim, to the agents that build characters (7.13).
+
+    Those agents read only the analyst's summary, and in the 7.12 navigators run it kept the
+    names and dropped the rest: the astronomer came back a surgeon, the fourteen-year-old cabin
+    boy a gunner of fifty, and every declared secret was replaced. Empty without a declared
+    cast, so a free-prompt run sends the same prompt as before.
+    """
+    if brief is None or not brief.cast:
+        return ""
+    lines = [
+        "",
+        "",
+        "AUTHOR'S CAST (canonical):",
+        "The author declared these characters. Keep each one's name, gender, age, trade, "
+        "temperament and secret exactly as written here; build on them, never replace them.",
+    ]
+    lines.extend(f"- {member.prompt_line()}" for member in brief.cast)
+    return "\n".join(lines)
+
+
 def missing_cast(brief: StoryBrief, characters: CharactersArtifact) -> list[CastMember]:
     """Return the declared characters the minted cast has nobody for."""
     names = {item.id: item.name for item in characters.characters}

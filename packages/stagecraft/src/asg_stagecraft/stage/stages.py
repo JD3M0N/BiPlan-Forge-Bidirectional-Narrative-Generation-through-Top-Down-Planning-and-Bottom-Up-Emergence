@@ -22,6 +22,7 @@ from ..agents import (
     StageManagerAgent,
 )
 from ..agents.promise_auditor import PromiseStoryAuditorAgent
+from ..brief import authored_cast_block
 from ..formats import SimulationMode
 from ..planning.promise_brief import chapter_brief
 from ..runtime.errors import NON_DEGRADABLE_ERRORS, ASGError
@@ -41,7 +42,7 @@ from ..writing.acceptance import writer_candidate_issue
 from ..writing.assembly import assemble_story, narrated_plan
 from ..writing.audit import story_metrics, word_count
 from . import fallback
-from .casting import dossier_index, fallback_bible, gates_for, materialize_bible
+from .casting import dossier_index, fallback_bible, gateless, gates_for, materialize_bible
 from .editorial import editorial_verdict, review_turns, strip_markers
 from .engine import CODA_TURNS, REACTION_TURNS, PerformanceEngine
 from .inventory import StageInventory
@@ -131,7 +132,14 @@ class SimulationStagesMixin:
             def draw_bible(feedback_snapshot: str = feedback):
                 """Draw one cast bible with feedback bound to this attempt."""
                 return agent.run(
-                    request, world, characters, plan, cast_ids, staging, feedback_snapshot
+                    request,
+                    world,
+                    characters,
+                    plan,
+                    cast_ids,
+                    staging,
+                    feedback_snapshot,
+                    authored_cast=authored_cast_block(self.brief),
                 )
 
             try:
@@ -165,6 +173,10 @@ class SimulationStagesMixin:
                     f"REJECTED CANDIDATE:\n{draft.model_dump_json()}"
                 )
                 continue
+            if gateless(bible, plan):
+                warning = "El reparto no tiene compuertas: nadie descubre nada en escena."
+                self.repository.add_warning(f"[CAST_NO_GATES] {warning}")
+                self._emit("cast_no_gates", warning, stage="casting")
             self.repository.save_json("cast_bible.json", bible)
             self.repository.complete_stage("casting")
             return bible

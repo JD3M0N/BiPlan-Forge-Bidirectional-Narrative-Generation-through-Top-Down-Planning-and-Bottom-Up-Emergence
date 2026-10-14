@@ -1,5 +1,42 @@
 # Historial de cambios
 
+## 7.13.0
+
+Lo que salió del análisis de los navegantes (`20261013-180025-las-islas-del-cielo`, 7.12,
+Expansiva): 2 h 55 min, de los que 98 fueron esperas; un reparto distinto del declarado y 5 de
+10 beats forzados. `PIPELINE_VERSION` pasa a 7.13 porque `stage_model` cambia de significado.
+
+- **Solo los actores van al modelo de la función, también con cadena.** Antes la función
+  entera iba a `GEMINI_STAGE_MODEL` sin cadena, y con `ASG_LLM_CHAIN` ese modelo era solo la
+  segunda ranura. Así, los 165 turnos de actor de los navegantes gastaron primero la cuota de
+  3.5 Flash-Lite. Se agotó en la llamada 93, y el director y **toda la narración** salieron de
+  3.1. Ahora `STAGE_MODEL_CALLS` (`("performance", "actor")`, turnos y reflexiones) prueba
+  primero la ranura de la función. El director, el casting, la narración y los constructores
+  siguen en el modelo principal. `FailoverProvider` reordena las ranuras solo para esas
+  llamadas y expone `stage_model_name`, así que `metadata.json` registra `stage_model` también
+  con cadena.
+- **Un modelo saturado espera 10 s, y al sexto 503 cede la llamada.** Cada 5xx espera
+  `GEMINI_OVERLOAD_WAIT` (10 s) y reintenta en el mismo modelo, con una cuenta aparte de
+  `GEMINI_MAX_RETRIES`. Al `GEMINI_OVERLOAD_ATTEMPTS`-ésimo (6), la llamada sale como
+  `ProviderOverloadedError` y pasa al siguiente modelo sin marcar la ranura. Se retiran
+  `CHAINED_SERVER_RETRIES` y `server_error_retries`. El borrador 7.12.2 esperaba 60 s × 10,
+  hasta 9 minutos por llamada. Pero cada 503 cuenta como petición: el 13 de octubre,
+  3.5 Flash-Lite agotó sus 500 diarias con 301 fallos y 199 éxitos.
+- **La cita de un director casa con lo que leyó.** La transcripción pone el nombre del actor
+  delante de la acción («Aleth se desliza»), y el director acorta citas con «[...]». El log
+  guarda «Se desliza», así que 20 de 42 cláusulas mostradas se rechazaban.
+  `stage/causality.py` acepta ahora las dos lecturas y los trozos literales en orden alrededor
+  de una elipsis, con un mínimo de tres palabras.
+- **El reparto del brief llega literal al diseñador de personajes y al casting.** Solo leían el
+  resumen del analista, que conservó los nombres y tiró el resto. La astrónoma volvió como
+  cirujana, el grumete de 14 años como artillero de 50 y todos los secretos declarados se
+  cambiaron. `brief.authored_cast_block` añade el reparto declarado como canon. Sin brief, el
+  prompt no cambia.
+- **Lo que el reparto descubrirá no es un secreto de partida.** El casting de los navegantes
+  dio a Teodoro, como secreto inicial, la medición del hundimiento que la trama tenía que
+  juntar, y dejó `knowledge_gates` vacío. El casting recibe esa regla, y un reparto sin
+  compuertas en un plan de varios capítulos deja `[CAST_NO_GATES]` en `metadata.json`.
+
 ## 7.12.1
 
 Arreglos que salieron del primer run real de 7.12 (`20261013-125004-la-ciudad-perdida`, el

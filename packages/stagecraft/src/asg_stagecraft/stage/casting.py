@@ -79,6 +79,16 @@ def fallback_bible(cast_ids: list[str], characters: CharactersArtifact) -> CastB
     )
 
 
+def gateless(bible: CastBible, plan: StoryPlan) -> bool:
+    """Say whether an authored bible leaves a story of several chapters with nothing to learn.
+
+    Found in the 7.12 navigators run: the discovery the whole plot builds to became one
+    character's starting secret, with no gate, so it was known from the first scene. Reported,
+    not rejected: a story may truly hold no secret, and the run is not worth losing over it.
+    """
+    return not bible.fallback and not bible.knowledge_gates and len(plan.chapters) > 1
+
+
 def dossier_index(bible: CastBible) -> dict[str, ActorDossier]:
     """Index one bible's dossiers by character ID."""
     return {item.character_id: item for item in bible.dossiers}

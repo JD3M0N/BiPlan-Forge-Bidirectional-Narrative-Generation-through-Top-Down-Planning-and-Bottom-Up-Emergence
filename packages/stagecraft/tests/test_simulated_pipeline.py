@@ -484,20 +484,23 @@ class RecordingStageProvider(StageFakeProvider):
         return super().generate_text(**kwargs)
 
 
-PERFORMANCE_SCHEMAS = {"ActorTurnDraft", "BeatDirection", "BeatCheckDraft", "ReflectionDraft"}
+ACTOR_SCHEMAS = {"ActorTurnDraft", "ReflectionDraft"}
 
 
-def test_the_performance_can_run_on_a_model_of_its_own(tmp_path) -> None:
-    """7.4: the actors spend most of a run's calls, so they may draw on another model's quota."""
+def test_the_actors_can_run_on_a_model_of_its_own(tmp_path) -> None:
+    """7.4: the actors spend most of a run's calls, so they may draw on another model's quota.
+
+    Since 7.13 only the actors: the director judges the beats on the main model.
+    """
     main = RecordingStageProvider("main-model")
     stage = RecordingStageProvider("stage-model")
     run, _ = generate(tmp_path, RoutedProvider(main, stage))
     main_schemas = {name for name, *_ in main.structured_calls}
     stage_schemas = {name for name, *_ in stage.structured_calls}
-    assert stage_schemas and stage_schemas <= PERFORMANCE_SCHEMAS
-    assert not main_schemas & PERFORMANCE_SCHEMAS
-    # Casting and narration stay on the main model: the narration is the text that is evaluated.
-    assert "CastBibleDraft" in main_schemas
+    assert stage_schemas == ACTOR_SCHEMAS
+    assert not main_schemas & ACTOR_SCHEMAS
+    # Casting, the director and the narration stay on the main model.
+    assert {"CastBibleDraft", "BeatCheckDraft"} <= main_schemas
     assert main.narrator_prompts and not stage.text_calls
     metadata = read_json(run, "metadata.json")
     assert metadata["status"] == "completed"
@@ -505,8 +508,17 @@ def test_the_performance_can_run_on_a_model_of_its_own(tmp_path) -> None:
     assert metadata["models_used"] == ["main-model", "stage-model"]
     lines = (run.run_dir / "llm_calls.jsonl").read_text(encoding="utf-8").splitlines()
     calls = [json.loads(line) for line in lines]
-    assert {item["model"] for item in calls if item["stage"] == "performance"} == {"stage-model"}
-    assert {item["model"] for item in calls if item["stage"] != "performance"} == {"main-model"}
+    acted = [
+        item["model"]
+        for item in calls
+        if (item["stage"], item["agent"]) == ("performance", "actor")
+    ]
+    assert acted and set(acted) == {"stage-model"}
+    assert {
+        item["model"]
+        for item in calls
+        if (item["stage"], item["agent"]) != ("performance", "actor")
+    } == {"main-model"}
     assert read_json(run, "llm_usage.json")["calls"] == len(calls)
 
 

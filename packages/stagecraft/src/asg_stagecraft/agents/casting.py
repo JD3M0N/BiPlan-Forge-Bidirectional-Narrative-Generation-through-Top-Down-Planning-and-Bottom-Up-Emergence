@@ -25,8 +25,14 @@ class CastingDirectorAgent(Agent[CastBibleDraft]):
         cast_ids: list[str],
         staging: str,
         repair_feedback: str = "",
+        *,
+        authored_cast: str = "",
     ) -> CastBibleDraft:
-        """Derive the cast bible from the frozen plan and the characters already designed."""
+        """Derive the cast bible from the frozen plan and the characters already designed.
+
+        authored_cast is the cast block of a structured brief: ages, trades and secrets the
+        dossiers must keep. Empty for a free prompt.
+        """
         relevant = [item for item in characters.characters if item.id in set(cast_ids)]
         return self.provider.generate_structured(
             system_instruction=(
@@ -53,7 +59,11 @@ class CastingDirectorAgent(Agent[CastBibleDraft]):
                 "initial_premises copied "
                 "exactly from its investigator initial_knowledge. Never include "
                 "its conclusion as a premise. "
-                "Whoever confesses must already know. A reveal must tell someone present "
+                "Whoever confesses must already know. Whatever the plan has the cast discover "
+                "in a later event - a measurement, a deduction, a truth they piece together - is "
+                "a knowledge gate revealed on stage: never in the initial_knowledge or the secret "
+                "of whoever will discover it; only someone hiding it may know it already. "
+                "A reveal must tell someone present "
                 "something new. Asymmetry is the point: a cast that all know the same things has "
                 "no scenes to play. Antagonists get the same care as protagonists; write what "
                 "they want and why it is worth wanting, never a label for how bad they are. "
@@ -65,6 +75,7 @@ class CastingDirectorAgent(Agent[CastBibleDraft]):
                 f"{story_specification_header(request)}"
                 f"\n\nWORLD:\n{json_text(world)}"
                 f"\n\nCHARACTERS:\n{json_text(relevant)}"
+                f"{authored_cast}"
                 f"\n\nRELATIONSHIPS:\n{json_text(characters.relationships)}"
                 f"\n\nPLAN:\n{json_text(plan)}"
                 f"\n\nSTAGING SUMMARY:\n{staging}"

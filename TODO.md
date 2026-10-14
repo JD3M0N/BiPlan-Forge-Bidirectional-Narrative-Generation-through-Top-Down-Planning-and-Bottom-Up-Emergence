@@ -286,6 +286,13 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
     rechazaron con 503: miden la caída de Gemini, no la función.
   - Falta el run completo de los navegantes; `125004` quedó en `running` y se puede cerrar con
     `asg-recover --discard`.
+- **Medido en 7.12.2, 2026-10-13** (`20261013-180025-las-islas-del-cielo`, los navegantes
+  completos, Expansiva, 2 h 55 min):
+  - 5 de 5 capítulos del narrador, ninguno de respaldo, y un solo `NARRATION_BEST_ATTEMPT`.
+  - Pero 5 de 10 beats forzados: el director citaba «Ilse Marvento [...] observa» y el log
+    guarda «Observa». Arreglado en 7.13 (`stage/causality.py`); falta medirlo en real.
+  - La narración entera salió de 3.1, porque los actores agotaron 3.5 en la llamada 93.
+    Arreglado en 7.13: los actores empiezan por 3.1.
 - **Qué hacer.** Repetir el prompt de los navegantes (`brief.json` de ese run) en real y leer
   `narration.json`, `narration/*-review-*.json` y `director.jsonl`.
 - **Hecho cuando.** Ningún capítulo con `source: fallback` salvo que el narrador no devolviera
@@ -293,6 +300,45 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   recibe el giro antes de su tope.
 - **Ojo.** Medir cuántos capítulos salen como `NARRATION_BEST_ATTEMPT`: si son muchos, el
   revisor sigue marcando como contradicción lo que no lo es, y hay que mirar sus códigos.
+
+### TD-9 · El plan no cumple el brief
+
+*Área:* top-down · *Cuota:* ~30 llamadas (un plan Expansivo con brief) · *Depende de:* —
+
+- **Síntoma.** En `20261013-180025-las-islas-del-cielo` el brief pedía:
+  - el ascenso por la Columna y la exploración de cada lugar (Nidos, Mercado, Jardines,
+    Archivo, Hondonada, Raíz);
+  - una tripulación que se divide entre quedarse, volver y sacar provecho;
+  - un final abierto: quién baja, quién se queda y qué paga cada uno.
+
+  El plan tiene 10 eventos. No hay ascenso ni Nidos, no se ve la división, y su último evento es
+  «guía a Zéfara hacia un equilibrio estable», un éxito sin precio. `plan_review.json` lo aprobó.
+  El planificador solo lee el `processed_prompt` del analista, que resume la trama y pierde sus
+  giros.
+- **Qué hacer.**
+  - Con brief, mandar la trama literal (`brief.plot`) al planificador y al crítico de plan como
+    canon, igual que `authored_cast_block` hace con el reparto en 7.13.
+  - Que el crítico de plan compruebe cada giro de esa trama y el tipo de final pedido.
+- **Hecho cuando.** Un plan Expansivo de los navegantes contiene el ascenso, la división de la
+  tripulación y una decisión final con pérdida, y el crítico rechaza un plan sin ellos.
+- **Ojo.** Sin brief, el prompt no debe cambiar: el corpus de prompts libres sigue comparable.
+
+### SIM-22 · Los nativos no conocen su propio mundo
+
+*Área:* función simulada · *Cuota:* ~120 llamadas (un run simulado) · *Depende de:* TD-9
+
+- **Síntoma.**
+  - En los navegantes, la exploración apenas enseña Zéfara. Aleth y Hanu, que son zefaríes,
+    no tienen en `knows` las costumbres de su pueblo (moneda de gotas, Ley del Suelo, Archivo).
+  - El director empujó a Gaspar a vender «cuentas de vidrio» como si no fueran ya la moneda
+    (`stage/chapter_2-scene-1/contexts.jsonl`).
+  - No hay ningún nativo de reparto (mercader, caído, mensajero) que enseñe la isla.
+- **Qué hacer.**
+  - Que el casting rellene `initial_knowledge` de cada personaje nativo con las costumbres de
+    `world.json` que le tocan.
+  - Que las escenas de exploración tengan quien las enseñe.
+- **Hecho cuando.** En un run de los navegantes, cada escena de exploración trae al menos un
+  turno de un nativo que explica o usa una costumbre de `world.json`, sin contradecirla.
 
 ### OPS-3 · El audio da 403 en las dos máquinas
 
@@ -739,11 +785,33 @@ versión definitiva del generador
   ve sus propios pensamientos anteriores en «LA ESCENA HASTA AHORA», y eso modela el patrón.
   Susurros: 0 y 1 en el par 7.8, y en `151512` son susurros con solo dos personajes en escena.
   Los eventos del mundo ya no son siempre viento.
+- **Medido en 7.12.2** (`20261013-180025`). `thought_ratio` 0,95, y solo 2 de 82 pensamientos
+  comparten más del 30 % de palabras con su habla o su acción: no son ecos, así que
+  `THOUGHT_ECHO` no los toca. Son intenciones («Debo impedir que…», «Si no…»), y el narrador las
+  convierte en coletillas (SIM-23).
 - **Hecho cuando.** Un par de runs:
   - baja `thought_ratio` claramente de 0,9, y bajan los pensamientos de plan que mide MED-7;
   - tiene al menos un susurro que la ablación pueda medir;
   - no repite tipo de evento del mundo.
 - **Ojo.** El porqué de cada punto, con su respaldo, está en `docs/resumen.md` §4 y §7.
+
+### SIM-23 · El narrador cierra cada párrafo con la intención del personaje
+
+*Área:* función simulada · *Cuota:* ~20 llamadas (la narración de un run guardado) ·
+*Depende de:* SIM-6
+
+- **Síntoma.**
+  - En los capítulos 4 y 5 de `20261013-180025-las-islas-del-cielo`, casi cada párrafo acaba
+    con un pensamiento contado: «convencido de que…», «decidido a…», «sabiendo que…».
+  - Es la intención del pensamiento del actor (SIM-6), pasada a prosa. Lo narró 3.1, pero el
+    prompt del narrador ya dice que no ponga un pensamiento a cada línea.
+- **Qué hacer.**
+  - Medir esa coletilla en `writing/craft_evidence.craft_notes`, como ya se miden los nombres
+    repetidos y los símiles.
+  - Pasarla como nota al segundo intento del narrador. No debe ser motivo de rechazo editorial:
+    7.12 prohíbe rechazar por un hallazgo leve.
+- **Hecho cuando.** Re-narrar ese run guardado da menos de un párrafo de cada cinco cerrado con
+  una intención, sin capítulos de respaldo.
 
 ### SIM-7 · Reanudar una función interrumpida
 

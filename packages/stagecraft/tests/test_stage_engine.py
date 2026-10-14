@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 from asg_stagecraft.formats import SimulationMode
+from asg_stagecraft.stage.causality import cited_source
 from asg_stagecraft.stage.engine import CODA_NOTE, FALLBACK_TURN_NOTE, PerformanceEngine
 from asg_stagecraft.stage.inventory import StageInventory
 from asg_stagecraft.stage.revision import materialize_revision
@@ -31,6 +32,7 @@ from asg_stagecraft.stage.schemas import (
     RevisedScene,
     SceneBrief,
     SceneCastBrief,
+    StageTurn,
     WorldEventAssessment,
 )
 from stage_fakes import quoted_source
@@ -578,6 +580,43 @@ def test_world_facts_require_a_real_observable_source() -> None:
     assert len(engine.facts) == 1
     assert engine.facts[0].source_turn_id == "chapter-1-scene-1-t001"
     assert engine.facts[0].kind == "action"
+
+
+@pytest.mark.parametrize(
+    ("channel", "excerpt", "cited"),
+    [
+        ("action", "Se desliza por la abertura de la roca", True),
+        ("action", "Aleth se desliza por la abertura de la roca", True),
+        ("action", "Aleth [...] hacia la sombra profunda.", True),
+        ("speech", "Aleth: Seguidme sin hacer ruido.", True),
+        ("action", "Aleth vuela por la abertura de la roca", False),
+        ("action", "Aleth ... sombra", False),
+        ("action", "hacia la sombra profunda [...] Se desliza", False),
+    ],
+    ids=[
+        "as-logged",
+        "as-the-director-reads-it",
+        "shortened-with-an-ellipsis",
+        "speech-with-the-speaker",
+        "a-paraphrase",
+        "too-short-to-prove-anything",
+        "pieces-out-of-order",
+    ],
+)
+def test_a_citation_counts_as_the_director_read_the_turn(channel, excerpt, cited) -> None:
+    """Found in 7.12.2: the transcript reads "Aleth se desliza", the log "Se desliza"."""
+    turn = StageTurn(
+        id="s-t001",
+        scene_id="s",
+        number=1,
+        actor_id="aleth",
+        beat_index=0,
+        action="Se desliza por la abertura de la roca hacia la sombra profunda.",
+        speech="Seguidme sin hacer ruido.",
+    )
+    source = EvidenceSource(turn_id=turn.id, channel=channel, excerpt=excerpt)
+    found = cited_source(source, {turn.id: turn}, names={"aleth": "Aleth"})
+    assert (found is turn) is cited
 
 
 # -- the inventory in a played scene -----------------------------------------------------

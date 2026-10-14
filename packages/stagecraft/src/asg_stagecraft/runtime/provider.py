@@ -44,11 +44,12 @@ T = TypeVar("T", bound=BaseModel)
 _LIMITERS: dict[tuple[str, str, int], SlidingWindowLimiter] = {}
 _LIMITERS_LOCK = threading.Lock()
 
-# The pipeline stages whose calls go to the performance model when one is configured. Only the
-# performance: it spends most of a simulated run's calls, casting is one strictly validated call,
-# and narration writes the text that is evaluated, which stays on the main model so it can be
-# compared with the runs before 7.4.
-STAGE_MODEL_STAGES = frozenset({"performance"})
+# The (stage, agent) calls that go first to the performance model when one is configured: the
+# actors' turns and reflections, two thirds of a simulated run's calls. Since 7.13 only those:
+# the scene director judges whether a beat was reached, and a weak judgement forces the beat, so
+# it stays with casting, narration and every builder on the main, stronger model. From 7.4 to
+# 7.12 the whole performance stage was routed, and only without a chain.
+STAGE_MODEL_CALLS = frozenset({("performance", "actor")})
 # The calls whose text a reader sees: drafted and revised chapters, and the simulated narration.
 # Only these go to GEMINI_PROSE_MODEL; titles, critics and the narration's review stay on main.
 PROSE_CALLS = frozenset(
@@ -154,11 +155,6 @@ def _gemini_response_schema(schema: type[BaseModel]) -> dict:
         return value
 
     return sanitize(schema.model_json_schema())
-
-
-# Retries a 5xx earns on a chain slot with another slot behind it. In the 7.12 validation run
-# the full GEMINI_MAX_RETRIES with backoff cost about a minute per overloaded call.
-CHAINED_SERVER_RETRIES = 1
 
 
 def _is_server_error(status: object) -> bool:
@@ -306,14 +302,27 @@ class _RecordingProvider:
     provider_label = "Gemini"
     quota_recommendation = "Espera a que se restablezca la cuota o revisa tu plan en AI Studio."
 
-    def __init__(self, model_name: str, *, max_retries: int, max_retry_delay: int, limiter) -> None:
+    def __init__(
+        self,
+        model_name: str,
+        *,
+        max_retries: int,
+        max_retry_delay: int,
+        limiter,
+        overload_attempts: int = 6,
+        overload_wait: float = 10,
+    ) -> None:
         """Set the retry tuning, the RPM limiter and the recording state of every provider."""
         self.model_name = model_name
         self.max_retries = max_retries
-        # Retries a 5xx earns; a chain lowers it on every slot with another one behind it,
-        # since moving on is quicker than waiting out an overloaded model.
-        self.server_error_retries = max_retries
         self.max_retry_delay = max_retry_delay
+        # A 5xx gets its own budget and a fixed wait: in the 7.12 runs 3.5 Flash-Lite answered
+        # 503 in bursts of minutes, which a 2-8 s backoff only burned through. The call fails
+        # as overloaded on its overload_attempts-th 5xx, and a chain or router hands it to the
+        # next model. Each 503 is charged as a request: on 13 Oct 2026 301 of the 500 daily
+        # requests of 3.5 Flash-Lite were 503s, so the patience is short (7.13).
+        self.overload_attempts = overload_attempts
+        self.overload_wait = overload_wait
         self._limiter = limiter
         self.wait_callback: Callable[[int, str], None] | None = None
         self.usage_callback: Callable[[LLMUsageRecord], None] | None = None
@@ -462,8 +471,10 @@ class _RecordingProvider:
         call_id = uuid.uuid4().hex
         pending_wait = 0.0
         max_retries, limiter, callback = self.max_retries, self._limiter, self.wait_callback
-        # GEMINI_MAX_RETRIES describes retries after the initial request.
-        for attempt in range(max_retries + 1):
+        # GEMINI_MAX_RETRIES describes retries after the initial request; a 5xx counts apart,
+        # so a 429 after a burst of 503 still gets its own retries.
+        attempt = overloads = others = 0
+        while True:
             waited, pending_wait = pending_wait, 0.0
             if limiter:
                 waited += limiter.acquire(callback)
@@ -492,12 +503,14 @@ class _RecordingProvider:
                     or _is_server_error(status)
                     or _is_transient_transport_error(exc)
                 )
-                budget = (
-                    min(max_retries, self.server_error_retries)
-                    if _is_server_error(status)
-                    else max_retries
-                )
-                if permanent_quota or not transient or attempt >= budget:
+                overloaded = _is_server_error(status)
+                if overloaded:
+                    overloads += 1
+                    exhausted = overloads >= self.overload_attempts
+                else:
+                    others += 1
+                    exhausted = others > max_retries
+                if permanent_quota or not transient or exhausted:
                     if status == 429:
                         error_type = self._quota_error_type(exc, details)
                         if self.quota and issubclass(error_type, ProviderDailyQuotaError):
@@ -515,15 +528,25 @@ class _RecordingProvider:
                             recommendations=[self.quota_recommendation],
                         ) from exc
                     raise
-                delay = retry_delay(attempt + 1, details)
-                if delay > self.max_retry_delay:
-                    raise GeminiRPMError(
-                        f"{self.provider_label} indicó una espera superior al máximo configurado.",
-                        details={**details, "model": self.model_name},
-                        recommendations=["Reanuda el trabajo cuando se restablezca la cuota."],
-                    ) from exc
-                countdown_wait(delay, self._wait_reason(status), callback)
+                if overloaded:
+                    delay = float(self.overload_wait)
+                    reason = (
+                        f"{self._wait_reason(status)}, {overloads}/{self.overload_attempts}; "
+                        f"reintento en {int(delay)}s"
+                    )
+                else:
+                    delay = retry_delay(others, details)
+                    if delay > self.max_retry_delay:
+                        raise GeminiRPMError(
+                            f"{self.provider_label} indicó una espera superior al máximo "
+                            "configurado.",
+                            details={**details, "model": self.model_name},
+                            recommendations=["Reanuda el trabajo cuando se restablezca la cuota."],
+                        ) from exc
+                    reason = self._wait_reason(status)
+                countdown_wait(delay, reason, callback)
                 pending_wait = delay
+                attempt += 1
 
     def _invoke_structured(
         self, prompt: str, system_instruction: str, schema: type[BaseModel], temperature: float
@@ -640,6 +663,8 @@ class GeminiProvider(_RecordingProvider):
         tpm_limit: int = 0,
         max_retries: int = 3,
         max_retry_delay: int = 120,
+        overload_attempts: int = 6,
+        overload_wait: float = 10,
         request_timeout_ms: int = 120_000,
     ) -> None:
         """Initialize the GeminiProvider instance."""
@@ -651,6 +676,8 @@ class GeminiProvider(_RecordingProvider):
             max_retries=max_retries,
             max_retry_delay=max_retry_delay,
             limiter=_shared_limiter(api_key, model_name, rpm_limit, rpm_reserve),
+            overload_attempts=overload_attempts,
+            overload_wait=overload_wait,
         )
         self.tpm_limit = tpm_limit
         self._token_limiter = TokenWindowLimiter(tpm_limit) if tpm_limit else None
@@ -775,6 +802,8 @@ class OpenAICompatibleProvider(_RecordingProvider):
         rpm_reserve: int = 1,
         max_retries: int = 3,
         max_retry_delay: int = 120,
+        overload_attempts: int = 6,
+        overload_wait: float = 10,
         request_timeout_ms: int = 120_000,
     ) -> None:
         """Initialize the provider for one base URL and model."""
@@ -785,6 +814,8 @@ class OpenAICompatibleProvider(_RecordingProvider):
             max_retries=max_retries,
             max_retry_delay=max_retry_delay,
             limiter=_shared_limiter(api_key, model_name, rpm_limit, rpm_reserve),
+            overload_attempts=overload_attempts,
+            overload_wait=overload_wait,
         )
         self.provider_label = label
         self.schema_mode = "json_schema"
@@ -974,7 +1005,7 @@ class _ProviderGroup:
 
 
 class RoutedProvider(_ProviderGroup):
-    """Send the performance and the reader-facing prose to their own providers, the rest to main.
+    """Send the actors and the reader-facing prose to their own providers, the rest to main.
 
     The pipeline tags each call with its stage and agent (call_context), so routing needs no
     agent to know about it. A routed provider that runs out of its daily allowance or refuses
@@ -988,14 +1019,14 @@ class RoutedProvider(_ProviderGroup):
         main,
         stage=None,
         *,
-        stages: frozenset[str] = STAGE_MODEL_STAGES,
+        calls: frozenset[tuple[str, str]] = STAGE_MODEL_CALLS,
         prose=None,
     ) -> None:
         """Wrap the main provider and the optional performance and prose ones."""
         self.main = main
         self.stage = stage
         self.prose = prose
-        self.stages = stages
+        self.calls = calls
         self.model_name = main.model_name
         self.stage_model_name = stage.model_name if stage is not None else None
         self.prose_model_name = prose.model_name if prose is not None else None
@@ -1014,7 +1045,7 @@ class RoutedProvider(_ProviderGroup):
         stage, agent = current_call_context()
         if self.prose is not None and (stage, agent) in PROSE_CALLS and self._usable(self.prose):
             return self.prose
-        if self.stage is not None and stage in self.stages and self._usable(self.stage):
+        if self.stage is not None and (stage, agent) in self.calls and self._usable(self.stage):
             return self.stage
         return self.main
 
@@ -1084,18 +1115,32 @@ class FailoverProvider(_ProviderGroup):
     or a fixed key can change before the provider's window does, so the ledger never hears of it.
     A slot that has already answered here is never a blocked key, so its 403, like a 5xx that
     outlasted the retries, moves only that call to the next slot.
+
+    The actors' calls (STAGE_MODEL_CALLS) try the stage slot, GEMINI_STAGE_MODEL, first and the
+    rest in their order; every other call keeps the chain's order. Before 7.13 the actors spent
+    the main model's daily allowance first, and the narration of the 7.12 navigators run was
+    written on the second model once it was gone.
     """
 
-    def __init__(self, entries: list[tuple[QuotaSlot, object]], ledger: QuotaLedger) -> None:
+    def __init__(
+        self,
+        entries: list[tuple[QuotaSlot, object]],
+        ledger: QuotaLedger,
+        *,
+        stage_slot: str | None = None,
+    ) -> None:
         """Wrap an ordered list of (slot, provider) pairs sharing one ledger."""
         if not entries:
             raise ValueError("A provider chain needs at least one slot")
         self.entries = entries
         self.ledger = ledger
-        for _, provider in entries[:-1]:
-            if hasattr(provider, "server_error_retries"):
-                provider.server_error_retries = min(provider.max_retries, CHAINED_SERVER_RETRIES)
         self.model_name = entries[0][1].model_name
+        stage = next((entry for entry in entries if entry[0].key == stage_slot), None)
+        # The actors' order: their slot first, the others as the chain lists them.
+        self.stage_entries = (
+            [stage, *(entry for entry in entries if entry is not stage)] if stage else entries
+        )
+        self.stage_model_name = stage[1].model_name if stage else None
         self._wait_callback = None
         self._usage_callback = None
         self.usage_records = []
@@ -1122,7 +1167,10 @@ class FailoverProvider(_ProviderGroup):
     def _call(self, method: str, estimated_tokens: int, **kwargs):
         """Run one call on the first slot with allowance, failing over on a spent quota."""
         passing: ProviderError | None = None
-        for index, (slot, provider) in enumerate(self.entries):
+        entries = (
+            self.stage_entries if current_call_context() in STAGE_MODEL_CALLS else self.entries
+        )
+        for index, (slot, provider) in enumerate(entries):
             if not self._usable(slot, estimated_tokens):
                 continue
             before = len(self.usage_records)
@@ -1133,20 +1181,24 @@ class FailoverProvider(_ProviderGroup):
             except ProviderOverloadedError as exc:
                 # Only this call moves on: the slot keeps its place for the next one.
                 passing = exc
-                self._announce(index, estimated_tokens, f"{slot.key} saturado")
+                self._announce(entries, index, estimated_tokens, f"{slot.key} saturado")
             except ProviderUnavailableError as exc:
                 if slot.key in self.answered:
                     # A slot that has answered in this process is not blocked; found in 7.12,
                     # when both Gemini models sent one 403 each in the middle of a 503 storm
                     # and the run died at scene 5 with most of the day's quota left.
                     passing = exc
-                    self._announce(index, estimated_tokens, f"{slot.key} rechazó esta llamada")
+                    self._announce(
+                        entries, index, estimated_tokens, f"{slot.key} rechazó esta llamada"
+                    )
                 else:
                     self.refused.add(slot.key)
-                    self._announce(index, estimated_tokens, f"{slot.key} rechaza el acceso")
+                    self._announce(
+                        entries, index, estimated_tokens, f"{slot.key} rechaza el acceso"
+                    )
             except ProviderDailyQuotaError as exc:
                 self.ledger.mark_exhausted(slot, retry_after=exc.details.get("retry_delay"))
-                self._announce(index, estimated_tokens, f"{slot.key} agotado")
+                self._announce(entries, index, estimated_tokens, f"{slot.key} agotado")
             finally:
                 self._record_spent(slot, before)
         if passing is not None:
@@ -1174,12 +1226,12 @@ class FailoverProvider(_ProviderGroup):
         """Say whether a slot may take this call: not refused here, and with allowance left."""
         return slot.key not in self.refused and self.ledger.available(slot, estimated_tokens)
 
-    def _announce(self, index: int, estimated_tokens: int, reason: str) -> None:
-        """Tell the run which slot takes over after the one at index dropped out."""
+    def _announce(self, entries: list, index: int, estimated_tokens: int, reason: str) -> None:
+        """Tell the run which slot of entries takes over after the one at index dropped out."""
         following = next(
             (
                 later.key
-                for later, _ in self.entries[index + 1 :]
+                for later, _ in entries[index + 1 :]
                 if self._usable(later, estimated_tokens)
             ),
             None,
@@ -1217,6 +1269,8 @@ def _chain_provider(entry: ChainEntry, settings: Settings):
         "rpm_reserve": settings.rpm_reserve,
         "max_retries": settings.max_retries,
         "max_retry_delay": settings.max_retry_delay,
+        "overload_attempts": settings.overload_attempts,
+        "overload_wait": settings.overload_wait,
         "request_timeout_ms": settings.request_timeout_ms,
     }
     if entry.slot.provider == "gemini":
@@ -1241,10 +1295,10 @@ def provider_from_settings(settings: Settings):
     """Build the provider a run uses.
 
     Without ASG_LLM_CHAIN: one Gemini provider, or a routed pair when GEMINI_STAGE_MODEL,
-    GEMINI_STAGE_API_KEY or GEMINI_STAGE_RPM_LIMIT make the performance differ; nothing else
-    changes. With a chain: one FailoverProvider every call goes through, the performance
-    included, whose second Gemini model (GEMINI_STAGE_MODEL) follows the main one, so the main
-    model's quota is spent first, then the second's, then the rest of the chain.
+    GEMINI_STAGE_API_KEY or GEMINI_STAGE_RPM_LIMIT make the actors differ; nothing else
+    changes. With a chain: one FailoverProvider every call goes through, whose second Gemini
+    model (GEMINI_STAGE_MODEL) follows the main one, so the builders, the director and the
+    narration spend the main model first; the actors start on the second model instead.
     """
     if not settings.chain:
         ledger = QuotaLedger(settings.budget_path) if settings.budget_path else None
@@ -1253,6 +1307,8 @@ def provider_from_settings(settings: Settings):
             "tpm_limit": settings.tpm_limit,
             "max_retries": settings.max_retries,
             "max_retry_delay": settings.max_retry_delay,
+            "overload_attempts": settings.overload_attempts,
+            "overload_wait": settings.overload_wait,
             "request_timeout_ms": settings.request_timeout_ms,
         }
         main = GeminiProvider(
@@ -1290,7 +1346,9 @@ def provider_from_settings(settings: Settings):
             return main
         return RoutedProvider(main, stage, prose=prose)
     entries = settings.quota_entries()
+    stage = settings.stage_chain_entry
     return FailoverProvider(
         [(entry.slot, _chain_provider(entry, settings)) for entry in entries],
         QuotaLedger(settings.budget_path),
+        stage_slot=stage.slot.key if stage is not None else None,
     )

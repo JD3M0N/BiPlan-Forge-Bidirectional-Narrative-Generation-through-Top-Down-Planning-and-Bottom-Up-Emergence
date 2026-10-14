@@ -23,7 +23,7 @@ from .agents import (
     WorldBuilderAgent,
     WriterAgent,
 )
-from .brief import StoryBrief, cast_repair_feedback, missing_cast
+from .brief import StoryBrief, authored_cast_block, cast_repair_feedback, missing_cast
 from .formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
 from .options import GenerationOptions
 from .planning.catalog_types import GuidanceStrategy
@@ -609,7 +609,9 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
 
         def build_characters(feedback: str = ""):
             """Generate characters for the bound request and world."""
-            return CharacterDesignerAgent(self.provider).run(request, world, blueprint, feedback)
+            return CharacterDesignerAgent(self.provider).run(
+                request, world, blueprint, feedback, authored_cast=authored_cast_block(self.brief)
+            )
 
         characters = self._call_agent("characters", build_characters)
         if self.brief is not None and self.brief.cast:

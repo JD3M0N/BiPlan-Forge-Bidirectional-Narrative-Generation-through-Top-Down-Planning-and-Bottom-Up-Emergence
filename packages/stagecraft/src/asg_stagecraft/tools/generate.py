@@ -56,7 +56,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument(
         "--stage-model",
         help=(
-            "Con --format simulated: modelo de Gemini para actores y director de escena en lugar "
+            "Con --format simulated: modelo de Gemini que prueban primero los actores, en lugar "
             "de GEMINI_STAGE_MODEL; con su propio cupo diario, deja intacto el del pipeline"
         ),
     )

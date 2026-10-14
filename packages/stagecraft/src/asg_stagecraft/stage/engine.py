@@ -771,7 +771,9 @@ class PerformanceEngine:
         except TurnIssue as exc:
             return str(exc)
         known = {turn.id: turn for turn in run.turns}
-        if any(cited_source(source, known) is None for source in draft.world_basis):
+        if any(
+            cited_source(source, known, names=self.names) is None for source in draft.world_basis
+        ):
             return "world event cites an unavailable or private source"
         if self.review_world is None:
             return "world event cannot be verified without an intervention reviewer"
@@ -966,7 +968,7 @@ class PerformanceEngine:
             key = _clause_key(part.part, frozen, required)
             if key is None:
                 continue
-            sources = observable_sources(part.sources, part.evidence, known)
+            sources = observable_sources(part.sources, part.evidence, known, self.names)
             gate = next((g for g in self.knowledge_gates if _gate_parts(key)[0] == g.id), None)
             sources = self._gate_sources(gate, sources)
             if not (part.shown and sources):
@@ -1049,6 +1051,7 @@ class PerformanceEngine:
                 source,
                 turns,
                 private=turns[source.turn_id].actor_id if source.turn_id in turns else "",
+                names=self.names,
             )
             if turn is None or source.turn_id != proposal.source_turn_id:
                 continue

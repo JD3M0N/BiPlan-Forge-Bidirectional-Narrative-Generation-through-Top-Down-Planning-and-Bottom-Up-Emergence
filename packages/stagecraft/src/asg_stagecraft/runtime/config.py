@@ -43,6 +43,11 @@ class Settings:
     tpm_limit: int = 0
     max_retries: int = 3
     max_retry_delay: int = 120
+    # A 5xx is an overloaded model, not a bad request: wait a fixed 10 s after each one, and on
+    # the sixth move the call to another model (7.13). Every 503 counts against the daily
+    # allowance, so a longer patience only burns the quota it is waiting for.
+    overload_attempts: int = 6
+    overload_wait: int = 10
     request_timeout_ms: int = 120_000
     narrative_guidance: bool = True
     promise_ledger: bool = True
@@ -251,6 +256,8 @@ def load_settings(start: Path | None = None, *, require_api_key: bool = True) ->
         tpm_limit=_integer("GEMINI_TPM_LIMIT", 0),
         max_retries=_integer("GEMINI_MAX_RETRIES", 3),
         max_retry_delay=_integer("GEMINI_MAX_RETRY_DELAY", 120, minimum=1),
+        overload_attempts=_integer("GEMINI_OVERLOAD_ATTEMPTS", 6, minimum=1),
+        overload_wait=_integer("GEMINI_OVERLOAD_WAIT", 10, minimum=1),
         request_timeout_ms=_integer("GEMINI_REQUEST_TIMEOUT_MS", 120_000, minimum=5_000),
         narrative_guidance=_flag("ASG_NARRATIVE_GUIDANCE", default=True),
         promise_ledger=_flag("ASG_PROMISE_LEDGER", default=True),

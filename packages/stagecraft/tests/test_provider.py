@@ -378,28 +378,44 @@ def routed_pair() -> tuple[provider_module.RoutedProvider, GeminiProvider, Gemin
     return provider_module.RoutedProvider(main, stage), main, stage
 
 
-def test_the_performance_goes_to_its_own_model_and_everything_else_to_the_main_one() -> None:
+def test_the_actors_go_to_their_own_model_and_everything_else_to_the_main_one(
+    tmp_path,
+) -> None:
+    """7.13: only the actors; the director judges the beats and stays on the stronger model."""
     routed, main, stage = routed_pair()
     ask = {"system_instruction": "s", "prompt": "p", "profile": "prose"}
     with provider_module.call_context("performance", "actor"):
         assert routed.generate_text(**ask) == "escena"
     with provider_module.call_context("performance", "stage_manager"):
-        assert routed.generate_text(**ask) == "escena"
+        assert routed.generate_text(**ask) == "principal"
     for stage_name in ("planning", "casting", "narration"):
         with provider_module.call_context(stage_name, "agent"):
             assert routed.generate_text(**ask) == "principal"
     # A call outside any stage, such as the stage audit's judge, stays on the main model.
     assert routed.generate_text(**ask) == "principal"
-    assert len(stage._client.models.generate_calls) == 2
-    assert len(main._client.models.generate_calls) == 4
+    assert len(stage._client.models.generate_calls) == 1
+    assert len(main._client.models.generate_calls) == 5
     assert [record.model for record in routed.usage_records] == [
         "stage-model",
-        "stage-model",
-        "main-model",
-        "main-model",
-        "main-model",
-        "main-model",
+        *["main-model"] * 5,
     ]
+    # With a chain the actors start on the stage slot and fail over to the main one.
+    slots = [QuotaSlot("gemini", "main"), QuotaSlot("gemini", "stage")]
+    fakes = [QuotaFake("main"), QuotaFake("stage")]
+    chain = provider_module.FailoverProvider(
+        list(zip(slots, fakes, strict=True)),
+        QuotaLedger(tmp_path / "budget.sqlite3"),
+        stage_slot="gemini:stage",
+    )
+    assert chain.stage_model_name == "stage"
+    answers = []
+    for agent in ("actor", "stage_manager"):
+        with provider_module.call_context("performance", agent):
+            answers.append(chain.generate_text(**ask))
+    fakes[1].spent = True
+    with provider_module.call_context("performance", "actor"):
+        answers.append(chain.generate_text(**ask))
+    assert answers == ["stage", "main", "main"]
 
 
 def test_reader_prose_goes_to_its_model_until_that_model_cannot_answer() -> None:
@@ -637,33 +653,52 @@ def test_a_slot_that_refuses_access_is_skipped_for_the_rest_of_the_run(tmp_path)
     assert [chain.generate_text(**ask) for _ in range(3)] == ["groq", "small", "groq"]
 
 
-def test_an_overloaded_slot_hands_over_only_the_call_it_failed(tmp_path) -> None:
-    """Found in 7.12: 3.5 Flash-Lite answered 503 for minutes while 3.1 sat idle."""
+def test_an_overloaded_slot_waits_per_503_and_hands_over_on_the_sixth(
+    monkeypatch, tmp_path
+) -> None:
+    """Found in 7.12: 3.5 Flash-Lite answered 503 for minutes; a 2-8 s backoff only burned it."""
+    waits = []
+    monkeypatch.setattr(
+        provider_module,
+        "countdown_wait",
+        lambda delay, reason, callback: waits.append((delay, reason)),
+    )
 
     def groq(replies):
         provider = provider_module.OpenAICompatibleProvider(
-            "fake-key", "openai/gpt-oss-120b", "https://groq.invalid", label="Groq", max_retries=3
+            "fake-key", "openai/gpt-oss-120b", "https://groq.invalid", label="Groq", max_retries=1
         )
         provider._limiter = None
         provider._client = FakeHTTP(replies)
         return provider
 
     ledger = QuotaLedger(tmp_path / "budget.sqlite3")
-    first = groq([(503, ""), (503, ""), (200, completion("groq"))])
     slots = [QuotaSlot("groq", "openai/gpt-oss-120b"), QuotaSlot("mistral", "small")]
+    ask = {"system_instruction": "s", "prompt": "p", "profile": "prose"}
+    # Five 503 and an answer: the call waits 10 s after each on its own model and never moves.
+    patient = groq([(503, "")] * 5 + [(200, completion("groq"))])
+    chain = provider_module.FailoverProvider(
+        list(zip(slots, [patient, QuotaFake("small")], strict=True)), ledger
+    )
+    assert chain.generate_text(**ask) == "groq"
+    assert [delay for delay, _ in waits] == [10.0] * 5
+    assert waits[0][1] == "Groq saturado (503), 1/6; reintento en 10s"
+    # The sixth 503 hands only that call to the next slot, which keeps its place for the next.
+    waits.clear()
+    first = groq([(503, "")] * 6 + [(200, completion("groq"))])
     chain = provider_module.FailoverProvider(
         list(zip(slots, [first, QuotaFake("small")], strict=True)), ledger
     )
-    ask = {"system_instruction": "s", "prompt": "p", "profile": "prose"}
-    # With a slot behind it, one retry and then the next slot: the 200 is left for later.
     assert [chain.generate_text(**ask) for _ in range(2)] == ["small", "groq"]
-    assert len(first._client.bodies) == 3
+    assert len(first._client.bodies) == 7
+    assert len(waits) == 5
     assert ledger.exhausted_until(slots[0]) is None
-    # The last slot keeps its whole budget, and an overload stays a degradable error.
-    lonely = groq([(503, "")] * 4)
+    # On the last slot an overload stays a degradable error, and a 429 keeps its own retries.
+    lonely = groq([(503, "")] * 6)
     with pytest.raises(provider_module.ProviderOverloadedError):
         provider_module.FailoverProvider([(slots[0], lonely)], ledger).generate_text(**ask)
-    assert len(lonely._client.bodies) == 4
+    mixed = groq([(503, "")] * 5 + [(429, ""), (200, completion("groq"))])
+    assert mixed.generate_text(**ask) == "groq"
 
 
 class FakeHTTP:
@@ -753,7 +788,7 @@ GROQ_AND_MISTRAL = [
     ("chain", "stage_model", "slots"),
     [
         ("groq,mistral", "", GROQ_AND_MISTRAL),
-        # Every call, the performance included, spends 3.5 first, then 3.1, then the rest.
+        # Every call spends 3.5 first, then 3.1, then the rest; the actors start on 3.1.
         (
             "gemini, groq, mistral",
             "gemini-3.1-flash-lite",
@@ -781,6 +816,7 @@ def test_the_factory_builds_the_chain_from_the_environment(
     provider = provider_module.provider_from_settings(load_settings(tmp_path))
     assert isinstance(provider, provider_module.FailoverProvider)
     assert [slot.key for slot, _ in provider.entries] == slots
+    assert provider.stage_model_name == (stage_model or None)
     assert provider.ledger.path == tmp_path / ".cache" / "llm_budget.sqlite3"
 
 

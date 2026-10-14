@@ -106,7 +106,7 @@ def test_a_declared_cast_is_matched_by_name_not_by_id() -> None:
 
 
 def test_a_brief_run_keeps_the_brief_and_analyzes_its_prompt(tmp_path) -> None:
-    story = brief(CastMember(name="Ana", role="protagonista"))
+    story = brief(CastMember(name="Ana", role="protagonista", secret="se llevó el expediente"))
     provider = FakeProvider()
     run = StoryGenerator(provider, tmp_path).generate(story)
     assert StoryBrief.model_validate(read_json(run.run_dir, "brief.json")) == story
@@ -115,6 +115,8 @@ def test_a_brief_run_keeps_the_brief_and_analyzes_its_prompt(tmp_path) -> None:
     assert "brief.json" in read_json(run.run_dir, "pipeline_manifest.json")["artifacts"]
     # Ana was cast on the first try, so the designer was asked exactly once.
     assert len(characters_calls(provider)) == 1
+    # 7.13: the designer reads the declared cast verbatim, not only the analyst's summary.
+    assert "- Ana, protagonista. Secreto: se llevó el expediente." in characters_calls(provider)[0]
     assert read_json(run.run_dir, "metadata.json")["warnings"] == []
 
 
@@ -135,4 +137,5 @@ def test_a_plain_prompt_never_asks_for_a_repair(tmp_path) -> None:
     provider = FakeProvider()
     run = StoryGenerator(provider, tmp_path).generate("Una historia sobre Zoe")
     assert len(characters_calls(provider)) == 1
+    assert "AUTHOR'S CAST" not in characters_calls(provider)[0]
     assert not run.brief_path.exists()

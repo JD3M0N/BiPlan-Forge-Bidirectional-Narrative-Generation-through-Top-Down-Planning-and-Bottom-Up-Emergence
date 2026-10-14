@@ -12,6 +12,7 @@ from asg_stagecraft.schemas import (
 from asg_stagecraft.stage import policy, voices
 from asg_stagecraft.stage.casting import (
     fallback_bible,
+    gateless,
     gates_for,
     gates_known_by_discoverer,
     materialize_bible,
@@ -648,6 +649,8 @@ def test_unknown_relationships_are_dropped_rather_than_rejected() -> None:
     )
     bible = materialize_bible(draft, cast_ids=[known], characters=characters, plan=plan)
     assert bible.dossiers[0].relationships == []
+    # 7.13: a plan of several chapters with nothing to find out is reported.
+    assert len(plan.chapters) > 1 and gateless(bible, plan)
 
 
 def test_a_gate_anchored_to_an_unknown_event_is_rejected() -> None:
@@ -689,6 +692,7 @@ def test_a_gate_only_reaches_the_characters_that_hold_it() -> None:
     bible = materialize_bible(draft, cast_ids=[holder], characters=characters, plan=plan)
     assert gates_for(bible, holder) == ["el secreto"]
     assert gates_for(bible, "quien-sea") == []
+    assert not gateless(bible, plan)
 
 
 def test_the_fallback_bible_is_playable_and_says_it_is_a_fallback() -> None:

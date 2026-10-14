@@ -301,9 +301,10 @@ A esa lista, el guion y el simulado añaden los suyos.
   Los rasgos T de `asg-evaluation` las recalculan desde `story.md`, así que también miden los
   runs anteriores a 6.5.0, que no las traen.
 
-`version.py` fija `PIPELINE_VERSION` (7.12) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.12).
+`version.py` fija `PIPELINE_VERSION` (7.13) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.13).
 Desde 7.11 un run nuevo ya no trae `evaluation.json`; 7.12 añade `style_request` a
-`request.json`, `prose_model` a `metadata.json` y el contrato 4 de `narration.json`.
+`request.json`, `prose_model` a `metadata.json` y el contrato 4 de `narration.json`; en 7.13
+`stage_model` pasa a ser el modelo de los actores.
 `StoryRun` se niega a abrir un run incompleto o de una versión no soportada. Si cambias el
 conjunto de artefactos o su significado, sube la versión en vez de romper los runs ya generados:
 son datos de la tesis. Una limpieza que no toca artefactos sube solo el parche de
@@ -330,13 +331,14 @@ esquema Pydantic, y `generate_text`) e implementa `GeminiProvider`. Lo que impor
     cuota por proyecto y por modelo. Desde 7.4, dos modelos no comparten ventana aunque tengan el
     mismo RPM.
   - El limitador de TPM, en cambio, es por instancia.
-- **La función simulada puede ir con un modelo propio** (7.4).
+- **Los actores pueden ir con un modelo propio** (7.4; solo los actores desde 7.13).
   - `GEMINI_STAGE_MODEL`, `GEMINI_STAGE_API_KEY` y `GEMINI_STAGE_RPM_LIMIT`; vacíos heredan los
     principales.
   - Si difieren, `provider_from_settings` devuelve un `RoutedProvider`, que enruta por la etapa
-    que `_call_agent` ya declara (`call_context`). Solo `performance` (turnos, reflexiones y
-    director de escena) va al modelo de la función (`STAGE_MODEL_STAGES`). El casting y la
-    narración siguen en el principal, y la auditoría también, porque no corre dentro de una etapa.
+    y el agente que `_call_agent` ya declara (`call_context`). Solo `STAGE_MODEL_CALLS`
+    (`("performance", "actor")`: turnos y reflexiones) va al modelo de la función. El director
+    de escena juzga si un beat se cumplió, y un juicio flojo fuerza el beat, así que sigue en el
+    principal con el casting, la narración, los constructores y la auditoría.
   - Los dos proveedores comparten `usage_records` y los callbacks del run, así que el pipeline
     ve uno solo. Ningún agente ni doble de test sabe del reparto.
   - `metadata.json` lo registra en `stage_model`, que es `None` si la función usó `model`. El eje
@@ -349,6 +351,14 @@ esquema Pydantic, y `generate_text`) e implementa `GeminiProvider`. Lo que impor
     `RoutedProvider` pasa esa ruta al principal durante el resto del run, sin perderlo.
   - `metadata.json` lo registra en `prose_model`; el eje `prose_model` de `pairing.py` solo lo da
     por usado si aparece en `models_used`. Sin cadena; con `ASG_LLM_CHAIN` se ignora.
+- **Un 503 se espera poco y se cede** (7.13). Cada 5xx espera `GEMINI_OVERLOAD_WAIT` (10 s) y
+  reintenta en el mismo modelo, con una cuenta aparte de `GEMINI_MAX_RETRIES`. Al
+  `GEMINI_OVERLOAD_ATTEMPTS`-ésimo (6) sale `ProviderOverloadedError`, y la cadena o el
+  enrutador pasan solo esa llamada al siguiente modelo.
+  - **Cada 503 cuenta como petición del cupo diario**: el 13 de octubre de 2026, 301 de las 500
+    de 3.5 Flash-Lite fueron 503.
+  - Una paciencia larga (60 s × 10 en el borrador 7.12.2) no ahorra cuota: la quema esperando.
+  - Una corta (un reintento en 7.12.1) gastaba la segunda ranura con cualquier pico.
 - **La cadena de proveedores** (7.7), `ASG_LLM_CHAIN=gemini,groq,mistral`.
   - `FailoverProvider` prueba sus ranuras (proveedor y modelo; Groq da una por modelo) en orden.
     Si una da un 429 diario o mensual (`ProviderDailyQuotaError`), la misma llamada se repite en
@@ -361,8 +371,10 @@ esquema Pydantic, y `generate_text`) e implementa `GeminiProvider`. Lo que impor
     `GeminiProvider` la base `_RecordingProvider`, que reintenta, valida y registra.
   - `metadata.json` guarda `models_used`. Un run que saltó de modelo tiene el eje `model`
     compuesto y no se empareja con uno puro.
-  - Con cadena, `GEMINI_STAGE_MODEL` no enruta la función: es la segunda ranura de Gemini, justo
-    tras la principal, y todas las llamadas siguen un solo orden (3.5 → 3.1 → Groq → Mistral).
+  - Con cadena, `GEMINI_STAGE_MODEL` es la segunda ranura de Gemini, justo tras la principal:
+    3.5 → 3.1 → Groq → Mistral. Desde 7.13 las llamadas de `STAGE_MODEL_CALLS` (los actores)
+    empiezan por ella: 3.1 → 3.5 → resto. `FailoverProvider.stage_model_name` la registra en
+    `metadata.json`.
   - Con la cadena vacía no hay failover, pero desde 7.8.3 cada `GeminiProvider` apunta sus
     intentos en el libro (`provider.quota`), así que `asg-budget` y las auditorías también
     cuentan. Con cadena lo apunta solo `FailoverProvider`: no dupliques el cargo.
