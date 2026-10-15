@@ -144,6 +144,21 @@ def actor_system_prompt(
     return "\n".join(lines)
 
 
+def _objective_blocks(scene: SceneBrief, objective: str) -> list[str]:
+    """Return what the actor wants here and, in the closing scene, that it is decided now.
+
+    7.15.1: in the closing scene of the 7.15 navigators run the actors kept the previous
+    scene's quarrel and never reached the decision. No plan reaches the actor here: only that
+    what it wants now outweighs what it was pursuing before.
+    """
+    blocks = [f"LO QUE QUIERES AQUÍ: {strip_internal_ids(objective)}"]
+    if scene.closes_play:
+        blocks.append(
+            "Esto se decide ahora: lo que quieres aquí pesa más que lo que perseguías antes."
+        )
+    return blocks
+
+
 def actor_turn_context(
     *,
     scene: SceneBrief,
@@ -174,7 +189,7 @@ def actor_turn_context(
         blocks.append("LO QUE LLEVAS:\n" + "\n".join(f"- {prop_line(item)}" for item in held))
     if in_reach:
         blocks.append("LO QUE VES:\n" + "\n".join(f"- {prop_line(item)}" for item in in_reach))
-    blocks.append(f"LO QUE QUIERES AQUÍ: {strip_internal_ids(objective)}")
+    blocks.extend(_objective_blocks(scene, objective))
     # Only once there is something decided: the 7.12 run told an actor opening its first scene
     # not to repeat a conversation it had never had.
     moved = any(turn.actor_id == character_id for turn in witnessed if turn.kind == "actor")

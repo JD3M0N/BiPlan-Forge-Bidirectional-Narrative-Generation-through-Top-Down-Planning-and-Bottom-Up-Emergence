@@ -34,6 +34,28 @@ _MIN_NAME_WORD = 3
 # A gesture is replayed when the new action contains this much of an earlier one. Containment,
 # not overlap: the real repeats kept the whole gesture and tacked a clause onto it.
 ACTION_CONTAINMENT = 0.8
+# A line restates a position when this much of its content words already came out of the same
+# speaker's mouth earlier in the scene (7.15). REPETITION_THRESHOLD only sees near-verbatim
+# lines; in the 7.14 navigators run Hanu made the same threat three times in other words.
+# Across the four 7.12-7.14 runs this flags 6 of 140 lines, each a restatement on reading.
+PARAPHRASE_CONTAINMENT = 0.3
+# Fewer content words than this say too little to count as a position.
+_MIN_PARAPHRASE_WORDS = 4
+# A thought that opens like this is a plan, not subtext: the actor narrating its next move,
+# which the narrator then turned into "decidido a..." (SIM-6). 7 of 48 thoughts in the 7.14
+# navigators run. Spanish only, the language every measured run was written in.
+_PLAN_THOUGHT = re.compile(r"^(?:debo|tengo que|necesito|voy a|hay que)\b", re.I)
+# 7.15.1: the plan also came as a second sentence ("Este miserable... Debo asegurar que..."), so
+# each sentence is read on its own and only the plans are dropped.
+_SENTENCE = re.compile(r"(?<=[.!?…])\s+")
+
+
+def _without_plans(thought: str) -> str:
+    """Drop the sentences of a thought that only announce the next move, keeping the rest."""
+    kept = [part for part in _SENTENCE.split(thought) if part and not _PLAN_THOUGHT.match(part)]
+    return " ".join(kept).strip()
+
+
 # A thought that says this much of what the speech already says is not subtext, only an echo.
 THOUGHT_ECHO = 0.5
 # The longest line that still reads as a turn rather than a speech. It lives here and never in a
@@ -89,6 +111,8 @@ def normalize_turn(
     # left to record - so it is emptied rather than bounced back to the actor.
     if thought and speech and similarity(thought, speech) >= THOUGHT_ECHO:
         thought = ""
+    # A plan has the same single fix: the move itself is the turn (7.15).
+    thought = _without_plans(thought)
     # An actor cannot address someone who is not in the scene; dropping them is the only
     # correction that keeps the turn, and the cast is the script's, not the actor's, to change.
     addressed = _addressees(turn.addressed_to, on_stage, names or {})
@@ -158,8 +182,13 @@ def validate_turn(
     previous_speech: list[str],
     previous_actions: list[str] | None = None,
     language: str = "",
+    scene_speech: list[str] | None = None,
 ) -> None:
-    """Accept one normalized turn, or raise a TurnIssue saying in English what to fix."""
+    """Accept one normalized turn, or raise a TurnIssue saying in English what to fix.
+
+    scene_speech is what this speaker already said in the scene; the engine passes it on a
+    first attempt only, so a restated position costs one retry and never a stalled turn.
+    """
     if turn.visibility == "whisper" and not turn.addressed_to:
         raise TurnIssue("INVALID_WHISPER", "a whisper needs one unambiguous addressee on stage")
     if re.search(
@@ -227,6 +256,13 @@ def validate_turn(
             f"this repeats what you already said ({repeated!r}); change tactic instead of "
             "restating your position in new words",
         )
+    restated = _restated(turn.speech, scene_speech or [])
+    if restated is not None:
+        raise TurnIssue(
+            "RESTATED_POSITION",
+            f"you already made this point in this scene ({restated!r}); do not argue it again: "
+            "give ground, change tactic, ask something, or act",
+        )
     if _replays_gesture(turn.action, previous_actions or []):
         raise TurnIssue(
             "REPEATED_ACTION",
@@ -269,6 +305,17 @@ def similarity(left: str, right: str) -> float:
 def echo_of(line: str, candidates: list[str]) -> float:
     """Return how closely one line echoes the nearest of a set, 0 when the set is empty."""
     return max((similarity(line, item) for item in candidates), default=0.0)
+
+
+def _restated(speech: str, earlier: list[str]) -> str | None:
+    """Return the earlier line of the scene a candidate restates in other words, or None."""
+    words = set(tokens(speech))
+    if len(words) < _MIN_PARAPHRASE_WORDS:
+        return None
+    for line in reversed(earlier):
+        if len(words & set(tokens(line))) / len(words) >= PARAPHRASE_CONTAINMENT:
+            return line[:80]
+    return None
 
 
 def _closest_repeat(speech: str, previous: list[str]) -> str | None:

@@ -775,3 +775,28 @@ def test_the_stage_is_dressed_from_the_world_when_the_prop_master_fails(tmp_path
     warnings = read_json(run, "metadata.json")["warnings"]
     assert any("PROPS_FALLBACK" in warning for warning in warnings)
     assert any(event.kind == "props_fallback" for event in events)
+
+
+TAGGED_CHAPTER = "Ana cerró el archivo.\n\n" + "\n\n".join(
+    f"—Linea numero {n} de la escena —dijo Ana." for n in range(8)
+)
+
+
+@pytest.mark.parametrize(
+    ("second", "shipped"),
+    [
+        # 7.15: the rewrite kept every tag; it must not replace the first chapter.
+        (TAGGED_CHAPTER.replace("cerró", "cerraba"), "first"),
+        ("Ana cerró el archivo y salió sin mirar atrás.", "second"),
+    ],
+    ids=["no-better", "better"],
+)
+def test_a_rewrite_with_craft_notes_ships_only_when_it_is_better(tmp_path, second, shipped):
+    provider = StageFakeProvider(narrator_outputs=[TAGGED_CHAPTER, second])
+    run, _ = generate(tmp_path, provider)
+    first_chapter = (run.run_dir / "narration" / "chapter-001.md").read_text(encoding="utf-8")
+    assert "CRAFT NOTES" in provider.narrator_prompts[1]
+    assert first_chapter.strip() == (TAGGED_CHAPTER if shipped == "first" else second)
+    warnings = read_json(run, "metadata.json")["warnings"]
+    kept = any(item.startswith("[NARRATION_CRAFT_KEPT_FIRST]") for item in warnings)
+    assert kept is (shipped == "first")

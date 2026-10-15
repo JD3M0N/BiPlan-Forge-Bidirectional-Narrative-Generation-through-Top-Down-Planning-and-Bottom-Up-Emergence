@@ -43,7 +43,7 @@ from ..writing.assembly import assemble_story, narrated_plan
 from ..writing.audit import story_metrics, word_count
 from . import fallback
 from .casting import dossier_index, fallback_bible, gateless, gates_for, materialize_bible
-from .editorial import editorial_verdict, review_turns, strip_markers
+from .editorial import craft_findings, editorial_verdict, review_turns, strip_markers
 from .engine import CODA_TURNS, REACTION_TURNS, PerformanceEngine
 from .inventory import StageInventory
 from .memory import RECENCY_DECAY, RETRIEVED_RECORDS
@@ -80,6 +80,11 @@ _ACT_LABEL = re.compile("^\\s*(?:acto|act)\\s+(?:[ivxlc]+|\\d+)\\s*[:.\\-–—]
 CASTING_ATTEMPTS = 2
 PROPS_ATTEMPTS = 2
 NARRATION_ATTEMPTS = 2
+
+
+def _measured(notes: list[str]) -> int:
+    """Count the measured craft findings of a chapter, leaving out the note that guards them."""
+    return sum(1 for note in notes if not note.startswith("KEEP:"))
 
 
 class SimulationStagesMixin:
@@ -958,6 +963,8 @@ class SimulationStagesMixin:
         assert self.repository is not None
         feedback = ""
         candidates: list[tuple[int, int, str]] = []
+        # An accepted chapter held back for one more attempt because it transcribed the log.
+        polished: tuple[int, str, int] | None = None
         for attempt in range(1, NARRATION_ATTEMPTS + 1):
 
             def narrate_once(feedback_snapshot: str = feedback):
@@ -1012,6 +1019,9 @@ class SimulationStagesMixin:
             except NON_DEGRADABLE_ERRORS:
                 raise
             except Exception as exc:
+                if polished is not None:
+                    # An unreviewed rewrite never replaces a reviewed chapter.
+                    break
                 # A review that could not run says nothing against the chapter, so the
                 # chapter stands: in 7.10 this path discarded sound prose for the fallback.
                 self.repository.save_data(
@@ -1031,6 +1041,17 @@ class SimulationStagesMixin:
                 f"narration/chapter-{index:03d}-review-{attempt:03d}.json",
                 {"review": review.model_dump(mode="json"), **verdict.as_record()},
             )
+            notes = craft_findings(candidate, visible) if verdict.accepted else []
+            if notes and polished is None and attempt < NARRATION_ATTEMPTS:
+                # Accepted, but read like a transcript: one more attempt with the measured
+                # notes, and this one ships unless the next one is better (7.15).
+                polished = (attempt, candidate, _measured(notes))
+                feedback = "\nCRAFT NOTES (curate, keep every event):\n" + "\n".join(notes)
+                continue
+            if verdict.accepted and polished is not None and _measured(notes) >= polished[2]:
+                # 7.15.1: the notes are only worth a better chapter. In 7.15 the second
+                # attempt kept every tag and moved into the imperfect, and it shipped.
+                break
             if verdict.accepted:
                 self.repository.save_text(f"narration/chapter-{index:03d}.md", candidate)
                 return candidate, attempt, "narrator"
@@ -1039,6 +1060,29 @@ class SimulationStagesMixin:
                 "\nEDITORIAL REPAIR (one bounded correction, preserve source events):\n"
                 + "\n".join(verdict.issues)
             )
+        return self._ship_leftover(index, polished, candidates, visible, names, request.language)
+
+    def _ship_leftover(
+        self,
+        index: int,
+        polished: tuple[int, str, int] | None,
+        candidates: list[tuple[int, int, str]],
+        visible,
+        names,
+        language: str,
+    ) -> tuple[str, int, str]:
+        """Ship what is left once no attempt was accepted outright, best first."""
+        assert self.repository is not None
+        if polished is not None:
+            attempt, body, _ = polished
+            warning = (
+                f"[NARRATION_CRAFT_KEPT_FIRST] Capítulo {index}: el intento con notas no "
+                "mejoró el primero, que es el que se entrega."
+            )
+            self.repository.add_warning(warning)
+            self._emit("narration_craft_kept_first", warning, stage="narration")
+            self.repository.save_text(f"narration/chapter-{index:03d}.md", body)
+            return body, attempt, "narrator"
         if candidates:
             # Fewest blocking findings wins, the later attempt on a tie: it already had the
             # corrections. Model prose with a disputed detail still reads better than the log.
@@ -1051,7 +1095,7 @@ class SimulationStagesMixin:
             self._emit("narration_best_attempt", warning, stage="narration")
             self.repository.save_text(f"narration/chapter-{index:03d}.md", body)
             return body, attempt, "narrator"
-        body = fallback.narrate(visible, names, request.language)
+        body = fallback.narrate(visible, names, language)
         warning = f"[NARRATION_FALLBACK] Capítulo {index}: se narró con el narrador de respaldo."
         self.repository.add_warning(warning)
         self._emit("narration_fallback", warning, stage="narration")

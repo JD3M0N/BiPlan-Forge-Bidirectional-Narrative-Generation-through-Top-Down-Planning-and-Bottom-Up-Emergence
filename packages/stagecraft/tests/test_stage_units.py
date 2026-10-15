@@ -17,7 +17,7 @@ from asg_stagecraft.stage.casting import (
     gates_known_by_discoverer,
     materialize_bible,
 )
-from asg_stagecraft.stage.editorial import editorial_verdict, strip_markers
+from asg_stagecraft.stage.editorial import craft_findings, editorial_verdict, strip_markers
 from asg_stagecraft.stage.fallback import narrate
 from asg_stagecraft.stage.inventory import StageInventory
 from asg_stagecraft.stage.memory import RECENT_REFLECTIONS, RETRIEVED_RECORDS, CharacterMemory
@@ -454,17 +454,29 @@ def test_a_speech_is_not_a_turn() -> None:
     validate_turn(trimmed, previous_speech=[])
 
 
-def test_a_thought_that_only_restates_the_line_is_emptied() -> None:
-    draft = act(
-        speech="No pienso abrir esa puerta hasta que llegue el juez.",
-        thought="No pienso abrir esa puerta hasta que llegue el juez, pase lo que pase.",
-    )
-    assert normalize_turn(draft, on_stage=["ana"]).thought == ""
-
-
-def test_a_thought_that_is_real_subtext_is_kept() -> None:
-    draft = act(speech="No pienso abrir esa puerta.", thought="La llave la tengo yo.")
-    assert normalize_turn(draft, on_stage=["ana"]).thought == "La llave la tengo yo."
+@pytest.mark.parametrize(
+    ("speech", "thought", "kept"),
+    [
+        (
+            "No pienso abrir esa puerta hasta que llegue el juez.",
+            "No pienso abrir esa puerta hasta que llegue el juez, pase lo que pase.",
+            "",
+        ),
+        # 7.15: a plan is not subtext either; the move itself is the turn.
+        ("No pienso abrir esa puerta.", "Debo ganar tiempo hasta que llegue el juez.", ""),
+        # 7.15.1: a plan in the second sentence goes; the subtext before it stays.
+        (
+            "No pienso abrir esa puerta.",
+            "Este miserable quiere la llave. Debo ganar tiempo.",
+            "Este miserable quiere la llave.",
+        ),
+        ("No pienso abrir esa puerta.", "La llave la tengo yo.", "La llave la tengo yo."),
+    ],
+    ids=["echo", "plan", "plan-after-subtext", "subtext"],
+)
+def test_only_a_thought_that_is_real_subtext_is_kept(speech, thought, kept) -> None:
+    draft = act(speech=speech, thought=thought)
+    assert normalize_turn(draft, on_stage=["ana"]).thought == kept
 
 
 def test_a_tactic_outside_the_closed_list_is_refused_by_the_contract() -> None:
@@ -535,8 +547,21 @@ def test_a_world_event_does_not_count_as_anyone_having_moved() -> None:
         ([("ana", "plead"), ("bruno", "command"), ("ana", "concede"), ("bruno", "command")], False),
         ([("ana", "plead"), ("bruno", "command"), ("cora", "plead"), ("bruno", "command")], False),
         ([("ana", "plead"), ("bruno", "command")], False),
+        # 7.15 closing scene: one character threatens three times in four while two answer.
+        (
+            [
+                ("hanu", "threaten"),
+                ("gaspar", "concede"),
+                ("hanu", "threaten"),
+                ("ilse", "command"),
+                ("hanu", "command"),
+                ("gaspar", "stall"),
+                ("hanu", "threaten"),
+            ],
+            True,
+        ),
     ],
-    ids=["standoff", "someone-gives-ground", "third-voice", "too-early"],
+    ids=["standoff", "someone-gives-ground", "third-voice", "too-early", "one-stuck"],
 )
 def test_two_characters_trading_the_same_moves_is_a_deadlock(moves, deadlocked) -> None:
     history = [
@@ -1406,3 +1431,56 @@ def test_the_stage_can_be_dressed_from_the_world_alone() -> None:
     assert props.fallback is True
     assert [item.id for item in props.props] == ["ledger"]
     assert props.props[0].location_id == "archive"
+
+
+@pytest.mark.parametrize(
+    ("speech", "restated"),
+    [
+        # 7.14 navigators: Hanu's threat, said again in other words in the same scene.
+        ("Si la nave zarpa sin el Consejo, el vacío arrastrará a toda la isla.", True),
+        ("¿Cuántos caben en la bodega si dejamos el agua?", False),
+    ],
+)
+def test_a_position_restated_in_the_same_scene_costs_one_retry(speech, restated) -> None:
+    earlier = ["Si esa nave zarpa sin la sincronía del Consejo, el vacío arrastrará la isla."]
+    draft = act(speech=speech)
+    if restated:
+        with pytest.raises(TurnIssue) as error:
+            validate_turn(draft, previous_speech=[], scene_speech=earlier)
+        assert error.value.code == "RESTATED_POSITION"
+    else:
+        validate_turn(draft, previous_speech=[], scene_speech=earlier)
+    # The retry is never held to it: the engine passes no scene_speech the second time.
+    validate_turn(draft, previous_speech=[])
+
+
+def test_a_chapter_that_transcribes_and_tags_every_line_gets_craft_notes() -> None:
+    """7.14 navigators: 18 of 18 lines copied from the log, 16 of 18 tagged with a verb."""
+    lines = [f"Esto es lo que digo en la escena número {n} ahora mismo" for n in range(8)]
+    turns = [turn("ana", speech=line, number=n) for n, line in enumerate(lines, 1)]
+    # 7.15: any speech verb counts, not only "dijo", so swapping verbs is no way out.
+    verbs = ["dijo", "advirtió", "replicó", "sentenció"] * 2
+    copied = "\n\n".join(f"—{line} —{verb} Ana." for line, verb in zip(lines, verbs, strict=True))
+    codes = [item.split(":")[0] for item in craft_findings(copied, turns)]
+    assert codes == ["TRANSCRIBED", "TAGGED", "KEEP"]
+    curated = "\n\n".join(f"—Palabras nuevas {n}." for n in range(8))
+    assert craft_findings(curated, turns) == []
+
+
+@pytest.mark.parametrize(
+    ("verbs", "tense"),
+    [
+        # The 7.15 rewrite that slid from the preterite into the imperfect.
+        (["aferró", "golpeó", "salió", "miró"], "preterite"),
+        (["aferraba", "golpeaba", "salía", "miraba"], "imperfect"),
+        (["aferró", "golpeaba", "salió", "miraba"], ""),
+    ],
+    ids=["preterite", "imperfect", "mixed"],
+)
+def test_the_narrative_tense_is_read_from_the_narration(verbs, tense) -> None:
+    from asg_stagecraft.stage.editorial import narrative_tense
+
+    story = "\n\n".join(f"Ana {verb} la puerta y {verb} otra vez." for verb in verbs * 2)
+    assert narrative_tense(story) == tense
+    if tense == "imperfect":
+        assert not editorial_verdict(NarrationReview(), story, [], "Spanish").accepted

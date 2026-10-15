@@ -92,7 +92,11 @@ def editorial_verdict(
             verdict.advisory.append(line)
     if _INTERNAL_ID.search(story):
         verdict.blocking.append("INTERNAL_MARKER: remove internal identifiers from the prose")
-    if _in_present(story, language) or _copies_directions(story, turns):
+    if (
+        _in_present(story, language)
+        or _copies_directions(story, turns)
+        or narrative_tense(story, language) == "imperfect"
+    ):
         verdict.blocking.append(
             "WRONG_TENSE: narrate in the past tense, dialogue tags included ('dijo', never "
             "'dice'), and curate the exchanges instead of rendering every turn"
@@ -106,6 +110,77 @@ def _in_present(story: str, language: str) -> bool:
         return False
     present = len(_PRESENT_TAG.findall(story))
     return present >= _MIN_PRESENT_TAGS and present > len(_PAST_TAG.findall(story))
+
+
+# Craft observations a narrated chapter is measured on (7.15). Never a reason to reject: an
+# accepted first attempt that trips one is narrated once more with the observation as a note.
+# Measured on the 7.13 and 7.14 navigators runs, whose chapters copied 13 of 13 and 18 of 18
+# lines verbatim and tagged 16 of 18 with a speech verb; the 7.12 chapters copied at most 9.
+_MIN_LINES_MEASURED = 8
+_TRANSCRIBED_SHARE = 0.9
+_TAGGED_SHARE = 0.7
+_QUOTED_CHARS = 60
+_SPEECH_TAG = re.compile(r"—\s*(?:dijo|\w+(?:ó|ió))\b", re.I)
+
+
+def craft_findings(story: str, turns: list[StageTurn]) -> list[str]:
+    """Measure whether a chapter transcribes the log or tags every line, as notes."""
+    lines = [line.strip() for line in story.splitlines() if line.lstrip().startswith("—")]
+    if len(lines) < _MIN_LINES_MEASURED:
+        return []
+    findings: list[str] = []
+    text = _normalized(story)
+    verbatim = sum(
+        1
+        for turn in turns
+        if len(turn.speech.split()) >= 6 and _normalized(turn.speech)[:_QUOTED_CHARS] in text
+    )
+    if verbatim >= _TRANSCRIBED_SHARE * len(lines):
+        findings.append(
+            "TRANSCRIBED: the chapter copies nearly every line of the log; keep the lines the "
+            "scene turns on, cut or summarize the rest, and let several exchanges pass in one "
+            "sentence of narration"
+        )
+    tagged = sum(1 for line in lines if _SPEECH_TAG.search(line[1:]))
+    if tagged >= _TAGGED_SHARE * len(lines):
+        findings.append(
+            "TAGGED: almost every line carries a speech verb, any of them ('dijo', 'advirtió', "
+            "'replicó'); swapping one verb for another is not the fix: tag a line only when "
+            "the speaker would be unclear, and otherwise let a gesture or nothing follow it"
+        )
+    if findings:
+        # 7.15: the second attempt answered these notes by moving the chapter into the
+        # imperfect. The note now says what must not change.
+        findings.append(
+            "KEEP: narrate in the same past tense (the preterite) and keep every event, line "
+            "and choice the chapter already got right"
+        )
+    return findings
+
+
+# The tense a chapter narrates in, read from third-person verb endings outside the dialogue.
+# Measured on the narrated chapters of 7.12 to 7.15: every chapter in the preterite has at most
+# about as many -aba/-ia forms as -o/-io ones (one run 21 to 30, with long background
+# descriptions), and the 7.15 chapter that slid into the imperfect had 0 to 32.
+_PRETERITE = re.compile(r"(?:ó|ió)$")
+_IMPERFECT = re.compile(r"(?:aba|ía)$")
+_TENSE_MARGIN = 2
+_MIN_TENSE_VERBS = 15
+
+
+def narrative_tense(story: str, language: str = "Spanish") -> str:
+    """Return 'preterite' or 'imperfect' when a Spanish chapter plainly narrates in one, or ''."""
+    if not language.strip().lower().startswith(("spanish", "espa")):
+        return ""
+    narration = " ".join(line for line in story.splitlines() if not line.lstrip().startswith("—"))
+    words = [word.lower() for word in _WORD.findall(narration)]
+    preterite = sum(bool(_PRETERITE.search(word)) for word in words)
+    imperfect = sum(bool(_IMPERFECT.search(word)) for word in words)
+    if imperfect >= _MIN_TENSE_VERBS and imperfect >= _TENSE_MARGIN * max(preterite, 1):
+        return "imperfect"
+    if preterite >= _MIN_TENSE_VERBS and preterite >= _TENSE_MARGIN * max(imperfect, 1):
+        return "preterite"
+    return ""
 
 
 def _copies_directions(story: str, turns: list[StageTurn]) -> bool:

@@ -59,3 +59,26 @@ def is_foreign(text: str, language: str) -> bool:
     foreign = sum(word in _FUNCTION_WORDS[other] for word in words)
     native = sum(word in _FUNCTION_WORDS[own] for word in words)
     return foreign >= 1 and foreign > native
+
+
+# The language a whole prompt is written in needs more evidence than a title: at least this
+# many function words of one language, and this many times those of the other.
+_MIN_PROMPT_HITS = 8
+_PROMPT_MARGIN = 3
+_LANGUAGE_NAMES = {"es": "Spanish", "en": "English"}
+
+
+def prompt_language(text: str) -> str:
+    """Name the language a long text is plainly written in, or '' when it is not plain.
+
+    Found in the 7.15 navigators run: the analyst read a Spanish brief that says "Idioma
+    espanol" and returned language English, and the whole story came out in English.
+    """
+    words = [word.lower() for word in _WORD.findall(text)]
+    counts = {
+        code: sum(word in _FUNCTION_WORDS[code] for word in words) for code in _FUNCTION_WORDS
+    }
+    best, other = sorted(counts, key=counts.get, reverse=True)
+    if counts[best] >= _MIN_PROMPT_HITS and counts[best] >= _PROMPT_MARGIN * counts[other]:
+        return _LANGUAGE_NAMES[best]
+    return ""

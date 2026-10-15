@@ -323,6 +323,9 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   tripulación y una decisión final con pérdida, y el crítico rechaza un plan sin ellos.
 - **Implementado en 7.14** (`brief.authored_plot_block` llega al planificador y al crítico);
   falta medirlo en real.
+- **Ruido sin medir.** Beats forzados del mismo brief Esencial: 1/6 (7.14), 2/5 (7.15) y 4/6
+  (7.15.1). Con un run por versión no se puede atribuir la diferencia a un cambio: hace falta
+  medir 2 o 3 runs por versión.
 - **Ojo.** Sin brief, el prompt no debe cambiar: el corpus de prompts libres sigue comparable.
 
 ### SIM-22 · Los nativos no conocen su propio mundo
@@ -791,6 +794,8 @@ versión definitiva del generador
   comparten más del 30 % de palabras con su habla o su acción: no son ecos, así que
   `THOUGHT_ECHO` no los toca. Son intenciones («Debo impedir que…», «Si no…»), y el narrador las
   convierte en coletillas (SIM-23).
+- **Medido en 7.14.** `thought_ratio` 0,98 aunque el actor ya no relee sus pensamientos; solo 7
+  de 48 son planes, y 7.15 los vacía en `normalize_turn` como a los ecos.
 - **Hecho cuando.** Un par de runs:
   - baja `thought_ratio` claramente de 0,9, y bajan los pensamientos de plan que mide MED-7;
   - tiene al menos un susurro que la ablación pueda medir;
@@ -814,6 +819,12 @@ versión definitiva del generador
     7.12 prohíbe rechazar por un hallazgo leve.
 - **Hecho cuando.** Re-narrar ese run guardado da menos de un párrafo de cada cinco cerrado con
   una intención, sin capítulos de respaldo.
+- **Medido en 7.14** (`20261014-195514`): 0 coletillas. El problema pasó a ser otro: el
+  narrador transcribe (18 de 18 réplicas copiadas, 16 de 18 con «dijo»). 7.15 lo mide
+  (`craft_findings`) y repite el capítulo una vez con la nota; falta medirlo en real.
+- **Medido en 7.15.1** (`20261015-151839`): `dialogue_survival` 1,0 y 13 de 15 réplicas con
+  acotación en el capítulo 3. Los segundos intentos con notas no mejoraron y se descartaron: la
+  nota no basta, porque el narrador copia lo que recibe.
 
 ### EXP-9 · Escribir en inglés y traducir la historia al final
 

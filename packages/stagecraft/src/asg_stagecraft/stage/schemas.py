@@ -595,6 +595,7 @@ class TurnRejection(BaseModel):
         "FIRST_PERSON_ACTION",
         "REPEATED_LINE",
         "REPEATED_ACTION",
+        "RESTATED_POSITION",
         "ACTOR_CALL_FAILED",
         "INVALID_WHISPER",
         "OUT_OF_FICTION",

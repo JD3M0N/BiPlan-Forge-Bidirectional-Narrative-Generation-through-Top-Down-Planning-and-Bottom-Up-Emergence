@@ -301,11 +301,11 @@ A esa lista, el guion y el simulado añaden los suyos.
   Los rasgos T de `asg-evaluation` las recalculan desde `story.md`, así que también miden los
   runs anteriores a 6.5.0, que no las traen.
 
-`version.py` fija `PIPELINE_VERSION` (7.14) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.14).
+`version.py` fija `PIPELINE_VERSION` (7.15) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.15).
 Desde 7.11 un run nuevo ya no trae `evaluation.json`; 7.12 añade `style_request` a
 `request.json`, `prose_model` a `metadata.json` y el contrato 4 de `narration.json`; en 7.13
 `stage_model` pasa a ser el modelo de los actores; 7.14 añade `localization.json` y cambia el
-esquema del pensamiento del actor.
+esquema del pensamiento del actor; 7.15 cambia la narración y la validación del turno.
 `StoryRun` se niega a abrir un run incompleto o de una versión no soportada. Si cambias el
 conjunto de artefactos o su significado, sube la versión en vez de romper los runs ya generados:
 son datos de la tesis. Una limpieza que no toca artefactos sube solo el parche de
@@ -440,6 +440,13 @@ que saber antes de tocar `stage/`:
   `INVENTED_EVENT` y `CONTRADICTION`, una revisión que falla acepta el capítulo y, agotados los
   intentos, se entrega el de menos hallazgos. El respaldo queda para cuando no hubo texto. No
   vuelvas a rechazar por un hallazgo leve.
+- **Un capítulo aceptado que transcribe se narra una vez más** (7.15). `craft_findings` mide
+  si copia casi todas las réplicas del log o las etiqueta todas. Si pasa, se pide un segundo
+  intento con esas notas, que solo se entrega si pasa la revisión y mejora la cifra medida
+  (7.15.1: en 7.15 el segundo intento se pasó al imperfecto y se entregó). Es una nota, nunca
+  un rechazo.
+- **Un estancamiento sin evento del mundo se pregunta una vez más** (7.15.1), pidiendo una
+  presión visible, nunca el desenlace: un beat final sin evento dejó una historia sin final.
 - **Prosa para un lector cualquiera** (7.12). `agents/style.py` es el contrato de estilo del
   Drafter, el Writer y el Narrator, y `request.style_request` lleva el registro que pidió la
   persona, literal. `writing/craft_evidence.craft_notes` convierte cada observación medida

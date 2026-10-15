@@ -82,6 +82,14 @@ CONSECUTIVE_FAILURE_LIMIT = 4
 REACTION_TURNS = 2
 # Turns the play's last scene keeps after its last beat, so the story ends on a scene.
 CODA_TURNS = 2
+# Added to the director's context when a stall came back without a stage_event (7.15.1). It
+# asks for pressure, never for the outcome: the actors still have to choose it.
+STALL_EVENT_REQUIRED = (
+    "\n\nSTAGE EVENT REQUIRED: the scene has run out of time and the missing clause has not "
+    "happened. An empty stage_event ends the story without it. Give one visible pressure, "
+    "consistent with what is established, that leaves the missing outcome as the characters' "
+    "most pressing choice. Never perform that choice for them."
+)
 # How many of each actor's recent tactics the director sees when it has to spot a deadlock.
 TACTIC_WINDOW = 3
 # Tactics that dig in rather than move. The deterministic fallback for naming who must change
@@ -360,6 +368,21 @@ class PerformanceEngine:
         verdict: _Verdict,
     ) -> None:
         """Let the world deliver what is missing, let the actors answer it, and read once more."""
+        if not verdict.stage_event:
+            # 7.15.1: the closing beat of the 7.15 navigators run stalled with no event, the
+            # actors never left the previous scene's quarrel, and the story ended before its
+            # ending. One more reading asks for the pressure; it may still come back empty.
+            retry = self._check(run, index, beat, "stall", extra=STALL_EVENT_REQUIRED)
+            record.checks += 1
+            if retry.achieved:
+                self._land(record, retry, run)
+                return
+            verdict = retry
+            if not verdict.stage_event:
+                self.warnings.append(
+                    f"[STAGE_EVENT_MISSING] {run.brief.scene_id}: el director no dio ningún "
+                    f"evento del mundo para {beat.event_id}."
+                )
         if verdict.stage_event:
             moves = self._world_moves(verdict.world_items, verdict.stage_event, run)
             if self.inventory is not None:
@@ -582,6 +605,9 @@ class PerformanceEngine:
         )
         previous_speech = self._spoken.get(actor_id, [])
         previous_actions = self._gestures.get(actor_id, [])
+        scene_speech = [
+            turn.speech for turn in witnessed if turn.actor_id == actor_id and turn.speech
+        ]
         feedback = ""
         rejections = 0
         for attempt in range(1, TURN_ATTEMPTS + 1):
@@ -641,6 +667,7 @@ class PerformanceEngine:
                     previous_speech=previous_speech,
                     previous_actions=previous_actions,
                     language=self.language,
+                    scene_speech=scene_speech if attempt == 1 else None,
                 )
                 validate_state_evidence(candidate)
                 moves = self._arbitrate(candidate, actor_id, scene, on_stage)
@@ -855,9 +882,11 @@ class PerformanceEngine:
             if character_id in run.on_stage and objective.strip():
                 run.objectives[character_id] = objective.strip()
 
-    def _check(self, run: _SceneRun, index: int, beat: BeatBrief, mode: str) -> _Verdict:
+    def _check(
+        self, run: _SceneRun, index: int, beat: BeatBrief, mode: str, extra: str = ""
+    ) -> _Verdict:
         """Ask the director to read the beat, and derive the verdict from its clauses."""
-        context = self._director_context(run, beat)
+        context = self._director_context(run, beat) + extra
         decision_id = f"{run.brief.scene_id}:director:{mode}:{len(run.turns)}"
         if self.on_decision:
             self.on_decision(decision_id)

@@ -77,6 +77,8 @@ def is_deadlocked(turns: list[StageTurn], *, window: int = DEADLOCK_WINDOW) -> b
     the same argument before the beat cap forced it. Repetition checks only compare an actor
     with itself, and these lines were worded differently each time; the tactics were not.
     """
+    if _stuck_actor([turn for turn in turns if turn.kind == "actor"]):
+        return True
     moved = [turn for turn in turns if turn.kind == "actor"][-window:]
     if len(moved) < window:
         return False
@@ -89,3 +91,25 @@ def is_deadlocked(turns: list[StageTurn], *, window: int = DEADLOCK_WINDOW) -> b
         moved[index].tactic and moved[index].tactic == moved[index + 2].tactic
         for index in range(window - 2)
     )
+
+
+# How many of one character's last own turns in a beat are read, and how many of them must play
+# the same tactic, for that character to count as stuck (7.15.1).
+STUCK_WINDOW = 4
+STUCK_REPEATS = 3
+
+
+def _stuck_actor(moved: list[StageTurn]) -> bool:
+    """Say whether one character keeps playing the same tactic, whoever answers them.
+
+    Found in the closing scene of the 7.15 navigators run: Hanu threatened in three of his four
+    turns while Gaspar and Ilse took turns answering him, so no two characters alternated and
+    the deadlock above never fired.
+    """
+    for actor in {turn.actor_id for turn in moved}:
+        tactics = [turn.tactic for turn in moved if turn.actor_id == actor][-STUCK_WINDOW:]
+        if len(tactics) == STUCK_WINDOW and any(
+            tactic and tactics.count(tactic) >= STUCK_REPEATS for tactic in tactics
+        ):
+            return True
+    return False

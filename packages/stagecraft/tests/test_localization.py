@@ -80,3 +80,40 @@ def test_a_leaked_title_is_localized_or_numbered(tmp_path, translate, title, sta
     assert len(localizer) == 1 and "La elección" not in localizer[0]
     warnings = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))["warnings"]
     assert any(item.startswith("[LOCALIZATION_FALLBACK]") for item in warnings) is not translate
+
+
+SPANISH_BRIEF = (
+    "Escribe una historia a partir de esta ficha. La tripulación de la carabela busca la "
+    "corriente que sube del mar al cielo, y en la isla viven los zefaríes. Notas: idioma español."
+)
+
+
+@pytest.mark.parametrize(
+    ("text", "language"),
+    [
+        (SPANISH_BRIEF, "Spanish"),
+        (
+            "The crew of the caravel looks for the current that rises from the sea to the sky.",
+            "English",
+        ),
+        ("Una historia", ""),
+    ],
+)
+def test_a_prompt_language_needs_plain_evidence(text, language) -> None:
+    from asg_stagecraft.writing.language import prompt_language
+
+    assert prompt_language(text) == language
+
+
+def test_a_spanish_prompt_keeps_spanish_whatever_the_analyst_says(tmp_path) -> None:
+    """7.15 navigators: the analyst returned English for a Spanish brief."""
+    from test_generator_v5 import make_request
+
+    wrong = make_request().model_copy(
+        update={"language": "English", "original_prompt": SPANISH_BRIEF}
+    )
+    run = StoryGenerator(FakeProvider(analyzed_request=wrong), tmp_path).generate(SPANISH_BRIEF)
+    request = json.loads((run.run_dir / "request.json").read_text(encoding="utf-8"))
+    assert request["language"] == "Spanish"
+    warnings = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))["warnings"]
+    assert any(item.startswith("[LANGUAGE_OVERRIDE]") for item in warnings)

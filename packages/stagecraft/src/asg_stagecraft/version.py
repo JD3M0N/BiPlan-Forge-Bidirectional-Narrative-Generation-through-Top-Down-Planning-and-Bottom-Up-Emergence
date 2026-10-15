@@ -1,9 +1,9 @@
 """Version identifiers persisted with every generated story."""
 
 GENERATOR_NAME = "asg-stagecraft"
-__version__ = "7.14.0"
+__version__ = "7.15.1"
 GENERATOR_VERSION = __version__
-PIPELINE_VERSION = "7.14"
+PIPELINE_VERSION = "7.15"
 # Runs written as Top-Down 5.x and 6.x stay readable: renaming the package and adding the
 # hybrid stages is additive, so every earlier contract still opens as a StoryRun. 7.1 changed
 # what a simulated beat's "achieved" means and added director.jsonl; 7.2 changed what
@@ -30,7 +30,9 @@ PIPELINE_VERSION = "7.14"
 # director verbatim. 7.14 adds localization.json, the reader-facing fields a localizer
 # rewrote out of English; a casting's last attempt drops a broken gate instead of the bible; the
 # actor's thought schema asks for subtext, never a plan, and the actor no longer rereads its own
-# earlier thoughts. Earlier runs open.
+# earlier thoughts. 7.15 has the narrator curate rather than transcribe (a measured second
+# attempt), rejects a position restated in the same scene once, and empties plan thoughts.
+# Earlier runs open.
 SUPPORTED_PIPELINE_VERSIONS = frozenset(
     {
         "5.0",
@@ -54,6 +56,7 @@ SUPPORTED_PIPELINE_VERSIONS = frozenset(
         "7.11",
         "7.12",
         "7.13",
+        "7.14",
         PIPELINE_VERSION,
     }
 )

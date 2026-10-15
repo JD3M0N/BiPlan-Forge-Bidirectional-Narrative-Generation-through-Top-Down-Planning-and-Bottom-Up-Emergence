@@ -89,6 +89,7 @@ from .writing.acceptance import writer_candidate_issue, writer_fallback_warning
 from .writing.assembly import assemble_story
 from .writing.audit import story_metrics, word_count
 from .writing.craft_evidence import character_names, craft_evidence, craft_notes
+from .writing.language import language_code, prompt_language
 from .writing.localization import LocalizationMixin
 
 T = TypeVar("T")
@@ -276,6 +277,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin, LocalizationMixin)
         self.repository = self._create_repository(request.title)
         try:
             self._configure_provider_callbacks()
+            request = self._with_prompt_language(request)
             self._save_request(request)
             blueprint = self._build_blueprint(request)
             world = self._build_world(request)
@@ -410,6 +412,22 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin, LocalizationMixin)
             return AnalystAgent(self.provider).run(request)
 
         return self._with_forced_profile(self._call_agent("analyst", analyze_request))
+
+    def _with_prompt_language(self, request: StoryRequest) -> StoryRequest:
+        """Keep the language the prompt is plainly written in over the analyst's guess (7.15).
+
+        Runs once the repository exists, since analysis is what names the run directory.
+        """
+        written = prompt_language(request.original_prompt)
+        if not written or language_code(written) == language_code(request.language):
+            return request
+        warning = (
+            f"[LANGUAGE_OVERRIDE] El análisis dio {request.language}; el prompt está en {written}."
+        )
+        assert self.repository is not None
+        self.repository.add_warning(warning)
+        self._emit("language_override", warning, stage="analysis")
+        return request.model_copy(update={"language": written})
 
     def _with_forced_profile(self, request: StoryRequest) -> StoryRequest:
         """Apply the caller's explicit profile, which outranks any prompt-derived choice."""

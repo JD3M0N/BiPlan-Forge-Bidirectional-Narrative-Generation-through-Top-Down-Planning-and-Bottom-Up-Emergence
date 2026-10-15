@@ -109,6 +109,7 @@ class StageFakeProvider(FakeProvider):
         beat_never_achieved=False,
         beat_needs_world=False,
         narration_reviews: list | None = None,
+        narrator_outputs: list[str] | None = None,
         **kwargs,
     ) -> None:
         """Configure the stage responses and the failures a test wants to force."""
@@ -127,6 +128,8 @@ class StageFakeProvider(FakeProvider):
         # Editorial reviews handed out in order (a NarrationReview, or an exception to raise);
         # once spent, every chapter gets a clean review.
         self.narration_reviews = list(narration_reviews or ())
+        # Chapters the narrator returns in order before falling back to the default one.
+        self.narrator_outputs = list(narrator_outputs or ())
         self.check_modes: list[str] = []
         self.casting_number = 0
         self.props_number = 0
@@ -204,6 +207,8 @@ class StageFakeProvider(FakeProvider):
                 raise GeminiDailyQuotaError("daily quota exhausted")
             if self.narrator_number in self.fail_narrator_calls:
                 raise RuntimeError("narrator unavailable")
+            if self.narrator_outputs:
+                return self.narrator_outputs.pop(0)
             return (
                 f"Narracion del capitulo {self.narrator_number}.\n\n"
                 "—Nadie mas lo sabe —dijo Ana.\n\n"

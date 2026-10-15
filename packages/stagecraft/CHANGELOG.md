@@ -1,5 +1,65 @@
 # Historial de cambios
 
+## 7.15.1
+
+Lo que la primera prueba completa de 7.15 (`20261015-134855-las-islas-del-cielo`) dejó roto. Sin
+artefactos ni esquemas nuevos: `PIPELINE_VERSION` sigue en 7.15.
+
+- **El segundo intento del narrador solo se entrega si mejora.**
+  - En 7.15 se entregaba siempre. El capítulo 1 pasó del pretérito al imperfecto
+    («aferraba», «se acercaba»: 0 pretéritos frente a 32 imperfectos).
+  - El capítulo 2 cambió «dijo» por «advirtió» y «replicó» y siguió con una acotación por
+    réplica.
+  - Ahora el segundo intento sustituye al primero solo si pasa la revisión y tiene menos
+    observaciones medidas. Si no, se entrega el primero con `[NARRATION_CRAFT_KEPT_FIRST]`.
+  - La revisión editorial bloquea como `WRONG_TENSE` un capítulo narrado en imperfecto
+    (`narrative_tense`).
+  - Las notas avisan de que cambiar de verbo no basta y piden conservar el pretérito.
+- **Un estancamiento sin evento del mundo se pregunta otra vez.**
+  - El beat final de 7.15 se cerró sin `stage_event`: los actores siguieron con la disputa de
+    la escena anterior y la historia acabó antes de su desenlace.
+  - El director recibe una segunda lectura `stall` que pide una presión visible, nunca el
+    desenlace. Si vuelve vacía, queda `[STAGE_EVENT_MISSING]`.
+  - En la escena que cierra la obra, el actor lee que lo que quiere ahí pesa más que lo que
+    perseguía antes.
+- **Un personaje atascado en su táctica cuenta como atasco.** Hanu amenazó en tres de sus
+  cuatro turnos mientras Gaspar e Ilse le contestaban por turnos, así que el atasco de dos
+  actores alternándose nunca saltaba.
+- **El analista distingue el idioma de la historia del de los campos.** Dos veces dio
+  `English` para el brief en español. `[LANGUAGE_OVERRIDE]` sigue como red.
+- **El plan en la segunda frase de un pensamiento también se quita.**
+- **Lo que no se hizo.** Comparar `RESTATED_POSITION` con lo que le dijeron al actor no detecta
+  las amenazas de Hanu (0,21 frente al umbral de 0,3) y añade 4 falsos positivos en 301 líneas,
+  así que no se aplica.
+
+## 7.15.0
+
+Lo que quedaba de la prueba 7.14 (`20261014-195514-las-islas-del-cielo`). Cambian los prompts
+del narrador y el comportamiento de la función, así que `PIPELINE_VERSION` pasa a 7.15.
+
+- **El narrador cura en vez de transcribir.**
+  - En 7.13 y 7.14 cada capítulo copiaba literalmente casi todas las réplicas del log (13 de 13,
+    18 de 18; `dialogue_survival` 1.0) y ponía verbo de habla en casi todas (16 de 18).
+  - `stage/editorial.craft_findings` mide las dos cosas (`TRANSCRIBED`, `TAGGED`). Un primer
+    intento aceptado que las cumple se narra una vez más con esas notas; si el segundo no pasa
+    la revisión, se entrega el primero. Nunca es motivo de rechazo.
+  - El prompt pide acotar solo cuando no se sepa quién habla y corregir la ortografía de las
+    réplicas sin cambiar su sentido: el narrador copiaba las erratas de los actores de 3.1
+    («Necestio», «ni un astilla»).
+- **Una postura repetida con otras palabras cuesta un reintento.**
+  - Hanu hizo la misma amenaza tres veces en el final, e Ilse y Gaspar se amenazaron ocho
+    turnos seguidos. `REPEATED_LINE` solo ve repeticiones casi literales.
+  - `RESTATED_POSITION` rechaza, solo en el primer intento, una línea cuyas palabras de
+    contenido ya dijo el mismo personaje en la escena (`PARAPHRASE_CONTAINMENT`, 0,3). En los
+    runs de 7.12 a 7.14 marca 6 de 140 líneas.
+- **El idioma del prompt manda sobre el del analista.** En la primera prueba de 7.15
+  (`20261015-132526`), el analista devolvió `language: English` para el brief en español que
+  dice «Idioma español», y la historia entera salió en inglés. `writing/language.prompt_language`
+  reconoce el idioma de un prompt claramente escrito en uno; si discrepa del analista, gana el
+  prompt, con un aviso `[LANGUAGE_OVERRIDE]`.
+- **Un pensamiento que es un plan se vacía.** Igual que el eco: «Debo…», «Tengo que…»,
+  «Voy a…» (7 de 48 en 7.14).
+
 ## 7.14.0
 
 Lo que falló en la prueba 7.13 (`20261014-180523-las-islas-del-cielo`, Esencial). Añade

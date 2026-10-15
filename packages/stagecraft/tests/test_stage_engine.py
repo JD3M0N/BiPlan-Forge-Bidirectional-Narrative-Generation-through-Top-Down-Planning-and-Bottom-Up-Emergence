@@ -189,6 +189,21 @@ def test_a_beat_that_never_lands_climbs_the_whole_ladder_before_it_is_forced() -
     assert performed.turns.index(world[0]) == 8
 
 
+def test_a_stall_without_a_world_event_is_asked_once_more() -> None:
+    """7.15 navigators: the closing beat stalled with no event and the ending never happened."""
+
+    def judge(mode, context):
+        event = EVENT if "STAGE EVENT REQUIRED" in context else ""
+        return unshown("bruno" if mode in {"turn", "stall"} else "", stage_event=event)
+
+    stage = Stage(judge)
+    engine = stage.engine()
+    performed = engine.perform_scene(scene())
+    assert stage.modes.count("stall") == 2
+    assert [turn.action for turn in performed.turns if turn.kind == "world"] == [EVENT]
+    assert not any("STAGE_EVENT_MISSING" in warning for warning in engine.warnings)
+
+
 def test_a_beat_the_world_resolves_is_reached_with_help_not_forced() -> None:
     def judge(mode, context):
         return shown(context) if mode == "final" else unshown("bruno", stage_event=EVENT)
