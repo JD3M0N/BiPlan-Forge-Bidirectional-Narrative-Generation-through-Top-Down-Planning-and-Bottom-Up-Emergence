@@ -33,6 +33,12 @@ _PRESENT_TAG = re.compile(
 _PAST_TAG = re.compile(r"—\s*\w+ó\b", re.I)
 # Below this many present tags a chapter has not settled into the present, it slipped once.
 _MIN_PRESENT_TAGS = 3
+# A stage direction is written in the present, so a narration that copies its opening words
+# copies its tense. Measured on the 7.13 navigators run: the chapter told in the present
+# reused 15 directions this way, every other chapter of that run and of 7.12 at most one.
+_DIRECTION_WORDS = 4
+_MIN_COPIED_DIRECTIONS = 3
+_WORD = re.compile(r"[^\W\d_]+", re.UNICODE)
 
 
 @dataclass
@@ -86,7 +92,7 @@ def editorial_verdict(
             verdict.advisory.append(line)
     if _INTERNAL_ID.search(story):
         verdict.blocking.append("INTERNAL_MARKER: remove internal identifiers from the prose")
-    if _in_present(story, language):
+    if _in_present(story, language) or _copies_directions(story, turns):
         verdict.blocking.append(
             "WRONG_TENSE: narrate in the past tense, dialogue tags included ('dijo', never "
             "'dice'), and curate the exchanges instead of rendering every turn"
@@ -100,6 +106,20 @@ def _in_present(story: str, language: str) -> bool:
         return False
     present = len(_PRESENT_TAG.findall(story))
     return present >= _MIN_PRESENT_TAGS and present > len(_PAST_TAG.findall(story))
+
+
+def _copies_directions(story: str, turns: list[StageTurn]) -> bool:
+    """Say whether the narration outside dialogue copies the log's present-tense directions."""
+    narration = " ".join(
+        line for line in story.lower().splitlines() if not line.lstrip().startswith("—")
+    )
+    narration = " ".join(_WORD.findall(narration))
+    copied = 0
+    for turn in turns:
+        words = _WORD.findall(turn.action.lower())[:_DIRECTION_WORDS]
+        if len(words) == _DIRECTION_WORDS and " ".join(words) in narration:
+            copied += 1
+    return copied >= _MIN_COPIED_DIRECTIONS
 
 
 def _unsupported(quote: str, turn_ids: list[str], story: str, known: set[str]) -> str:

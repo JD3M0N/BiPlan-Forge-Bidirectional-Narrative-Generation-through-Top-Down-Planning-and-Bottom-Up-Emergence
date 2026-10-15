@@ -321,6 +321,8 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   - Que el crítico de plan compruebe cada giro de esa trama y el tipo de final pedido.
 - **Hecho cuando.** Un plan Expansivo de los navegantes contiene el ascenso, la división de la
   tripulación y una decisión final con pérdida, y el crítico rechaza un plan sin ellos.
+- **Implementado en 7.14** (`brief.authored_plot_block` llega al planificador y al crítico);
+  falta medirlo en real.
 - **Ojo.** Sin brief, el prompt no debe cambiar: el corpus de prompts libres sigue comparable.
 
 ### SIM-22 · Los nativos no conocen su propio mundo
@@ -812,6 +814,27 @@ versión definitiva del generador
     7.12 prohíbe rechazar por un hallazgo leve.
 - **Hecho cuando.** Re-narrar ese run guardado da menos de un párrafo de cada cinco cerrado con
   una intención, sin capítulos de respaldo.
+
+### EXP-9 · Escribir en inglés y traducir la historia al final
+
+*Área:* medición · *Cuota:* ~2 runs simulados más una llamada de traducción por capítulo ·
+*Depende de:* EXP-4
+
+- **Síntoma.** Propuesta de 2026-10-14: procesar todo en inglés (prompt, plan, diálogos, prosa)
+  y que un agente traductor pase la historia final al idioma pedido, para evitar las mezclas de
+  idioma. 7.14 arregla las mezclas con una frontera vigilada (`writing/language.py` y
+  `LocalizerAgent`), sin traducir la prosa.
+- **Qué hacer.** Un brazo con actores y narrador en inglés y traducción final, frente al
+  defecto, con el mismo plan congelado (`--plan-from`). Medir a ciegas y con las cifras de
+  artesanía.
+- **Hecho cuando.** Los lectores prefieren un brazo, o no distinguen. Solo entonces se decide el
+  defecto.
+- **Ojo.**
+  - La traducción reescribe la voz y el registro pedido (`style_request`), y `craft_metrics`
+    mediría al traductor.
+  - El inglés no marca género («the captain»): es el fallo de TD-2, ahora en cada línea.
+  - Rompe la cadena de citas narración-log (`dialogue_survival`, revisión editorial) salvo que
+    se traduzca también el log.
 
 ### SIM-7 · Reanudar una función interrumpida
 

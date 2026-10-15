@@ -35,8 +35,8 @@ def brief(*cast: CastMember, **fields) -> StoryBrief:
     return StoryBrief(**values)
 
 
-def characters_calls(provider) -> list[str]:
-    return [prompt for name, _, prompt in provider.structured_calls if name == "CharactersArtifact"]
+def characters_calls(provider, schema="CharactersArtifact") -> list[str]:
+    return [prompt for name, _, prompt in provider.structured_calls if name == schema]
 
 
 def test_the_prompt_is_composed_the_same_way_every_time() -> None:
@@ -117,6 +117,10 @@ def test_a_brief_run_keeps_the_brief_and_analyzes_its_prompt(tmp_path) -> None:
     assert len(characters_calls(provider)) == 1
     # 7.13: the designer reads the declared cast verbatim, not only the analyst's summary.
     assert "- Ana, protagonista. Secreto: se llevó el expediente." in characters_calls(provider)[0]
+    # 7.14: the planner and the plan critic read the authored plot as canon.
+    for schema in ("StoryPlanDraft", "PlanReview"):
+        assert "AUTHOR'S PLOT" in characters_calls(provider, schema)[0]
+        assert story.plot in characters_calls(provider, schema)[0]
     assert read_json(run.run_dir, "metadata.json")["warnings"] == []
 
 
@@ -138,4 +142,5 @@ def test_a_plain_prompt_never_asks_for_a_repair(tmp_path) -> None:
     run = StoryGenerator(provider, tmp_path).generate("Una historia sobre Zoe")
     assert len(characters_calls(provider)) == 1
     assert "AUTHOR'S CAST" not in characters_calls(provider)[0]
+    assert "AUTHOR'S PLOT" not in characters_calls(provider, "StoryPlanDraft")[0]
     assert not run.brief_path.exists()

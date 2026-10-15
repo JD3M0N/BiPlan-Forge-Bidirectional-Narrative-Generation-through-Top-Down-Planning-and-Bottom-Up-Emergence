@@ -158,7 +158,11 @@ class SimulationStagesMixin:
                 continue
             try:
                 bible = materialize_bible(
-                    draft, cast_ids=cast_ids, characters=characters, plan=plan
+                    draft,
+                    cast_ids=cast_ids,
+                    characters=characters,
+                    plan=plan,
+                    drop_invalid_gates=attempt == CASTING_ATTEMPTS,
                 )
             except ValueError as exc:
                 issue = str(exc).strip() or type(exc).__name__
@@ -173,6 +177,11 @@ class SimulationStagesMixin:
                     f"REJECTED CANDIDATE:\n{draft.model_dump_json()}"
                 )
                 continue
+            dropped = [note for note in bible.observations if " dropped: " in note]
+            if dropped:
+                warning = f"Se descartaron {len(dropped)} compuertas inválidas del reparto."
+                self.repository.add_warning(f"[CAST_GATE_DROPPED] {warning}")
+                self._emit("cast_gate_dropped", warning, stage="casting")
             if gateless(bible, plan):
                 warning = "El reparto no tiene compuertas: nadie descubre nada en escena."
                 self.repository.add_warning(f"[CAST_NO_GATES] {warning}")

@@ -1,5 +1,38 @@
 # Historial de cambios
 
+## 7.14.0
+
+Lo que falló en la prueba 7.13 (`20261014-180523-las-islas-del-cielo`, Esencial). Añade
+`localization.json` y cambia el esquema del turno de actor, así que `PIPELINE_VERSION` pasa a
+7.14.
+
+- **El casting ya no pierde la biblia por una compuerta.**
+  - El casting de 7.13 creó compuertas, pero se rechazaron en los dos intentos: la descubridora
+    estaba en `known_by`, y una confesión no tenía confesor. Toda la función corrió sobre
+    `fallback_bible`.
+  - `_normalize_gates` corrige las dos formas que tienen una sola corrección: quien descubre o
+    deduce sale de `known_by`, y una confesión con un solo poseedor lo toma como confesor.
+  - El último intento descarta la compuerta que siga rota, en vez de la biblia entera, y avisa
+    con `[CAST_GATE_DROPPED]`. Las reglas no cambian: una compuerta descartada nunca se relaja.
+- **La frontera de idioma, vigilada en código.**
+  - `writing/language.py` detecta por palabras funcionales un texto corto en el idioma
+    equivocado («Arrival and Discovery» en una historia en español).
+  - `LocalizerAgent` traduce solo esos campos: título, títulos de capítulo, marco del guion y
+    roles. Nunca la prosa.
+  - Lo traducido queda en `localization.json`, con el original al lado.
+  - Si el localizador falla, el capítulo pasa a «Capítulo N», con
+    `[LOCALIZATION_FALLBACK]`. Sin nada marcado, no hay llamada ni artefacto.
+- **Un capítulo que copia las acotaciones del log está en presente.**
+  - El capítulo 2 de 7.13 reutilizó 15 acotaciones literales, que se escriben en presente; los
+    demás capítulos, una como mucho.
+  - La revisión editorial lo bloquea como `WRONG_TENSE`, en cualquier idioma.
+- **Pensamiento sin planes.**
+  - El actor ya no relee sus pensamientos anteriores en «LA ESCENA HASTA AHORA».
+  - El esquema define el pensamiento como lo que nota, teme o calla, nunca lo que planea hacer
+    (SIM-6).
+- **El plan lee la trama del brief.** `brief.authored_plot_block` la manda literal al
+  planificador y al crítico de plan como canon (TD-9). Sin brief, el prompt no cambia.
+
 ## 7.13.0
 
 Lo que salió del análisis de los navegantes (`20261013-180025-las-islas-del-cielo`, 7.12,

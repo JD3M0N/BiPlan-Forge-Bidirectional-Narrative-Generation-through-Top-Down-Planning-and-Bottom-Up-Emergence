@@ -301,10 +301,11 @@ A esa lista, el guion y el simulado añaden los suyos.
   Los rasgos T de `asg-evaluation` las recalculan desde `story.md`, así que también miden los
   runs anteriores a 6.5.0, que no las traen.
 
-`version.py` fija `PIPELINE_VERSION` (7.13) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.13).
+`version.py` fija `PIPELINE_VERSION` (7.14) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.14).
 Desde 7.11 un run nuevo ya no trae `evaluation.json`; 7.12 añade `style_request` a
 `request.json`, `prose_model` a `metadata.json` y el contrato 4 de `narration.json`; en 7.13
-`stage_model` pasa a ser el modelo de los actores.
+`stage_model` pasa a ser el modelo de los actores; 7.14 añade `localization.json` y cambia el
+esquema del pensamiento del actor.
 `StoryRun` se niega a abrir un run incompleto o de una versión no soportada. Si cambias el
 conjunto de artefactos o su significado, sube la versión en vez de romper los runs ya generados:
 son datos de la tesis. Una limpieza que no toca artefactos sube solo el parche de
@@ -545,6 +546,14 @@ que saber antes de tocar `stage/`:
 - **Excepción deliberada:** los mensajes de `ValueError` de `planning/graph.py`,
   `planning/promises.py`, `script/validation.py`, `stage/validation.py` y `stage/casting.py` van
   en inglés porque se reinyectan en el prompt del modelo.
+- **La frontera de idioma de la ficción** (7.14).
+  - Planifican en inglés: análisis, mundo, plan, promesas y la parte interna de los dossiers.
+  - Escriben en el idioma de la ficción los actores, el narrador, los títulos, los nombres y los
+    roles.
+  - `writing/language.py` marca un campo corto que se escapó al otro idioma, y
+    `LocalizerAgent` traduce solo esos campos, nunca la prosa. Una traducción final de la
+    historia entera aplanaría la voz que se evalúa y rompería las citas al log: es la ficha
+    EXP-9, no el defecto.
 - `Stories/`, PDFs y experimentos son datos de investigación: **nunca** se eliminan en tareas de
   limpieza, aunque estén en `.gitignore`. Eso incluye `Stories/Bottom-Up/`, aunque el código que
   lo generó ya no exista.
@@ -612,8 +621,10 @@ que saber antes de tocar `stage/`:
 - **Quién lo sabe ya ≠ quién lo descubrirá.** En una compuerta de `cast_bible.json`, `known_by`
   es quién sabe el hecho **antes de la primera escena**. Quien lo deduce o descubre en escena va
   en `revealed_by`, con `how`, y **no** en `known_by`. El primer run real los confundió y le dio
-  al detective la solución de partida. `stage/casting.py` lo rechaza desde 7.1; no relajes esa
-  validación para que pase un casting.
+  al detective la solución de partida. `stage/casting.py` lo hace cumplir desde 7.1, y desde 7.14
+  corrige la forma con una sola lectura: saca al descubridor de `known_by`. Lo que sigue roto en
+  el último intento se descarta compuerta a compuerta (`[CAST_GATE_DROPPED]`), nunca se acepta.
+  No relajes esa validación para que pase un casting.
 - **Las cláusulas de un beat casan por clave, no por texto.** El director reescribe a su manera
   las compuertas obligatorias (`"gate_x: hecho (how, nombre)"`): sin el sufijo, o como el hecho
   a secas. De 7.5 a 7.8 se compararon como cadenas exactas, y los 6 beats con compuertas se

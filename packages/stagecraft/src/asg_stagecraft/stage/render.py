@@ -197,11 +197,8 @@ def actor_turn_context(
     if memories:
         blocks.append("LO QUE RECUERDAS:\n" + "\n".join(f"- {item.text}" for item in memories))
     if witnessed:
-        transcript = "\n".join(
-            visible_text(turn, character_id, names)
-            for turn in witnessed
-            if visible_text(turn, character_id, names)
-        )
+        seen = (visible_text(turn, character_id, names, own_thoughts=False) for turn in witnessed)
+        transcript = "\n".join(line for line in seen if line)
         blocks.append(
             f"LA ESCENA HASTA AHORA:\n{transcript}" if transcript else "LA ESCENA ACABA DE EMPEZAR."
         )

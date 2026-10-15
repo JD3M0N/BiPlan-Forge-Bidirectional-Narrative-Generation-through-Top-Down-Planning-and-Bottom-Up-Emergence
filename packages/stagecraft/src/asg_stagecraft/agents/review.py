@@ -24,8 +24,13 @@ class PlanCriticAgent(Agent[PlanReview]):
         world: WorldArtifact,
         characters: CharactersArtifact,
         plan: StoryPlan,
+        authored_plot: str = "",
     ) -> PlanReview:
-        """Return actionable English notes or approve the plan."""
+        """Return actionable English notes or approve the plan.
+
+        authored_plot is a structured brief's plot: a turn it names that no event stages, or an
+        ending of another kind, is a fidelity failure the critic must send back.
+        """
         return self.provider.generate_structured(
             system_instruction=(
                 "You are the Plan Critic. Review a structurally valid story plan for fidelity to "
@@ -45,6 +50,7 @@ class PlanCriticAgent(Agent[PlanReview]):
                 f"{story_specification_header(request)}"
                 f"\n\nWORLD:\n{json_text(world)}"
                 f"\n\nCHARACTERS:\n{json_text(characters)}"
+                f"{authored_plot}"
                 f"\n\nVALIDATED PLAN:\n{json_text(plan)}"
             ),
             schema=PlanReview,

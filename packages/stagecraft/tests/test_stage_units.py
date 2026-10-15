@@ -131,6 +131,8 @@ def test_a_thought_is_visible_only_to_the_character_who_thought_it() -> None:
     thinking = turn("ana", speech="Nada.", thought="Miente.")
     assert "pienso" in visible_text(thinking, "ana", NAMES)
     assert "Miente" not in visible_text(thinking, "bruno", NAMES)
+    # 7.14: the actor's own scene so far leaves out its earlier plans, keeping what it said.
+    assert visible_text(thinking, "ana", NAMES, own_thoughts=False) == "Ana: Nada."
 
 
 # -- memory ------------------------------------------------------------------------------
@@ -380,6 +382,16 @@ def test_copied_log_marks_are_stripped_and_internal_ids_still_block() -> None:
     past = present.replace("dice", "dijo")
     assert editorial_verdict(NarrationReview(), past, [], "Spanish").accepted
     assert editorial_verdict(NarrationReview(), present, [], "English").accepted
+    # Found in 7.13: the narration copied the log's present-tense directions, in any language.
+    directions = [
+        "señala el centro del archivo",
+        "se interpone entre ella y",
+        "acaricia una cuerda de plata",
+    ]
+    turns = [turn("ana", action=item, number=n) for n, item in enumerate(directions, 1)]
+    copied = "\n\n".join(f"Ana {item} con calma." for item in directions)
+    for prose, accepted in [(copied, False), (copied.replace("señala", "señaló"), True)]:
+        assert editorial_verdict(NarrationReview(), prose, turns, "English").accepted is accepted
 
 
 def test_the_first_person_detector_is_conservative_by_design() -> None:
@@ -728,28 +740,48 @@ def gate(**fields) -> KnowledgeGate:
     return KnowledgeGate(**{"id": "gate-1", "fact": "el secreto", "how": "discovery", **fields})
 
 
-def cast_with(*gates, initial=()):
+def cast_with(*gates, initial=(), drop=False):
     plan, characters = plan_and_cast()
     holder = characters.characters[0].id
     draft = CastBibleDraft(
         dossiers=[dossier(holder, initial_knowledge=list(initial))],
         knowledge_gates=list(gates),
     )
-    return materialize_bible(draft, cast_ids=[holder], characters=characters, plan=plan)
+    return materialize_bible(
+        draft, cast_ids=[holder], characters=characters, plan=plan, drop_invalid_gates=drop
+    )
 
 
 def test_the_detective_cannot_already_know_what_she_deduces() -> None:
-    """The run-1 gate: known_by the detective, who was also the one to deduce it."""
-    with pytest.raises(ValueError) as error:
-        cast_with(gate(known_by=["ana"], revealed_by="ana", how="deduction"))
-    assert "ana works out this fact on stage, so they cannot already know" in str(error.value)
-    assert str(error.value).isascii()
+    """The run-1 gate: known_by the detective, who was also the one to deduce it.
+
+    Since 7.14 the one correction is applied: she leaves known_by, and still learns it on stage.
+    """
+    bible = cast_with(
+        gate(known_by=["ana"], revealed_by="ana", how="deduction", initial_premises=["una pista"]),
+        initial=["una pista"],
+    )
+    assert bible.knowledge_gates[0].known_by == []
+    assert gates_for(bible, "ana") == [] and gates_known_by_discoverer(bible) == 0
 
 
 def test_nobody_confesses_what_they_do_not_know() -> None:
     with pytest.raises(ValueError) as error:
         cast_with(gate(known_by=[], revealed_by="ana", how="confession"))
     assert "confession" in str(error.value)
+    assert str(error.value).isascii()
+    # A confession with one holder and no confessor has one reading: the holder confesses.
+    bible = cast_with(gate(known_by=["ana"], how="confession"))
+    assert bible.knowledge_gates[0].revealed_by == "ana"
+
+
+def test_the_last_attempt_drops_a_broken_gate_and_keeps_the_dossiers() -> None:
+    """7.13 navigators: one bad gate sent the whole bible to the fallback."""
+    broken = gate(id="gate-2", known_by=[], revealed_by="ana", how="confession")
+    bible = cast_with(gate(revealed_by="ana"), broken, drop=True)
+    assert [item.id for item in bible.knowledge_gates] == ["gate-1"]
+    assert any(note.startswith("gate gate-2 dropped:") for note in bible.observations)
+    assert bible.dossiers and not bible.fallback
 
 
 def test_a_reveal_has_to_tell_somebody_present_something_new() -> None:

@@ -91,19 +91,24 @@ def perceives_item(character_id: str, turn: StageTurn) -> bool:
     return any(character_id in move.witnesses for move in item_moves(turn))
 
 
-def visible_text(turn: StageTurn, character_id: str, names: dict[str, str]) -> str:
+def visible_text(
+    turn: StageTurn, character_id: str, names: dict[str, str], *, own_thoughts: bool = True
+) -> str:
     """Render one turn as a given character perceived it, hiding what they could not know.
 
     A character reads its own thought and never anyone else's, which is what makes a scene
     transcript differ between two actors who both stood through it. An object move is held to
     the same standard: a concealed one appears only to its holder, and a whispered hand-over
     only to the two hands and whoever was whispered to.
+
+    own_thoughts=False leaves the character's own thoughts out too: the actor's scene so far
+    since 7.14, because rereading its earlier plans taught it to plan in every thought (SIM-6).
     """
     if turn.kind == "world":
         return f"({turn.action})" if turn.action else ""
     speaker = names.get(turn.actor_id, turn.actor_id)
     pieces: list[str] = []
-    if turn.actor_id == character_id and turn.thought:
+    if own_thoughts and turn.actor_id == character_id and turn.thought:
         pieces.append(f"[pienso: {turn.thought}]")
     if turn.action:
         pieces.append(f"({stage_direction(speaker, turn.action, names)})")

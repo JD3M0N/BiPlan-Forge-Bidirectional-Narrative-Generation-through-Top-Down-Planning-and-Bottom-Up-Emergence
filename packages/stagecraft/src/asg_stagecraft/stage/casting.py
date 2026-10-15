@@ -35,8 +35,14 @@ def materialize_bible(
     cast_ids: list[str],
     characters: CharactersArtifact,
     plan: StoryPlan,
+    drop_invalid_gates: bool = False,
 ) -> CastBible:
-    """Validate one proposed cast bible and mint the trusted version."""
+    """Validate one proposed cast bible and mint the trusted version.
+
+    With drop_invalid_gates, a gate that breaks a rule is left out instead of rejecting the
+    bible: the last casting attempt uses it, so that one bad gate no longer costs every
+    dossier (7.14). The rules themselves are the same; a dropped gate is never weakened.
+    """
     known_characters = {item.id for item in characters.characters}
     known_events = {event.id for event in plan.events}
     required = list(dict.fromkeys(cast_ids))
@@ -47,16 +53,56 @@ def materialize_bible(
     dossiers = [_normalize_dossier(item, known_characters) for item in dossiers]
 
     gates = _normalize_gates(draft.knowledge_gates, known_characters)
+    observations: list[str] = []
+    if drop_invalid_gates:
+        kept: list[KnowledgeGate] = []
+        for gate in gates:
+            issue = _gate_issue(gate, gates, dossiers, plan, known_events)
+            if issue:
+                observations.append(f"gate {gate.id} dropped: {issue}")
+            else:
+                kept.append(gate)
+        dropped = {gate.id for gate in gates} - {gate.id for gate in kept}
+        # A premise that was dropped takes its deductions with it.
+        gates = [gate for gate in kept if not dropped & set(gate.premise_gate_ids)]
+    _validate_gates(gates, dossiers, plan, known_events)
+
+    return CastBible(
+        dossiers=dossiers,
+        knowledge_gates=gates,
+        observations=observations + _observations(dossiers, gates, required),
+    )
+
+
+def _validate_gates(
+    gates: list[KnowledgeGate],
+    dossiers: list[ActorDossier],
+    plan: StoryPlan,
+    known_events: set[str],
+) -> None:
+    """Run every gate rule over a list of gates, raising on the first broken one."""
     _validate_gate_anchors(gates, known_events)
     _validate_gate_logic(gates, plan)
     _validate_no_handed_answers(dossiers, gates)
     _validate_premises(gates, dossiers, plan)
 
-    return CastBible(
-        dossiers=dossiers,
-        knowledge_gates=gates,
-        observations=_observations(dossiers, gates, required),
-    )
+
+def _gate_issue(
+    gate: KnowledgeGate,
+    gates: list[KnowledgeGate],
+    dossiers: list[ActorDossier],
+    plan: StoryPlan,
+    known_events: set[str],
+) -> str:
+    """Return the first rule one gate breaks, read against the rest of the bible, or ''."""
+    try:
+        _validate_gate_anchors([gate], known_events)
+        _validate_gate_logic([gate], plan)
+        _validate_no_handed_answers(dossiers, [gate])
+        _validate_premises(gates, dossiers, plan, only=gate.id)
+    except ValueError as exc:
+        return str(exc)
+    return ""
 
 
 def fallback_bible(cast_ids: list[str], characters: CharactersArtifact) -> CastBible:
@@ -179,7 +225,13 @@ def _normalize_dossier(dossier: ActorDossier, known: set[str]) -> ActorDossier:
 
 
 def _normalize_gates(gates: list[KnowledgeGate], known: set[str]) -> list[KnowledgeGate]:
-    """Keep one gate per ID and drop holders who are not characters of this story."""
+    """Keep one gate per ID and drop holders who are not characters of this story.
+
+    Two shapes have exactly one correction, so they are corrected (7.14): whoever discovers or
+    deduces a fact on stage is taken out of known_by, which keeps the rule that they cannot
+    already hold it; and a confession with nobody named as confessor gets its only holder.
+    The 7.13 navigators casting lost its whole bible to both in two attempts.
+    """
     seen: set[str] = set()
     kept: list[KnowledgeGate] = []
     for gate in gates:
@@ -188,6 +240,10 @@ def _normalize_gates(gates: list[KnowledgeGate], known: set[str]) -> list[Knowle
         seen.add(gate.id)
         holders = [item for item in dict.fromkeys(gate.known_by) if item in known]
         revealer = gate.revealed_by if gate.revealed_by in known else ""
+        if gate.how in LEARNED_ON_STAGE and revealer in holders:
+            holders.remove(revealer)
+        if gate.how == "confession" and not revealer and len(holders) == 1:
+            revealer = holders[0]
         kept.append(gate.model_copy(update={"known_by": holders, "revealed_by": revealer}))
     return kept
 
@@ -290,14 +346,17 @@ def _observations(
 
 
 def _validate_premises(
-    gates: list[KnowledgeGate], dossiers: list[ActorDossier], plan: StoryPlan
+    gates: list[KnowledgeGate],
+    dossiers: list[ActorDossier],
+    plan: StoryPlan,
+    only: str = "",
 ) -> None:
     """A deduction needs earlier gates or literal knowledge of its investigator."""
     by_id = {gate.id: gate for gate in gates}
     known = {d.character_id: set(d.initial_knowledge) for d in dossiers}
     order = {event_id: index for index, event_id in enumerate(plan.topological_order)}
     for gate in gates:
-        if gate.how != "deduction":
+        if gate.how != "deduction" or (only and gate.id != only):
             continue
         if not gate.premise_gate_ids and not gate.initial_premises:
             raise ValueError("a deduction needs explicit premise_gate_ids or initial_premises")

@@ -31,8 +31,9 @@ class PlotPlannerAgent(Agent[StoryPlanDraft]):
         repair_feedback: str = "",
         plan_review: PlanReview | None = None,
         blueprint: NarrativeBlueprint | CompositionArtifact | None = None,
+        authored_plot: str = "",
     ) -> StoryPlanDraft:
-        """Run the PlotPlannerAgent workflow."""
+        """Plan the story; authored_plot is a structured brief's plot, empty otherwise."""
         low, high = profile_chapter_band(request.narrative_profile)
         low_events, high_events = profile_event_target(request.narrative_profile)
         aim_events = profile_event_aim(request.narrative_profile)
@@ -72,6 +73,7 @@ class PlotPlannerAgent(Agent[StoryPlanDraft]):
                 f"{story_specification_header(request, blueprint)}"
                 f"\n\nWORLD:\n{json_text(world)}"
                 f"\n\nCHARACTERS:\n{json_text(characters)}"
+                f"{authored_plot}"
                 f"\n\nPLAN REVIEW TO APPLY:\n{json_text(plan_review) if plan_review else 'none'}"
                 f"{repair_feedback}"
             ),

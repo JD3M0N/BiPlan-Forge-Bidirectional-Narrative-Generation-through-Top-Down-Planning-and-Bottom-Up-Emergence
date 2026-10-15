@@ -473,9 +473,10 @@ class ActorTurnDraft(BaseModel):
     thought: str = Field(
         default="",
         description=(
-            "In the fiction language, first person: the subtext - what the character thinks and "
-            "does NOT say, such as a doubt, a lie they are telling, a fear. Nobody else ever "
-            "perceives it. Leave it empty unless it differs from what they say and do."
+            "In the fiction language, first person: the subtext - what the character notices, "
+            "fears or keeps quiet and does NOT say, such as a doubt or a lie they are telling. "
+            "Never what they plan to do next. Nobody else ever perceives it. Leave it empty "
+            "unless it differs from what they say and do."
         ),
     )
     action: str = Field(

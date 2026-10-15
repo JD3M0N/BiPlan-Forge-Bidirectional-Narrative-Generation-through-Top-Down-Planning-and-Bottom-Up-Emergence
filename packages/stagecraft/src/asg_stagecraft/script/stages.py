@@ -105,6 +105,7 @@ class ScriptStagesMixin:
                 "frame": normalized_frame(presentation.frame, characters, language=request.language)
             }
         )
+        presentation = self._localized_presentation(request, presentation, characters)
         self.repository.save_json("script_presentation.json", presentation)
         event_by_id = {event.id: event for event in plan.events}
         acts: list[ActScript] = []

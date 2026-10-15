@@ -23,7 +23,13 @@ from .agents import (
     WorldBuilderAgent,
     WriterAgent,
 )
-from .brief import StoryBrief, authored_cast_block, cast_repair_feedback, missing_cast
+from .brief import (
+    StoryBrief,
+    authored_cast_block,
+    authored_plot_block,
+    cast_repair_feedback,
+    missing_cast,
+)
 from .formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
 from .options import GenerationOptions
 from .planning.catalog_types import GuidanceStrategy
@@ -83,6 +89,7 @@ from .writing.acceptance import writer_candidate_issue, writer_fallback_warning
 from .writing.assembly import assemble_story
 from .writing.audit import story_metrics, word_count
 from .writing.craft_evidence import character_names, craft_evidence, craft_notes
+from .writing.localization import LocalizationMixin
 
 T = TypeVar("T")
 
@@ -137,7 +144,7 @@ PROMISE_ATTEMPTS = 2
 WORLD_ATTEMPTS = 2
 
 
-class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
+class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin, LocalizationMixin):
     """Execute one Stagecraft request through explicit, testable stages."""
 
     def __init__(
@@ -616,6 +623,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
         characters = self._call_agent("characters", build_characters)
         if self.brief is not None and self.brief.cast:
             characters = self._keep_declared_cast(characters, build_characters)
+        characters = self._localized_characters(request, characters)
         self.repository.save_json("characters.json", characters)
         self.repository.complete_stage("characters")
         return characters
@@ -670,6 +678,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
                     characters,
                     feedback_snapshot,
                     blueprint=blueprint,
+                    authored_plot=authored_plot_block(self.brief),
                 )
 
             draft = self._call_agent(
@@ -744,6 +753,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
                     world,
                     characters,
                     original_plan,
+                    authored_plot=authored_plot_block(self.brief),
                 )
 
             review = self._call_agent("plan_critic", critique_plan)
@@ -761,6 +771,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
                     characters,
                     plan_review=review,
                     blueprint=blueprint,
+                    authored_plot=authored_plot_block(self.brief),
                 )
 
             candidate = self._call_agent("plot_planner", refine_plan)
@@ -924,6 +935,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin):
 
         presentation = self._call_agent("drafter", create_presentation)
         self._validate_presentation(plan, presentation)
+        presentation = self._localized_presentation(request, presentation, characters)
         self.repository.save_json("draft_presentation.json", presentation)
         event_by_id = {item.id: item for item in plan.events}
         bodies: list[str] = []

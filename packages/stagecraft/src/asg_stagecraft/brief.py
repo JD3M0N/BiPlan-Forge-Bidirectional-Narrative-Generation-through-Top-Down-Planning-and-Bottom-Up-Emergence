@@ -181,6 +181,24 @@ def authored_cast_block(brief: StoryBrief | None) -> str:
     return "\n".join(lines)
 
 
+def authored_plot_block(brief: StoryBrief | None) -> str:
+    """Hand the plot the author wrote, verbatim, to the planner and the plan critic (7.14).
+
+    The planner read only the analyst's summary: in the 7.12 navigators run it planned no ascent,
+    no split in the crew and a happy ending for a plot that asked for an open one with a price.
+    Empty without a brief, so a free-prompt run sends the same prompt as before.
+    """
+    if brief is None:
+        return ""
+    notes = f"\nAuthor's notes: {brief.notes}" if brief.notes else ""
+    return (
+        "\n\nAUTHOR'S PLOT (canonical):\n"
+        "The author wrote this plot. Every turn it names must happen in some event, in its "
+        "order, and the ending must be the kind of ending it asks for.\n"
+        f"{brief.plot}{notes}"
+    )
+
+
 def missing_cast(brief: StoryBrief, characters: CharactersArtifact) -> list[CastMember]:
     """Return the declared characters the minted cast has nobody for."""
     names = {item.id: item.name for item in characters.characters}
