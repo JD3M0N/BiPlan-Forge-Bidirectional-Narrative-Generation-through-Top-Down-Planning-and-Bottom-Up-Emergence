@@ -301,11 +301,12 @@ A esa lista, el guion y el simulado añaden los suyos.
   Los rasgos T de `asg-evaluation` las recalculan desde `story.md`, así que también miden los
   runs anteriores a 6.5.0, que no las traen.
 
-`version.py` fija `PIPELINE_VERSION` (7.15) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.15).
+`version.py` fija `PIPELINE_VERSION` (7.16) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.16).
 Desde 7.11 un run nuevo ya no trae `evaluation.json`; 7.12 añade `style_request` a
 `request.json`, `prose_model` a `metadata.json` y el contrato 4 de `narration.json`; en 7.13
 `stage_model` pasa a ser el modelo de los actores; 7.14 añade `localization.json` y cambia el
-esquema del pensamiento del actor; 7.15 cambia la narración y la validación del turno.
+esquema del pensamiento del actor; 7.15 cambia la narración y la validación del turno; 7.16
+añade `narration/chapter-NNN-reported.json` y cambia el log que lee el narrador y el último beat.
 `StoryRun` se niega a abrir un run incompleto o de una versión no soportada. Si cambias el
 conjunto de artefactos o su significado, sube la versión en vez de romper los runs ya generados:
 son datos de la tesis. Una limpieza que no toca artefactos sube solo el parche de
@@ -431,6 +432,19 @@ que saber antes de tocar `stage/`:
   en ellos.
 - **El narrador cura, no transcribe.** Puede cortar, fundir y reordenar dentro de un capítulo,
   pero no puede inventar un beat. Donde el plan y el log no coincidan, manda el log.
+  - **Copia lo que recibe.** Entero, transcribía todas las réplicas (7.15.1); cortadas tras la
+    primera frase, copiaba los muñones (7.15.2).
+  - Desde 7.16 recibe enteras solo las réplicas `[clave]` y los sucesos del mundo. El resto le
+    llega en estilo indirecto («Gaspar insistió en el lastre»), que escribe
+    `NarratorAgent.report` una vez por capítulo. Ese mismo resumen ordena las réplicas más
+    memorables, y el código conserva enteras las primeras hasta una de cada tres del capítulo
+    (`WHOLE_EVERY`), porque un beat forzado no tiene ninguna `[clave]`. El resumen lee ids
+    cortos (`L1`, `L2`…), nunca ids de turno, que renumeraba.
+  - `stage/narration.accept_reports` descarta la paráfrasis que comparte cuatro palabras
+    seguidas con su réplica. Lo aceptado y lo descartado queda en
+    `narration/chapter-NNN-reported.json`.
+  - Si el resumen no puede correr, las réplicas van enteras con `[REPORT_FALLBACK]`.
+  - La revisión y las métricas siguen leyendo los turnos completos.
 - **El respaldo es contrato.** Si el casting, la utilería o la narración no pueden correr,
   `stage/casting.py`, `stage/props.py` y `stage/fallback.py` derivan un resultado determinista.
   El run lo registra y sigue.
@@ -444,9 +458,19 @@ que saber antes de tocar `stage/`:
   si copia casi todas las réplicas del log o las etiqueta todas. Si pasa, se pide un segundo
   intento con esas notas, que solo se entrega si pasa la revisión y mejora la cifra medida
   (7.15.1: en 7.15 el segundo intento se pasó al imperfecto y se entregó). Es una nota, nunca
-  un rechazo.
+  un rechazo. Desde 7.16 también cuenta como nota `DROPPED_EVENT`, un suceso del mundo que el
+  capítulo no cuenta.
 - **Un estancamiento sin evento del mundo se pregunta una vez más** (7.15.1), pidiendo una
   presión visible, nunca el desenlace: un beat final sin evento dejó una historia sin final.
+- **La excepción es el último beat de la obra** (7.16, `CLOSING_STALL`).
+  - Ahí el suceso del mundo puede ejecutar la consecuencia visible de una elección que los
+    personajes ya tomaron en escena (el barco zarpa). Nunca elige por ellos.
+  - Ese beat tiene un turno de reacción más.
+  - En 7.15 y 7.15.2 todos los finales se forzaron con el barco amarrado.
+- **Un dúo deja entrar a un tercero** (7.16, `policy.DUET_WINDOW`).
+  - Si los últimos cuatro turnos son de solo dos personajes, habla el que lleva más tiempo
+    callado de los demás, aunque le hayan hablado a otro.
+  - En 7.15.2 hubo 12 parejas personaje-escena sin un turno.
 - **Prosa para un lector cualquiera** (7.12). `agents/style.py` es el contrato de estilo del
   Drafter, el Writer y el Narrator, y `request.style_request` lleva el registro que pidió la
   persona, literal. `writing/craft_evidence.craft_notes` convierte cada observación medida

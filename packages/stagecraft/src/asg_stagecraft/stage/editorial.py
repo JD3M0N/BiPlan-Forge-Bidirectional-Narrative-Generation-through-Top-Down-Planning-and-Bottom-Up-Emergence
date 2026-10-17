@@ -20,6 +20,7 @@ BLOCKING_CODES = frozenset({"INVENTED_EVENT", "CONTRADICTION"})
 
 _KEY_MARK = re.compile(r"\[clave\][ \t]*", re.I)
 _THOUGHT_LABEL = re.compile(r"\[[^]\n]+? piensa:\s*([^]\n]*)\]")
+_WRAPPED_LINE = re.compile(r"^[ \t]*\(([^()\n]+)\)[ \t]*$", re.M)
 _INTERNAL_ID = re.compile(r"\b(?:chapter|scene|event)[_-]\d+", re.I)
 # Spanish dialogue tags after a dash: present-tense speech verbs, and any preterite in -o.
 # Every voice narrates in the past; in 7.12.1 a chapter came back as a dash line and
@@ -72,6 +73,8 @@ class EditorialVerdict:
 def strip_markers(story: str) -> str:
     """Remove process labels a narrator copied from its log, keeping the prose around them."""
     cleaned = _THOUGHT_LABEL.sub(r"\1", _KEY_MARK.sub("", story))
+    # 7.16: a world event marked key was copied whole, parentheses and all, as a paragraph.
+    cleaned = _WRAPPED_LINE.sub(r"\1", cleaned)
     return "\n".join(line.rstrip() for line in cleaned.splitlines()).strip()
 
 
@@ -124,11 +127,11 @@ _SPEECH_TAG = re.compile(r"—\s*(?:dijo|\w+(?:ó|ió))\b", re.I)
 
 
 def craft_findings(story: str, turns: list[StageTurn]) -> list[str]:
-    """Measure whether a chapter transcribes the log or tags every line, as notes."""
+    """Measure whether a chapter transcribes the log, tags every line or drops a world event."""
+    findings = _dropped_events(story, turns)
     lines = [line.strip() for line in story.splitlines() if line.lstrip().startswith("—")]
     if len(lines) < _MIN_LINES_MEASURED:
-        return []
-    findings: list[str] = []
+        return _with_guard(findings)
     text = _normalized(story)
     verbatim = sum(
         1
@@ -148,14 +151,56 @@ def craft_findings(story: str, turns: list[StageTurn]) -> list[str]:
             "'replicó'); swapping one verb for another is not the fix: tag a line only when "
             "the speaker would be unclear, and otherwise let a gesture or nothing follow it"
         )
-    if findings:
-        # 7.15: the second attempt answered these notes by moving the chapter into the
-        # imperfect. The note now says what must not change.
-        findings.append(
-            "KEEP: narrate in the same past tense (the preterite) and keep every event, line "
-            "and choice the chapter already got right"
-        )
+    return _with_guard(findings)
+
+
+def _with_guard(findings: list[str]) -> list[str]:
+    """Add the note that says what a second attempt must not change, when there are notes."""
+    if not findings:
+        return []
+    # 7.15: the second attempt answered these notes by moving the chapter into the imperfect.
+    return [
+        *findings,
+        "KEEP: narrate in the same past tense (the preterite) and keep every event, line and "
+        "choice the chapter already got right",
+    ]
+
+
+# A world event is told when the prose carries enough of the words only it used. Words are
+# compared by their first letters, so "sacudida" matches "sacudió". The only world event of the
+# 7.15.2 finale (a violent jolt that turned the argument) shared none of them with its chapter.
+_EVENT_WORD = 6
+_EVENT_STEM = 5
+_EVENT_SHARE = 0.25
+
+
+def _dropped_events(story: str, turns: list[StageTurn]) -> list[str]:
+    """Name the world events a chapter leaves out, as notes for one more attempt."""
+    told = _stems(story)
+    spoken = _stems(
+        " ".join(f"{turn.action} {turn.speech}" for turn in turns if turn.kind != "world")
+    )
+    findings = []
+    for turn in turns:
+        if turn.kind != "world":
+            continue
+        own = [stem for stem in _stems_in_order(turn.action) if stem not in spoken]
+        if own and sum(stem in told for stem in own) < _EVENT_SHARE * len(own):
+            findings.append(
+                f"DROPPED_EVENT: the chapter leaves out something the world did ({turn.action}); "
+                "tell it where it happened, it is what the characters react to"
+            )
     return findings
+
+
+def _stems(text: str) -> set[str]:
+    """The stems of a text's long words, for telling whether an event is in the prose."""
+    return set(_stems_in_order(text))
+
+
+def _stems_in_order(text: str) -> list[str]:
+    """The stems of a text's long words, in order."""
+    return [word[:_EVENT_STEM] for word in _WORD.findall(text.lower()) if len(word) >= _EVENT_WORD]
 
 
 # The tense a chapter narrates in, read from third-person verb endings outside the dialogue.

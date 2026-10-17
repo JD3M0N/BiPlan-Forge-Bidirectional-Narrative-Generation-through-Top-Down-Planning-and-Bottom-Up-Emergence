@@ -1,5 +1,70 @@
 # Historial de cambios
 
+## 7.16.0
+
+Lo que dejó roto la prueba de 7.15.2 (`20261015-174818-las-islas-del-cielo`, Esencial). Añade
+`narration/chapter-NNN-reported.json` y cambia lo que lee el narrador y cómo acaba la obra, así
+que `PIPELINE_VERSION` pasa a 7.16.
+
+- **El narrador recibe en estilo indirecto lo que no es clave.**
+  - En 7.15.1 copió las 15 de 15 réplicas de un capítulo. En 7.15.2 recibió cortadas tras la
+    primera frase las que no eran `[clave]` y copió los muñones («—Celestina, mira… —dijo
+    Teodoro»). Así perdió las preguntas y el tartamudeo, con `dialogue_survival` en 0,95.
+  - Ahora `NarratorAgent.report` reescribe esas réplicas en estilo indirecto, una frase por
+    réplica y una llamada por capítulo. El narrador solo las recibe así, sin texto que copiar.
+  - `stage/narration.accept_reports` descarta la paráfrasis que comparte cuatro palabras
+    seguidas con la réplica. Si la llamada falla, las réplicas van enteras con
+    `[REPORT_FALLBACK]`.
+  - Un beat forzado no tiene réplicas `[clave]`: el final de 7.15.2 tenía 12 y ninguna clave.
+    Por eso el resumen ordena además las réplicas más memorables, y el código conserva enteras
+    las primeras hasta una de cada tres del capítulo, con un mínimo de dos.
+  - La primera prueba en vivo dio tres arreglos:
+    - las líneas llevan ids cortos (`L1`, `L2`…), porque con ids de turno el modelo renumeró la
+      segunda escena y se perdieron 12 de 16 resúmenes;
+    - el ejemplo del esquema lleva tildes, porque sin ellas el modelo escribía «acuso»;
+    - las réplicas conservadas salen de una lista ordenada, porque con un booleano no marcó
+      ninguna.
+  - El prompt pide conservar los rasgos de habla deliberados, como el tartamudeo, al corregir la
+    ortografía.
+- **Los sucesos del mundo son siempre clave.** La única sacudida del final de 7.15.2 no llegó a
+  la prosa. `craft_findings` añade la nota `DROPPED_EVENT` cuando un capítulo no cuenta un
+  suceso del mundo; activa el segundo intento, nunca un rechazo.
+- **La obra acaba en escena.**
+  - En 7.15 y 7.15.2 el último beat se forzó con el barco amarrado, y la historia terminó en una
+    pregunta.
+  - En el último beat de la obra, la lectura de estancamiento (`CLOSING_STALL`) deja que el
+    mundo ejecute la consecuencia visible de una elección ya tomada en escena. Nunca elige por
+    los personajes.
+  - Ese beat tiene un turno de reacción más.
+- **La nota de reserva dice qué falta.** `FALLBACK_TURN_NOTE` no tenía `{part}`, así que el actor
+  nunca supo qué faltaba. La nota de coda abierta llegaba como «La cuesti?n sigue abierta».
+- **Un dúo deja entrar a un tercero.**
+  - En 7.15.2 hubo 12 parejas personaje-escena sin un turno, y Aleth, la guía, habló 3 veces en
+    toda la obra.
+  - `policy.next_actor` da el turno al más callado cuando los últimos cuatro son de dos
+    personajes.
+- **Un gesto repetido en toda la obra es un tic.**
+  - En 7.15.2 Ilse apretó tres veces el pomo de su espada corta y Gaspar golpeó cuatro el
+    mamparo. `REPEATED_ACTION` solo miraba los tres gestos anteriores.
+  - Ahora también rechaza, solo en el primer intento, el gesto que repite tres palabras seguidas
+    de cualquier gesto anterior del mismo actor (`GESTURE_RUN`). En los runs de 7.12 a 7.15
+    marca uno de cada diez.
+- **Un suceso del mundo copiado entre paréntesis pierde los paréntesis.** Marcado como clave, el
+  narrador lo copió como párrafo en la validación (`strip_markers`).
+- **Validación (2026-10-17).** Dos pares 7.15.2 / 7.16 del mismo prompt, cada par lanzado a la
+  vez: `20261017-182746` / `182756` y `184650` / `184641`.
+  - `dialogue_survival` bajó de 0,89 y 0,92 a 0,47 y 0,47, y las líneas de diálogo, de 36 y 49
+    a 11 y 17. El árbitro descartó 7 de 26 y 3 de 41 resúmenes.
+  - Sin cambio claro en beats forzados (1 y 2 frente a 1 y 3) ni en finales logrados (uno por
+    brazo). El final de `184641` es el único de los cuatro en que la obra se resuelve en escena.
+  - Personajes mudos: 4 de 20 y 7 de 25 frente a 4 de 19 y 1 de 19.
+  - Peor en 7.16: la prosa resume de más. Encadena réplicas indirectas en párrafos largos,
+    vuelve a etiquetar con «dijo» las réplicas que conserva, y en `182756` copió el suceso entre
+    paréntesis y acabó sin final.
+  - Con dos pares no se separa del ruido. Hace falta la lectura humana a ciegas.
+- **Los nativos conocen su mundo (SIM-22).** El casting pone en el `initial_knowledge` de quien
+  es de un lugar las costumbres, la moneda, las leyes y la historia que vive allí.
+
 ## 7.15.1
 
 Lo que la primera prueba completa de 7.15 (`20261015-134855-las-islas-del-cielo`) dejó roto. Sin

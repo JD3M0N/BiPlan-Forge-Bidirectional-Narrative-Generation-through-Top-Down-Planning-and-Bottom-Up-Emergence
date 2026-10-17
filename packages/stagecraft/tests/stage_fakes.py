@@ -33,6 +33,8 @@ from asg_stagecraft.stage.schemas import (
     PropListDraft,
     ReflectionDraft,
     RelationshipState,
+    ReportedLine,
+    ReportedLines,
     RevisedScene,
     WorldEventAssessment,
 )
@@ -142,8 +144,12 @@ class StageFakeProvider(FakeProvider):
 
     def generate_structured(self, *, system_instruction, prompt, schema, profile):
         """Route the stage schemas here and leave every other schema to the narrative double."""
-        if schema is NarrationReview:
-            return self._narration_review()
+        narration = {
+            NarrationReview: self._narration_review,
+            ReportedLines: lambda: self._reported(system_instruction, prompt),
+        }.get(schema)
+        if narration is not None:
+            return narration()
         if schema is WorldEventAssessment:
             return WorldEventAssessment(
                 compatible=True,
@@ -216,6 +222,16 @@ class StageFakeProvider(FakeProvider):
             )
         return super().generate_text(
             system_instruction=system_instruction, prompt=prompt, profile=profile
+        )
+
+    def _reported(self, system_instruction: str, prompt: str) -> ReportedLines:
+        """Retell every requested line as a sentence that copies nothing of it."""
+        self.structured_calls.append((ReportedLines.__name__, system_instruction, prompt))
+        lines = json.loads(prompt)["lines"]
+        return ReportedLines(
+            lines=[
+                ReportedLine(id=line["id"], report=f"{line['speaker']} hablo.") for line in lines
+            ]
         )
 
     def _narration_review(self) -> NarrationReview:

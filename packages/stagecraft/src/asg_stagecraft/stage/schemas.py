@@ -1050,6 +1050,36 @@ class NarrationReview(BaseModel):
     findings: list[NarrationFinding] = Field(default_factory=list)
 
 
+class ReportedLine(BaseModel):
+    """One line of speech retold in indirect style, so the narrator has nothing to copy."""
+
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(description="The id of the line this retells, exactly as given (L1, L2...).")
+    report: str = Field(
+        min_length=1,
+        description=(
+            "One short sentence in the past tense and in the fiction's language, with its "
+            "accents, that says what the speaker said or wanted, in indirect style and in your "
+            "own words, e.g. 'Gaspar insistió en soltar el lastre'. Never quote the line."
+        ),
+    )
+
+
+class ReportedLines(BaseModel):
+    """Indirect-style retellings of the lines a chapter does not turn on (7.16)."""
+
+    model_config = ConfigDict(extra="forbid")
+    lines: list[ReportedLine] = Field(default_factory=list)
+    memorable: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Ids of the lines worth hearing in the speaker's own words - a decision, a refusal, "
+            "a confession, a reveal, a line that turns the scene - the most memorable first. "
+            "Rank several of them."
+        ),
+    )
+
+
 class WorldEventAssessment(BaseModel):
     """Semantic review of a proposed intervention against established circumstances."""
 

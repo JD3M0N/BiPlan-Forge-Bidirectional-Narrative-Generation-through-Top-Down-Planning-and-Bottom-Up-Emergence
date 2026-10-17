@@ -397,7 +397,9 @@ def test_when_the_director_names_nobody_the_engine_picks_and_says_so() -> None:
     assert turn_entry.turning_actor_id == "bruno"
     after = stage.moves[6]
     assert after[0] == "bruno"
-    assert FALLBACK_TURN_NOTE.split(".")[0] in after[1]
+    # 7.16: the note says what has still not happened; before, the clause never arrived.
+    assert FALLBACK_TURN_NOTE.split(",")[0] in after[1]
+    assert "{part}" not in after[1] and "aún no ha pasado esto: " in after[1]
 
 
 def test_every_director_call_is_logged_once() -> None:

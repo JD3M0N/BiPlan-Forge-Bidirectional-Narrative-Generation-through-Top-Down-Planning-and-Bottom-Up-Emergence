@@ -13,7 +13,8 @@ disagree, the log wins - because the log is what happened.
 
 from ..formats import NarrativeVoice
 from ..schemas import ChapterPlan, StoryRequest
-from ..stage.schemas import NarrationReview
+from ..stage.narration import reporter_view
+from ..stage.schemas import NarrationReview, ReportedLines
 from .base import Agent, json_text
 from .style import style_clause
 
@@ -108,6 +109,9 @@ class NarratorAgent(Agent[str]):
                 "a revelation the log does not contain, and where the log and any plan disagree, "
                 "the log is what happened. "
                 "Curate, do not transcribe: the finished chapter should be shorter than the log. "
+                'Lines with no speaker label ("Gaspar insistió en…") are speech already '
+                "retold for you: narrate them as summary or cut them, and never turn them back "
+                "into dialogue with words the log does not contain. "
                 "Moments marked [clave] are the ones the chapter turns on; play those in full, "
                 "as scene, and never copy the mark itself into the prose. Compress everything "
                 "else - a standoff where both sides repeat their position, a gesture made "
@@ -121,7 +125,8 @@ class NarratorAgent(Agent[str]):
                 "new speaker or shift of attention, and let what characters do carry what they "
                 "feel. Tag a line with a speech verb only when the speaker would otherwise be "
                 "unclear. The lines you keep may be trimmed, and their spelling and grammar "
-                "corrected, but never their meaning. Hold this through the last "
+                "corrected, but never their meaning, nor a way of speaking the character "
+                "plays on purpose, such as a stammer. Hold this through the last "
                 "chapter: an ending is a scene, not an account of how matters turned out. "
                 "If a question remains open in the log, leave it open. Do not expose "
                 "internal IDs, turn identifiers or planning terminology."
@@ -133,6 +138,24 @@ class NarratorAgent(Agent[str]):
                 f"\n\nCHAPTER: {chapter_title}" + f"\n\nPERFORMANCE LOG:\n{log}" + retry_feedback
             ),
             profile="prose",
+        )
+
+    def report(self, *, request: StoryRequest, lines: list[dict]) -> ReportedLines:
+        """Retell the lines a chapter does not turn on in indirect style, one sentence each."""
+        return self.provider.generate_structured(
+            system_instruction=(
+                "You prepare a performance log for a narrator. For every line of speech you "
+                f"receive, write one short sentence in {request.language}, in the past tense and "
+                "in indirect style, that says what the speaker said or wanted: who, to whom and "
+                "the gist, as a narrator would summarize it. Use your own words: never quote the "
+                "line, never copy a phrase of it, never add anything it does not say. Keep "
+                "questions as questions asked, refusals as refusals, threats as threats. Return "
+                "one entry per line, with its id exactly as given, and rank in memorable the "
+                "lines worth hearing in the speaker's own words."
+            ),
+            prompt=json_text({"lines": [reporter_view(line) for line in lines]}),
+            schema=ReportedLines,
+            profile="extraction",
         )
 
     def review(

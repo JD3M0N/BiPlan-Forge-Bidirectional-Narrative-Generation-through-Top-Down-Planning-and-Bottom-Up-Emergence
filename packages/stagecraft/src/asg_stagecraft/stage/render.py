@@ -351,19 +351,28 @@ def scene_log(
     thoughts: bool,
     key_ids: frozenset[str] | set[str] = frozenset(),
     short_names: bool = False,
+    reported: dict[str, str] | None = None,
 ) -> str:
     """Render one scene's log for the narrator, with or without access to inner life.
 
     ``key_ids`` are the turns the director cited as evidence that a beat landed. They are marked
     so the narrator knows which moments the chapter turns on and can compress the rest: the
     first real run expanded the log instead of curating it, because every turn looked equal.
+
+    ``reported`` replaces every line of speech the chapter does not turn on with its retelling
+    in indirect style (7.16). The narrator copies what it reads: whole, it carried 15 of 15 lines
+    into 7.15.1; cut after the first sentence (7.15.2), it copied the stubs. A line with no
+    accepted retelling is left out. World events always count as key: the only one in the
+    7.15.2 finale never reached the prose. The editorial review and the metrics still read the
+    full turns.
     """
     calls = ShortNames(names) if short_names else None
     lines = []
     for turn in turns:
         # On its own line for every kind of turn: sharing a line with a world event, the mark
         # was copied into the prose as part of the sentence (7.10).
-        if turn.id in key_ids:
+        key = turn.id in key_ids or turn.kind == "world"
+        if key:
             lines.append("[clave]")
         if turn.kind == "world":
             lines.append(f"({turn.action})")
@@ -378,7 +387,10 @@ def scene_log(
             moved = item_line(move, names, concealed_from=len(move.witnesses) == 1)
             if moved:
                 lines.append(f"{speaker} {moved}")
-        if turn.speech:
+        if turn.speech and reported is not None and not key:
+            if reported.get(turn.id):
+                lines.append(reported[turn.id])
+        elif turn.speech:
             aside = ""
             if turn.visibility == "whisper":
                 addressed = ", ".join(names.get(item, item) for item in turn.addressed_to)

@@ -23,6 +23,11 @@ suelto sin matar el run, el casting se repara sobre su candidato, la revisión r
 capítulo en presente, y el actor lee su contexto con tildes. Resultados en SIM-21. 705 tests
 en verde.
 
+**7.16.0, 2026-10-17: la función acaba en escena y el narrador deja de transcribir.** Dos
+pares 7.15.2 / 7.16 de «Las islas del cielo» (`20261017-182746` / `182756` y `184650` /
+`184641`). El diálogo copiado bajó de 0,9 a 0,47 y el mejor final es de 7.16, pero la prosa
+resume de más (SIM-24) y la lectura por pares quedó 1 a 1. 742 tests en verde.
+
 **Estado medido el 2026-10-09 con `asg-stagecraft` 7.9.0 (pipeline 7.9).** Un solo generador,
 Stagecraft, con tres formatos: `narrative`, `script` y `simulated`. La función simulada puede
 llevar inventario de objetos, la guía narrativa tiene una estrategia experimental
@@ -338,12 +343,33 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   - El director empujó a Gaspar a vender «cuentas de vidrio» como si no fueran ya la moneda
     (`stage/chapter_2-scene-1/contexts.jsonl`).
   - No hay ningún nativo de reparto (mercader, caído, mensajero) que enseñe la isla.
-- **Qué hacer.**
-  - Que el casting rellene `initial_knowledge` de cada personaje nativo con las costumbres de
-    `world.json` que le tocan.
+- **Hecho en 7.16.** El prompt del casting pide las costumbres del lugar en el
+  `initial_knowledge` de quien es de allí. Sin medir: en `20261017-184641`, Hanu cita la Ley del
+  Suelo y Aleth el Archivo, pero nadie revisó escena a escena.
+- **Qué falta.**
+  - Medir el «Hecho cuando» en los dos runs 7.16 (`20261017-182756`, `184641`).
   - Que las escenas de exploración tengan quien las enseñe.
 - **Hecho cuando.** En un run de los navegantes, cada escena de exploración trae al menos un
   turno de un nativo que explica o usa una costumbre de `world.json`, sin contradecirla.
+
+### SIM-24 · El narrador de 7.16 resume de más
+
+*Área:* función simulada · *Cuota:* ~260 llamadas (un par 7.16 / 7.16.x del mismo prompt) ·
+*Depende de:* —
+
+- **Síntoma.**
+  - Con las réplicas no clave en estilo indirecto, `dialogue_survival` bajó de 0,89–0,92 a 0,47.
+    Pero la prosa encadena esas réplicas en párrafos que leen como un acta («ordenó…,
+    preguntando…, sugiriendo…»), en `20261017-182756` y `184641`.
+  - Vuelve a etiquetar con «—dijo X» casi todas las réplicas que conserva.
+  - En la lectura por pares (no a ciegas) quedó 1 a 1 frente a 7.15.2. Detalle en el
+    CHANGELOG de 7.16.0.
+- **Qué hacer.**
+  - Pedir al narrador que funda varias réplicas indirectas en una frase, o que las corte.
+  - Medir `TAGGED` también por debajo de 8 líneas.
+- **Hecho cuando.** En un par nuevo, `dialogue_survival` sigue por debajo de 0,6, ningún
+  párrafo encadena más de dos réplicas indirectas y menos de la mitad de las réplicas llevan
+  verbo de habla.
 
 ### OPS-3 · El audio da 403 en las dos máquinas
 

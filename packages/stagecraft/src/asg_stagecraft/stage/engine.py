@@ -90,6 +90,15 @@ STALL_EVENT_REQUIRED = (
     "consistent with what is established, that leaves the missing outcome as the characters' "
     "most pressing choice. Never perform that choice for them."
 )
+# Added when the play's last beat stalls (7.16). Every closing beat of 7.15 and 7.15.2 ended
+# forced, with the ship still docked and the last line a question: pressure alone left the
+# ending off stage. Here the world may carry out a choice already made, never make it.
+CLOSING_STALL = (
+    "\n\nLAST BEAT OF THE PLAY: the story ends here, on stage. If the characters have already "
+    "chosen in the transcript, the stage_event may carry out the visible consequence of that "
+    "choice, so the ending happens in front of the reader. If nobody has chosen yet, give the "
+    "pressure that forces the choice now. Never choose for them."
+)
 # How many of each actor's recent tactics the director sees when it has to spot a deadlock.
 TACTIC_WINDOW = 3
 # Tactics that dig in rather than move. The deterministic fallback for naming who must change
@@ -103,10 +112,12 @@ CODA_NOTE = (
     "movimiento."
 )
 # Used only when the director was asked to name who must change and did not.
+# 7.16: until then the string had no {part}, so the actor never learned what was missing.
 FALLBACK_TURN_NOTE = (
-    "Tu táctica no produce cambios. Prueba otra acción desde lo que sabes y quieres; "
-    "asume su coste y deja que los demás respondan."
+    "Tu táctica no produce cambios, y aún no ha pasado esto: {part}. Prueba otra acción desde "
+    "lo que sabes y quieres; asume su coste y deja que los demás respondan."
 )
+OPEN_CODA_NOTE = "La cuestión sigue abierta. Actúa según lo que sabes y quieres ahora."
 
 # How much of a gate's fact a director's clause must carry to count as that gate. The director
 # restates required gates in its own words, and 7.5 to 7.8 compared them as exact strings: six
@@ -402,7 +413,9 @@ class PerformanceEngine:
                 self.on_turn(event_turn, "")
         first = verdict.turning_actor_id if verdict.turning_actor_id in run.on_stage else ""
         notes = list(verdict.notes)
-        for position in range(self.reaction_turns):
+        # The play's last beat gets one more answer, so the ending is played and not only told.
+        reactions = self.reaction_turns + int(_closing_beat(run.brief, beat))
+        for position in range(reactions):
             moved = self._advance(run, index, beat, first if position == 0 else "", notes)
             notes = self._consume(notes, moved)
             record.reaction_turns += 1
@@ -453,11 +466,7 @@ class PerformanceEngine:
             and self._scene_beats[-1].event_id == run.brief.beats[-1].event_id
             and self._scene_beats[-1].achieved
         )
-        note = (
-            CODA_NOTE
-            if settled
-            else "La cuesti?n sigue abierta. Act?a seg?n lo que sabes y quieres ahora."
-        )
+        note = CODA_NOTE if settled else OPEN_CODA_NOTE
         notes = [f"{actor}: {note}" for actor in chosen]
         played = 0
         for actor in chosen:
@@ -668,6 +677,7 @@ class PerformanceEngine:
                     previous_actions=previous_actions,
                     language=self.language,
                     scene_speech=scene_speech if attempt == 1 else None,
+                    play_actions=previous_actions if attempt == 1 else None,
                 )
                 validate_state_evidence(candidate)
                 moves = self._arbitrate(candidate, actor_id, scene, on_stage)
@@ -886,6 +896,8 @@ class PerformanceEngine:
         self, run: _SceneRun, index: int, beat: BeatBrief, mode: str, extra: str = ""
     ) -> _Verdict:
         """Ask the director to read the beat, and derive the verdict from its clauses."""
+        if mode == "stall" and _closing_beat(run.brief, beat):
+            extra += CLOSING_STALL
         context = self._director_context(run, beat) + extra
         decision_id = f"{run.brief.scene_id}:director:{mode}:{len(run.turns)}"
         if self.on_decision:
@@ -1523,3 +1535,8 @@ def _grounded_reflection(reflection, witnessed, character_id):
             "relationships": [],
         }
     )
+
+
+def _closing_beat(brief: SceneBrief, beat: BeatBrief) -> bool:
+    """Say whether this beat is the last one of the scene that closes the play."""
+    return brief.closes_play and bool(brief.beats) and brief.beats[-1].event_id == beat.event_id

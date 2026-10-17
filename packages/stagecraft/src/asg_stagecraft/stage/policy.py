@@ -33,6 +33,9 @@ def next_actor(
     candidates = [item for item in on_stage if item != last] or list(on_stage)
     if requested in set(candidates):
         return requested
+    outsider = _duet_outsider(moved, candidates)
+    if outsider:
+        return outsider
     answered = _addressed_and_silent(moved, candidates)
     if answered:
         return answered
@@ -47,6 +50,25 @@ def should_check(turns_in_beat: int, *, check_every: int = CHECK_EVERY) -> bool:
 def must_force(turns_in_beat: int, *, turns_per_beat: int) -> bool:
     """Say whether the beat has used its whole budget and must be closed."""
     return turns_in_beat >= turns_per_beat
+
+
+# How many actor turns in a row two characters may trade before a third on stage cuts in. In
+# 7.15.2 the cast present but never acting filled 12 character-scene slots, Aleth the guide
+# spoke 3 times in the whole play, and the finale was ten turns of one pair: whoever is spoken
+# to answers, so two characters who address each other never let anyone in.
+DUET_WINDOW = 4
+
+
+def _duet_outsider(turns: list[StageTurn], candidates: list[str]) -> str:
+    """Name the longest-silent character outside a pair that holds the floor, if there is one."""
+    recent = turns[-DUET_WINDOW:]
+    pair = {turn.actor_id for turn in recent}
+    if len(recent) < DUET_WINDOW or len(pair) > 2:
+        return ""
+    outside = [item for item in candidates if item not in pair]
+    if not outside:
+        return ""
+    return min(outside, key=lambda item: (_last_spoke(turns, item), candidates.index(item)))
 
 
 def _addressed_and_silent(turns: list[StageTurn], candidates: list[str]) -> str:

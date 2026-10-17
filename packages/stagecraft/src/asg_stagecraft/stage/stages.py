@@ -50,10 +50,13 @@ from .memory import RECENCY_DECAY, RETRIEVED_RECORDS
 from .metrics import simulation_metrics
 from .narration import (
     ChapterView,
+    accept_reports,
     chapter_views,
     choose_narrator,
+    lines_to_report,
     narrated_chapter_ids,
     scene_presence,
+    whole_lines_wanted,
 )
 from .policy import CHECK_EVERY
 from .promise_audit import broken_promise_audit, materialize_promise_audit
@@ -891,7 +894,17 @@ class SimulationStagesMixin:
             key_ids = {
                 item for scene in view.scenes for beat in scene.beats for item in beat.evidence
             }
-            log = scene_log(view.visible, names, thoughts=True, key_ids=key_ids, short_names=True)
+            reported = self._report_lines(agent, request, view.visible, key_ids, names, index)
+            if reported is not None:
+                key_ids |= {item for item in reported if not reported[item]}
+            log = scene_log(
+                view.visible,
+                names,
+                thoughts=True,
+                key_ids=key_ids,
+                short_names=True,
+                reported=reported,
+            )
             visible_ids = {turn.id for turn in view.visible}
             facts = [
                 fact
@@ -933,6 +946,34 @@ class SimulationStagesMixin:
         story = assemble_story(narrated, self._presentation_from(play, plan), bodies)
         self.repository.complete_stage("narration")
         return story, narration, fallbacks, narrated
+
+    def _report_lines(self, agent, request, visible, key_ids, names, index):
+        """Retell a chapter's non-key lines in indirect style, or None to pass them whole."""
+        assert self.repository is not None
+        lines = lines_to_report(visible, key_ids, names)
+        if not lines:
+            return {}
+        try:
+            drafted = self._call_agent(
+                "narrator_report", lambda: agent.report(request=request, lines=lines)
+            )
+        except NON_DEGRADABLE_ERRORS:
+            raise
+        except Exception as exc:
+            # Whole lines are what 7.15.1 narrated from: worse, but never a lost chapter.
+            warning = (
+                f"[REPORT_FALLBACK] Capítulo {index}: no se pudieron resumir las réplicas "
+                f"({type(exc).__name__}); el narrador las recibe enteras."
+            )
+            self.repository.add_warning(warning)
+            self._emit("report_fallback", warning, stage="narration")
+            return None
+        accepted = accept_reports(lines, drafted, keep=whole_lines_wanted(visible, key_ids))
+        self.repository.save_data(
+            f"narration/chapter-{index:03d}-reported.json", accepted.as_record()
+        )
+        # A kept line maps to no retelling: the caller reads it as key and passes it whole.
+        return {**accepted.reports, **dict.fromkeys(accepted.kept, "")}
 
     def _skip_unseen_chapter(self, index: int, narrator: str, names: dict[str, str]) -> None:
         """Report a chapter left out because this point of view saw nothing of it."""

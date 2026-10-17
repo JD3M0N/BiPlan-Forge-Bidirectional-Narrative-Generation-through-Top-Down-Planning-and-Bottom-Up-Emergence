@@ -167,7 +167,7 @@ def upstream_calls(provider):
     structured = [
         (name, system, prompt)
         for name, system, prompt in provider.structured_calls
-        if name not in {"NarrationReview", "PromiseStoryAuditDraft"}
+        if name not in {"NarrationReview", "PromiseStoryAuditDraft", "ReportedLines"}
     ]
     text = [
         (system, prompt)
@@ -289,7 +289,8 @@ def test_a_beat_the_world_resolves_is_counted_as_reached_with_help(tmp_path) -> 
     metrics = read_json(run, "simulation_metrics.json")
     assert metrics["beats_intervened"] >= 1
     assert metrics["beats_forced"] == 0
-    assert metrics["reaction_turns"] == 2 * metrics["beats_intervened"]
+    # Two answers to the world, and one more in the play's last beat (7.16).
+    assert metrics["reaction_turns"] == 2 * metrics["beats_intervened"] + 1
     assert metrics["stage_events"] >= metrics["beats_intervened"]
     assert "final" in provider.check_modes
 

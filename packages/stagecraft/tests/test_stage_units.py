@@ -22,6 +22,12 @@ from asg_stagecraft.stage.fallback import narrate
 from asg_stagecraft.stage.inventory import StageInventory
 from asg_stagecraft.stage.memory import RECENT_REFLECTIONS, RETRIEVED_RECORDS, CharacterMemory
 from asg_stagecraft.stage.metrics import simulation_metrics
+from asg_stagecraft.stage.narration import (
+    accept_reports,
+    lines_to_report,
+    reporter_view,
+    whole_lines_wanted,
+)
 from asg_stagecraft.stage.perception import visible_text, witnesses
 from asg_stagecraft.stage.props import fallback_props, materialize_props
 from asg_stagecraft.stage.render import actor_turn_context, scene_log
@@ -42,6 +48,8 @@ from asg_stagecraft.stage.schemas import (
     Prop,
     PropDraft,
     PropListDraft,
+    ReportedLine,
+    ReportedLines,
     SceneBrief,
     SceneCastBrief,
     ScenePerformance,
@@ -369,6 +377,11 @@ def test_a_turn_outside_the_fiction_language_is_rejected(fields, rejected) -> No
 def test_copied_log_marks_are_stripped_and_internal_ids_still_block() -> None:
     marked = "[clave] Un golpe sacude el barco.\n[Ana piensa: Miente]"
     assert strip_markers(marked) == "Un golpe sacude el barco.\nMiente"
+    # 7.16: a key world event copied as a paragraph keeps its words, never its parentheses.
+    copied = "Ilse esperó.\n\n(Un estruendo sacudió los acantilados.)\n\n—Ya (por fin) llega."
+    assert strip_markers(copied) == (
+        "Ilse esperó.\n\nUn estruendo sacudió los acantilados.\n\n—Ya (por fin) llega."
+    )
     assert not editorial_verdict(NarrationReview(), "Ocurrio en chapter_2.", []).accepted
     # A reviewer quoting Spanish dialogue with other quote marks still quotes the candidate.
     review = NarrationReview(
@@ -430,6 +443,17 @@ def test_a_new_gesture_is_accepted() -> None:
         previous_speech=[],
         previous_actions=["se ajusta las gafas con el índice"],
     )
+
+
+def test_a_tic_from_scenes_ago_costs_a_first_attempt_only() -> None:
+    """Ilse, 7.15.2: the pommel of her short sword, three times across the play."""
+    tic = "Ilse ajusta con fuerza el puño sobre el pomo de su espada corta y señala la borda."
+    played = ["sube a cubierta", "mira el mapa", "cierra la escotilla", tic]
+    again = act(action="Aprieta el pomo de su espada corta mirando a Hanu.", speech="Basta.")
+    with pytest.raises(TurnIssue) as error:
+        validate_turn(again, previous_speech=[], play_actions=played)
+    assert error.value.code == "REPEATED_ACTION"
+    validate_turn(again, previous_speech=[], previous_actions=played)
 
 
 def test_a_speech_is_not_a_turn() -> None:
@@ -528,6 +552,12 @@ def test_a_lone_character_may_continue_alone() -> None:
 def test_whoever_was_addressed_answers_next() -> None:
     history = [turn("ana", speech="Y tu?", addressed=["cora"], visibility="public")]
     assert policy.next_actor(on_stage=["ana", "bruno", "cora"], turns=history) == "cora"
+    # 7.16: after four turns of one pair, the silent one cuts in even over an address.
+    duet = [
+        turn(speaker, speech="Otra vez.", addressed=[other], number=n)
+        for n, (speaker, other) in enumerate([("ana", "bruno"), ("bruno", "ana")] * 2, 1)
+    ]
+    assert policy.next_actor(on_stage=["ana", "bruno", "cora"], turns=duet) == "cora"
 
 
 def test_a_world_event_does_not_count_as_anyone_having_moved() -> None:
@@ -1023,6 +1053,52 @@ def test_the_narrator_log_marks_the_turns_the_beat_turned_on() -> None:
     again = [*turns, turn("ana", speech="Tres.", number=3)]
     short = scene_log(again, FULL_NAMES, thoughts=True, short_names=True).splitlines()
     assert short == ["Ana Robles: Una.", "Lord Bruno Vane: Dos.", "Ana: Tres."]
+    # 7.16: the key line arrives whole, the others only as their retelling, a line with no
+    # accepted retelling not at all, and a world event always counts as key.
+    jolt = turn("cora", action="El suelo tiembla.", number=4).model_copy(update={"kind": "world"})
+    reported = scene_log(
+        [*again, jolt],
+        NAMES,
+        thoughts=False,
+        key_ids={"chapter-1-scene-1-t002"},
+        reported={"chapter-1-scene-1-t001": "Ana dio un numero."},
+    )
+    assert reported.splitlines() == [
+        "Ana dio un numero.",
+        "[clave]",
+        "Bruno: Dos.",
+        "[clave]",
+        "(El suelo tiembla.)",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("report", "accepted"),
+    [
+        ("Ana se nego a soltar el lastre.", True),
+        # Four words of the line in a row is a copy, whatever surrounds them.
+        ("Ana dijo que no pienso soltar nada.", False),
+    ],
+)
+def test_a_retelling_that_copies_its_line_is_turned_away(report: str, accepted: bool) -> None:
+    line = turn("ana", speech="No pienso soltar nada, Gaspar.", addressed=["bruno"])
+    key = turn("bruno", speech="Suelta el lastre.", number=2)
+    lines = lines_to_report([line, key], {key.id}, NAMES)
+    # The reporter reads short line ids, never turn ids: it renumbered those (7.16 probe).
+    assert [(item["id"], item["turn_id"]) for item in lines] == [("L1", line.id)]
+    assert "turn_id" not in reporter_view(lines[0])
+    drafted = ReportedLines(
+        lines=[ReportedLine(id="L1", report=report), ReportedLine(id="L9", report="Nada.")],
+        memorable=["L1"],
+    )
+    result = accept_reports(lines, drafted)
+    assert (line.id in result.reports) is accepted
+    assert "L9" in result.rejected
+    # A ranked line stays whole only up to what the code allows the chapter.
+    room = whole_lines_wanted([line, key], {key.id})
+    assert room == 1
+    assert accept_reports(lines, drafted, keep=room).kept == [line.id]
+    assert result.kept == []
 
 
 @pytest.mark.parametrize(
@@ -1465,6 +1541,12 @@ def test_a_chapter_that_transcribes_and_tags_every_line_gets_craft_notes() -> No
     assert codes == ["TRANSCRIBED", "TAGGED", "KEEP"]
     curated = "\n\n".join(f"—Palabras nuevas {n}." for n in range(8))
     assert craft_findings(curated, turns) == []
+    # 7.16: a world event the chapter leaves out is a note, however short the chapter.
+    jolt = turn("ana", action="Una sacudida violenta estremece la carabela.", number=9)
+    world = [*turns, jolt.model_copy(update={"kind": "world"})]
+    codes = [item.split(":")[0] for item in craft_findings("—Nada.", world)]
+    assert codes == ["DROPPED_EVENT", "KEEP"]
+    assert craft_findings("La carabela se estremeció con la sacudida.", world) == []
 
 
 @pytest.mark.parametrize(

@@ -34,6 +34,11 @@ _MIN_NAME_WORD = 3
 # A gesture is replayed when the new action contains this much of an earlier one. Containment,
 # not overlap: the real repeats kept the whole gesture and tacked a clause onto it.
 ACTION_CONTAINMENT = 0.8
+# A gesture is a tic when it shares this many words in a row with one the same actor made
+# anywhere earlier in the play (7.16). REPEATED_ACTION's window of three missed them: in 7.15.2
+# Ilse closed her fist on the pommel of her short sword three times, Gaspar struck the bulkhead
+# with his knuckles four. Across the 7.12-7.15 runs this flags about one gesture in ten.
+GESTURE_RUN = 3
 # A line restates a position when this much of its content words already came out of the same
 # speaker's mouth earlier in the scene (7.15). REPETITION_THRESHOLD only sees near-verbatim
 # lines; in the 7.14 navigators run Hanu made the same threat three times in other words.
@@ -183,11 +188,13 @@ def validate_turn(
     previous_actions: list[str] | None = None,
     language: str = "",
     scene_speech: list[str] | None = None,
+    play_actions: list[str] | None = None,
 ) -> None:
     """Accept one normalized turn, or raise a TurnIssue saying in English what to fix.
 
-    scene_speech is what this speaker already said in the scene; the engine passes it on a
-    first attempt only, so a restated position costs one retry and never a stalled turn.
+    scene_speech is what this speaker already said in the scene, and play_actions every gesture
+    they made in the play; the engine passes both on a first attempt only, so a restated
+    position or a tic costs one retry and never a stalled turn.
     """
     if turn.visibility == "whisper" and not turn.addressed_to:
         raise TurnIssue("INVALID_WHISPER", "a whisper needs one unambiguous addressee on stage")
@@ -263,10 +270,22 @@ def validate_turn(
             f"you already made this point in this scene ({restated!r}); do not argue it again: "
             "give ground, change tactic, ask something, or act",
         )
-    if _replays_gesture(turn.action, previous_actions or []):
+    _check_gesture(turn.action, previous_actions or [], play_actions or [])
+
+
+def _check_gesture(action: str, recent: list[str], played: list[str]) -> None:
+    """Reject a gesture the actor just made, or one that has become a tic over the play."""
+    if _replays_gesture(action, recent):
         raise TurnIssue(
             "REPEATED_ACTION",
             "you already made this gesture; do something new, or say something without it",
+        )
+    tic = _tic(action, played)
+    if tic:
+        raise TurnIssue(
+            "REPEATED_ACTION",
+            f"you have already done this ({tic!r}); repeated, a gesture becomes a tic: show it "
+            "another way, or act without it",
         )
 
 
@@ -292,6 +311,22 @@ def _replays_gesture(action: str, previous: list[str]) -> bool:
         for earlier in previous[-REPETITION_WINDOW:]
         if earlier
     )
+
+
+def _tic(action: str, earlier: list[str]) -> str:
+    """Return the run of words a new action repeats from any earlier gesture, or nothing."""
+    runs = set(_runs(tokens(action)))
+    for gesture in earlier:
+        for run in _runs(tokens(gesture)):
+            if run in runs:
+                return " ".join(run)
+    return ""
+
+
+def _runs(words: list[str]) -> list[tuple[str, ...]]:
+    """Every GESTURE_RUN words in a row of a tokenized action, in order."""
+    last = len(words) - GESTURE_RUN
+    return [tuple(words[index : index + GESTURE_RUN]) for index in range(last + 1)]
 
 
 def similarity(left: str, right: str) -> float:
