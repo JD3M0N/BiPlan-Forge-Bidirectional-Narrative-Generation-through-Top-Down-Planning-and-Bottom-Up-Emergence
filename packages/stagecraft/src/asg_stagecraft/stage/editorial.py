@@ -17,6 +17,11 @@ from .schemas import NarrationReview, StageTurn
 # Findings that make the chapter tell something that did not happen. The rest are craft notes:
 # they travel to the next attempt as corrections, but never cost the chapter its narrator.
 BLOCKING_CODES = frozenset({"INVENTED_EVENT", "CONTRADICTION"})
+# How much each blocking finding costs a leftover attempt when none was accepted (7.17). A tense
+# or a marker the code measured spoils the whole chapter; a reviewer's contradiction is often one
+# slip. In 20261017-184650 a tie on one finding each shipped the later attempt, told in the
+# present with 16 "dice", over one whose only finding was a single untranslated word.
+_SEVERITY = {"WRONG_TENSE": 3, "INTERNAL_MARKER": 3, "INVENTED_EVENT": 2, "CONTRADICTION": 1}
 
 _KEY_MARK = re.compile(r"\[clave\][ \t]*", re.I)
 _THOUGHT_LABEL = re.compile(r"\[[^]\n]+? piensa:\s*([^]\n]*)\]")
@@ -68,6 +73,11 @@ class EditorialVerdict:
             "discarded": self.discarded,
             "accepted": self.accepted,
         }
+
+
+def severity(blocking: list[str]) -> int:
+    """Weigh the blocking findings of one attempt, the measured ones above the reviewer's."""
+    return sum(_SEVERITY.get(line.split(":", 1)[0], 1) for line in blocking)
 
 
 def strip_markers(story: str) -> str:

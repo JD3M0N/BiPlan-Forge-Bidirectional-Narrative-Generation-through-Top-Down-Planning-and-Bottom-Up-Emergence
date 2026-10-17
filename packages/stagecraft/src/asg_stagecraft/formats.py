@@ -59,6 +59,19 @@ class SimulationMode(StrEnum):
     ADAPTIVE = "adaptive"
 
 
+class NarrationMethod(StrEnum):
+    """What a simulated chapter's narrator is handed (7.17).
+
+    ``reported`` is 7.16: the whole log, with the lines nobody turns on retold in indirect style.
+    ``selected`` first chooses the moments a chapter is told through, and the narrator writes
+    from that choice, the places and the cast, never from the whole log. Flash-Lite copies what
+    it receives, so the second controls what it can copy.
+    """
+
+    REPORTED = "reported"
+    SELECTED = "selected"
+
+
 @dataclass(frozen=True)
 class OutputChoice:
     """One combined output option, as shown on every interactive surface."""

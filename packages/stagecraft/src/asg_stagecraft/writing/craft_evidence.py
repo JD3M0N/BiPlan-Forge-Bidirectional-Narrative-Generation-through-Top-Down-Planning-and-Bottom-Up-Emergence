@@ -8,8 +8,10 @@ from ..schemas import (
     ChapterCraftEvidence,
     ChapterPlan,
     CharacterProfile,
+    CharactersArtifact,
     CraftEvidenceArtifact,
     RevisionNote,
+    WorldArtifact,
 )
 
 # Recalibrated on the 90 chapters of the 23 finished 6.6.0 runs, read from the per-chapter figures
@@ -42,7 +44,11 @@ SIMILE_CHAINS = "comparisons pile up, so the prose reads as ornament instead of 
 # What the critic is shown: whether a chapter plays as scene. Readability goes to the Writer as a
 # note of its own, so the critic's prompt did not change when it was added.
 SCENE_OBSERVATIONS = frozenset({NO_DIALOGUE, RARE_DIALOGUE, BLOCK_PARAGRAPHS})
-_TITLES = frozenset("lord lady sir don dona doctor doctora dr. dra. capitan capitana".split())
+# Titles, and since 7.17 the articles too: "Los Sobrinos" was counted as a character named "Los".
+_TITLES = frozenset(
+    "lord lady sir don dona doña doctor doctora dr. dra. capitan capitana capitán custodio "
+    "el la los las".split()
+)
 
 EVIDENCE_PREFACE = (
     "Observed deterministically in the draft below, not requested by the user. Every line names a "
@@ -81,6 +87,19 @@ def character_names(characters: list[CharacterProfile]) -> list[str]:
         if words:
             names.append(words[0])
     return names
+
+
+def known_names(characters: CharactersArtifact, world: WorldArtifact | None = None) -> set[str]:
+    """Every word of a name the story may use: the cast's, its places' and its objects' (7.17).
+
+    An edit that brings in a capitalized word outside this set and the paragraph it rewrites
+    has invented someone, and the line editor turns it down.
+    """
+    names = [character.name for character in characters.characters]
+    if world is not None:
+        names.extend(location.name for location in world.locations)
+        names.extend(item.name for item in world.objects)
+    return {word for name in names for word in name.split()}
 
 
 def craft_evidence(

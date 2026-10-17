@@ -11,6 +11,7 @@ from asg_stagecraft import version as version_module
 from asg_stagecraft.agents import AnalystAgent
 from asg_stagecraft.pipeline import StoryPipeline
 from asg_stagecraft.planning.graph import materialize_plan, validate_profile_structure
+from asg_stagecraft.planning.names import choose_names
 from asg_stagecraft.planning.profiles import profile_event_floor, promise_band
 from asg_stagecraft.planning.repair import repair_guidance
 from asg_stagecraft.runtime import storage as storage_module
@@ -22,10 +23,13 @@ from asg_stagecraft.schemas import (
     ChapterDraft,
     ChapterPresentation,
     CharacterProfile,
+    CharacterRelationship,
     CharactersArtifact,
+    ConstraintCheck,
     EventDependency,
     LLMUsageRecord,
     Location,
+    NameOption,
     NarrativeBlueprintDraft,
     PlanReview,
     PlotEvent,
@@ -36,6 +40,8 @@ from asg_stagecraft.schemas import (
     PromisePayoff,
     PromiseProgress,
     RevisionNote,
+    SceneCard,
+    SceneCardsDraft,
     SceneCastMember,
     ScriptFrame,
     ScriptLine,
@@ -52,6 +58,7 @@ from asg_stagecraft.schemas import (
 from asg_stagecraft.writing.acceptance import writer_candidate_issue
 from asg_stagecraft.writing.audit import parse_chapter_bodies
 from asg_stagecraft.writing.craft_evidence import NO_DIALOGUE, RARE_DIALOGUE
+from asg_stagecraft.writing.line_edit import LineEdits
 
 # A qualitative fragment of the Developed contract. PROFILE_GUIDANCE carries no event count
 # any more, so the tests that follow the profile contract downstream track this instead.
@@ -465,8 +472,12 @@ class FakeProvider:
         fail_script_writer_call: int | set[int] | None = None,
         fail_script_critic=False,
         fail_script_frame=False,
+        line_edits: list[LineEdits] | None = None,
+        scene_cards: list[SceneCardsDraft] | None = None,
     ) -> None:
         self.plans = list(plans or [valid_plan()])
+        self.line_edits = list(line_edits or ())
+        self.scene_cards = list(scene_cards or ())
         self.ledgers = list(ledgers) if ledgers is not None else None
         self.fail_promise_ledger = fail_promise_ledger
         self.promise_verdict = promise_verdict
@@ -534,11 +545,21 @@ class FakeProvider:
             StoryRequest: lambda: self.analyzed_request,
             SemanticSkeletonRanking: lambda: self._architecture_response(schema),
             NarrativeBlueprintDraft: lambda: self._architecture_response(schema),
+            LineEdits: lambda: self.line_edits.pop(0) if self.line_edits else LineEdits(),
+            SceneCardsDraft: lambda: self._scene_cards_response(prompt),
         }
         handler = handlers.get(schema)
         if handler is None:
             raise AssertionError(schema)
         return handler()
+
+    def _scene_cards_response(self, prompt: str) -> SceneCardsDraft:
+        """Hand out a queued set of cards, or draw one scene for every planned event."""
+        if self.scene_cards:
+            return self.scene_cards.pop(0)
+        listed = prompt.split("PLANNED EVENTS IN ORDER:\n", 1)[1].split("\n\nSCENE CARD REPAIR")[0]
+        events = json.loads(listed)
+        return SceneCardsDraft(cards=[scene_card(event["id"]) for event in events])
 
     def _plan_response(self):
         self.last_plan = self.plans.pop(0)
@@ -657,11 +678,30 @@ class FakeProvider:
                 return original
             if self.writer_outputs is not None:
                 return self.writer_outputs.pop(0)
-            return prose(f"revisado{self.writer_number}-")
+            # A sound rewrite keeps the draft's paragraphs (7.17 rejects one that merges them).
+            blocks = [block for block in original.split("\n\n") if block.strip()]
+            return "\n\n".join(
+                f"{block} revisado{self.writer_number}-{index}"
+                for index, block in enumerate(blocks)
+            )
         self.draft_number += 1
         if self.drafter_outputs is not None:
             return self.drafter_outputs.pop(0)
         return prose(f"borrador{self.draft_number}-")
+
+
+def scene_card(event_id: str) -> SceneCard:
+    """One complete scene card for an event, with a character every test world has."""
+    return SceneCard(
+        event_id=event_id,
+        character_ids=["ana"],
+        wants="Ana quiere abrir el archivo.",
+        obstacle="La llave no gira.",
+        turn="Ana fuerza la cerradura.",
+        detail="El papel huele a humedad.",
+        unsaid="Ana tiene miedo de lo que encontrará.",
+        closing="La puerta queda entreabierta.",
+    )
 
 
 def structured_prompt(provider, schema_name: str) -> str:
@@ -675,6 +715,112 @@ def structured_prompt_at(provider, schema_name: str, index: int) -> str:
 
 def structured_prompt_system(provider, schema_name: str) -> str:
     return next(system for name, system, _ in provider.structured_calls if name == schema_name)
+
+
+def test_a_name_is_the_least_typical_acceptable_candidate_and_renames_everywhere() -> None:
+    """7.17 (TD-7): a stock name never wins, an author's name is kept, a rename reaches all."""
+
+    def person(identifier, name, options, goal):
+        return (
+            make_characters()
+            .characters[0]
+            .model_copy(
+                update={
+                    "id": identifier,
+                    "name": name,
+                    "goal": goal,
+                    "name_options": [NameOption(name=n, typicality=t) for n, t in options],
+                }
+            )
+        )
+
+    cast = CharactersArtifact(
+        characters=[
+            person(
+                "elena_vance",
+                "Elena Vance",
+                [("Elena Vance", 0.9), ("Ilse Marvento", 0.2), ("Aris Thorne", 0.1)],
+                "Elena busca a Bruno.",
+            ),
+            person("bruno", "Bruno", [("Bruno", 0.8), ("Ilse Nadal", 0.1)], "Teme a Elena Vance."),
+            person("ana", "Ana", [("Ana", 0.9), ("Odra", 0.1)], "Ana calla."),
+        ],
+        relationships=[
+            CharacterRelationship(
+                source_character_id="bruno", target_character_id="elena_vance", description="Rival"
+            )
+        ],
+    )
+    chosen, choices = choose_names(cast, fixed=["Ana"])
+    assert [(item.id, item.name, item.goal) for item in chosen.characters] == [
+        ("ilse_marvento", "Ilse Marvento", "Ilse busca a Bruno."),
+        ("bruno", "Bruno", "Teme a Ilse Marvento."),
+        ("ana", "Ana", "Ana calla."),
+    ]
+    assert chosen.relationships[0].target_character_id == "ilse_marvento"
+    assert [item["chosen"] for item in choices] == ["Ilse Marvento", "Bruno"]
+    assert "name_options" not in chosen.model_dump_json()
+
+
+def test_scene_cards_reach_the_drafter_and_a_rejected_set_is_repaired(tmp_path) -> None:
+    """7.17: a card for an event the plan lacks is reinjected; the Drafter writes from cards."""
+    provider = FakeProvider(scene_cards=[SceneCardsDraft(cards=[scene_card("event-99")])])
+    run = StoryGenerator(provider, tmp_path, scene_cards=True, audio=False).generate(make_request())
+    plan = json.loads((run.run_dir / "story_plan.json").read_text(encoding="utf-8"))
+    cards = json.loads((run.run_dir / "scene_cards.json").read_text(encoding="utf-8"))["cards"]
+    assert [card["event_id"] for card in cards] == plan["topological_order"]
+    rejected = run.run_dir / "scene_cards" / "attempt-001.json"
+    assert "event-99" in json.loads(rejected.read_text(encoding="utf-8"))["issue"]
+    assert "SCENE CARD REPAIR" in structured_prompt_at(provider, "SceneCardsDraft", 1)
+    drafted = [prompt for system, prompt in provider.text_calls if "the Drafter" in system]
+    assert all("SCENE CARDS:" in prompt for prompt in drafted)
+    # The plan stops at the chapter being written: the ending no longer travels with it.
+    assert all('"ending"' not in prompt for prompt in drafted)
+    stages = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert stages["completed_stages"].index("scene_cards") < stages["completed_stages"].index(
+        "drafting"
+    )
+
+
+def test_an_anchored_approval_needs_a_quote_the_draft_contains(tmp_path) -> None:
+    """7.17 (TD-1): 18 of 18 constraints passed in 7.10, one of them against the text."""
+    review = StoryReview(
+        constraint_checks=[
+            ConstraintCheck(
+                constraint="Ana duda",
+                passed=True,
+                notes="borrador1-0 borrador1-1 borrador1-2 borrador1-3",
+            ),
+            ConstraintCheck(constraint="Ana casi pierde", passed=True, notes="Ana nearly loses"),
+        ]
+    )
+    provider = FakeProvider(story_review=review)
+    run = StoryGenerator(provider, tmp_path, anchored_critic=True, audio=False).generate(
+        make_request()
+    )
+    anchors = json.loads((run.run_dir / "review_anchors.json").read_text(encoding="utf-8"))
+    assert [item["found"] for item in anchors["constraints"]] == [True, False]
+    assert "ANCHORED REVIEW" in structured_prompt_system(provider, "StoryReview")
+    writer_prompts = [prompt for system, prompt in provider.text_calls if "final Writer" in system]
+    assert writer_prompts
+    assert all("Ana casi pierde" in prompt for prompt in writer_prompts)
+
+
+def test_a_new_draft_reuses_the_exact_plan_of_a_finished_run(tmp_path) -> None:
+    """7.17: two drafts from one plan differ only in how they were written."""
+    original = StoryGenerator(FakeProvider(), tmp_path / "a", audio=False).generate(make_request())
+    provider = FakeProvider()
+    replay = StoryGenerator(provider, tmp_path / "b", audio=False).generate_from_plan(
+        original.run_dir
+    )
+    frozen = ("request.json", "world.json", "characters.json", "story_plan.json")
+    for name in (*frozen, "promise_ledger.json"):
+        assert (replay.run_dir / name).read_bytes() == (original.run_dir / name).read_bytes()
+    planners = {"StoryRequest", "WorldArtifact", "CharactersArtifact", "StoryPlanDraft"}
+    assert planners.isdisjoint(name for name, _, _ in provider.structured_calls)
+    source = json.loads((replay.run_dir / "source_run.json").read_text(encoding="utf-8"))
+    assert source["reused"] == "plan"
+    assert replay.story_path.read_text(encoding="utf-8").startswith("# El precio")
 
 
 def test_complete_pipeline_saves_v60_artifacts_and_agent_order(tmp_path) -> None:
@@ -1217,8 +1363,19 @@ def test_writer_retries_unchanged_major_revision_and_saves_attempt(tmp_path) -> 
             major_story_review().notes,
             "UNCHANGED_SIGNIFICANT_NOTES",
         ),
+        # 7.17 (TD-3): what the code can tell is worse than the draft.
+        (prose("bloque-", 300), scene_prose(), [], "MERGED_PARAGRAPHS"),
+        (prose("largo-", 400), prose("original-", 300), [], "LENGTHENED_WITHOUT_CAUSE"),
+        (scene_prose().replace("—", ""), scene_prose(), [], "WORSE_CRAFT"),
     ],
-    ids=["empty-body", "markdown-headings", "unchanged-with-significant-notes"],
+    ids=[
+        "empty-body",
+        "markdown-headings",
+        "unchanged-with-significant-notes",
+        "merged",
+        "lengthened",
+        "worse-craft",
+    ],
 )
 def test_writer_candidate_diagnostics_are_structured(
     candidate, original, notes, expected_code
@@ -1230,12 +1387,14 @@ def test_writer_candidate_diagnostics_are_structured(
     assert diagnostic.retry_instruction
 
 
-def test_writer_accepts_different_lengths_without_budget_retries(tmp_path) -> None:
+def test_a_rewrite_may_shorten_but_grows_only_when_a_note_asks_for_staging(tmp_path) -> None:
+    """7.17 (TD-3): in 6.2, 66 of 69 revisions came back longer; growth now needs a cause."""
     provider = FakeProvider(
         story_review=major_story_review(),
         writer_outputs=[
             prose("corto-a-", 100),
             prose("largo-", 500),
+            prose("ajustado-", 300),
         ],
     )
     run = StoryGenerator(provider, tmp_path).generate(make_request())
@@ -1244,10 +1403,12 @@ def test_writer_accepts_different_lengths_without_budget_retries(tmp_path) -> No
         "revision",
         "revision",
     ]
-    assert [chapter["final_words"] for chapter in report["chapters"]] == [100, 500]
-    assert all(chapter["attempts"][0]["status"] == "accepted" for chapter in report["chapters"])
+    # The longer one is sent back once, and the retry keeps the draft's length.
+    assert [chapter["final_words"] for chapter in report["chapters"]] == [100, 300]
+    grown = report["chapters"][1]["attempts"][0]
+    assert grown["diagnostic"]["code"] == "LENGTHENED_WITHOUT_CAUSE"
     writer_calls = [item for item in provider.text_calls if "final Writer" in item[0]]
-    assert len(writer_calls) == 2
+    assert len(writer_calls) == 3
     metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
     assert not any("longitud" in warning.casefold() for warning in metadata["warnings"])
 

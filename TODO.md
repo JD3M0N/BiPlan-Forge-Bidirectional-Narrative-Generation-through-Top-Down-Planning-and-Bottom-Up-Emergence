@@ -28,6 +28,18 @@ pares 7.15.2 / 7.16 de «Las islas del cielo» (`20261017-182746` / `182756` y `
 `184641`). El diálogo copiado bajó de 0,9 a 0,47 y el mejor final es de 7.16, pero la prosa
 resume de más (SIM-24) y la lectura por pares quedó 1 a 1. 742 tests en verde.
 
+**7.17.0, 2026-10-17: lo que entra en cada agente y lo que decide el código.** Análisis de los
+runs 7.10–7.16 contrastado con la literatura:
+
+- Flash-Lite copia lo que recibe.
+- Su juicio de calidad no sirve.
+- El 35 % de los beats se fuerzan, la mitad por viajes que nadie puede representar.
+- Los runs 7.16 se lanzaron sin `brief.json` y en Esencial.
+
+Seis brazos apagados por defecto (estilo con ejemplos, editor por fragmentos, fichas de
+escena, crítico con cita, narración por selección y cláusulas por tipo), más arreglos siempre
+activos. La validación en real está en SIM-25, TD-10 y SIM-26. 781 tests en verde.
+
 **Estado medido el 2026-10-09 con `asg-stagecraft` 7.9.0 (pipeline 7.9).** Un solo generador,
 Stagecraft, con tres formatos: `narrative`, `script` y `simulated`. La función simulada puede
 llevar inventario de objetos, la guía narrativa tiene una estrategia experimental
@@ -235,12 +247,98 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   cita, tres criterios humanos por pares a ciegas y un juez aprendido de esos pares. Las seis
   métricas de 1 a 10 de `evaluation.json` eran un instrumento heredado y se retiraron en el
   cierre.
+- **Lo que se lanza es lo que se mide (2026-10-17).** Los runs de 7.16 no traían `brief.json`, se
+  hicieron en Esencial para un brief que pedía una historia extensa y eran anteriores al commit.
+  Desde 7.17:
+  - siempre `--brief` cuando la obra tiene ficha;
+  - un perfil acorde con lo que pide el brief;
+  - código ya confirmado en git;
+  - dos runs por brazo como mínimo.
+- **Comparar sobre la misma entrada.** Un cambio de narrador se compara con `--narrate-from`
+  sobre la misma función, y uno de escritura Top-Down con `--plan-from` sobre el mismo plan. Así
+  el ruido de la función y del plan queda fuera de la comparación.
 - **Por escrito.** El resultado va con cifras y comandos en el doc del formato
   (`docs/resumen.md` o `docs/resumen.md`), no aquí.
 
 ---
 
 ## Lo siguiente
+
+### SIM-25 · Validar la narración por selección y el editor sobre el mismo log
+
+*Área:* función simulada · *Cuota:* ~140 llamadas (5 renarraciones × 2 brazos) ·
+*Depende de:* —
+
+- **Síntoma.**
+  - El narrador copia lo que recibe:
+    - con el log entero, `dialogue_survival` está entre 0,89 y 1,0;
+    - con el estilo indirecto de 7.16, salen 32 verbos de estilo indirecto en `20261017-184641`
+      y párrafos de acta.
+  - Hace 12 de 12 cambios de escena sin transición.
+  - No recibe el mundo, así que Zéfara casi no aparece.
+  - 7.17 añade `narration_method=selected`, `line_editor` y `style_examples`, probados solo con
+    dobles.
+- **Qué hacer.**
+  - Renarrar con `asg-generate --narrate-from` los cinco runs 7.15.2/7.16 del 17-oct dos veces:
+    - una con `--options` del run;
+    - otra con `--narration-method selected --line-editor --style-examples`.
+  - Leer los pares a ciegas en StageCraft, que ya muestra las cifras de legibilidad.
+  - Leer `narration/*-selection.json`, `line_edits/` y los avisos `[SELECTION_FALLBACK]` y
+    `[LINE_EDIT_UNAVAILABLE]`.
+- **Hecho cuando.**
+  - Las personas prefieren un brazo o no distinguen, y queda escrito en el CHANGELOG y en
+    `docs/resumen.md`.
+  - Si gana `selected`, el predeterminado cambia y se borra el camino de `report` y el segundo
+    intento de 7.15.
+- **Ojo.** Es la comparación más limpia que permite el proyecto: el mismo log, solo cambia la
+  narración. No mezclar con runs nuevos.
+
+### TD-10 · Validar fichas de escena, crítico con cita y editor en Top-Down
+
+*Área:* top-down · *Cuota:* ~110 llamadas (2 planes y 2 borradores por brazo con
+`--plan-from`) · *Depende de:* —
+
+- **Síntoma.**
+  - En 7.10, 3 de 4 historias salieron como su primer borrador, porque el crítico no dio notas.
+  - 114 de 114 réplicas acotadas.
+  - 12 de 14 capítulos abren con el aire.
+  - No hay capa de escena.
+  - 7.17 añade `scene_cards`, `anchored_critic`, `line_editor` y `style_examples`, más la
+    aceptación medida del Writer y los nombres por candidatos, probados solo con dobles.
+- **Qué hacer.**
+  - Generar un plan de la cubana (prompt libre) y uno de la regencia (`--brief`).
+  - Desde cada plan, dos borradores con `--plan-from <run> --format narrative`: uno sin brazos y
+    otro con los cuatro.
+  - Comparar a ciegas y con las cifras de legibilidad de StageCraft.
+  - Leer `scene_cards.json`, `review_anchors.json`, `line_edits/` y `name_choices.json`.
+- **Hecho cuando.**
+  - Hay una decisión escrita por brazo.
+  - Se cumplen los umbrales de TD-8 en el brazo ganador.
+- **Ojo.** Se puede hacer junto con TD-8, que pide los mismos dos prompts.
+
+### SIM-26 · Validar las cláusulas por tipo y el casting de 7.17 en una función completa
+
+*Área:* función simulada · *Cuota:* ~600 llamadas (2 runs por brazo, perfil Desarrollada) ·
+*Depende de:* SIM-25
+
+- **Síntoma.**
+  - Se forzaron 22 de 63 beats en 7.12–7.16: 11 eran desenlaces físicos o de viaje y 3
+    necesitaban a alguien ausente. El final se forzó en 6 de 10 runs.
+  - El casting le dio a Ilse, todavía en alta mar, el resultado del segundo evento.
+  - El 57 % de los turnos ordenan, exigen o amenazan.
+  - Las notas de giro dictaban: «cede ante la evidencia».
+  - 7.17 añade `typed_clauses`, y siempre activos la fuente del conocimiento inicial,
+    `cover_story`, `TACTIC_RUN` y las notas con cita.
+- **Qué hacer.** Dos runs de los navegantes con `--brief` (el `brief.json` de `20261015-174818`)
+  y `--profile developed`, con y sin `--typed-clauses`, y el narrador que gane SIM-25. Contar:
+  - beats forzados y finales en escena;
+  - `[CAST_FACT_DROPPED]` y `TACTIC_RUN` en `rejected.jsonl`;
+  - notas sustituidas por la de reserva en `director.jsonl`.
+- **Hecho cuando.**
+  - Bajan los beats forzados por desenlaces de viaje frente a 7.16.
+  - El descenso ocurre en escena.
+  - Hay una decisión escrita sobre `typed_clauses`.
+- **Ojo.** Con dos runs por brazo no se separa del ruido de la función: es indicio, no medida.
 
 ### TD-8 · Validar en real la prosa para un lector cualquiera
 
@@ -266,6 +364,9 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   título y el slug van en español, y los amigos la prefieren a ciegas frente a la de 7.10.
 - **Ojo.** 3.5 Flash-Lite ignora la temperatura (ver Ideas): el modelo de prosa es el único
   mando de estilo que no pasa por el prompt.
+- **Avance 7.17.** Las cifras de legibilidad ya están en la comparación de StageCraft
+  (`pairing.py`), recalculadas desde `story.md`. No están en la capa T, porque tocar `rasgos.csv`
+  cambia la huella del catálogo y el juez de 27 entradas: decidirlo antes del estudio.
 
 ### SIM-21 · Validar en real que la narración no cae al respaldo
 
@@ -367,6 +468,8 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
 - **Qué hacer.**
   - Pedir al narrador que funda varias réplicas indirectas en una frase, o que las corte.
   - Medir `TAGGED` también por debajo de 8 líneas.
+- **Respuesta en 7.17.** El brazo `narration_method=selected` (el narrador escribe desde momentos
+  elegidos, nunca desde el log), más el editor por fragmentos. Se mide en SIM-25.
 - **Hecho cuando.** En un par nuevo, `dialogue_survival` sigue por debajo de 0,6, ningún
   párrafo encadena más de dos réplicas indirectas y menos de la mitad de las réplicas llevan
   verbo de habla.
@@ -570,6 +673,9 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
     no juzgada, y una promesa no juzgada ya cuenta como `broken`.
   - Auditar las promesas contra el `story.md` final, con una relectura tras la revisión.
   - Con esas cifras, decidir si `plan_review` se endurece con criterios objetivos o se retira.
+- **Avance 7.17.** Con el brazo `anchored_critic`, el crítico cita el borrador y
+  `writing/anchoring.py` busca cada cita. Lo que no está en el texto cuenta como no juzgado
+  (`review_anchors.json`). Se mide en TD-10. Falta auditar contra `story.md` tras la revisión.
 - **Hecho cuando.**
   - Cada «aprobado» o «cumplida» de un run nuevo cita un fragmento que existe en su `story.md`.
   - Hay test del camino de la cita inexistente.
@@ -935,6 +1041,9 @@ versión definitiva del generador
   (13 de 20), y el médico, 5 de 6. El médico desvía cinco veces seguidas hacia «la estructura
   vieja» y la tormenta, con las seis réplicas empezando por «Señorita Vela,», y solo cede con la
   confesión: no tiene otra versión que contar.
+- **Avance 7.17.** El dossier trae `cover_story` y el actor entra en escena con ella. El actor
+  ve en español las tácticas que ha probado, y una tercera igual seguida se rechaza
+  (`TACTIC_RUN`). Se mide en SIM-26.
 - **Hecho cuando.** En un par de misterio (prompts 03 y 07):
   - hay al menos una mentira sostenida y después descubierta;
   - hay más tácticas distintas por actor que en 7.1, leídas con MED-7.
@@ -1078,6 +1187,9 @@ versión definitiva del generador
   - Rechazo blando: devolver el mejor candidato, nunca el borrador degradado.
   - El feedback nombra la observación y jamás una cifra; para eso existe
     `test_no_measurement_ever_reaches_the_prompt`.
+- **Avance 7.17.** `writer_candidate_issue` rechaza la fusión de párrafos, el alargamiento sin
+  nota que lo pida y la reescritura que empeora lo medido. Quedan el bucle compartido y entregar
+  el mejor candidato en lugar del borrador.
 - **Hecho cuando.**
   - Una reescritura que no mueve la observación se reintenta.
   - El capítulo entregado nunca es el borrador.
@@ -1169,6 +1281,9 @@ versión definitiva del generador
   - Después, probar una intervención que no rompa la reproducibilidad, porque un run no puede leer
     otros runs. Por ejemplo, que el agente de personajes derive los nombres de la cultura y la
     época del mundo, con una lista corta de nombres por defecto que evitar.
+- **Avance 7.17.** Nombres por candidatos: el diseñador propone tres con su tipicidad y
+  `planning/names.py` elige el menos típico fuera de una lista que el prompt no ve
+  (`name_choices.json`). Falta el informe.
 - **Hecho cuando.** El informe existe, y una matriz nueva baja la repetición de nombres respecto
   del corpus leída con el protocolo de ruido.
 

@@ -244,6 +244,28 @@ def simulation_metrics(
     )
 
 
+def renarrated_metrics(
+    source: SimulationMetrics, performance: PerformanceArtifact, story: str, fallbacks: int
+) -> SimulationMetrics:
+    """Carry a source's performance figures over to a new narration of it (7.17).
+
+    The performance did not change, so every figure of it stands; only the ones measured on the
+    prose are taken again, the same way simulation_metrics takes them.
+    """
+    turns = [turn for scene in performance.scenes for turn in scene.turns]
+    narrated_words = len(story.split())
+    return source.model_copy(
+        update={
+            "narration_source_fallbacks": fallbacks,
+            "narrated_words": narrated_words,
+            "compression_ratio": round(narrated_words / source.log_words, 4)
+            if source.log_words
+            else 0.0,
+            "dialogue_survival": round(_dialogue_survival(turns, story), 4),
+        }
+    )
+
+
 def _inventory_metrics(
     performance: PerformanceArtifact,
     scenes: list[ScenePerformance],

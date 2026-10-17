@@ -7,7 +7,14 @@ from pathlib import Path
 from asg_core import find_project_root
 from dotenv import load_dotenv
 
-from ..formats import ActorMemory, NarrativeVoice, ScriptMethod, SimulationMode, StoryFormat
+from ..formats import (
+    ActorMemory,
+    NarrationMethod,
+    NarrativeVoice,
+    ScriptMethod,
+    SimulationMode,
+    StoryFormat,
+)
 from .budget import QuotaSlot
 from .errors import ConfigurationError
 
@@ -58,6 +65,13 @@ class Settings:
     simulation_mode: SimulationMode = SimulationMode.FIXED
     inventory: bool = False
     turns_per_beat: int = 8
+    # The 7.17 arms, each off by default: its own control until a blind reading decides.
+    style_examples: bool = False
+    line_editor: bool = False
+    scene_cards: bool = False
+    anchored_critic: bool = False
+    narration_method: NarrationMethod = NarrationMethod.REPORTED
+    typed_clauses: bool = False
     # The performance may run on its own model, key and RPM: Gemini counts the free daily quota
     # per project and per model, and the actors spend most of a simulated run's calls. Empty (or
     # 0) means the same as the main model, key and RPM, so an unset .env behaves as before 7.4.
@@ -268,6 +282,12 @@ def load_settings(start: Path | None = None, *, require_api_key: bool = True) ->
         simulation_mode=_choice("ASG_SIMULATION_MODE", SimulationMode, SimulationMode.FIXED),
         inventory=_flag("ASG_INVENTORY", default=False),
         turns_per_beat=_integer("ASG_STAGE_TURNS_PER_BEAT", 8, minimum=2),
+        style_examples=_flag("ASG_STYLE_EXAMPLES", default=False),
+        line_editor=_flag("ASG_LINE_EDITOR", default=False),
+        scene_cards=_flag("ASG_SCENE_CARDS", default=False),
+        anchored_critic=_flag("ASG_ANCHORED_CRITIC", default=False),
+        narration_method=_choice("ASG_NARRATION_METHOD", NarrationMethod, NarrationMethod.REPORTED),
+        typed_clauses=_flag("ASG_TYPED_CLAUSES", default=False),
         stage_model=os.getenv("GEMINI_STAGE_MODEL", "").strip(),
         stage_api_key=os.getenv("GEMINI_STAGE_API_KEY", "").strip(),
         stage_rpm_limit=_integer("GEMINI_STAGE_RPM_LIMIT", 0),

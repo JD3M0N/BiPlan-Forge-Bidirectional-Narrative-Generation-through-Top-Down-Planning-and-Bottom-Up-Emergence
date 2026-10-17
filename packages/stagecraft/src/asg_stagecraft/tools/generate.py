@@ -9,7 +9,14 @@ from asg_core import NARRATION_VOICE_NAMES, use_utf8_output
 from pydantic import ValidationError
 
 from ..brief import StoryBrief
-from ..formats import ActorMemory, NarrativeVoice, ScriptMethod, SimulationMode, StoryFormat
+from ..formats import (
+    ActorMemory,
+    NarrationMethod,
+    NarrativeVoice,
+    ScriptMethod,
+    SimulationMode,
+    StoryFormat,
+)
 from ..generator import StoryGenerator
 from ..options import GenerationOptions
 from ..planning.catalog_types import GuidanceStrategy
@@ -122,6 +129,25 @@ def parser() -> argparse.ArgumentParser:
         help="Con --format simulated: el registro que se pide al narrador, en texto libre",
     )
     result.add_argument(
+        "--narration-method",
+        type=NarrationMethod,
+        choices=list(NarrationMethod),
+        help=(
+            "Con --format simulated: reported (7.16) o selected, que elige los momentos antes "
+            "de narrar"
+        ),
+    )
+    for flag, help_text in (
+        ("--style-examples", "añade al contrato de estilo dos párrafos de muestra"),
+        ("--line-editor", "reescribe solo los párrafos que el código marca"),
+        ("--scene-cards", "con --format narrative: fichas de escena antes del borrador"),
+        ("--anchored-critic", "con --format narrative: el crítico cita lo que juzga"),
+        ("--typed-clauses", "con --format simulated: el mundo puede ejecutar viajes y llegadas"),
+    ):
+        result.add_argument(
+            flag, action=argparse.BooleanOptionalAction, default=None, help=help_text
+        )
+    result.add_argument(
         "--turns-per-beat",
         type=int,
         help=(
@@ -140,7 +166,18 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument(
         "--plan-from",
         type=Path,
-        help="Con --format simulated: reutiliza request, plan, guion y casting de un run completo",
+        help=(
+            "Reutiliza el plan de un run completo: con --format simulated también el guion y el "
+            "casting, y vuelve a representar; con --format narrative escribe otro borrador"
+        ),
+    )
+    result.add_argument(
+        "--narrate-from",
+        type=Path,
+        help=(
+            "Vuelve a narrar la función de un run simulado completo sin representarla: unas 12 "
+            "llamadas, para comparar dos narraciones del mismo log"
+        ),
     )
     result.add_argument(
         "--force",
@@ -195,7 +232,7 @@ def build_options(args: argparse.Namespace, settings) -> GenerationOptions:
         "narrative_guidance": args.narrative_guidance,
         "audio": False if args.no_audio else None,
         "audio_voice": args.audio_voice,
-        "story_format": args.story_format or (StoryFormat.SIMULATED if args.plan_from else None),
+        "story_format": args.story_format or (StoryFormat.SIMULATED if _reuses(args) else None),
         "script_method": args.script_method,
         "narrative_voice": args.narrative_voice,
         "narrator": args.narrator,
@@ -204,13 +241,24 @@ def build_options(args: argparse.Namespace, settings) -> GenerationOptions:
         "simulation_mode": args.simulation_mode,
         "inventory": args.inventory,
         "turns_per_beat": args.turns_per_beat,
+        "narration_method": args.narration_method,
+        "style_examples": args.style_examples,
+        "line_editor": args.line_editor,
+        "scene_cards": args.scene_cards,
+        "anchored_critic": args.anchored_critic,
+        "typed_clauses": args.typed_clauses,
     }
     return base.with_changes(**{name: value for name, value in flags.items() if value is not None})
 
 
+def _reuses(args: argparse.Namespace) -> bool:
+    """Say whether the flags reuse a finished run instead of asking for a new story."""
+    return bool(args.plan_from or args.narrate_from)
+
+
 def read_request(args: argparse.Namespace) -> StoryBrief | str:
     """Return the brief the flags point at, or the prompt given or typed in."""
-    if args.plan_from:
+    if _reuses(args):
         return ""
     if args.brief:
         return StoryBrief.model_validate_json(args.brief.read_text(encoding="utf-8"))
@@ -227,9 +275,13 @@ def request_problem(
     args: argparse.Namespace, options: GenerationOptions, prompt: StoryBrief | str
 ) -> str | None:
     """Say why a run cannot start from these flags and this request, or None when it can."""
-    if args.plan_from and options.story_format is not StoryFormat.SIMULATED:
-        return "--plan-from exige --format simulated."
-    if not prompt and not args.plan_from:
+    if args.plan_from and args.narrate_from:
+        return "usa --plan-from o --narrate-from, no los dos."
+    if args.plan_from and options.story_format is StoryFormat.SCRIPT:
+        return "--plan-from exige --format simulated o narrative."
+    if args.narrate_from and options.story_format is not StoryFormat.SIMULATED:
+        return "--narrate-from exige --format simulated."
+    if not prompt and not _reuses(args):
         return "el prompt no puede estar vacío."
     return None
 
@@ -237,9 +289,28 @@ def request_problem(
 def print_banner(args: argparse.Namespace) -> None:
     """Greet, and show the example prompt only when one is about to be typed in."""
     print("Generador automático de historias — Stagecraft")
-    if not (args.prompt or args.brief or args.plan_from):
+    if not (args.prompt or args.brief or _reuses(args)):
         print("\nEjemplo de prompt ideal:\n")
         print(f"  {EXAMPLE_PROMPT}\n")
+
+
+def run(generator: StoryGenerator, args: argparse.Namespace, prompt: StoryBrief | str):
+    """Generate the story the flags ask for: a new one, or a replay of a finished run."""
+
+    def report_progress(update) -> None:
+        """Print one formatted pipeline progress update."""
+        print(format_progress(update), flush=True)
+
+    def report_event(event) -> None:
+        """Print one structured pipeline event message."""
+        print(event.message, flush=True)
+
+    callbacks = {"on_progress": report_progress, "on_event": report_event}
+    if args.narrate_from:
+        return generator.generate_from_performance(args.narrate_from, **callbacks)
+    if args.plan_from:
+        return generator.generate_from_plan(args.plan_from, **callbacks)
+    return generator.generate(prompt, **callbacks)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -247,7 +318,7 @@ def main(argv: list[str] | None = None) -> int:
     use_utf8_output()
     args = parser().parse_args(argv)
     print_banner(args)
-    if (args.brief and args.prompt) or (args.plan_from and (args.prompt or args.brief)):
+    if (args.brief and args.prompt) or (_reuses(args) and (args.prompt or args.brief)):
         print("Error: usa un prompt o --brief, no los dos.", file=sys.stderr)
         return 2
     try:
@@ -263,35 +334,18 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Error: {problem}", file=sys.stderr)
             return 2
         settings = apply_setting_flags(args, settings)
-        refusal = None if args.force else preflight(settings, options.story_format.value)
+        # A narration replay costs about what a narrative run does, not a whole performance.
+        budgeted = "narrative" if args.narrate_from else options.story_format.value
+        refusal = None if args.force else preflight(settings, budgeted)
         if refusal:
             print(f"Error: no cabe en la cuota de hoy: {refusal}", file=sys.stderr)
             return 3
         provider = provider_from_settings(settings)
         generator = StoryGenerator.from_options(provider, settings.output_root, options)
 
-        def report_progress(update) -> None:
-            """Print one formatted pipeline progress update."""
-            print(format_progress(update), flush=True)
-
-        def report_event(event) -> None:
-            """Print one structured pipeline event message."""
-            print(event.message, flush=True)
-
         simulated = options.story_format is StoryFormat.SIMULATED
         print(f"\nGenerando con {settings.model_summary(simulated=simulated)}...")
-        if args.plan_from:
-            output = generator.generate_from_plan(
-                args.plan_from,
-                on_progress=report_progress,
-                on_event=report_event,
-            )
-        else:
-            output = generator.generate(
-                prompt,
-                on_progress=report_progress,
-                on_event=report_event,
-            )
+        output = run(generator, args, prompt)
         if output.story_format is StoryFormat.SCRIPT:
             print(f"\nGuion terminado: {output.story_path}")
             print(f"Guion estructurado: {output.script_path}")

@@ -20,6 +20,7 @@ from asg_stagecraft.stage.schemas import (
     BeatCheckDraft,
     BeatDirection,
     CastBibleDraft,
+    ChapterSelection,
     EvidenceSource,
     FutureConflict,
     FutureRevision,
@@ -36,6 +37,7 @@ from asg_stagecraft.stage.schemas import (
     ReportedLine,
     ReportedLines,
     RevisedScene,
+    SelectedMoment,
     WorldEventAssessment,
 )
 from test_generator_v5 import FakeProvider
@@ -112,6 +114,7 @@ class StageFakeProvider(FakeProvider):
         beat_needs_world=False,
         narration_reviews: list | None = None,
         narrator_outputs: list[str] | None = None,
+        selections: list | None = None,
         **kwargs,
     ) -> None:
         """Configure the stage responses and the failures a test wants to force."""
@@ -132,6 +135,9 @@ class StageFakeProvider(FakeProvider):
         self.narration_reviews = list(narration_reviews or ())
         # Chapters the narrator returns in order before falling back to the default one.
         self.narrator_outputs = list(narrator_outputs or ())
+        # Chapter selections handed out in order (a ChapterSelection, or an exception to raise);
+        # once spent, every chapter plays its key lines and passes the rest in one sentence.
+        self.selections = list(selections or ())
         self.check_modes: list[str] = []
         self.casting_number = 0
         self.props_number = 0
@@ -147,6 +153,7 @@ class StageFakeProvider(FakeProvider):
         narration = {
             NarrationReview: self._narration_review,
             ReportedLines: lambda: self._reported(system_instruction, prompt),
+            ChapterSelection: lambda: self._selection(system_instruction, prompt),
         }.get(schema)
         if narration is not None:
             return narration()
@@ -233,6 +240,22 @@ class StageFakeProvider(FakeProvider):
                 ReportedLine(id=line["id"], report=f"{line['speaker']} hablo.") for line in lines
             ]
         )
+
+    def _selection(self, system_instruction: str, prompt: str) -> ChapterSelection:
+        """Play the first and the key lines as scene and pass every other line in one sentence."""
+        self.structured_calls.append((ChapterSelection.__name__, system_instruction, prompt))
+        if self.selections:
+            selection = self.selections.pop(0)
+            if isinstance(selection, Exception):
+                raise selection
+            return selection
+        lines = json.loads(prompt)["lines"]
+        played = [line["id"] for index, line in enumerate(lines) if index == 0 or line.get("key")]
+        rest = [line["id"] for line in lines if line["id"] not in played]
+        moments = [SelectedMoment(lines=played, treatment="scene", gist="Empezo la escena.")]
+        if rest:
+            moments.append(SelectedMoment(lines=rest, treatment="summary", gist="Siguieron."))
+        return ChapterSelection(moments=moments)
 
     def _narration_review(self) -> NarrationReview:
         """Hand out the next queued editorial review, raising it when it is an exception."""

@@ -1,5 +1,110 @@
 # Historial de cambios
 
+## 7.17.0
+
+Viene del análisis de los runs de 7.10 a 7.16 contrastado con la literatura de 2023 a 2026. El
+plan completo está en `TODO.md` (SIM-25, SIM-26 y TD-10). Añade artefactos y cambia los esquemas
+del casting y de los personajes, así que `PIPELINE_VERSION` pasa a 7.17.
+
+**Lo que dejó claro el análisis:**
+
+- Flash-Lite copia lo que recibe:
+  - con el log entero, transcribe;
+  - con el estilo indirecto de 7.16, copia esas frases y salen párrafos de acta.
+- Juzgar la calidad tampoco lo hace bien. El crítico no dio ninguna nota en 3 de 4 narrativas
+  de 7.10, y la literatura sitúa su juicio de escritura cerca del azar.
+- Por eso 7.17 controla lo que entra en cada agente y deja el juicio al código.
+- Error de método: los cuatro runs de 7.16 se lanzaron sin `brief.json` y en perfil Esencial,
+  para un brief que pide una historia extensa.
+
+**Seis brazos, apagados por defecto.** Cada uno se activa con una opción de solo API, una
+variable `ASG_*` y un flag de `asg-generate`. El predeterminado no cambia hasta la lectura
+humana a ciegas.
+
+- **`style_examples`.** El contrato de estilo lleva dos párrafos de muestra en español, sin
+  trama. El editor marca la copia de cinco palabras seguidas.
+- **`line_editor`.** `asg_core.craft.paragraph_flags` marca cada párrafo con lo que estorba al
+  lector:
+  - acotación que explica la emoción, coletilla en gerundio o nombre en la acotación;
+  - nombre repetido;
+  - palabras largas;
+  - acta;
+  - bloque;
+  - frase gastada;
+  - símiles;
+  - apertura atmosférica.
+
+  `writing/line_edit.py` manda al editor solo esos párrafos. Una edición se acepta solo si:
+  - la marca baja;
+  - no alarga más de un 10 %;
+  - no inventa un nombre ni una réplica;
+  - no cambia el tiempo verbal.
+
+  Se guarda en `line_edits/chapter-NNN.json`. Con el editor, la segunda narración de 7.15 solo
+  se pide por `DROPPED_EVENT`.
+- **`scene_cards`.** Antes del Drafter, una llamada convierte cada evento en una o dos fichas:
+  - lugar y personajes;
+  - qué quiere cada uno;
+  - el obstáculo;
+  - el giro;
+  - un detalle sensorial;
+  - lo que no se dice;
+  - el cierre.
+
+  Las valida `planning/scene_cards.py`, con errores en inglés que se reinyectan, y se guardan en
+  `scene_cards.json`. Con fichas, el Drafter deja de recibir `plan.ending` y los capítulos
+  futuros. La etapa es degradable (`[SCENE_CARDS_FALLBACK]`).
+- **`anchored_critic`.** El crítico da como mucho una nota por capítulo y cita el borrador.
+  `writing/anchoring.py` busca cada cita: una restricción aprobada sin cita que exista pasa a no
+  juzgada y genera una nota, y una promesa así pasa a `broken`. El registro queda en
+  `review_anchors.json`.
+- **`narration_method=selected`.** `NarratorAgent.select` agrupa el log en momentos, cada uno
+  `scene` o `summary`, con una frase y un puente entre escenas. `stage/selection.py`:
+  - devuelve los sucesos del mundo y las réplicas clave;
+  - rechaza un resumen que copia;
+  - limita a la mitad las líneas jugadas.
+
+  `NarratorAgent.write` escribe desde los momentos, los lugares del mundo y la cara pública del
+  reparto, nunca desde el log. Se guarda en `narration/chapter-NNN-selection.json`. Si la
+  selección falla, el capítulo se narra como en 7.16 (`[SELECTION_FALLBACK]`).
+- **`typed_clauses`.** El director marca cada cláusula como `decision`, `revelation` o `world`,
+  con un esquema aparte (`TypedBeatCheckDraft`), así que el control no cambia.
+  - Cuando lo único que falta es del mundo, el beat pasa a la lectura de estancamiento sin
+    esperar al tope, y el `stage_event` puede ejecutarlo (`WORLD_CLAUSE`).
+  - El casting rechaza una compuerta cuyo revelador no está en la escena de su evento.
+
+**Siempre activo:**
+
+- **`asg-generate --narrate-from <run>`**: vuelve a narrar una función guardada sin
+  representarla, en unas 12 llamadas frente a 130. **`--plan-from`** sirve también con
+  `--format narrative`.
+- **Legibilidad en StageCraft.** `pairing.py` recalcula desde `story.md` siete cifras de
+  legibilidad, también para los runs antiguos. No se tocó `rasgos.csv`: cambiaría la huella del
+  catálogo y el juez de 27 entradas.
+- **El Writer** ya no entrega una reescritura que pierde un 30 % de los párrafos, que alarga más
+  de un 15 % sin nota que lo pida, o que empeora lo medido (TD-3). Los códigos son
+  `MERGED_PARAGRAPHS`, `LENGTHENED_WITHOUT_CAUSE` y `WORSE_CRAFT`.
+- **Nombres por candidatos (TD-7).**
+  - El diseñador propone tres nombres por personaje con su tipicidad.
+  - `planning/names.py` elige el menos típico que no esté en una lista que el prompt no ve.
+  - Renombra en todo el reparto y vuelve a acuñar el id si salía del nombre.
+  - El prompt ya no nombra los nombres vetados. Se guarda en `name_choices.json`.
+- **El dossier declara la fuente de cada hecho inicial** (`knowledge_sources`). El hecho que
+  viene de un evento posterior a la primera escena del personaje se descarta
+  (`[CAST_FACT_DROPPED]`). Quien guarda un secreto entra con su `cover_story` (SIM-11).
+- **Validadores de la función:**
+  - `_ship_leftover` desempata por gravedad.
+  - La primera persona conjugada de una lista cerrada se corrige: «Golpeo» pasa a «Golpea».
+  - El tic ignora las rachas con palabras de lugar.
+  - Una evidencia de estado sin cita conserva el turno y descarta el cambio
+    (`STATE_CHANGE_DROPPED`).
+  - El plan condicional («Si…, tendré que…») se vacía del pensamiento; el miedo condicional, no.
+  - La tercera táctica igual seguida se rechaza (`TACTIC_RUN`).
+  - El actor ve en español lo que ha probado y se le pide responder a lo que le dijeron.
+  - La nota de giro que no cita nada de la escena se sustituye por la de reserva.
+
+Sin validar en real: el protocolo y el presupuesto están en `TODO.md`. 781 tests en verde.
+
 ## 7.16.0
 
 Lo que dejó roto la prueba de 7.15.2 (`20261015-174818-las-islas-del-cielo`, Esencial). Añade

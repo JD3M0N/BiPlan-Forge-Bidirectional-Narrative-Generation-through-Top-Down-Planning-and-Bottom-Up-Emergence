@@ -23,7 +23,7 @@ from ..agents import (
 )
 from ..agents.promise_auditor import PromiseStoryAuditorAgent
 from ..brief import authored_cast_block
-from ..formats import SimulationMode
+from ..formats import NarrationMethod, SimulationMode
 from ..planning.promise_brief import chapter_brief
 from ..runtime.errors import NON_DEGRADABLE_ERRORS, ASGError
 from ..runtime.provider import decision_context
@@ -43,7 +43,7 @@ from ..writing.assembly import assemble_story, narrated_plan
 from ..writing.audit import story_metrics, word_count
 from . import fallback
 from .casting import dossier_index, fallback_bible, gateless, gates_for, materialize_bible
-from .editorial import craft_findings, editorial_verdict, review_turns, strip_markers
+from .editorial import craft_findings, editorial_verdict, review_turns, severity, strip_markers
 from .engine import CODA_TURNS, REACTION_TURNS, PerformanceEngine
 from .inventory import StageInventory
 from .memory import RECENCY_DECAY, RETRIEVED_RECORDS
@@ -74,6 +74,17 @@ from .schemas import (
     SceneBrief,
     SceneCastBrief,
     ScenePerformance,
+)
+from .selection import (
+    accept_selection,
+    chapter_cast,
+    chapter_places,
+    last_paragraph,
+    scene_settings,
+    script_scenes,
+    selection_lines,
+    selection_material,
+    selector_view,
 )
 from .validation import REPETITION_THRESHOLD
 
@@ -111,7 +122,7 @@ class SimulationStagesMixin:
             request, world, characters, plan, play, bible, ledger, props
         )
         story, narration, fallbacks, narrated = self._narrate(
-            request, characters, plan, play, performance, ledger
+            request, characters, plan, play, performance, ledger, world=world, bible=bible
         )
         self._audit_performed_promises(ledger, performance, story)
         self._finalize_simulation(
@@ -148,6 +159,7 @@ class SimulationStagesMixin:
                     staging,
                     feedback_snapshot,
                     authored_cast=authored_cast_block(self.brief),
+                    first_scenes=first_scenes_block(play),
                 )
 
             try:
@@ -171,6 +183,8 @@ class SimulationStagesMixin:
                     characters=characters,
                     plan=plan,
                     drop_invalid_gates=attempt == CASTING_ATTEMPTS,
+                    future_events=future_events(play),
+                    on_stage=event_casts(play) if self.options.typed_clauses else None,
                 )
             except ValueError as exc:
                 issue = str(exc).strip() or type(exc).__name__
@@ -185,6 +199,11 @@ class SimulationStagesMixin:
                     f"REJECTED CANDIDATE:\n{draft.model_dump_json()}"
                 )
                 continue
+            facts = [note for note in bible.observations if note.startswith("fact dropped")]
+            if facts:
+                warning = f"Se quitaron {len(facts)} hechos iniciales que venían del futuro."
+                self.repository.add_warning(f"[CAST_FACT_DROPPED] {warning}")
+                self._emit("cast_fact_dropped", warning, stage="casting")
             dropped = [note for note in bible.observations if " dropped: " in note]
             if dropped:
                 warning = f"Se descartaron {len(dropped)} compuertas inválidas del reparto."
@@ -349,7 +368,13 @@ class SimulationStagesMixin:
             ),
             check_beat=lambda context, mode: stage_call(
                 "stage_manager",
-                lambda: director.check(context, request.language, mode=mode, genre=request.genre),
+                lambda: director.check(
+                    context,
+                    request.language,
+                    mode=mode,
+                    genre=request.genre,
+                    typed=self.options.typed_clauses,
+                ),
             ),
             reflect=lambda system, log: stage_call(
                 "actor", lambda: actor.reflect(system, log, request.language)
@@ -376,6 +401,7 @@ class SimulationStagesMixin:
             simulation_mode=self.options.simulation_mode,
             inventory=inventory,
             turns_per_beat=self.turns_per_beat,
+            typed_clauses=self.options.typed_clauses,
             reaction_turns=REACTION_TURNS,
             coda_turns=CODA_TURNS,
             on_event=lambda kind, message: self._emit(kind, message, stage="performance"),
@@ -843,6 +869,9 @@ class SimulationStagesMixin:
         play: PlayScript,
         performance: PerformanceArtifact,
         ledger: PromiseLedger | None,
+        *,
+        world: WorldArtifact | None = None,
+        bible: CastBible | None = None,
     ) -> tuple[str, NarrationArtifact, int, StoryPlan]:
         """Write the story from the performance log, through the configured point of view.
 
@@ -894,16 +923,16 @@ class SimulationStagesMixin:
             key_ids = {
                 item for scene in view.scenes for beat in scene.beats for item in beat.evidence
             }
-            reported = self._report_lines(agent, request, view.visible, key_ids, names, index)
-            if reported is not None:
-                key_ids |= {item for item in reported if not reported[item]}
-            log = scene_log(
-                view.visible,
+            log, selected = self._chapter_material(
+                agent,
+                request,
+                view,
+                key_ids,
                 names,
-                thoughts=True,
-                key_ids=key_ids,
-                short_names=True,
-                reported=reported,
+                play,
+                world=world,
+                bible=bible,
+                previous=bodies[-1] if bodies else "",
             )
             visible_ids = {turn.id for turn in view.visible}
             facts = [
@@ -926,8 +955,11 @@ class SimulationStagesMixin:
                 names,
                 view.visible,
                 index,
+                selected=selected,
             )
             fallbacks += int(source == "fallback")
+            if source == "narrator":
+                body = self._line_edit_chapter(request, characters, world, index, body)
             bodies.append(body)
             records.append(
                 _chapter_record(view, words=word_count(body), attempts=attempts, source=source)
@@ -946,6 +978,70 @@ class SimulationStagesMixin:
         story = assemble_story(narrated, self._presentation_from(play, plan), bodies)
         self.repository.complete_stage("narration")
         return story, narration, fallbacks, narrated
+
+    def _chapter_material(
+        self, agent, request, view, key_ids, names, play, *, world, bible, previous
+    ) -> tuple[str, bool]:
+        """Build what one chapter is narrated from, and say whether it is a selection.
+
+        With narration_method=selected the narrator writes from the moments a first call chose
+        (7.17); otherwise, or when that call cannot be used, from the 7.16 log, with the lines
+        nobody turns on retold in indirect style.
+        """
+        if self.options.narration_method is NarrationMethod.SELECTED:
+            material = self._selected_material(
+                agent, request, view, key_ids, names, play, world, bible, previous
+            )
+            if material is not None:
+                return material, True
+        reported = self._report_lines(agent, request, view.visible, key_ids, names, view.index)
+        if reported is not None:
+            key_ids = key_ids | {item for item in reported if not reported[item]}
+        log = scene_log(
+            view.visible,
+            names,
+            thoughts=True,
+            key_ids=key_ids,
+            short_names=True,
+            reported=reported,
+        )
+        return log, False
+
+    def _selected_material(
+        self, agent, request, view, key_ids, names, play, world, bible, previous
+    ) -> str | None:
+        """Choose the moments of one chapter and render them, or None to fall back to 7.16."""
+        assert self.repository is not None
+        lines = selection_lines(view.visible, names, key_ids)
+        scenes = script_scenes(play)
+        settings = scene_settings(view.visible, scenes)
+        try:
+            drafted = self._call_agent(
+                "narrator_select",
+                lambda: agent.select(request=request, scenes=settings, lines=selector_view(lines)),
+            )
+            selection = accept_selection(lines, drafted)
+        except NON_DEGRADABLE_ERRORS:
+            raise
+        except Exception as exc:
+            warning = (
+                f"[SELECTION_FALLBACK] Capítulo {view.index}: no se pudieron elegir los momentos "
+                f"({type(exc).__name__}); se narra desde el log con el estilo indirecto."
+            )
+            self.repository.add_warning(warning)
+            self._emit("selection_fallback", warning, stage="narration")
+            return None
+        self.repository.save_data(
+            f"narration/chapter-{view.index:03d}-selection.json", selection.as_record()
+        )
+        return selection_material(
+            selection,
+            view.visible,
+            names,
+            places=chapter_places(view.visible, scenes, world),
+            cast=chapter_cast(view.visible, scenes, names, bible),
+            previous=last_paragraph(previous),
+        )
 
     def _report_lines(self, agent, request, visible, key_ids, names, index):
         """Retell a chapter's non-key lines in indirect style, or None to pass them whole."""
@@ -999,18 +1095,21 @@ class SimulationStagesMixin:
         names,
         visible,
         index,
+        *,
+        selected: bool = False,
     ) -> tuple[str, int, str]:
         """Narrate one chapter, or render its log deterministically when the model cannot."""
         assert self.repository is not None
         feedback = ""
-        candidates: list[tuple[int, int, str]] = []
+        candidates: list[tuple[int, int, int, str]] = []
         # An accepted chapter held back for one more attempt because it transcribed the log.
         polished: tuple[int, str, int] | None = None
         for attempt in range(1, NARRATION_ATTEMPTS + 1):
 
             def narrate_once(feedback_snapshot: str = feedback):
                 """Narrate the bound chapter with this attempt's feedback."""
-                return agent.run(
+                write = agent.write if selected else agent.run
+                return write(
                     request,
                     chapter,
                     title,
@@ -1019,6 +1118,7 @@ class SimulationStagesMixin:
                     narrator_name=names.get(narrator, ""),
                     retry_feedback=feedback_snapshot,
                     tone=self.options.narration_tone,
+                    style_examples=self.options.style_examples,
                 )
 
             try:
@@ -1082,7 +1182,11 @@ class SimulationStagesMixin:
                 f"narration/chapter-{index:03d}-review-{attempt:03d}.json",
                 {"review": review.model_dump(mode="json"), **verdict.as_record()},
             )
-            notes = craft_findings(candidate, visible) if verdict.accepted else []
+            notes = (
+                _editor_leaves(craft_findings(candidate, visible), self.options.line_editor)
+                if verdict.accepted
+                else []
+            )
             if notes and polished is None and attempt < NARRATION_ATTEMPTS:
                 # Accepted, but read like a transcript: one more attempt with the measured
                 # notes, and this one ships unless the next one is better (7.15).
@@ -1096,7 +1200,9 @@ class SimulationStagesMixin:
             if verdict.accepted:
                 self.repository.save_text(f"narration/chapter-{index:03d}.md", candidate)
                 return candidate, attempt, "narrator"
-            candidates.append((len(verdict.blocking), attempt, candidate))
+            candidates.append(
+                (severity(verdict.blocking), len(verdict.blocking), attempt, candidate)
+            )
             feedback = (
                 "\nEDITORIAL REPAIR (one bounded correction, preserve source events):\n"
                 + "\n".join(verdict.issues)
@@ -1107,7 +1213,7 @@ class SimulationStagesMixin:
         self,
         index: int,
         polished: tuple[int, str, int] | None,
-        candidates: list[tuple[int, int, str]],
+        candidates: list[tuple[int, int, int, str]],
         visible,
         names,
         language: str,
@@ -1125,9 +1231,10 @@ class SimulationStagesMixin:
             self.repository.save_text(f"narration/chapter-{index:03d}.md", body)
             return body, attempt, "narrator"
         if candidates:
-            # Fewest blocking findings wins, the later attempt on a tie: it already had the
-            # corrections. Model prose with a disputed detail still reads better than the log.
-            blocking, attempt, body = min(candidates, key=lambda item: (item[0], -item[1]))
+            # The lightest findings win, weighed by severity, and the later attempt on a tie: it
+            # already had the corrections. Model prose with a disputed detail still reads better
+            # than the log.
+            _, blocking, attempt, body = min(candidates, key=lambda item: (item[0], -item[2]))
             warning = (
                 f"[NARRATION_BEST_ATTEMPT] Capítulo {index}: se entregó el intento {attempt} "
                 f"con {blocking} observaciones editoriales sin resolver."
@@ -1294,6 +1401,64 @@ def _gate_line(gate, names: dict[str, str]) -> str:
     holders = _holders(gate.known_by, names)
     revealer = names.get(gate.revealed_by, gate.revealed_by) if gate.revealed_by else "el mundo"
     return f"{gate.fact} (lo saben: {holders}; lo saca a la luz {revealer} por {gate.how})"
+
+
+def _scenes_in_order(play: PlayScript) -> list:
+    """Every scene of the script, act after act."""
+    return [scene for act in play.acts for scene in act.scenes]
+
+
+def event_casts(play: PlayScript) -> dict[str, set[str]]:
+    """Map every plan event to everyone on stage in the scenes that play it."""
+    casts: dict[str, set[str]] = {}
+    for scene in _scenes_in_order(play):
+        for event_id in scene.event_ids:
+            casts.setdefault(event_id, set()).update(item.character_id for item in scene.cast)
+    return casts
+
+
+def future_events(play: PlayScript) -> dict[str, set[str]]:
+    """Map each character to the events played from their first scene on (7.17).
+
+    Those are what their initial knowledge may never come from: an event in their first scene
+    has not happened yet when they walk on.
+    """
+    scenes = _scenes_in_order(play)
+    future: dict[str, set[str]] = {}
+    for index, scene in enumerate(scenes):
+        for member in scene.cast:
+            if member.character_id not in future:
+                future[member.character_id] = {
+                    event_id for later in scenes[index:] for event_id in later.event_ids
+                }
+    return future
+
+
+def first_scenes_block(play: PlayScript) -> str:
+    """Tell the casting director the events of each character's first scene."""
+    names = {member.character_id: member.name for member in play.cast}
+    seen: dict[str, list[str]] = {}
+    for scene in _scenes_in_order(play):
+        for member in scene.cast:
+            seen.setdefault(member.character_id, list(scene.event_ids))
+    return "\n".join(
+        f"- {character_id} ({names.get(character_id, character_id)}): first on stage in the "
+        f"scene of {', '.join(events) or 'no event'}"
+        for character_id, events in seen.items()
+    )
+
+
+def _editor_leaves(notes: list[str], editor: bool) -> list[str]:
+    """Keep only the notes a line editor cannot answer, when one will read the chapter (7.17).
+
+    TRANSCRIBED and TAGGED cost a whole second narration since 7.15, and the second attempt
+    rarely improved on the first. With the editor on, a tag is its work, paragraph by paragraph;
+    a world event the chapter dropped is not, so DROPPED_EVENT still asks for another attempt.
+    """
+    if not editor:
+        return notes
+    kept = [note for note in notes if note.startswith("DROPPED_EVENT")]
+    return [*kept, *(note for note in notes if note.startswith("KEEP"))] if kept else []
 
 
 def _without_act_label(title: str) -> str:

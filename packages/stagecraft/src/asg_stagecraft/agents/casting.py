@@ -27,6 +27,7 @@ class CastingDirectorAgent(Agent[CastBibleDraft]):
         repair_feedback: str = "",
         *,
         authored_cast: str = "",
+        first_scenes: str = "",
     ) -> CastBibleDraft:
         """Derive the cast bible from the frozen plan and the characters already designed.
 
@@ -34,6 +35,7 @@ class CastingDirectorAgent(Agent[CastBibleDraft]):
         dossiers must keep. Empty for a free prompt.
         """
         relevant = [item for item in characters.characters if item.id in set(cast_ids)]
+        scenes_block = f"\n\nFIRST SCENES:\n{first_scenes}" if first_scenes else ""
         return self.provider.generate_structured(
             system_instruction=(
                 "You are the Casting Director. The story is already planned and staged; you are "
@@ -53,6 +55,13 @@ class CastingDirectorAgent(Agent[CastBibleDraft]):
                 "the customs, money, laws, institutions and told history of that place they "
                 "live by, so they can use or explain them on stage; an outsider knows none of "
                 "it. This is ordinary knowledge, never a gate fact or a secret. "
+                "initial_knowledge pictures the moment before each character's first scene, "
+                "listed under FIRST SCENES: never the outcome of an event at or after it, not "
+                "even the situation the play will put them in later - where they will end up, "
+                "how others will treat them. For every fact add its source to "
+                "knowledge_sources, in the same order: 'world', 'backstory', or the id of the "
+                "earlier plan event it comes from. A character who keeps a secret also gets a "
+                "cover_story: the version of events they tell instead, as they would say it. "
                 "Use knowledge_gates for the facts some characters hold and "
                 "others do not - a secret, a lie, a piece of evidence. For each gate keep two "
                 "things apart that are easy to confuse: known_by lists who ALREADY knows the "
@@ -73,7 +82,8 @@ class CastingDirectorAgent(Agent[CastBibleDraft]):
                 "no scenes to play. Antagonists get the same care as protagonists; write what "
                 "they want and why it is worth wanting, never a label for how bad they are. "
                 "Use only the character IDs listed. Write public_face, initial_knowledge, "
-                f"initial_emotion, initial_goal and every gate fact in {request.language}, "
+                f"cover_story, initial_emotion, initial_goal and every gate fact in "
+                f"{request.language}, "
                 "because they reach the actors directly; write other dossier fields in English."
             ),
             prompt=(
@@ -83,6 +93,7 @@ class CastingDirectorAgent(Agent[CastBibleDraft]):
                 f"{authored_cast}"
                 f"\n\nRELATIONSHIPS:\n{json_text(characters.relationships)}"
                 f"\n\nPLAN:\n{json_text(plan)}"
+                f"{scenes_block}"
                 f"\n\nSTAGING SUMMARY:\n{staging}"
                 f"\n\nWRITE ONE DOSSIER FOR EACH OF THESE IDS: {', '.join(cast_ids)}"
                 f"{repair_feedback}"

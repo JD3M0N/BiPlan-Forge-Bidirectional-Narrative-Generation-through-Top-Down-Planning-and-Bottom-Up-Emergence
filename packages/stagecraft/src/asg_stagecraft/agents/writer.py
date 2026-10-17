@@ -5,6 +5,7 @@ from ..schemas import (
     CharacterProfile,
     PlotEvent,
     RevisionNote,
+    SceneCard,
     StoryPlan,
     StoryPresentation,
     StoryRequest,
@@ -12,6 +13,15 @@ from ..schemas import (
 )
 from .base import Agent, json_text, story_specification_header
 from .style import style_clause
+
+# How a chapter is written from its scene cards (7.17, the scene_cards option).
+SCENE_CARD_CLAUSE = (
+    " Write the chapter scene by scene from the SCENE CARDS, in their order, one card per scene: "
+    "open where the card places it, let each character go after what they want, make the first "
+    "attempt fail on the obstacle, land the turn, use the sensory detail once, leave what is "
+    "unsaid unsaid, and end the scene on its closing. Move between scenes with one sentence of "
+    "place or time, never with a summary of what happened in between."
+)
 
 
 class DrafterAgent(Agent[str]):
@@ -48,14 +58,30 @@ class DrafterAgent(Agent[str]):
         relevant_history: list[PlotEvent],
         previous_chapter: str,
         promise_brief: str = "",
+        *,
+        style_examples: bool = False,
+        scene_cards: list[SceneCard] | None = None,
     ) -> str:
-        """Draft one fiction chapter from its validated event context."""
+        """Draft one fiction chapter from its validated event context.
+
+        With scene cards (7.17) the chapter is written scene by scene from them, and the plan
+        stops at this chapter: the ending and the chapters still to come told the Drafter how it
+        all turns out, and the 7.10 drafts telegraphed it from the first page.
+        """
+        chapters = [item.model_dump(mode="json") for item in plan.chapters]
         plan_context = {
             "logline": plan.logline,
             "theme": plan.theme,
             "ending": plan.ending,
-            "chapters": [item.model_dump(mode="json") for item in plan.chapters],
+            "chapters": chapters,
         }
+        if scene_cards:
+            position = [item.id for item in plan.chapters].index(chapter.id)
+            plan_context = {
+                "logline": plan.logline,
+                "theme": plan.theme,
+                "chapters": chapters[: position + 1],
+            }
         return self.provider.generate_text(
             system_instruction=(
                 "You are the Drafter. Write only this first-draft fiction chapter body in "
@@ -75,7 +101,8 @@ class DrafterAgent(Agent[str]):
                 "supplied, deliver each one inside the event it names, through what happens and "
                 "what is said, so the reader is left expecting, or satisfied, without ever being "
                 "told so. Do not expose internal IDs or planning terminology."
-                f"{style_clause(request)}"
+                + (SCENE_CARD_CLAUSE if scene_cards else "")
+                + f"{style_clause(request, examples=style_examples)}"
             ),
             prompt=(
                 f"{story_specification_header(request)}"
@@ -88,6 +115,7 @@ class DrafterAgent(Agent[str]):
                 f"\n\nRELEVANT PRIOR EVENTS:\n{json_text(relevant_history)}"
                 f"\n\nPREVIOUS CHAPTER:\n{previous_chapter or 'none'}"
                 + (f"\n\nPROMISE OBLIGATIONS:\n{promise_brief}" if promise_brief else "")
+                + (f"\n\nSCENE CARDS:\n{json_text(scene_cards)}" if scene_cards else "")
             ),
             profile="prose",
         )
@@ -111,6 +139,8 @@ class WriterAgent(Agent[str]):
         previous_revised_chapter: str,
         retry_feedback: str = "",
         promise_brief: str = "",
+        *,
+        style_examples: bool = False,
     ) -> str:
         """Rewrite one chapter body in the requested fiction language."""
         return self.provider.generate_text(
@@ -127,7 +157,7 @@ class WriterAgent(Agent[str]):
                 "block. Coordinate the opening with the previously revised chapter. When PROMISE "
                 "OBLIGATIONS are supplied, the rewrite must still deliver every one of them "
                 "inside the event it names: never drop an expectation the draft already planted."
-                f"{style_clause(request)}"
+                f"{style_clause(request, examples=style_examples)}"
             ),
             prompt=(
                 f"{story_specification_header(request)}"

@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .formats import (
     ActorMemory,
+    NarrationMethod,
     NarrativeVoice,
     ScriptMethod,
     SimulationMode,
@@ -32,8 +33,19 @@ from .planning.profiles import NarrativeProfile
 # so a CLI or .env value above it still validates: this is only what a picker offers.
 MAX_OFFERED_TURNS_PER_BEAT = 16
 
-# Experimental options available through the facade and CLI, but not visual controls.
-API_ONLY_OPTIONS = frozenset({"guidance_strategy"})
+# Experimental options available through the facade and CLI, but not visual controls. The 7.17
+# arms are off by default, each its own control, until a blind reading decides the default.
+API_ONLY_OPTIONS = frozenset(
+    {
+        "guidance_strategy",
+        "style_examples",
+        "line_editor",
+        "scene_cards",
+        "anchored_critic",
+        "narration_method",
+        "typed_clauses",
+    }
+)
 
 # The choice an interface shows for an empty audio_voice, which lets the story's language decide.
 AUTOMATIC_AUDIO_VOICE_LABEL = "Automática (según el idioma)"
@@ -127,6 +139,54 @@ class GenerationOptions(BaseModel):
         ge=2,
         title="Turnos por beat",
         description="Cuántos turnos puede durar un beat antes de que el mundo lo cierre.",
+    )
+    style_examples: bool = Field(
+        default=False,
+        title="Ejemplos de estilo",
+        description=(
+            "Añade al contrato de estilo dos párrafos de muestra en español, sin trama: "
+            "enseñan la atribución mínima y la emoción en el gesto."
+        ),
+    )
+    line_editor: bool = Field(
+        default=False,
+        title="Editor por fragmentos",
+        description=(
+            "Reescribe solo los párrafos que el código marca (acotaciones, nombres repetidos, "
+            "acta, frases gastadas) y acepta una edición solo si la marca desaparece."
+        ),
+    )
+    scene_cards: bool = Field(
+        default=False,
+        title="Fichas de escena",
+        description=(
+            "Antes de escribir, convierte cada evento del plan en fichas de escena (lugar, "
+            "deseos, obstáculo, giro, detalle y cierre) de las que escribe el Drafter."
+        ),
+    )
+    anchored_critic: bool = Field(
+        default=False,
+        title="Crítico con cita",
+        description=(
+            "El crítico nombra el problema más importante de cada capítulo con una cita "
+            "literal, y una aprobación sin cita que exista en el texto no cuenta."
+        ),
+    )
+    narration_method: NarrationMethod = Field(
+        default=NarrationMethod.REPORTED,
+        title="Método de narración",
+        description=(
+            "Resumida da al narrador el log con las réplicas en estilo indirecto; "
+            "seleccionada elige antes los momentos y el narrador escribe desde ellos."
+        ),
+    )
+    typed_clauses: bool = Field(
+        default=False,
+        title="Cláusulas por tipo",
+        description=(
+            "El director separa lo que deciden los personajes de lo que hace el mundo, y el "
+            "mundo puede ejecutar un viaje o una llegada que los actores no pueden representar."
+        ),
     )
 
     @field_validator("narrator", "narration_tone")

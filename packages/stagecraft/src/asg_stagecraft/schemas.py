@@ -151,6 +151,17 @@ class WorldArtifact(BaseModel):
         return self
 
 
+class NameOption(BaseModel):
+    """One name the character designer could give a character, and how typical it is (7.17)."""
+
+    name: str = Field(min_length=1)
+    typicality: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="0 for a name you would rarely reach for, 1 for the first that comes to mind.",
+    )
+
+
 class CharacterProfile(BaseModel):
     """Represent CharacterProfile data and behavior."""
 
@@ -164,6 +175,16 @@ class CharacterProfile(BaseModel):
     voice: str
     functional_role: str = ""
     persona: str = ""
+    # Asked of the designer and read once by planning/names.py, which keeps the least typical
+    # acceptable one (7.17). Never serialized: characters.json and every prompt see the choice.
+    name_options: list[NameOption] = Field(
+        default_factory=list,
+        exclude=True,
+        description=(
+            "Three different names that fit this character and the world, each with its "
+            "typicality; name repeats one of them."
+        ),
+    )
 
     @field_validator("functional_role", "persona", mode="before")
     @classmethod
@@ -476,6 +497,55 @@ class ChapterPresentation(BaseModel):
     title: str = Field(min_length=1)
 
 
+class SceneCard(BaseModel):
+    """One scene the Drafter will write, drawn over the frozen plan before any prose (7.17)."""
+
+    model_config = ConfigDict(extra="forbid")
+    event_id: str = Field(description="The plan event this scene plays, exactly as given.")
+    location_id: str = Field(
+        default="", description="The id of the world location it happens in, or empty."
+    )
+    character_ids: list[str] = Field(
+        min_length=1, description="Who is in the scene, by character id exactly as given."
+    )
+    wants: str = Field(
+        min_length=1,
+        description="In the fiction's language: what each character there wants right now.",
+    )
+    obstacle: str = Field(
+        min_length=1,
+        description="In the fiction's language: why the first attempt fails, what is in the way.",
+    )
+    turn: str = Field(
+        min_length=1,
+        description=(
+            "In the fiction's language: what has changed by the end - a decision, a discovery "
+            "or a reversal the reader sees happen."
+        ),
+    )
+    detail: str = Field(
+        min_length=1,
+        description="In the fiction's language: one concrete sensory detail of the place.",
+    )
+    unsaid: str = Field(
+        min_length=1,
+        description=(
+            "In the fiction's language: what the reader must understand without anyone saying it."
+        ),
+    )
+    closing: str = Field(
+        min_length=1,
+        description="In the fiction's language: the image or the line the scene ends on.",
+    )
+
+
+class SceneCardsDraft(BaseModel):
+    """The scene cards of a whole story, as scene_cards.json keeps them."""
+
+    model_config = ConfigDict(extra="forbid")
+    cards: list[SceneCard] = Field(min_length=1)
+
+
 class StoryPresentation(BaseModel):
     """Localized titles created when the drafting phase begins."""
 
@@ -756,6 +826,9 @@ class WriterCandidateDiagnostic(BaseModel):
         "MARKDOWN_HEADINGS",
         "UNCHANGED_SIGNIFICANT_NOTES",
         "INVALID_SCRIPT_ACT",
+        "MERGED_PARAGRAPHS",
+        "LENGTHENED_WITHOUT_CAUSE",
+        "WORSE_CRAFT",
     ]
     message: str
     retry_instruction: str

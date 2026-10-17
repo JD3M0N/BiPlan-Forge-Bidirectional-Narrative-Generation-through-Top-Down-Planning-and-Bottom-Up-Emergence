@@ -7,7 +7,14 @@ from collections.abc import Callable
 from pathlib import Path
 
 from .brief import StoryBrief
-from .formats import ActorMemory, NarrativeVoice, ScriptMethod, SimulationMode, StoryFormat
+from .formats import (
+    ActorMemory,
+    NarrationMethod,
+    NarrativeVoice,
+    ScriptMethod,
+    SimulationMode,
+    StoryFormat,
+)
 from .options import GenerationOptions
 from .pipeline import StoryPipeline
 from .planning.catalog_types import GuidanceStrategy
@@ -115,6 +122,12 @@ class StoryGenerator:
         simulation_mode: SimulationMode = SimulationMode.FIXED,
         inventory: bool = False,
         turns_per_beat: int = 8,
+        style_examples: bool = False,
+        line_editor: bool = False,
+        scene_cards: bool = False,
+        anchored_critic: bool = False,
+        narration_method: NarrationMethod = NarrationMethod.REPORTED,
+        typed_clauses: bool = False,
     ) -> None:
         """Configure a generator with its provider, output directory and run options."""
         self.provider = provider
@@ -135,6 +148,12 @@ class StoryGenerator:
             simulation_mode=simulation_mode,
             inventory=inventory,
             turns_per_beat=turns_per_beat,
+            style_examples=style_examples,
+            line_editor=line_editor,
+            scene_cards=scene_cards,
+            anchored_critic=anchored_critic,
+            narration_method=narration_method,
+            typed_clauses=typed_clauses,
         )
 
     @classmethod
@@ -156,7 +175,7 @@ class StoryGenerator:
         *,
         should_cancel: Callable[[], bool] | None = None,
     ) -> StoryRun:
-        """Run a new performance using the source's original plan, script and cast."""
+        """Write a new run from the source's plan: a new draft, or a new performance."""
         pipeline = StoryPipeline(
             self.provider,
             self.output_root,
@@ -167,6 +186,27 @@ class StoryGenerator:
             should_cancel=should_cancel,
         )
         return StoryRun(pipeline.execute_from_plan(source_run))
+
+    def generate_from_performance(
+        self,
+        source_run: Path,
+        on_progress: ProgressCallback | None = None,
+        on_run_created: Callable[[Path], None] | None = None,
+        on_event: PipelineEventCallback | None = None,
+        *,
+        should_cancel: Callable[[], bool] | None = None,
+    ) -> StoryRun:
+        """Narrate the source's frozen performance again, without performing it (7.17)."""
+        pipeline = StoryPipeline(
+            self.provider,
+            self.output_root,
+            options=self.options,
+            on_progress=on_progress,
+            on_run_created=on_run_created,
+            on_event=on_event,
+            should_cancel=should_cancel,
+        )
+        return StoryRun(pipeline.execute_from_performance(source_run))
 
     def generate(
         self,

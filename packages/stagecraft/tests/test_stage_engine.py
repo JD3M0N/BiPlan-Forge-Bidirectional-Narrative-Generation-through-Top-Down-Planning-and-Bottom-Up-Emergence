@@ -33,6 +33,8 @@ from asg_stagecraft.stage.schemas import (
     SceneBrief,
     SceneCastBrief,
     StageTurn,
+    TypedBeatCheckDraft,
+    TypedOutcomePart,
     WorldEventAssessment,
 )
 from stage_fakes import quoted_source
@@ -131,8 +133,9 @@ class Stage:
     def reflect(self, system: str, log: str) -> ReflectionDraft:
         return ReflectionDraft(summary="Sali de alli con dudas.", importance=0.5)
 
-    def engine(self, cast=("ana", "bruno")) -> PerformanceEngine:
+    def engine(self, cast=("ana", "bruno"), **options) -> PerformanceEngine:
         return PerformanceEngine(
+            **options,
             take_turn=self.take_turn,
             open_beat=self.open_beat,
             check_beat=self.check_beat,
@@ -189,6 +192,34 @@ def test_a_beat_that_never_lands_climbs_the_whole_ladder_before_it_is_forced() -
     assert performed.turns.index(world[0]) == 8
 
 
+@pytest.mark.parametrize(
+    ("kind", "modes"),
+    [
+        ("world", ["check", "stall", "final"]),
+        ("decision", ["check", "turn", "turn", "stall", "final"]),
+    ],
+    ids=["world-clause-is-carried-out-early", "decision-waits-for-the-actors"],
+)
+def test_a_world_clause_is_carried_out_once_it_is_all_that_is_missing(kind, modes) -> None:
+    """7.17: 11 of the 22 forced beats were journeys the actors could not act out."""
+
+    def judge(mode, context):
+        turning = "bruno" if mode in {"turn", "stall"} else ""
+        return TypedBeatCheckDraft(
+            parts=[TypedOutcomePart(part="el barco zarpa", shown=False, kind=kind)],
+            turning_actor_id=turning,
+            notes=[f"{turning}: ya no queda tiempo"] if turning else [],
+            stage_event=EVENT if mode == "stall" else "",
+        )
+
+    stage = Stage(judge)
+    record = stage.engine(typed_clauses=True).perform_scene(scene()).beats[0]
+    assert stage.modes == modes
+    assert record.stage_events == [EVENT]
+    stall = stage.contexts[stage.modes.index("stall")]
+    assert ("WORLD CLAUSE" in stall) is (kind == "world")
+
+
 def test_a_stall_without_a_world_event_is_asked_once_more() -> None:
     """7.15 navigators: the closing beat stalled with no event and the ending never happened."""
 
@@ -213,16 +244,22 @@ def test_a_beat_the_world_resolves_is_reached_with_help_not_forced() -> None:
     assert record.achieved and record.intervened and not record.forced
 
 
-def test_the_turning_actor_moves_next_and_gets_the_note() -> None:
+@pytest.mark.parametrize("quoted", [True, False], ids=["grounded-note", "dictating-note"])
+def test_the_turning_actor_moves_next_and_keeps_a_note_only_if_it_quotes(quoted) -> None:
+    """7.17: a turn note that quotes nothing performed dictates, and the fallback replaces it."""
+    reason = "«linea1a linea1b linea1c»" if quoted else "cede ante la evidencia"
+
     def judge(mode, context):
-        return unshown("bruno") if mode == "turn" else unshown()
+        if mode != "turn":
+            return unshown()
+        return unshown("bruno").model_copy(update={"notes": [f"bruno: recuerda {reason}"]})
 
     stage = Stage(judge)
     stage.engine(cast=("ana", "bruno", "cora")).perform_scene(scene(cast=("ana", "bruno", "cora")))
     # Rotation alone would give the seventh turn to Ana; the director asked for Bruno.
     assert stage.actors[:6] == ["ana", "bruno", "cora", "ana", "bruno", "cora"]
     assert stage.actors[6] == "bruno"
-    assert "ya no tiene sentido negarlo" in stage.moves[6][1]
+    assert ("recuerda" in stage.moves[6][1]) is quoted
 
 
 def test_a_note_reaches_its_actor_once_per_beat() -> None:

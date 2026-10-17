@@ -16,6 +16,7 @@ from __future__ import annotations
 from .names import ShortNames
 from .perception import item_line, item_moves, stage_direction, visible_text
 from .schemas import (
+    TACTIC_NAMES,
     ActorDossier,
     BeatBrief,
     CharacterState,
@@ -159,6 +160,10 @@ def _objective_blocks(scene: SceneBrief, objective: str) -> list[str]:
     return blocks
 
 
+# How many of its own recent tactics an actor sees, once it has tried at least that many.
+TRIED_TACTICS = 3
+
+
 def actor_turn_context(
     *,
     scene: SceneBrief,
@@ -219,12 +224,36 @@ def actor_turn_context(
         )
     else:
         blocks.append("LA ESCENA ACABA DE EMPEZAR. Te toca abrirla.")
-    addressed = _unanswered_line(witnessed, character_id, names)
-    if addressed:
-        blocks.append(f"TE ACABAN DE DECIR:\n{addressed}")
+    blocks.extend(_reply_blocks(witnessed, character_id, names))
     if note:
         blocks.append(f"NOTA DEL DIRECTOR (nunca la menciones):\n{strip_internal_ids(note)}")
     return "\n\n".join(blocks)
+
+
+def _reply_blocks(witnessed: list[StageTurn], character_id: str, names: dict[str, str]) -> list:
+    """What the actor has tried in the scene, and the line it still owes an answer to."""
+    blocks: list[str] = []
+    tried = [
+        TACTIC_NAMES.get(turn.tactic, turn.tactic)
+        for turn in witnessed
+        if turn.actor_id == character_id and turn.kind == "actor" and turn.tactic
+    ][-TRIED_TACTICS:]
+    if len(tried) >= TRIED_TACTICS:
+        # 7.17: the rule to change tactic had nothing to work with until the actor could see
+        # what it had tried, in its own words.
+        blocks.append(
+            f"LO QUE HAS PROBADO EN ESTA ESCENA: {', '.join(tried)}. Si no funcionó, prueba otra "
+            "manera."
+        )
+    addressed = _unanswered_line(witnessed, character_id, names)
+    if addressed:
+        # 7.17: the line was there since 7.2 and characters still walked past it ("ignorando la
+        # instrucción de la capitana", six times in one chapter of 20261017-184641).
+        blocks.append(
+            f"TE ACABAN DE DECIR (responde a esto, aunque sea para negarte, antes de seguir con "
+            f"lo tuyo):\n{addressed}"
+        )
+    return blocks
 
 
 def _unanswered_line(turns: list[StageTurn], character_id: str, names: dict[str, str]) -> str:

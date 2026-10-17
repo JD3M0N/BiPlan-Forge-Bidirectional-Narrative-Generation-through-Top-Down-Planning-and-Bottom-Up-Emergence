@@ -1,6 +1,8 @@
 """Tests for the prose craft primitives shared by both approaches."""
 
+import pytest
 from asg_core import CraftMetrics, craft_metrics, prose_paragraphs, split_sentences
+from asg_core.craft import paragraph_flags, readability_signals
 
 DASH = "—"
 ELLIPSIS = "…"
@@ -142,3 +144,53 @@ def test_a_narrator_aside_splits_the_line_it_interrupts():
     """Document the known bias: a dialogue aside adds one short sentence."""
     line = f"{DASH}Nada {DASH}mintio{DASH}. Polvo en la lente."
     assert split_sentences(line) == [f"{DASH}Nada {DASH}mintio{DASH}.", "Polvo en la lente."]
+
+
+LONG = " ".join(["Contemplaba"] * 6 + ["la", "mar"] * 8)
+REPORT = "Ana ordenó a Bruno que callara, preguntando por el mapa."
+
+
+@pytest.mark.parametrize(
+    ("paragraph", "opening", "flags"),
+    [
+        (
+            f"{DASH}Ven {DASH}dijo Ana, sonriendo con una mueca.",
+            False,
+            ("emotion_tag", "gerund_tag", "named_tag"),
+        ),
+        (f"{DASH}Ven {DASH}dijo.", False, ()),
+        (f"{DASH}Ven. {DASH}Ana se fue.", False, ()),
+        (REPORT, False, ("reported_chain",)),
+        ("Ana se fue. Ana volvió.", False, ("repeated_name",)),
+        (LONG, False, ("long_words",)),
+        ("Dio un paso al frente.", False, ("stock_phrase",)),
+        ("No era una nota, sino un aviso.", False, ("stock_phrase",)),
+        ("Brilla como un sol, como una vela.", False, ("simile_chain",)),
+        ("El viento soplaba.", True, ("atmospheric_opening",)),
+        ("El viento soplaba.", False, ()),
+    ],
+    ids=[
+        "tag-that-explains",
+        "plain-tag",
+        "action-beat",
+        "minutes",
+        "name-twice",
+        "long-words",
+        "stock-phrase",
+        "not-x-but-y",
+        "similes",
+        "weather-opening",
+        "weather-elsewhere",
+    ],
+)
+def test_each_paragraph_observation_is_named(paragraph, opening, flags):
+    """7.17: what the line editor is handed, one paragraph at a time."""
+    assert paragraph_flags(paragraph, ["Ana"], opening=opening) == flags
+
+
+def test_the_readability_signals_cover_the_paragraph_observations():
+    story = f"{DASH}Ven {DASH}dijo Ana, sonriendo.\n\n{REPORT}"
+    signals = readability_signals(story, ["Ana"])
+    assert (signals.speech_tag_ratio, signals.gerund_tag_ratio) == (1.0, 1.0)
+    assert signals.reported_speech_per_1000_words > 0
+    assert signals.flagged_paragraph_ratio == 1.0

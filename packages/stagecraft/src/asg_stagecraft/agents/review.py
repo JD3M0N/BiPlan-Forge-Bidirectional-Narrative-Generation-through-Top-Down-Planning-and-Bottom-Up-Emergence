@@ -58,6 +58,20 @@ class PlanCriticAgent(Agent[PlanReview]):
         )
 
 
+# 7.17 (anchored_critic): one problem per chapter, and every verdict settled by a quote the code
+# looks up in the draft (writing/anchoring.py). CritiCS (EMNLP 2024) found one critique per round
+# beats a list of them, and the critic's own evidence had been paraphrase for 6.x and 7.10.
+ANCHORED_REVIEW = (
+    " ANCHORED REVIEW, which overrides any instruction above that asks for more notes: for each "
+    "chapter raise at most one note, the single problem a reader would feel most, and make its "
+    "evidence a passage copied word for word from the draft, at least six words long and in the "
+    "draft's language. A chapter with nothing worth fixing gets no note. Settle every constraint "
+    "check by copying into its notes, word for word, the passage of the draft that shows the "
+    "constraint is met; when no passage shows it, it is not passed. Promise evidence must also be "
+    "a passage copied word for word from the draft."
+)
+
+
 class DramaCriticAgent(Agent[StoryReview]):
     """Read the complete draft and create coordinated revision notes."""
 
@@ -73,6 +87,8 @@ class DramaCriticAgent(Agent[StoryReview]):
         draft: str,
         craft_evidence: str = "",
         promise_obligations: str = "",
+        *,
+        anchored: bool = False,
     ) -> StoryReview:
         """Run the global-to-local drama criticism workflow."""
         return self.provider.generate_structured(
@@ -111,6 +127,7 @@ class DramaCriticAgent(Agent[StoryReview]):
                 "instruction. Promise IDs belong in promise_checks only: chapter_ids and "
                 "event_ids of a note must contain canonical plan IDs and nothing else. "
                 "Do not score the story or invent user requirements."
+                + (ANCHORED_REVIEW if anchored else "")
             ),
             prompt=(
                 f"{story_specification_header(request)}"

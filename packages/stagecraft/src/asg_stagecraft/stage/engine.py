@@ -69,7 +69,7 @@ from .validation import (
     containment,
     normalize_turn,
     repair_form,
-    validate_state_evidence,
+    settle_state_evidence,
     validate_turn,
 )
 
@@ -99,6 +99,15 @@ CLOSING_STALL = (
     "choice, so the ending happens in front of the reader. If nobody has chosen yet, give the "
     "pressure that forces the choice now. Never choose for them."
 )
+# Added to a stall reading when a missing clause is the world's (7.17, typed_clauses): the
+# generalization of CLOSING_STALL to every beat. The world carries out what the characters
+# cannot act out; it never decides or reveals for them.
+WORLD_CLAUSE = (
+    "\n\nWORLD CLAUSE: what is still missing includes something the world or someone off stage "
+    "does - a journey, an arrival, a ship leaving - which the actors cannot act out. The "
+    "stage_event may make it happen now, visibly, as the consequence of what the characters "
+    "already chose on stage. Never make a decision or a revelation for them."
+)
 # How many of each actor's recent tactics the director sees when it has to spot a deadlock.
 TACTIC_WINDOW = 3
 # Tactics that dig in rather than move. The deterministic fallback for naming who must change
@@ -117,6 +126,9 @@ FALLBACK_TURN_NOTE = (
     "Tu táctica no produce cambios, y aún no ha pasado esto: {part}. Prueba otra acción desde "
     "lo que sabes y quieres; asume su coste y deja que los demás respondan."
 )
+# What a turn note must quote from the scene to count as grounded (7.17), and how much of it.
+_QUOTED = re.compile(r"[«“\"]([^»”\"]+)[»”\"]")
+_MIN_QUOTED_WORDS = 3
 OPEN_CODA_NOTE = "La cuestión sigue abierta. Actúa según lo que sabes y quieres ahora."
 
 # How much of a gate's fact a director's clause must carry to count as that gate. The director
@@ -181,6 +193,7 @@ class PerformanceEngine:
         simulation_mode: SimulationMode = SimulationMode.FIXED,
         inventory: StageInventory | None = None,
         turns_per_beat: int = 8,
+        typed_clauses: bool = False,
         reaction_turns: int = REACTION_TURNS,
         coda_turns: int = CODA_TURNS,
         on_event: Callable[[str, str], None] | None = None,
@@ -224,6 +237,9 @@ class PerformanceEngine:
         self.on_fact = on_fact
         self.facts: list[StageFact] = []
         self._clauses: dict[str, list[str]] = {}
+        # The kind of every frozen clause, with typed_clauses (7.17); empty otherwise.
+        self.typed_clauses = typed_clauses
+        self._clause_kinds: dict[str, dict[str, str]] = {}
         self.turns_per_beat = turns_per_beat
         self.reaction_turns = reaction_turns
         self.coda_turns = coda_turns
@@ -243,6 +259,9 @@ class PerformanceEngine:
                 character_id=character_id,
                 scene_number=0,
                 goal=dossier.initial_goal or dossier.want,
+                # 7.17 (SIM-11): a secret-keeper walks on with the story they tell instead, so a
+                # lie has something to say; until 7.16 nobody lied in 80 turns.
+                cover_story=dossier.cover_story,
             )
             for character_id, dossier in dossiers.items()
         }
@@ -336,6 +355,7 @@ class PerformanceEngine:
         requested, notes = direction.opening_actor_id, list(direction.notes)
         turns_in_beat = checks = 0
         standoff_called = False
+        missing: list[str] = []
 
         while True:
             moved = self._advance(run, index, beat, requested, notes)
@@ -349,18 +369,29 @@ class PerformanceEngine:
             # per beat, so a cast that keeps one tactic costs one director call more at most.
             deadlocked = not at_cap and not standoff_called and policy.is_deadlocked(beat_turns)
             standoff_called = standoff_called or deadlocked
-            if not at_cap and not deadlocked and not policy.should_check(turns_in_beat):
+            # 7.17: once all that is missing is the world's to do, waiting for the cap only
+            # makes the actors argue over a decision already taken.
+            world_due = not at_cap and self._only_world_missing(run, beat, missing)
+            if (
+                not at_cap
+                and not deadlocked
+                and not world_due
+                and not policy.should_check(turns_in_beat)
+            ):
                 continue
             checks += 1
-            mode = "stall" if at_cap else ("turn" if checks >= 2 or deadlocked else "check")
-            verdict = self._check(run, index, beat, mode)
+            stalled = at_cap or world_due
+            mode = "stall" if stalled else ("turn" if checks >= 2 or deadlocked else "check")
+            extra = WORLD_CLAUSE if stalled and self._world_missing(run, beat, missing) else ""
+            verdict = self._check(run, index, beat, mode, extra=extra)
             record.checks += 1
             if verdict.turning_actor_id:
                 record.turning_actor_id = verdict.turning_actor_id
             if verdict.achieved:
                 self._land(record, verdict, run)
                 return record
-            if at_cap:
+            missing = list(verdict.missing)
+            if stalled:
                 if self.simulation_mode is SimulationMode.ADAPTIVE:
                     record.missing = list(verdict.missing)
                     self._emit("beat_unreached", f"{run.brief.scene_id} no alcanzó {beat.event_id}")
@@ -369,6 +400,21 @@ class PerformanceEngine:
                 return record
             requested = verdict.turning_actor_id or verdict.next_actor_id
             notes = verdict.notes
+
+    def _world_missing(self, run: _SceneRun, beat: BeatBrief, missing: list[str]) -> bool:
+        """Say whether a typed clause still missing is the world's to carry out."""
+        kinds = self._clause_kinds.get(run.brief.scene_id + ":" + beat.event_id, {})
+        return self.typed_clauses and any(kinds.get(key) == "world" for key in missing)
+
+    def _only_world_missing(self, run: _SceneRun, beat: BeatBrief, missing: list[str]) -> bool:
+        """Say whether everything still missing is the world's, in a fixed performance."""
+        kinds = self._clause_kinds.get(run.brief.scene_id + ":" + beat.event_id, {})
+        return (
+            self.typed_clauses
+            and self.simulation_mode is SimulationMode.FIXED
+            and bool(missing)
+            and all(kinds.get(key) == "world" for key in missing)
+        )
 
     def _resolve_stall(
         self,
@@ -617,6 +663,9 @@ class PerformanceEngine:
         scene_speech = [
             turn.speech for turn in witnessed if turn.actor_id == actor_id and turn.speech
         ]
+        scene_tactics = [
+            turn.tactic for turn in witnessed if turn.actor_id == actor_id and turn.kind == "actor"
+        ]
         feedback = ""
         rejections = 0
         for attempt in range(1, TURN_ATTEMPTS + 1):
@@ -678,8 +727,10 @@ class PerformanceEngine:
                     language=self.language,
                     scene_speech=scene_speech if attempt == 1 else None,
                     play_actions=previous_actions if attempt == 1 else None,
+                    scene_tactics=scene_tactics if attempt == 1 else None,
                 )
-                validate_state_evidence(candidate)
+                candidate, dropped = settle_state_evidence(candidate)
+                repairs = [*repairs, *dropped]
                 moves = self._arbitrate(candidate, actor_id, scene, on_stage)
             except TurnIssue as issue:
                 rejections += 1
@@ -1002,6 +1053,14 @@ class PerformanceEngine:
                 _clause_key(part.part, required, required) or part.part for part in draft.parts
             ]
             frozen = self._clauses[beat_key] = list(dict.fromkeys([*first, *required]))
+            kinds = {
+                key: getattr(part, "kind", "decision")
+                for key, part in zip(first, draft.parts, strict=True)
+            }
+            self._clause_kinds[beat_key] = {
+                key: "revelation" if key in required else kinds.get(key, "decision")
+                for key in frozen
+            }
         evidence: list[str] = []
         proofs: list[BeatEvidence] = []
         shown: set[str] = set()
@@ -1047,6 +1106,11 @@ class PerformanceEngine:
             if not turning:
                 turning = self._likely_turner(run)
                 fallback = True
+            if mode == "turn" and not self._grounded(self._note_for(notes, turning), run):
+                # 7.17: in both 7.16 runs the turn came from a note that said "cede ante la
+                # evidencia", and the actor ceded on its first turn. A note that quotes nothing
+                # anyone said or did on stage dictates; the fallback names what is missing.
+                notes = [note for note in notes if not self._note_for([note], turning)]
             if missing and not self._note_for(notes, turning):
                 part = _clause_text(missing[0], required)
                 notes = [*notes[:1], f"{turning}: {FALLBACK_TURN_NOTE.format(part=part)}"]
@@ -1422,6 +1486,13 @@ class PerformanceEngine:
         """Build what a character is trying to remember: the scene, its want, and the last words."""
         recent = " ".join(turn.speech for turn in witnessed[-2:] if turn.speech)
         return f"{scene.setting} {objective} {recent}".strip()
+
+    @staticmethod
+    def _grounded(note: str, run: _SceneRun) -> bool:
+        """Say whether a note quotes, between guillemets, something said or done in the scene."""
+        performed = normalize(" ".join(f"{turn.speech} {turn.action}" for turn in run.turns))
+        quotes = [normalize(item) for item in _QUOTED.findall(note)]
+        return any(len(item.split()) >= _MIN_QUOTED_WORDS and item in performed for item in quotes)
 
     @staticmethod
     def _note_for(notes: list[str], actor_id: str) -> str:

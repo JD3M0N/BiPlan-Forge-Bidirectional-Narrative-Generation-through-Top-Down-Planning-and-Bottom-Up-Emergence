@@ -17,6 +17,8 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from asg_core import readability_signals
+
 from .artifacts import load_json_object, number_field, text_field
 from .simulation_report import SIMULATION_FIELDS
 
@@ -47,6 +49,12 @@ AXES: tuple[Axis, ...] = (
     Axis("actor_memory", "Memoria de los actores", SIMULATED),
     Axis("inventory", "Inventario de objetos", SIMULATED),
     Axis("turns_per_beat", "Turnos por beat", SIMULATED),
+    Axis("narration_method", "Método de narración", SIMULATED),
+    Axis("typed_clauses", "Cláusulas por tipo", SIMULATED),
+    Axis("scene_cards", "Fichas de escena", frozenset({"narrative"})),
+    Axis("anchored_critic", "Crítico con cita", frozenset({"narrative"})),
+    Axis("style_examples", "Ejemplos de estilo"),
+    Axis("line_editor", "Editor por fragmentos"),
     Axis("promise_ledger", "Ledger de promesas"),
     Axis("narrative_guidance", "Guía de esqueletos"),
     Axis("guidance_strategy", "Estrategia de guía"),
@@ -56,6 +64,22 @@ AXIS_LABELS = {axis.key: axis.label for axis in AXES}
 
 # The option axes a run before 7.3 could not have set to anything but their default.
 _FIXED_BEFORE_73 = {"narrator": "", "narration_tone": "", "audio_voice": ""}
+
+
+# The readability figures (7.17), measured on story.md like the T layer, so they also cover the
+# runs written before the narrator and the editor existed. None when a run has no story.
+READABILITY_LABELS = {
+    "speech_tag_ratio": "Réplicas con acotación",
+    "gerund_tag_ratio": "Acotaciones con gerundio",
+    "name_repeat_ratio": "Frases que repiten el nombre de la anterior",
+    "long_word_ratio": "Palabras de nueve letras o más",
+    "reported_speech_per_1000_words": "Verbos de estilo indirecto por 1000 palabras",
+    "stock_phrases_per_1000_words": "Frases gastadas por 1000 palabras",
+    "flagged_paragraph_ratio": "Párrafos con alguna observación",
+}
+_TITLES = frozenset(
+    "capitan capitana capitán custodio doctor doctora dr dra lord lady sir don doña".split()
+)
 
 
 @dataclass(frozen=True)
@@ -72,6 +96,7 @@ METRICS: tuple[Metric, ...] = (
     Metric("story_chapters", "Capítulos", "Historia"),
     Metric("dialogue_ratio", "Proporción de párrafos con diálogo", "Historia"),
     Metric("words_per_sentence", "Palabras por frase", "Historia"),
+    *(Metric(key, label, "Legibilidad") for key, label in READABILITY_LABELS.items()),
     *(Metric(name, name, "Función") for name in SIMULATION_FIELDS),
     Metric("knowledge_score", "Juez: fronteras de conocimiento", "Juez LLM"),
     Metric("narration_score", "Juez: fidelidad de la narración", "Juez LLM"),
@@ -262,7 +287,25 @@ def run_measurements(run_dir: str | Path) -> dict[str, float | None]:
     }
     for name in SIMULATION_FIELDS:
         values[name] = number_field(simulation, name)
+    values.update(_readability(run_dir))
     return {metric.key: values.get(metric.key) for metric in METRICS}
+
+
+def _readability(run_dir: Path) -> dict[str, float | None]:
+    """Measure the readability figures on a run's story, all None when it has none."""
+    try:
+        story = (run_dir / "story.md").read_text(encoding="utf-8")
+    except OSError:
+        return dict.fromkeys(READABILITY_LABELS)
+    characters = load_json_object(run_dir / "characters.json").get("characters")
+    names = []
+    for character in characters if isinstance(characters, list) else []:
+        name = character.get("name") if isinstance(character, dict) else None
+        words = [w for w in str(name or "").split() if w.casefold().strip(".") not in _TITLES]
+        if words:
+            names.append(words[0])
+    signals = readability_signals(story, names)
+    return {key: getattr(signals, key) for key in READABILITY_LABELS}
 
 
 def _applies(axis: Axis, config: RunConfig) -> bool:

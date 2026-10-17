@@ -23,6 +23,9 @@ from .agents import (
     WorldBuilderAgent,
     WriterAgent,
 )
+from .agents.editor import LineEditorAgent
+from .agents.scene_cards import SceneCardAgent
+from .agents.style import STYLE_EXAMPLES
 from .brief import (
     StoryBrief,
     authored_cast_block,
@@ -42,10 +45,12 @@ from .planning.graph import (
 from .planning.guidance_composition import compose_patterns
 from .planning.guidance_models import CompositionArtifact, CompositionFailure
 from .planning.guidance_retrieval import retrieve_patterns
+from .planning.names import choose_names
 from .planning.profiles import NarrativeProfile
 from .planning.promise_brief import critic_obligations, event_index, rendered_ledger
 from .planning.promises import materialize_ledger
 from .planning.repair import repair_guidance
+from .planning.scene_cards import chapter_cards, materialize_cards
 from .runtime.errors import (
     NON_DEGRADABLE_ERRORS,
     PlotValidationError,
@@ -73,6 +78,8 @@ from .schemas import (
     PromiseLedgerDraft,
     RevisionNote,
     RevisionReport,
+    SceneCard,
+    SceneCardsDraft,
     StoryPlan,
     StoryPlanDraft,
     StoryPresentation,
@@ -82,14 +89,17 @@ from .schemas import (
 )
 from .script.render import render_script
 from .script.stages import ScriptStagesMixin
-from .stage.schemas import CastBible
+from .stage.metrics import SimulationMetrics, renarrated_metrics
+from .stage.schemas import CastBible, PerformanceArtifact
 from .stage.stages import SimulationStagesMixin
 from .version import SUPPORTED_PIPELINE_VERSIONS
 from .writing.acceptance import writer_candidate_issue, writer_fallback_warning
+from .writing.anchoring import anchor_review
 from .writing.assembly import assemble_story
 from .writing.audit import story_metrics, word_count
-from .writing.craft_evidence import character_names, craft_evidence, craft_notes
+from .writing.craft_evidence import character_names, craft_evidence, craft_notes, known_names
 from .writing.language import language_code, prompt_language
+from .writing.line_edit import edit_chapter
 from .writing.localization import LocalizationMixin
 
 T = TypeVar("T")
@@ -104,6 +114,8 @@ CHECKPOINT_STAGES = (
     "planning",
     "plan_review",
     "promises",
+    # The scene cards of a narrative run, only when the scene_cards option is on (7.17).
+    "scene_cards",
     "drafting",
     "critique",
     "revision",
@@ -140,9 +152,72 @@ PLAN_ATTEMPTS_BY_PROFILE: dict[NarrativeProfile, int] = {
 # to repair than a rejected plan: one repair round is enough, and the stage degrades rather than
 # spending more of the quota on prose guidance the story can do without.
 PROMISE_ATTEMPTS = 2
+# The scene cards annotate a frozen plan like the ledger, so they get as many attempts.
+SCENE_CARD_ATTEMPTS = 2
 # The world has no repair prompt of its own: the provider already resends the validation errors,
 # so a second stage attempt is a fresh draw. 7.10 lost a run to one bad location id here.
 WORLD_ATTEMPTS = 2
+
+
+# What every reuse of a finished run freezes: the request and the plan it was drawn from.
+_PLAN_ARTIFACTS = {
+    "request.json": StoryRequest,
+    "world.json": WorldArtifact,
+    "characters.json": CharactersArtifact,
+    "story_plan.json": StoryPlan,
+}
+# The options a performance was played with: a narration replay records the source's.
+_PERFORMANCE_OPTIONS = (
+    "narrative_profile",
+    "actor_memory",
+    "simulation_mode",
+    "inventory",
+    "turns_per_beat",
+    "typed_clauses",
+)
+# The stages a narration replay inherits from its source as already done.
+_PERFORMED_STAGES = (
+    "analysis",
+    "world",
+    "characters",
+    "planning",
+    "drafting",
+    "casting",
+    "performance",
+)
+
+
+def _compatible_source(source: Path, *, simulated: bool) -> dict:
+    """Read a source run's metadata, refusing one this code cannot reuse."""
+    metadata = json.loads((source / "metadata.json").read_text(encoding="utf-8"))
+    if (
+        metadata.get("status") != "completed"
+        or metadata.get("pipeline_version") not in SUPPORTED_PIPELINE_VERSIONS
+        or (simulated and metadata.get("story_format") != StoryFormat.SIMULATED.value)
+    ):
+        kind = "simulated " if simulated else ""
+        raise ValueError(f"the source must be a completed compatible {kind}run")
+    return {**metadata, "_directory": str(source)}
+
+
+def _frozen_artifacts(source: Path, frozen_types: dict) -> tuple[dict, dict]:
+    """Read and validate a source run's frozen artifacts, keeping their exact bytes."""
+    raw = {name: (source / name).read_bytes() for name in frozen_types}
+    return raw, {name: model.model_validate_json(raw[name]) for name, model in frozen_types.items()}
+
+
+def _source_ledger(source: Path) -> PromiseLedger | None:
+    """Read a source run's promise ledger, or None when that run traced none."""
+    path = source / "promise_ledger.json"
+    return PromiseLedger.model_validate_json(path.read_bytes()) if path.is_file() else None
+
+
+def _source_options(source: Path) -> dict:
+    """Read the options a source run recorded, empty for a run older than 7.3."""
+    try:
+        return json.loads((source / "generation_options.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
 
 
 class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin, LocalizationMixin):
@@ -330,67 +405,52 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin, LocalizationMixin)
             self._clear_provider_callbacks()
 
     def execute_from_plan(self, source_run: Path) -> Path:
-        """Perform a new run from the source's frozen request, plan, script and cast."""
-        if not self._simulated:
-            raise ValueError("plan reuse requires the simulated story format")
+        """Write a new run from the source's frozen plan, from its first writing stage on.
+
+        A simulated run reuses the script and the cast too, and performs again. Since 7.17 a
+        narrative run can reuse a plan as well, so two drafts from one plan differ only in how
+        they were written: that is what makes a Top-Down arm readable with a handful of runs.
+        """
         source = Path(source_run)
-        metadata = json.loads((source / "metadata.json").read_text(encoding="utf-8"))
-        if (
-            metadata.get("status") != "completed"
-            or metadata.get("story_format") != StoryFormat.SIMULATED.value
-            or metadata.get("pipeline_version") not in SUPPORTED_PIPELINE_VERSIONS
-        ):
-            raise ValueError("plan source must be a completed compatible simulated run")
-        frozen_types = {
-            "request.json": StoryRequest,
-            "world.json": WorldArtifact,
-            "characters.json": CharactersArtifact,
-            "story_plan.json": StoryPlan,
-            "script.json": PlayScript,
-            "cast_bible.json": CastBible,
-        }
-        raw = {name: (source / name).read_bytes() for name in frozen_types}
-        frozen = {
-            name: model.model_validate_json(raw[name]) for name, model in frozen_types.items()
-        }
+        if self._simulated:
+            frozen_types = {
+                **_PLAN_ARTIFACTS,
+                "script.json": PlayScript,
+                "cast_bible.json": CastBible,
+            }
+        elif self.story_format is StoryFormat.NARRATIVE:
+            frozen_types = dict(_PLAN_ARTIFACTS)
+        else:
+            raise ValueError("plan reuse requires the narrative or simulated story format")
+        metadata = _compatible_source(source, simulated=self._simulated)
+        raw, frozen = _frozen_artifacts(source, frozen_types)
         request = frozen["request.json"]
         world = frozen["world.json"]
         characters = frozen["characters.json"]
         plan = frozen["story_plan.json"]
-        play = frozen["script.json"]
-        bible = frozen["cast_bible.json"]
         validate_story_plan(plan, world, characters)
-        ledger_path = source / "promise_ledger.json"
-        ledger = (
-            PromiseLedger.model_validate_json(ledger_path.read_bytes())
-            if ledger_path.is_file()
-            else None
-        )
+        ledger = _source_ledger(source)
         self.usage_start = len(getattr(self.provider, "usage_records", []))
         self.repository = self._create_repository(request.title)
         try:
             self._configure_provider_callbacks()
-            self.repository.save_data(
-                "source_run.json",
-                {
-                    "run_id": metadata["run_id"],
-                    "frozen_sha256": {
-                        name: hashlib.sha256(content).hexdigest() for name, content in raw.items()
-                    },
-                },
-            )
-            for name, artifact in frozen.items():
-                self.repository.save_json(name, artifact)
-            if ledger is not None:
-                self.repository.save_json("promise_ledger.json", ledger)
-            for name in ("script_presentation.json", "script_promise_audit.json"):
-                path = source / name
-                if path.is_file():
-                    self.repository.save_data(name, json.loads(path.read_text(encoding="utf-8")))
+            self._save_frozen(metadata, raw, frozen, ledger, "plan")
             self.repository.metadata.narrative_profile = request.narrative_profile
-            for stage in ("analysis", "world", "characters", "planning", "drafting", "casting"):
+            if self._simulated:
+                for stage in ("analysis", "world", "characters", "planning", "drafting", "casting"):
+                    self.repository.complete_stage(stage)
+                play, bible = frozen["script.json"], frozen["cast_bible.json"]
+                self._perform_and_narrate(request, world, characters, plan, play, ledger, bible)
+                return self.repository.run_dir
+            for stage in ("analysis", "world", "characters", "planning"):
                 self.repository.complete_stage(stage)
-            self._perform_and_narrate(request, world, characters, plan, play, ledger, bible)
+            presentation, draft_bodies, draft = self._draft_chapters(
+                request, world, characters, plan, ledger
+            )
+            bodies = self._critique_and_revise(
+                request, world, characters, plan, presentation, draft_bodies, draft, ledger
+            )
+            self._finalize(request, plan, assemble_story(plan, presentation, bodies))
             return self.repository.run_dir
         except Exception as exc:
             self._record_failure(exc)
@@ -400,6 +460,97 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin, LocalizationMixin)
             raise
         finally:
             self._clear_provider_callbacks()
+
+    def execute_from_performance(self, source_run: Path) -> Path:
+        """Narrate a new run from the source's frozen performance, without performing again.
+
+        A narration costs about a dozen calls and a performance about a hundred and thirty, and
+        the performance is where the noise between two runs comes from. Narrating one log twice,
+        one way and another, compares the two ways and nothing else (7.17).
+        """
+        if not self._simulated:
+            raise ValueError("narration reuse requires the simulated story format")
+        source = Path(source_run)
+        metadata = _compatible_source(source, simulated=True)
+        frozen_types = {
+            **_PLAN_ARTIFACTS,
+            "script.json": PlayScript,
+            "cast_bible.json": CastBible,
+            "performance.json": PerformanceArtifact,
+            "simulation_metrics.json": SimulationMetrics,
+        }
+        raw, frozen = _frozen_artifacts(source, frozen_types)
+        request = frozen["request.json"]
+        characters = frozen["characters.json"]
+        plan = frozen["story_plan.json"]
+        play = frozen["script.json"]
+        performance = frozen["performance.json"]
+        ledger = _source_ledger(source)
+        # What the performance was played with belongs to the source: only the narration may
+        # differ, so the options this run records say so.
+        recorded = _source_options(source)
+        self.options = self.options.with_changes(
+            **{name: recorded[name] for name in _PERFORMANCE_OPTIONS if name in recorded}
+        )
+        self.usage_start = len(getattr(self.provider, "usage_records", []))
+        self.repository = self._create_repository(request.title)
+        try:
+            self._configure_provider_callbacks()
+            self._save_frozen(metadata, raw, frozen, ledger, "performance")
+            self.repository.metadata.narrative_profile = request.narrative_profile
+            self.repository.metadata.stage_model = metadata.get("stage_model")
+            for stage in _PERFORMED_STAGES:
+                self.repository.complete_stage(stage)
+            story, narration, fallbacks, narrated = self._narrate(
+                request,
+                characters,
+                plan,
+                play,
+                performance,
+                ledger,
+                world=frozen["world.json"],
+                bible=frozen["cast_bible.json"],
+            )
+            self._audit_performed_promises(ledger, performance, story)
+            metrics = renarrated_metrics(
+                frozen["simulation_metrics.json"], performance, story, fallbacks
+            ).model_copy(update={"narrative_voice": narration.narrative_voice})
+            self.repository.save_json("simulation_metrics.json", metrics)
+            self.repository.save_json("story_metrics.json", story_metrics(request, narrated, story))
+            self._publish(story, "Guardando la historia", "Historia renarrada terminada")
+            return self.repository.run_dir
+        except Exception as exc:
+            self._record_failure(exc)
+            raise
+        except BaseException as exc:
+            self._record_interruption(exc)
+            raise
+        finally:
+            self._clear_provider_callbacks()
+
+    def _save_frozen(self, metadata, raw, frozen, ledger, reused: str) -> None:
+        """Copy a source run's frozen artifacts into this run, with their fingerprints."""
+        assert self.repository is not None
+        self.repository.save_data(
+            "source_run.json",
+            {
+                "run_id": metadata["run_id"],
+                "reused": reused,
+                "frozen_sha256": {
+                    name: hashlib.sha256(content).hexdigest() for name, content in raw.items()
+                },
+            },
+        )
+        for name, artifact in frozen.items():
+            if name != "simulation_metrics.json":
+                self.repository.save_json(name, artifact)
+        if ledger is not None:
+            self.repository.save_json("promise_ledger.json", ledger)
+        source = Path(metadata["_directory"])
+        for name in ("script_presentation.json", "script_promise_audit.json"):
+            path = source / name
+            if path.is_file():
+                self.repository.save_data(name, json.loads(path.read_text(encoding="utf-8")))
 
     def _analyze_request(self, request: StoryRequest | str) -> StoryRequest:
         """Convert a free-form prompt into a validated story request."""
@@ -641,6 +792,10 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin, LocalizationMixin)
         characters = self._call_agent("characters", build_characters)
         if self.brief is not None and self.brief.cast:
             characters = self._keep_declared_cast(characters, build_characters)
+        fixed = [member.name for member in self.brief.cast] if self.brief is not None else []
+        characters, choices = choose_names(characters, fixed)
+        if choices:
+            self.repository.save_data("name_choices.json", {"choices": choices})
         characters = self._localized_characters(request, characters)
         self.repository.save_json("characters.json", characters)
         self.repository.complete_stage("characters")
@@ -945,6 +1100,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin, LocalizationMixin)
     ) -> tuple[StoryPresentation, list[str], str]:
         """Use Drafter to localize titles and create the first story."""
         assert self.repository is not None
+        cards = self._build_scene_cards(request, world, characters, plan)
         drafter = DrafterAgent(self.provider)
 
         def create_presentation():
@@ -967,6 +1123,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin, LocalizationMixin)
             history = relevant_prior_events(plan, {event.id for event in events})
             character_ids = {item for event in events for item in event.character_ids}
             relevant = [item for item in characters.characters if item.id in character_ids]
+            scenes = chapter_cards(cards, plan, chapter.id)
 
             def draft_chapter(
                 character_snapshot=relevant or characters.characters,
@@ -975,6 +1132,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin, LocalizationMixin)
                 history_snapshot=history,
                 previous_body: str = bodies[-1] if bodies else "",
                 brief: str = self._promise_brief(ledger, chapter.id),
+                scenes=scenes,
             ):
                 """Draft one chapter with loop values bound to this iteration."""
                 return drafter.run(
@@ -988,6 +1146,8 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin, LocalizationMixin)
                     history_snapshot,
                     previous_body,
                     brief,
+                    style_examples=self.options.style_examples,
+                    scene_cards=scenes,
                 )
 
             body = self._call_agent("drafter", draft_chapter).strip()
@@ -997,6 +1157,62 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin, LocalizationMixin)
         draft = assemble_story(plan, presentation, bodies)
         self.repository.save_text("draft.md", draft)
         return presentation, bodies, draft
+
+    def _build_scene_cards(
+        self,
+        request: StoryRequest,
+        world: WorldArtifact,
+        characters: CharactersArtifact,
+        plan: StoryPlan,
+    ) -> list[SceneCard]:
+        """Draw the scenes of every event when the run asks for them, or carry on without.
+
+        The cards change how the plan is written, never what it holds, so like the ledger the
+        stage degrades: a story drafted without them is a 7.16 story, never a lost run.
+        """
+        if not self.options.scene_cards:
+            return []
+        assert self.repository is not None
+        self._notify(51, "scene_cards", "Dibujando las escenas de cada evento")
+        agent = SceneCardAgent(self.provider)
+        feedback = ""
+        for attempt in range(1, SCENE_CARD_ATTEMPTS + 1):
+
+            def draw_cards(feedback_snapshot: str = feedback):
+                """Draw one set of scene cards with feedback bound to this attempt."""
+                return agent.run(request, world, characters, plan, feedback_snapshot)
+
+            try:
+                draft = self._call_agent("scene_planner", draw_cards)
+                cards = materialize_cards(draft, plan, world, characters)
+            except NON_DEGRADABLE_ERRORS:
+                raise
+            except ValueError as exc:
+                issue = str(exc).strip() or type(exc).__name__
+                self.repository.save_data(
+                    f"scene_cards/attempt-{attempt:03d}.json", {"attempt": attempt, "issue": issue}
+                )
+                feedback = (
+                    "\n\nSCENE CARD REPAIR REQUIRED. RETURN A COMPLETE REPLACEMENT SET. "
+                    f"The previous one was rejected: {issue}."
+                )
+                continue
+            except Exception as exc:
+                self.repository.save_data(
+                    f"scene_cards/attempt-{attempt:03d}.json",
+                    {"attempt": attempt, "exception_type": type(exc).__name__},
+                )
+                continue
+            self.repository.save_json("scene_cards.json", SceneCardsDraft(cards=cards))
+            self.repository.complete_stage("scene_cards")
+            return cards
+        warning = (
+            "[SCENE_CARDS_FALLBACK] No se pudieron dibujar las escenas; el borrador se escribe "
+            "directamente desde el plan."
+        )
+        self.repository.add_warning(warning)
+        self._emit("scene_cards_fallback", warning, stage="scene_cards")
+        return []
 
     @staticmethod
     def _validate_presentation(plan: StoryPlan, presentation: StoryPresentation) -> None:
@@ -1053,11 +1269,15 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin, LocalizationMixin)
                     draft,
                     evidence.prompt_block,
                     obligations,
+                    anchored=self.options.anchored_critic,
                 )
 
             review = self._call_agent("drama_critic", critique_story)
             self.repository.save_json("review.json", review)
             self._validate_note_references(review.notes, plan)
+            if self.options.anchored_critic:
+                review, anchors = anchor_review(review, draft)
+                self.repository.save_data("review_anchors.json", anchors)
             self._audit_promises(ledger, review)
             self.repository.complete_stage("critique")
         except NON_DEGRADABLE_ERRORS:
@@ -1069,10 +1289,10 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin, LocalizationMixin)
             )
             self.repository.add_warning(warning)
             self._emit("quality_fallback", warning, stage=self.progress["stage"])
-            return draft_bodies
+            return self._line_edited(request, characters, world, draft_bodies)
         # review.json keeps what the critic said; the Writer also gets what was measured.
         measured = review.model_copy(update={"notes": [*review.notes, *craft_notes(evidence)]})
-        return self._revise_chapters(
+        revised = self._revise_chapters(
             request,
             characters,
             plan,
@@ -1081,6 +1301,68 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin, LocalizationMixin)
             measured,
             ledger,
         )
+        return self._line_edited(request, characters, world, revised)
+
+    def _line_edited(
+        self,
+        request: StoryRequest,
+        characters: CharactersArtifact,
+        world: WorldArtifact | None,
+        bodies: list[str],
+    ) -> list[str]:
+        """Run the line editor over every finished chapter when the run asks for it (7.17)."""
+        return [
+            self._line_edit_chapter(request, characters, world, index, body)
+            for index, body in enumerate(bodies, 1)
+        ]
+
+    def _line_edit_chapter(
+        self,
+        request: StoryRequest,
+        characters: CharactersArtifact,
+        world: WorldArtifact | None,
+        index: int,
+        body: str,
+    ) -> str:
+        """Edit one chapter's flagged paragraphs, or return it untouched.
+
+        Off unless the line_editor option is on. An editor that cannot run costs the chapter
+        nothing: it ships as it was, with a warning.
+        """
+        if not self.options.line_editor:
+            return body
+        assert self.repository is not None
+        editor = LineEditorAgent(self.provider)
+        examples = STYLE_EXAMPLES if self.options.style_examples else ()
+
+        def call(paragraphs: list[dict]):
+            """Hand the flagged paragraphs of the bound chapter to the editor."""
+            return self._call_agent(
+                "line_editor",
+                lambda: editor.run(request, paragraphs, style_examples=self.options.style_examples),
+            )
+
+        try:
+            edited = edit_chapter(
+                body,
+                character_names(characters.characters),
+                known_names(characters, world),
+                call,
+                examples=examples,
+            )
+        except NON_DEGRADABLE_ERRORS:
+            raise
+        except Exception as exc:
+            warning = (
+                f"[LINE_EDIT_UNAVAILABLE] Capítulo {index}: el editor no pudo corregir "
+                f"({type(exc).__name__}); el capítulo se entrega como estaba."
+            )
+            self.repository.add_warning(warning)
+            self._emit("line_edit_unavailable", warning, stage=self.progress["stage"])
+            return body
+        if edited.flagged:
+            self.repository.save_data(f"line_edits/chapter-{index:03d}.json", edited.as_record())
+        return edited.body
 
     def _audit_promises(self, ledger: PromiseLedger | None, review: StoryReview) -> None:
         """Cross the ledger with the critic's verdicts and record what the story delivered.
@@ -1286,6 +1568,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin, LocalizationMixin)
                         previous_revised,
                         feedback_snapshot,
                         promise_brief,
+                        style_examples=self.options.style_examples,
                     )
 
                 candidate = self._call_agent("writer", revise_chapter).strip()

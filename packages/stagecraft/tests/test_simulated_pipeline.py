@@ -7,6 +7,7 @@ from asg_stagecraft import StoryGenerator
 from asg_stagecraft import pipeline as pipeline_module
 from asg_stagecraft.formats import (
     ActorMemory,
+    NarrationMethod,
     NarrativeVoice,
     ScriptMethod,
     SimulationMode,
@@ -23,8 +24,9 @@ from asg_stagecraft.stage.schemas import (
     PerformanceArtifact,
 )
 from asg_stagecraft.tools import recompute
+from asg_stagecraft.writing.line_edit import LineEdit, LineEdits
 from stage_fakes import StageFakeProvider
-from test_generator_v5 import major_story_review, make_request
+from test_generator_v5 import major_story_review, make_request, structured_prompt
 
 
 def generate(tmp_path, provider=None, **kwargs):
@@ -675,6 +677,69 @@ def test_a_new_performance_reuses_the_exact_plan_script_and_cast(tmp_path) -> No
     ):
         assert (replay.run_dir / name).read_bytes() == (original.run_dir / name).read_bytes()
     assert read_json(replay, "performance.json")["settings"]["simulation_mode"] == "adaptive"
+
+
+def test_the_line_editor_rewrites_only_flagged_paragraphs_and_code_decides(tmp_path) -> None:
+    """7.17: the editor sees the flagged paragraph alone, and an edit off it is turned down."""
+    edits = LineEdits(
+        edits=[
+            LineEdit(id="P2", text="—Nadie mas lo sabe."),
+            LineEdit(id="P3", text="Ana se fue."),
+        ]
+    )
+    provider = StageFakeProvider(story_review=major_story_review(), line_edits=[edits])
+    run, _ = generate(tmp_path, provider, line_editor=True, audio=False)
+    record = read_json(run, "line_edits/chapter-001.json")
+    assert record["flagged"] == {"P2": ["named_tag"]}
+    assert record["accepted"] == {"P2": "—Nadie mas lo sabe."}
+    assert record["rejected"] == {"P3": "not a flagged paragraph"}
+    edited = run.story_path.read_text(encoding="utf-8").split("\n## ")[1]
+    assert "—Nadie mas lo sabe.\n" in edited
+    requested = structured_prompt(provider, "LineEdits")
+    assert "Ana cerro el archivo" not in requested
+
+
+@pytest.mark.parametrize(
+    "selections", [None, [RuntimeError("selector down")]], ids=["selected", "fallback"]
+)
+def test_a_selected_narration_writes_from_its_moments_or_falls_back(tmp_path, selections):
+    """7.17: the narrator is handed the chosen moments, never the whole log, unless they fail."""
+    provider = StageFakeProvider(story_review=major_story_review(), selections=selections)
+    run, _ = generate(tmp_path, provider, narration_method=NarrationMethod.SELECTED, audio=False)
+    metadata = read_json(run, "metadata.json")
+    assert metadata["status"] == "completed"
+    first = provider.narrator_prompts[0]
+    if selections is None:
+        assert "MOMENTOS:" in first
+        assert "PERFORMANCE LOG" not in first
+        assert read_json(run, "narration/chapter-001-selection.json")["moments"]
+        assert "ReportedLines" not in {name for name, _, _ in provider.structured_calls}
+    else:
+        assert "PERFORMANCE LOG" in first
+        assert any(item.startswith("[SELECTION_FALLBACK]") for item in metadata["warnings"])
+
+
+def test_a_narration_replay_narrates_the_frozen_log_without_performing(tmp_path) -> None:
+    """7.17: two narrations of one log compare the narrations and nothing else."""
+    original, _ = generate(tmp_path, audio=False)
+    provider = StageFakeProvider(story_review=major_story_review())
+    replay = StoryGenerator(
+        provider, tmp_path, story_format=StoryFormat.SIMULATED, audio=False, turns_per_beat=3
+    ).generate_from_performance(original.run_dir)
+    assert read_json(replay, "metadata.json")["status"] == "completed"
+    assert read_json(replay, "source_run.json")["reused"] == "performance"
+    for name in ("performance.json", "script.json", "cast_bible.json"):
+        assert (replay.run_dir / name).read_bytes() == (original.run_dir / name).read_bytes()
+    assert "ActorTurnDraft" not in {name for name, _, _ in provider.structured_calls}
+    # The options this run records are the ones the performance was played with.
+    options = read_json(original, "generation_options.json")
+    assert (
+        read_json(replay, "generation_options.json")["turns_per_beat"] == options["turns_per_beat"]
+    )
+    assert (
+        read_json(replay, "simulation_metrics.json")["turns"]
+        == read_json(original, "simulation_metrics.json")["turns"]
+    )
 
 
 def test_the_inventory_dresses_the_stage_and_arbitrates_the_performance(tmp_path) -> None:

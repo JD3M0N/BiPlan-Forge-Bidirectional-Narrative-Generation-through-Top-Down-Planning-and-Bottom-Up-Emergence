@@ -38,6 +38,7 @@ from asg_stagecraft.stage.schemas import (
     BeatBrief,
     BeatRecord,
     CastBibleDraft,
+    ChapterSelection,
     ItemAction,
     ItemActionDraft,
     KnowledgeGate,
@@ -53,8 +54,10 @@ from asg_stagecraft.stage.schemas import (
     SceneBrief,
     SceneCastBrief,
     ScenePerformance,
+    SelectedMoment,
     StageTurn,
 )
+from asg_stagecraft.stage.selection import accept_selection
 from asg_stagecraft.stage.stages import _without_act_label
 from asg_stagecraft.stage.validation import (
     MAX_SPEECH_WORDS,
@@ -62,6 +65,7 @@ from asg_stagecraft.stage.validation import (
     TurnIssue,
     normalize_turn,
     repair_form,
+    settle_state_evidence,
     similarity,
     strip_internal_ids,
     validate_turn,
@@ -329,15 +333,20 @@ def test_every_rejection_carries_the_code_the_audit_files_it_under() -> None:
 @pytest.mark.parametrize(
     ("action", "repaired"),
     [
-        # Both verbatim from the second real run. A leading verb would need conjugating, so it
-        # is still bounced; a possessive has one fix, so it is repaired in place since 7.9.
-        ("Me arrodillo lentamente junto al hogar, escarbo las brasas con un hierro viejo.", None),
+        # Verbatim from the second real run. A possessive has one fix (7.9), and since 7.17 so
+        # does a verb from the closed list; a verb outside it would need guessing, so it is
+        # still bounced back.
+        (
+            "Me arrodillo lentamente junto al hogar, escarbo las brasas con un hierro viejo.",
+            "Se arrodilla lentamente junto al hogar, escarba las brasas con un hierro viejo.",
+        ),
         (
             "Golpeo rítmicamente un pequeño bolígrafo metálico contra la palma de mi mano.",
-            "Golpeo rítmicamente un pequeño bolígrafo metálico contra la palma de su mano.",
+            "Golpea rítmicamente un pequeño bolígrafo metálico contra la palma de su mano.",
         ),
+        ("Me escabullo hacia la puerta.", None),
     ],
-    ids=["leading-me-is-rejected", "possessive-is-repaired"],
+    ids=["known-verbs-are-conjugated", "possessive-and-verb-are-repaired", "unknown-is-rejected"],
 )
 def test_a_first_person_stage_direction_is_repaired_or_rejected(action, repaired) -> None:
     fixed, repairs = repair_form(act(action=action, speech="Algo."))
@@ -408,9 +417,23 @@ def test_copied_log_marks_are_stripped_and_internal_ids_still_block() -> None:
 
 
 def test_the_first_person_detector_is_conservative_by_design() -> None:
-    """A bare first-person verb gets through: the documented blind spot, not a bug."""
-    validate_turn(act(action="Saco una astilla del bolsillo.", speech="Algo."), previous_speech=[])
+    """A first-person verb outside the closed list gets through: the documented blind spot."""
+    validate_turn(act(action="Tamborileo sobre la mesa.", speech="Algo."), previous_speech=[])
     validate_turn(act(action="cruza los brazos", speech="Algo."), previous_speech=[])
+
+
+@pytest.mark.parametrize(
+    ("evidence", "kept"),
+    [("«Ya no confío en ti»", True), ("Nunca dije esto", False)],
+    ids=["quoted-with-other-marks-and-accents", "absent-from-the-turn"],
+)
+def test_an_unsupported_state_change_is_dropped_and_the_turn_kept(evidence, kept) -> None:
+    """7.16: an unmatched quote rejected 24 of 51 turns, and twice it cost Aleth her turn."""
+    draft = act(speech="Ya no confio en ti.", goal_after="Huir", state_evidence=evidence)
+    settled, repairs = settle_state_evidence(draft)
+    assert (settled.goal_after == "Huir", repairs) == (
+        (True, []) if kept else (False, ["STATE_CHANGE_DROPPED"])
+    )
 
 
 def test_a_gesture_made_again_is_rejected_even_with_a_word_changed() -> None:
@@ -454,6 +477,16 @@ def test_a_tic_from_scenes_ago_costs_a_first_attempt_only() -> None:
         validate_turn(again, previous_speech=[], play_actions=played)
     assert error.value.code == "REPEATED_ACTION"
     validate_turn(again, previous_speech=[], previous_actions=played)
+    # 7.17: a third turn in a row on one tactic is asked for another way, on a first attempt.
+    with pytest.raises(TurnIssue) as error:
+        validate_turn(act(speech="Abre."), previous_speech=[], scene_tactics=["confront"] * 2)
+    assert error.value.code == "TACTIC_RUN"
+    validate_turn(act(speech="Abre."), previous_speech=[], scene_tactics=["deflect", "confront"])
+    # 7.17: going towards the same place again is not a tic; "hacia la grieta" names a place.
+    climb = act(action="trepa hacia la grieta superior de la pared", speech="Arriba.")
+    validate_turn(
+        climb, previous_speech=[], play_actions=["se desliza hacia la grieta superior del muro"]
+    )
 
 
 def test_a_speech_is_not_a_turn() -> None:
@@ -495,8 +528,14 @@ def test_a_speech_is_not_a_turn() -> None:
             "Este miserable quiere la llave.",
         ),
         ("No pienso abrir esa puerta.", "La llave la tengo yo.", "La llave la tengo yo."),
+        # 7.17: a plan dressed as a condition goes; a fear dressed as one is subtext and stays.
+        (
+            "No pienso abrir esa puerta.",
+            "Si no lee el documento, tendré que obligarle. Si la piedra cede, nos engullirá.",
+            "Si la piedra cede, nos engullirá.",
+        ),
     ],
-    ids=["echo", "plan", "plan-after-subtext", "subtext"],
+    ids=["echo", "plan", "plan-after-subtext", "subtext", "conditional-plan-but-not-fear"],
 )
 def test_only_a_thought_that_is_real_subtext_is_kept(speech, thought, kept) -> None:
     draft = act(speech=speech, thought=thought)
@@ -739,6 +778,43 @@ def test_a_gate_anchored_to_an_unknown_event_is_rejected() -> None:
     with pytest.raises(ValueError) as error:
         materialize_bible(draft, cast_ids=[known], characters=characters, plan=plan)
     assert "no-existe" in str(error.value)
+
+
+def test_a_fact_from_the_future_is_dropped_and_an_absent_revealer_rejected() -> None:
+    """7.17: Ilse knew at sea how the second event would end; three beats needed the absent."""
+    plan, characters = plan_and_cast()
+    known = characters.characters[0].id
+    first = plan.topological_order[0]
+    seeded = dossier(known).model_copy(
+        update={
+            "initial_knowledge": ["El mar es salado.", "El barco acabará varado."],
+            "knowledge_sources": ["world", first],
+        }
+    )
+    bible = materialize_bible(
+        CastBibleDraft(dossiers=[seeded]),
+        cast_ids=[known],
+        characters=characters,
+        plan=plan,
+        future_events={known: {first}},
+    )
+    assert bible.dossiers[0].initial_knowledge == ["El mar es salado."]
+    assert any(note.startswith("fact dropped") for note in bible.observations)
+    gate = KnowledgeGate(
+        id="gate-1",
+        fact="la grieta",
+        revealed_by=known,
+        how="discovery",
+        revealed_at_event_id=first,
+    )
+    with pytest.raises(ValueError, match="not on stage"):
+        materialize_bible(
+            CastBibleDraft(dossiers=[dossier(known)], knowledge_gates=[gate]),
+            cast_ids=[known],
+            characters=characters,
+            plan=plan,
+            on_stage={first: set()},
+        )
 
 
 def test_a_gate_only_reaches_the_characters_that_hold_it() -> None:
@@ -1017,7 +1093,8 @@ def _context_for(character_id: str, witnessed: list[StageTurn]) -> str:
 def test_an_actor_is_shown_the_line_just_addressed_to_them() -> None:
     """The 7.1 scenes were rounds of monologues: nobody answered what was said to them."""
     spoken = [turn("ana", speech="Bruno, quien subio anoche?", addressed=["bruno"])]
-    assert "TE ACABAN DE DECIR:\nAna: Bruno, quien subio anoche?" in _context_for("bruno", spoken)
+    owed = "antes de seguir con lo tuyo):\nAna: Bruno, quien subio anoche?"
+    assert owed in _context_for("bruno", spoken)
     assert "TE ACABAN DE DECIR" not in _context_for("ana", spoken)
 
 
@@ -1566,3 +1643,25 @@ def test_the_narrative_tense_is_read_from_the_narration(verbs, tense) -> None:
     assert narrative_tense(story) == tense
     if tense == "imperfect":
         assert not editorial_verdict(NarrationReview(), story, [], "Spanish").accepted
+
+
+def test_a_selection_keeps_the_narrator_contract() -> None:
+    """7.17: unknown ids drop, a copied summary is cut, a key line returns, the share holds."""
+    lines = [
+        {"id": f"L{n}", "turn_id": f"t{n}", "scene": "S1", "says": f"dato{n} uno dos tres cuatro"}
+        for n in range(1, 7)
+    ]
+    lines[5]["key"] = True
+    drafted = ChapterSelection(
+        moments=[
+            SelectedMoment(lines=["L1", "L2", "L9"], treatment="scene", gist="Discutieron."),
+            SelectedMoment(lines=["L3"], treatment="summary", gist="dato3 uno dos tres cuatro"),
+            SelectedMoment(lines=["L4", "L5"], treatment="scene", gist="Se separaron."),
+        ]
+    )
+    selection = accept_selection(lines, drafted)
+    assert [(moment.turn_ids, moment.treatment) for moment in selection.moments] == [
+        (["t1", "t2"], "scene"),
+        (["t4", "t5"], "summary"),
+        (["t6"], "scene"),
+    ]

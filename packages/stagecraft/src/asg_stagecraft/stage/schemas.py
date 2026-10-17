@@ -48,6 +48,30 @@ Tactic = Literal[
     "withdraw",
 ]
 
+# The tactics in the fiction's words, for the actor to read what it has tried (7.17).
+TACTIC_NAMES = {
+    "confront": "enfrentar",
+    "accuse": "acusar",
+    "demand": "exigir",
+    "deflect": "desviar",
+    "deny": "negar",
+    "lie": "mentir",
+    "stall": "dar largas",
+    "plead": "suplicar",
+    "charm": "seducir",
+    "comfort": "consolar",
+    "threaten": "amenazar",
+    "mock": "burlarse",
+    "command": "ordenar",
+    "test": "poner a prueba",
+    "investigate": "investigar",
+    "reveal": "revelar",
+    "confess": "confesar",
+    "concede": "ceder en algo",
+    "yield": "rendirse",
+    "withdraw": "retirarse",
+}
+
 # Tactics that give ground. A beat whose outcome needs someone to change can only land after one.
 YIELDING_TACTICS = frozenset({"reveal", "confess", "concede", "yield"})
 
@@ -258,6 +282,20 @@ class ActorDossier(BaseModel):
             "In the fiction language: what this character already knows when the curtain rises. "
             "This is their knowledge boundary at the start: anything absent here they must learn "
             "on stage. Never include what they will deduce or discover during the story."
+        ),
+    )
+    knowledge_sources: list[str] = Field(
+        default_factory=list,
+        description=(
+            "One entry per initial_knowledge fact, in the same order, saying where it comes "
+            "from: 'world', 'backstory', or the id of the plan event it comes from."
+        ),
+    )
+    cover_story: str = Field(
+        default="",
+        description=(
+            "In the fiction language, only when this character has a secret: the version of "
+            "events they tell instead, as something they would say. Empty otherwise."
         ),
     )
     relationships: list[ActorRelationship] = Field(default_factory=list)
@@ -605,6 +643,8 @@ class TurnRejection(BaseModel):
         "INVALID_ITEM_TARGET",
         "UNDECLARED_ITEM_ACTION",
         "INVALID_STATE_EVIDENCE",
+        "TACTIC_RUN",
+        "WRONG_LANGUAGE",
     ]
     issue: str
     turn: dict | None = None
@@ -668,6 +708,19 @@ class OutcomePart(BaseModel):
     )
 
     sources: list[EvidenceSource] = Field(default_factory=list)
+
+
+class TypedOutcomePart(OutcomePart):
+    """A clause tagged with who can make it happen (7.17, the typed_clauses option)."""
+
+    kind: Literal["decision", "revelation", "world"] = Field(
+        default="decision",
+        description=(
+            "decision: someone on stage chooses or does it. revelation: someone on stage tells "
+            "or discovers a fact. world: the world or someone off stage does it - a journey, an "
+            "arrival, a ship leaving - which the characters cannot act out."
+        ),
+    )
 
 
 class BeatEvidence(BaseModel):
@@ -754,6 +807,19 @@ class BeatCheckDraft(BaseModel):
     world_items: list[WorldItemDraft] = Field(default_factory=list)
     world_basis: list[EvidenceSource] = Field(default_factory=list)
     world_effect: Literal["opportunity", "pressure"] = "pressure"
+
+
+class TypedBeatCheckDraft(BeatCheckDraft):
+    """The director's reading with each clause tagged by kind (7.17, typed_clauses).
+
+    A model of its own, like ActorTurnWithItemsDraft: the schema crosses to the provider, so a
+    kind field on every reading would change every director request of the control arm.
+    """
+
+    parts: list[TypedOutcomePart] = Field(
+        min_length=1,
+        description="Every clause of the outcome, each judged separately and tagged by kind.",
+    )
 
 
 class DirectorEntry(BaseModel):
@@ -1078,6 +1144,43 @@ class ReportedLines(BaseModel):
             "Rank several of them."
         ),
     )
+
+
+class SelectedMoment(BaseModel):
+    """A run of consecutive lines a chapter tells one way (7.17, narration_method=selected)."""
+
+    model_config = ConfigDict(extra="forbid")
+    lines: list[str] = Field(
+        min_length=1,
+        description="Ids of the consecutive lines of this moment, exactly as given (L1, L2...).",
+    )
+    treatment: Literal["scene", "summary"] = Field(
+        description=(
+            "scene: played out in full, its lines as dialogue - only for what the chapter turns "
+            "on. summary: passes in one sentence of narration."
+        )
+    )
+    gist: str = Field(
+        min_length=1,
+        description=(
+            "One sentence in the fiction's language, in the past tense and with its accents: "
+            "what happens or changes in this moment, in your own words. Never quote a line."
+        ),
+    )
+    bridge: str = Field(
+        default="",
+        description=(
+            "Only when this moment opens a new scene: one sentence in the fiction's language "
+            "that carries the reader there - where, when, who is there - from the scene's setting."
+        ),
+    )
+
+
+class ChapterSelection(BaseModel):
+    """The moments one chapter is told through, chosen from its log before any prose."""
+
+    model_config = ConfigDict(extra="forbid")
+    moments: list[SelectedMoment] = Field(default_factory=list)
 
 
 class WorldEventAssessment(BaseModel):

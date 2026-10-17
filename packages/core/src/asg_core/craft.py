@@ -174,6 +174,197 @@ _EMOTION_TAG = re.compile(
 _SIMILE = re.compile(r"\bcomo\s+(?:si|una?)\b", re.IGNORECASE)
 
 
+# What a reported line is narrated with: the speech verbs, in the preterite and as a gerund,
+# with an object pronoun or without. In 7.16 the narrator chained them into paragraphs that read
+# like minutes ("ordenó..., preguntando..., sugiriendo..."): 32 in 20261017-184641, against 0
+# to 1 in every narration before it and 0.3 per 1,000 words in the Top-Down corpus.
+_SPEECH_VERBS = (
+    ("ordenó", "ordenando"),
+    ("exigió", "exigiendo"),
+    ("pidió", "pidiendo"),
+    ("advirtió", "advirtiendo"),
+    ("sugirió", "sugiriendo"),
+    ("insistió", "insistiendo"),
+    ("preguntó", "preguntando"),
+    ("prometió", "prometiendo"),
+    ("aseguró", "asegurando"),
+    ("afirmó", "afirmando"),
+    ("propuso", "proponiendo"),
+    ("instó", "instando"),
+    ("informó", "informando"),
+    ("explicó", "explicando"),
+    ("suplicó", "suplicando"),
+    ("reclamó", "reclamando"),
+    ("rogó", "rogando"),
+    ("mandó", "mandando"),
+    ("anunció", "anunciando"),
+    ("declaró", "declarando"),
+)
+
+
+def _with_pronoun(gerund: str) -> str:
+    """Return the accented stem a gerund takes before an attached pronoun (pidiendo-le)."""
+    if gerund.endswith("iendo"):
+        return gerund[: -len("iendo")] + "iéndo"
+    return gerund[: -len("ando")] + "ándo"
+
+
+REPORTED_SPEECH = re.compile(
+    r"\b(?:"
+    + "|".join(
+        alternative
+        for preterite, gerund in _SPEECH_VERBS
+        for alternative in (
+            preterite,
+            gerund,
+            _with_pronoun(gerund) + "(?:le|les|lo|la|los|las|se)",
+        )
+    )
+    + r")\b",
+    re.IGNORECASE,
+)
+
+# The observations a line editor works from (7.17). Each is measured on one paragraph, so an
+# editor can be handed only the paragraphs that carry one, and the code can tell whether the
+# replacement still does. Calibrated on 2026-10-17 over the paragraphs of 20 words or more of
+# the 6.x Top-Down corpus (5,718), the 7.10 narratives the readers rejected (323) and the
+# October simulated narrations (1,439).
+EMOTION_TAG = "emotion_tag"
+GERUND_TAG = "gerund_tag"
+NAMED_TAG = "named_tag"
+REPEATED_NAME = "repeated_name"
+LONG_WORDS = "long_words"
+REPORTED_CHAIN = "reported_chain"
+LONG_PARAGRAPH = "long_paragraph"
+STOCK_PHRASE = "stock_phrase"
+SIMILE_CHAIN = "simile_chain"
+ATMOSPHERIC_OPENING = "atmospheric_opening"
+
+LONG_WORD_LETTERS = 9
+# Reached by 16 % of the 6.x paragraphs, 9 % of the 7.10 ones and 7 % of the simulated ones;
+# their medians are 0.15, 0.13 and 0.08.
+LONG_WORD_SHARE = 0.22
+# Below this many words a share says nothing.
+MIN_SHARE_WORDS = 20
+LONG_PARAGRAPH_WORDS = 100
+# Each found in the stories of at least 16 of the 68 distinct Spanish prompts of the corpus
+# ("un paso al frente" in 39), plus the ones the readers' runs repeated within one story.
+STOCK_PHRASES = (
+    "un paso al frente",
+    "con la mirada fija",
+    "los ojos fijos en",
+    "con paso firme",
+    "sintiendo cómo",
+    "un golpe seco",
+    "con voz firme",
+    "el zumbido constante",
+    "la voz quebrada",
+    "sintiendo el peso",
+    "bajo el peso de",
+    "con precisión milimétrica",
+    "un chasquido seco",
+    "un chasquido metálico",
+    "un movimiento seco",
+    "exhaló un suspiro",
+    "a pocos centímetros",
+    "con pulso firme",
+    "la tensión acumulada",
+    "cuestión de segundos",
+    "se tornaron blancos",
+    "de oreja a oreja",
+    "silencio sepulcral",
+    "un escalofrío recorrió",
+)
+# "No era una nota, sino una frecuencia de corte": the construction the slop literature finds
+# several times more often in model prose than in human prose.
+_NOT_X_BUT_Y = re.compile(r"\bno (?:era|es|fue) (?:solo |sólo )?[^,.;:]{1,40}, sino\b", re.I)
+# A chapter that opens on the weather or the air: 12 of the 14 chapters of the 7.10 narratives.
+_SENSORY_OPENING = re.compile(
+    r"^(?:el|la|los|las)\s+(?:aire|viento|brisa|silencio|calor|frío|eco|zumbido|rugido|"
+    r"murmullo|crujido|chirrido|estruendo|timbre|sonido|olor|aroma|hedor|luz|sol|niebla|"
+    r"bruma|lluvia|tormenta|nieve|humo|vapor|polvo|penumbra|sombra|sombras|oscuridad|noche|"
+    r"amanecer|atardecer)\b",
+    re.IGNORECASE,
+)
+_TAG = re.compile(
+    r"^[" + DIALOGUE_DASHES + r"][^" + DIALOGUE_DASHES + r"\n]+"
+    r"[" + DIALOGUE_DASHES + r"]\s*([^" + DIALOGUE_DASHES + r"\n]*)"
+)
+_GERUND = re.compile(
+    r"\b[^\W\d_]+(?:ando|iendo|yendo)\b|\b[^\W\d_]+(?:ándo|iéndo)(?:le|les|lo|la|los|las|se)\b",
+    re.IGNORECASE,
+)
+_LETTERS = re.compile(r"[^\W\d_]+")
+
+
+def speech_tag(paragraph: str) -> str:
+    """Return what follows the spoken line of a dialogue paragraph when it opens a tag."""
+    match = _TAG.match(paragraph.lstrip())
+    tag = match.group(1).strip() if match else ""
+    return tag if tag[:1].islower() else ""
+
+
+def stock_phrases(text: str) -> int:
+    """Count the stock phrases and the 'no X, sino Y' constructions of a text."""
+    folded = text.casefold()
+    return sum(folded.count(phrase) for phrase in STOCK_PHRASES) + len(_NOT_X_BUT_Y.findall(text))
+
+
+def long_word_share(text: str) -> float:
+    """Return the share of a text's words of LONG_WORD_LETTERS letters or more."""
+    words = _LETTERS.findall(text)
+    return sum(len(word) >= LONG_WORD_LETTERS for word in words) / len(words) if words else 0.0
+
+
+def _name_patterns(names: list[str] | tuple[str, ...]) -> list[re.Pattern[str]]:
+    """Compile one whole-word pattern per non-empty character name."""
+    return [re.compile(r"\b" + re.escape(name) + r"\b") for name in names if name.strip()]
+
+
+def _repeats_name(paragraph: str, patterns: list[re.Pattern[str]]) -> bool:
+    """Say whether a paragraph names a character in two sentences in a row."""
+    previous: set[int] = set()
+    for sentence in split_sentences(paragraph):
+        current = {index for index, pattern in enumerate(patterns) if pattern.search(sentence)}
+        if current & previous:
+            return True
+        previous = current
+    return False
+
+
+def paragraph_flags(
+    paragraph: str, names: list[str] | tuple[str, ...] = (), *, opening: bool = False
+) -> tuple[str, ...]:
+    """Name the observations one prose paragraph carries, in a fixed order."""
+    patterns = _name_patterns(names)
+    words = len(paragraph.split())
+    flags: list[str] = []
+    if opens_with_dash(paragraph):
+        tag = speech_tag(paragraph)
+        if tag and _EMOTION_TAG.search(paragraph):
+            flags.append(EMOTION_TAG)
+        if tag and _GERUND.search(tag):
+            flags.append(GERUND_TAG)
+        if tag and any(pattern.search(tag) for pattern in patterns):
+            flags.append(NAMED_TAG)
+    else:
+        if len(REPORTED_SPEECH.findall(paragraph)) >= 2:
+            flags.append(REPORTED_CHAIN)
+        if words >= LONG_PARAGRAPH_WORDS:
+            flags.append(LONG_PARAGRAPH)
+    if _repeats_name(paragraph, patterns):
+        flags.append(REPEATED_NAME)
+    if words >= MIN_SHARE_WORDS and long_word_share(paragraph) >= LONG_WORD_SHARE:
+        flags.append(LONG_WORDS)
+    if stock_phrases(paragraph):
+        flags.append(STOCK_PHRASE)
+    if len(_SIMILE.findall(paragraph)) >= 2:
+        flags.append(SIMILE_CHAIN)
+    if opening and _SENSORY_OPENING.match(paragraph):
+        flags.append(ATMOSPHERIC_OPENING)
+    return tuple(flags)
+
+
 @dataclass(frozen=True)
 class ReadabilitySignals:
     """How heavy a prose body reads, in figures no prompt ever receives (7.12).
@@ -181,24 +372,32 @@ class ReadabilitySignals:
     Added after readers outside the project called the stories hard to read. Measured on the
     corpus: name_repeat_ratio has a p90 of 0.20 in the 6.x Top-Down chapters and 0.5 to 0.8 in
     the 7.10 fallback narration; tagged_dialogue_ratio reached 0.6 in the 7.10 narrative runs.
+    The rest came in 7.17 for the run comparison, which reads them whole; the line editor works
+    paragraph by paragraph from paragraph_flags.
     """
 
     name_repeat_ratio: float
     tagged_dialogue_ratio: float
     similes_per_100_words: float
+    speech_tag_ratio: float
+    gerund_tag_ratio: float
+    long_word_ratio: float
+    reported_speech_per_1000_words: float
+    stock_phrases_per_1000_words: float
+    flagged_paragraph_ratio: float
 
 
 def readability_signals(
     markdown: str, names: list[str] | tuple[str, ...] = ()
 ) -> ReadabilitySignals:
-    """Measure repeated names, emotion-explaining dialogue tags and simile density.
+    """Measure repeated names, dialogue tags, simile density and the paragraph observations.
 
     name_repeat_ratio is the share of sentences that name a character already named in the
     sentence before, which is what a reader feels as "the name in every line".
     """
     paragraphs = prose_paragraphs(markdown)
     words = sum(len(paragraph.split()) for paragraph in paragraphs)
-    patterns = [re.compile(r"\b" + re.escape(name) + r"\b") for name in names if name.strip()]
+    patterns = _name_patterns(names)
     previous: set[int] = set()
     repeats = sentences = 0
     for paragraph in paragraphs:
@@ -208,13 +407,35 @@ def readability_signals(
             repeats += bool(current & previous)
             previous = current
     dialogue = [paragraph for paragraph in paragraphs if opens_with_dash(paragraph)]
-    tagged = sum(bool(_EMOTION_TAG.search(paragraph)) for paragraph in dialogue)
-    return ReadabilitySignals(
-        name_repeat_ratio=round(repeats / sentences, RATIO_DIGITS) if sentences else 0.0,
-        tagged_dialogue_ratio=round(tagged / len(dialogue), RATIO_DIGITS) if dialogue else 0.0,
-        similes_per_100_words=(
-            round(100 * len(_SIMILE.findall(" ".join(paragraphs))) / words, AVERAGE_DIGITS)
-            if words
-            else 0.0
-        ),
+    tags = [speech_tag(paragraph) for paragraph in dialogue]
+    prose = " ".join(paragraphs)
+    narration = " ".join(paragraph for paragraph in paragraphs if not opens_with_dash(paragraph))
+    flagged = sum(
+        bool(paragraph_flags(paragraph, names, opening=index == 0))
+        for index, paragraph in enumerate(paragraphs)
     )
+    return ReadabilitySignals(
+        name_repeat_ratio=_ratio(repeats, sentences),
+        tagged_dialogue_ratio=_ratio(
+            sum(bool(_EMOTION_TAG.search(paragraph)) for paragraph in dialogue), len(dialogue)
+        ),
+        similes_per_100_words=_per(len(_SIMILE.findall(prose)), words, 100),
+        speech_tag_ratio=_ratio(sum(bool(tag) for tag in tags), len(dialogue)),
+        gerund_tag_ratio=_ratio(
+            sum(bool(tag and _GERUND.search(tag)) for tag in tags), len(dialogue)
+        ),
+        long_word_ratio=round(long_word_share(prose), RATIO_DIGITS),
+        reported_speech_per_1000_words=_per(len(REPORTED_SPEECH.findall(narration)), words, 1000),
+        stock_phrases_per_1000_words=_per(stock_phrases(prose), words, 1000),
+        flagged_paragraph_ratio=_ratio(flagged, len(paragraphs)),
+    )
+
+
+def _ratio(part: int, whole: int) -> float:
+    """Return part / whole rounded like every ratio here, 0 when there is no whole."""
+    return round(part / whole, RATIO_DIGITS) if whole else 0.0
+
+
+def _per(count: int, words: int, scale: int) -> float:
+    """Return a count per `scale` words rounded like every average here, 0 without words."""
+    return round(scale * count / words, AVERAGE_DIGITS) if words else 0.0

@@ -14,7 +14,7 @@ disagree, the log wins - because the log is what happened.
 from ..formats import NarrativeVoice
 from ..schemas import ChapterPlan, StoryRequest
 from ..stage.narration import reporter_view
-from ..stage.schemas import NarrationReview, ReportedLines
+from ..stage.schemas import ChapterSelection, NarrationReview, ReportedLines
 from .base import Agent, json_text
 from .style import style_clause
 
@@ -88,6 +88,8 @@ class NarratorAgent(Agent[str]):
         narrator_name: str = "",
         retry_feedback: str = "",
         tone: str = "",
+        *,
+        style_examples: bool = False,
     ) -> str:
         """Narrate one chapter, inventing nothing the performance did not stage."""
         stable_context = {
@@ -130,12 +132,93 @@ class NarratorAgent(Agent[str]):
                 "chapter: an ending is a scene, not an account of how matters turned out. "
                 "If a question remains open in the log, leave it open. Do not expose "
                 "internal IDs, turn identifiers or planning terminology."
-                f"{style_clause(request)}"
+                f"{style_clause(request, examples=style_examples)}"
             ),
             prompt=(
                 "PREMISA Y REGLAS (son contexto, no sucesos ya ocurridos):\n"
                 f"{json_text(stable_context)}"
                 f"\n\nCHAPTER: {chapter_title}" + f"\n\nPERFORMANCE LOG:\n{log}" + retry_feedback
+            ),
+            profile="prose",
+        )
+
+    def select(
+        self, *, request: StoryRequest, scenes: dict[str, str], lines: list[dict]
+    ) -> ChapterSelection:
+        """Group a chapter's log into moments and decide how each is told (7.17)."""
+        return self.provider.generate_structured(
+            system_instruction=(
+                "You plan how one chapter of a story is told, from the record of a performance: "
+                "what the characters actually said, did and thought, in order. Group "
+                "consecutive lines into moments and decide how each is told. A scene moment is "
+                "played out in full: keep scenes for what the chapter turns on - a decision, a "
+                "refusal, a reveal, a change between two people, what the world does. A summary "
+                "moment passes in one sentence of narration. Lines you leave out of every moment "
+                "are cut: a position said again, a gesture made again, an exchange that changes "
+                "nothing. For every moment write its gist: one sentence in "
+                f"{request.language}, in the past tense, saying what happens or changes, in "
+                "your own words and never quoting a line. When a moment's lines open a new scene "
+                "label, write its bridge: one sentence that takes the reader there, drawn only "
+                "from that scene's setting. Keep every line marked key in some moment, keep the "
+                "moments in the order of the record, and invent nothing."
+            ),
+            prompt=json_text({"scenes": scenes, "lines": lines}),
+            schema=ChapterSelection,
+            profile="extraction",
+        )
+
+    def write(
+        self,
+        request: StoryRequest,
+        chapter: ChapterPlan,
+        chapter_title: str,
+        voice: NarrativeVoice,
+        material: str,
+        narrator_name: str = "",
+        retry_feedback: str = "",
+        tone: str = "",
+        *,
+        style_examples: bool = False,
+    ) -> str:
+        """Write one chapter from its selected moments, never from the whole log (7.17).
+
+        Takes the same arguments as run, so the stage can call either; the plan chapter itself
+        is not sent, only its localized title, exactly as run does.
+        """
+        stable_context = {
+            "premise": request.premise,
+            "constraints": request.constraints,
+            "genre": request.genre,
+        }
+        return self.provider.generate_text(
+            system_instruction=(
+                "You are the Narrator. Below is the plan of one chapter: the moments it is told "
+                "through, chosen from what the characters actually said, did and thought. Turn "
+                f"it into one chapter of finished prose in {request.language}, with no heading "
+                "and no process notes. "
+                f"{_VOICE_CLAUSES[voice]}{narrator_clause(voice, narrator_name)}"
+                f"{tone_clause(tone)} "
+                "Play every ESCENA moment as scene: its lines as dialogue under the dialogue-dash "
+                "convention of the language, its gestures as action, a recorded thought only "
+                "where it changes what the reader understands. Pass every RESUMEN moment in a "
+                "sentence or two of narration, in your own words. Carry the reader into each new "
+                "place with its bridge, and let places and people look as LUGARES and REPARTO "
+                "say: the light, a sound, a texture of the place are yours to add, as long as "
+                "nothing happens because of them. Never add an event, a line or a revelation the "
+                "moments do not contain. If a previous chapter is given, begin where its last "
+                "paragraph leaves off, without repeating it. Start a new paragraph for each new "
+                "speaker or shift of attention, and tag a line with a speech verb only when the "
+                "speaker would otherwise be unclear. The lines you keep may be trimmed and their "
+                "spelling corrected, never their meaning, nor a way of speaking the character "
+                "plays on purpose, such as a stammer. An ending is a scene, not an account of how "
+                "matters turned out; a question the moments leave open stays open. Do not expose "
+                "internal IDs, moment numbers or planning terminology."
+                f"{style_clause(request, examples=style_examples)}"
+            ),
+            prompt=(
+                "PREMISA Y REGLAS (son contexto, no sucesos ya ocurridos):\n"
+                f"{json_text(stable_context)}"
+                f"\n\nCHAPTER: {chapter_title}\n\n{material}" + retry_feedback
             ),
             profile="prose",
         )

@@ -39,6 +39,13 @@ ACTION_CONTAINMENT = 0.8
 # Ilse closed her fist on the pommel of her short sword three times, Gaspar struck the bulkhead
 # with his knuckles four. Across the 7.12-7.15 runs this flags about one gesture in ten.
 GESTURE_RUN = 3
+# 7.17: four of the six tics flagged in the October runs were a place or a direction, not a
+# gesture ("hacia grieta superior", "entrada del bosque", "senala hacia las"). A run that holds
+# one of these words is where a gesture goes, so it never counts as the gesture repeated.
+_GESTURE_FILLER = frozenset(
+    "las los del hacia bajo tras junto frente encima debajo dentro fuera cerca lejos "
+    "mientras luego hasta".split()
+)
 # A line restates a position when this much of its content words already came out of the same
 # speaker's mouth earlier in the scene (7.15). REPETITION_THRESHOLD only sees near-verbatim
 # lines; in the 7.14 navigators run Hanu made the same threat three times in other words.
@@ -50,17 +57,33 @@ _MIN_PARAPHRASE_WORDS = 4
 # which the narrator then turned into "decidido a..." (SIM-6). 7 of 48 thoughts in the 7.14
 # navigators run. Spanish only, the language every measured run was written in.
 _PLAN_THOUGHT = re.compile(r"^(?:debo|tengo que|necesito|voy a|hay que)\b", re.I)
+# 7.17: a plan also comes dressed as a condition ("Si no lee el documento, tendré que
+# obligarle"). Only a consequence the speaker will carry out counts - a plan verb or a verb in
+# the first-person future. Of 297 thoughts opening with "Si" in the October runs, 28 have that
+# shape; the other 269 are fears ("Si la piedra cede, el mar nos engullirá"), which is subtext.
+_CONDITIONAL_PLAN = re.compile(
+    r"^si\b[^.!?]*?,\s*(?:(?:lo|la|le|los|las|les|me|te|nos)\s+)?"
+    r"(?:(?:debo|tengo que|necesito|voy a|hay que|podr[ée]|tendr[ée] que)\b|[^\W\d_]+ré\b)",
+    re.I,
+)
 # 7.15.1: the plan also came as a second sentence ("Este miserable... Debo asegurar que..."), so
 # each sentence is read on its own and only the plans are dropped.
 _SENTENCE = re.compile(r"(?<=[.!?…])\s+")
 
 
+def _is_plan(sentence: str) -> bool:
+    """Say whether one sentence of a thought only announces the speaker's next move."""
+    return bool(_PLAN_THOUGHT.match(sentence) or _CONDITIONAL_PLAN.match(sentence))
+
+
 def _without_plans(thought: str) -> str:
     """Drop the sentences of a thought that only announce the next move, keeping the rest."""
-    kept = [part for part in _SENTENCE.split(thought) if part and not _PLAN_THOUGHT.match(part)]
+    kept = [part for part in _SENTENCE.split(thought) if part and not _is_plan(part)]
     return " ".join(kept).strip()
 
 
+# How many turns in a row on one tactic the actor may play before a fresh one is asked for.
+TACTIC_RUN = 2
 # A thought that says this much of what the speech already says is not subtext, only an echo.
 THOUGHT_ECHO = 0.5
 # The longest line that still reads as a turn rather than a speech. It lives here and never in a
@@ -71,13 +94,101 @@ _WHITESPACE = re.compile(r"\s+")
 _LEADING_DASHES = "—–-"
 # Internal identifiers look like event-3 or chapter_2; a reader must never see one.
 _INTERNAL_ID = re.compile(r"\b(?:event|chapter|scene|promise|beat)[-_]\d+\b", re.IGNORECASE)
-# First-person markers in a stage direction. Deliberately conservative: it catches "me
-# arrodillo" and "la palma de mi mano" and lets a bare first-person verb through, because
-# guessing Spanish conjugation from one word would reject honest third-person directions.
+# First-person markers in a stage direction: "me arrodillo" at the start and "la palma de mi
+# mano" anywhere. Guessing Spanish conjugation from one word would reject honest third-person
+# directions, so a verb counts only from the closed lists below.
 _FIRST_PERSON = re.compile(r"^(?:me|yo)\b|\b(?:mi|mis|conmigo)\b", re.IGNORECASE)
 # The first-person words a stage direction can lose without touching a verb.
 _THIRD_PERSON = {"mi": "su", "mis": "sus", "conmigo": "consigo"}
 _POSSESSIVE = re.compile(r"\b(?:mi|mis|conmigo)\b", re.IGNORECASE)
+# 7.17: 11 of the 49 actions of 20261017-184641 opened on a first-person verb ("Golpeo",
+# "Doy un paso"), which the markers above never saw. Each verb here was read in the actors'
+# directions of the corpus, and each has one third-person form, so it is corrected in place.
+# Words that are also a noun or a preposition ("bajo", "paso") stay out.
+_FIRST_PERSON_VERBS = {
+    "abro": "abre",
+    "acaricio": "acaricia",
+    "aferro": "aferra",
+    "agarro": "agarra",
+    "ajusto": "ajusta",
+    "alzo": "alza",
+    "anoto": "anota",
+    "apoyo": "apoya",
+    "aprieto": "aprieta",
+    "arrojo": "arroja",
+    "avanzo": "avanza",
+    "camino": "camina",
+    "cierro": "cierra",
+    "clavo": "clava",
+    "coloco": "coloca",
+    "corro": "corre",
+    "cruzo": "cruza",
+    "dejo": "deja",
+    "deslizo": "desliza",
+    "despliego": "despliega",
+    "doy": "da",
+    "empiezo": "empieza",
+    "empujo": "empuja",
+    "entrego": "entrega",
+    "escarbo": "escarba",
+    "escupo": "escupe",
+    "examino": "examina",
+    "extiendo": "extiende",
+    "giro": "gira",
+    "golpeo": "golpea",
+    "guardo": "guarda",
+    "inclino": "inclina",
+    "lanzo": "lanza",
+    "levanto": "levanta",
+    "mantengo": "mantiene",
+    "masajeo": "masajea",
+    "miro": "mira",
+    "muestro": "muestra",
+    "niego": "niega",
+    "observo": "observa",
+    "ofrezco": "ofrece",
+    "pongo": "pone",
+    "presiono": "presiona",
+    "recojo": "recoge",
+    "retiro": "retira",
+    "retrocedo": "retrocede",
+    "saco": "saca",
+    "señalo": "señala",
+    "sonrío": "sonríe",
+    "sostengo": "sostiene",
+    "sujeto": "sujeta",
+    "suelto": "suelta",
+    "suspiro": "suspira",
+    "tomo": "toma",
+    "toco": "toca",
+}
+# After "me", the reflexive ones, which become "se" plus the third person.
+_REFLEXIVE_VERBS = {
+    **_FIRST_PERSON_VERBS,
+    "abalanzo": "abalanza",
+    "acerco": "acerca",
+    "agacho": "agacha",
+    "alejo": "aleja",
+    "aparto": "aparta",
+    "arrodillo": "arrodilla",
+    "asomo": "asoma",
+    "desplomo": "desploma",
+    "detengo": "detiene",
+    "enderezo": "endereza",
+    "interpongo": "interpone",
+    "paso": "pasa",
+    "planto": "planta",
+    "quedo": "queda",
+    "siento": "sienta",
+    "vuelvo": "vuelve",
+}
+# Where a clause can begin a new verb of the actor's: the start, a comma, or a joining word,
+# with an object pronoun that may come between it and the verb.
+_CLAUSE_VERB = re.compile(
+    r"(^|[,;]\s*|\b(?:y|e|mientras|luego|que|entonces)\s+)"
+    r"(?:(me|yo|lo|la|los|las|le|les)\s+)?([^\W\d_]+)",
+    re.IGNORECASE,
+)
 # Where one spoken sentence ends and the next begins.
 _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
 
@@ -151,9 +262,9 @@ def repair_form(turn: ActorTurnDraft) -> tuple[ActorTurnDraft, list[str]]:
         if trimmed:
             speech = trimmed
             repairs.append("LONG_SPEECH")
-    if action and _FIRST_PERSON.search(action):
-        third = _POSSESSIVE.sub(_third_person, action)
-        if not _FIRST_PERSON.search(third):
+    if action:
+        third = _third_person_verbs(_POSSESSIVE.sub(_third_person, action))
+        if third != action and not _FIRST_PERSON.search(third):
             action = third
             repairs.append("FIRST_PERSON_ACTION")
     if not repairs:
@@ -181,6 +292,41 @@ def _third_person(match: re.Match[str]) -> str:
     return replacement.capitalize() if word[0].isupper() else replacement
 
 
+def _third_person_verbs(action: str) -> str:
+    """Conjugate the known first-person verbs of a direction in the third person (7.17)."""
+
+    def replace(match: re.Match[str]) -> str:
+        """Rewrite one clause-opening verb, with its pronoun, when the lists know it."""
+        lead, pronoun, word = match.group(1), match.group(2) or "", match.group(3)
+        reflexive = pronoun.casefold() == "me"
+        third = (_REFLEXIVE_VERBS if reflexive else _FIRST_PERSON_VERBS).get(word.casefold())
+        if third is None:
+            return match.group(0)
+        if reflexive:
+            return f"{lead}{_capital_like('se', pronoun)} {third}"
+        if pronoun.casefold() == "yo":
+            return f"{lead}{_capital_like(third, pronoun)}"
+        before = f"{pronoun} " if pronoun else ""
+        return f"{lead}{before}{_capital_like(third, word)}"
+
+    return _CLAUSE_VERB.sub(replace, action)
+
+
+def _capital_like(word: str, model: str) -> str:
+    """Return a word capitalized when the word it replaces was."""
+    return word.capitalize() if model[:1].isupper() else word
+
+
+def _first_person_verb(action: str) -> bool:
+    """Say whether a direction opens a clause on a first-person verb the lists know."""
+    for match in _CLAUSE_VERB.finditer(action):
+        pronoun, word = (match.group(2) or "").casefold(), match.group(3).casefold()
+        verbs = _REFLEXIVE_VERBS if pronoun == "me" else _FIRST_PERSON_VERBS
+        if word in verbs:
+            return True
+    return False
+
+
 def validate_turn(
     turn: ActorTurnDraft,
     *,
@@ -189,6 +335,7 @@ def validate_turn(
     language: str = "",
     scene_speech: list[str] | None = None,
     play_actions: list[str] | None = None,
+    scene_tactics: list[str] | None = None,
 ) -> None:
     """Accept one normalized turn, or raise a TurnIssue saying in English what to fix.
 
@@ -250,7 +397,7 @@ def validate_turn(
             "the line is a speech, not a turn: say the one thing that matters now and let the "
             "others answer",
         )
-    if turn.action and _FIRST_PERSON.search(turn.action):
+    if is_first_person_action(turn.action):
         raise TurnIssue(
             "FIRST_PERSON_ACTION",
             "the action is written in the first person; write it as a stage direction, in the "
@@ -271,6 +418,16 @@ def validate_turn(
             "give ground, change tactic, ask something, or act",
         )
     _check_gesture(turn.action, previous_actions or [], play_actions or [])
+    # 7.17: a third turn in a row on one tactic. In the October runs 57 % of the turns ordered,
+    # demanded or threatened, with runs of three to six; a structured choice of move is what the
+    # echo literature found to break the loop. First attempts only, like the other repetitions.
+    recent = (scene_tactics or [])[-TACTIC_RUN:]
+    if len(recent) == TACTIC_RUN and set(recent) == {turn.tactic}:
+        raise TurnIssue(
+            "TACTIC_RUN",
+            f"you have played '{turn.tactic}' in your last turns and it has not worked; get what "
+            "you want another way this time: ask, bargain, concede a little, lie, or act",
+        )
 
 
 def _check_gesture(action: str, recent: list[str], played: list[str]) -> None:
@@ -298,8 +455,8 @@ def containment(earlier: str, later: str) -> float:
 
 
 def is_first_person_action(action: str) -> bool:
-    """Say whether a stage direction carries the conservative first-person markers."""
-    return bool(action and _FIRST_PERSON.search(action))
+    """Say whether a stage direction carries a first-person marker or a known first-person verb."""
+    return bool(action and (_FIRST_PERSON.search(action) or _first_person_verb(action)))
 
 
 def _replays_gesture(action: str, previous: list[str]) -> bool:
@@ -324,9 +481,10 @@ def _tic(action: str, earlier: list[str]) -> str:
 
 
 def _runs(words: list[str]) -> list[tuple[str, ...]]:
-    """Every GESTURE_RUN words in a row of a tokenized action, in order."""
+    """Every GESTURE_RUN words in a row of a tokenized action that name the gesture itself."""
     last = len(words) - GESTURE_RUN
-    return [tuple(words[index : index + GESTURE_RUN]) for index in range(last + 1)]
+    runs = [tuple(words[index : index + GESTURE_RUN]) for index in range(last + 1)]
+    return [run for run in runs if not _GESTURE_FILLER.intersection(run)]
 
 
 def similarity(left: str, right: str) -> float:
@@ -451,8 +609,14 @@ def _unquote(value: str) -> str:
     return stripped
 
 
-def validate_state_evidence(candidate: ActorTurnDraft) -> None:
-    """A changed private state must point to the character's current expression."""
+def settle_state_evidence(candidate: ActorTurnDraft) -> tuple[ActorTurnDraft, list[str]]:
+    """Keep a changed private state only when its quote is in the turn, else drop the change.
+
+    Until 7.16 an unsupported change rejected the whole turn: 24 of the 51 rejections of the
+    7.12-7.16 runs, and twice in a row it cost Aleth her turn in the Raiz scene. The quote was
+    compared byte for byte, so an accent or a quote mark was enough. The change is bookkeeping
+    and the turn is the performance, so the turn stays and only the change is dropped.
+    """
     changes = (
         candidate.goal_after,
         candidate.commitment_after,
@@ -460,13 +624,18 @@ def validate_state_evidence(candidate: ActorTurnDraft) -> None:
         candidate.change_condition_after,
     )
     if not any(changes):
-        return
-    quote = candidate.state_evidence
-    if not quote.strip() or not any(
-        quote in text for text in (candidate.thought, candidate.action, candidate.speech)
+        return candidate, []
+    quote = normalize(candidate.state_evidence)
+    if quote and any(
+        quote in normalize(text) for text in (candidate.thought, candidate.action, candidate.speech)
     ):
-        raise TurnIssue(
-            "INVALID_STATE_EVIDENCE",
-            "Cita un fragmento exacto de tu pensamiento, "
-            "acción o palabras que fundamente el cambio; deja vacío lo que no cambió.",
-        )
+        return candidate, []
+    dropped = candidate.model_copy(
+        update={
+            "goal_after": "",
+            "commitment_after": "",
+            "cover_story_after": "",
+            "change_condition_after": "",
+        }
+    )
+    return dropped, ["STATE_CHANGE_DROPPED"]

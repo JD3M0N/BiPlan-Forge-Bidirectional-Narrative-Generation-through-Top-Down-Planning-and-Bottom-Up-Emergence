@@ -18,6 +18,7 @@ from ..stage.schemas import (
     BeatDirection,
     FutureConflict,
     FutureRevision,
+    TypedBeatCheckDraft,
     WorldEventAssessment,
 )
 from .base import Agent
@@ -62,8 +63,10 @@ _MODE_CLAUSES: dict[str, str] = {
         " The characters are holding their positions and the missing clause will not happen "
         "on its own. Name turning_actor_id: the one character whose change it needs - who has "
         "to give ground, confess, discover or decide. Give that character one of your notes, "
-        "and make it a reason true to them to change now, in their own way. Your other note, "
-        "if any, must not block that change. Leave stage_event empty."
+        "and make it a reason true to them to change now, in their own way: something they "
+        "have just seen or heard on stage, quoted «like this» from the transcript, never the "
+        "change itself. Your other note, if any, must not block that change. Leave stage_event "
+        "empty."
     ),
     "stall": (
         " The scene has used its time. You may offer a stage_event in {language}: an opportunity "
@@ -78,6 +81,17 @@ _MODE_CLAUSES: dict[str, str] = {
         "turning_actor_id and stage_event empty."
     ),
 }
+
+
+# 7.17 (typed_clauses): 11 of the 22 beats forced in the 7.12-7.16 runs were a journey or an
+# arrival the actors could not act out ("the ship breaks through into the sea"), and 3 needed
+# someone who was not on stage. Tagged, the engine can let the world carry out those clauses.
+TYPED_CLAUSES = (
+    " Tag every clause with its kind: decision when someone on stage chooses or does it, "
+    "revelation when someone on stage tells or discovers a fact, world when it is a journey, an "
+    "arrival or anything the world or someone off stage does, which the characters cannot act "
+    "out. A fixed clause about a fact is a revelation."
+)
 
 
 class StageManagerAgent(Agent[BeatDirection]):
@@ -105,7 +119,13 @@ class StageManagerAgent(Agent[BeatDirection]):
         )
 
     def check(
-        self, context: str, language: str, *, mode: str = "check", genre: str = ""
+        self,
+        context: str,
+        language: str,
+        *,
+        mode: str = "check",
+        genre: str = "",
+        typed: bool = False,
     ) -> BeatCheckDraft:
         """Read the beat clause by clause, and escalate as far as the mode allows.
 
@@ -133,9 +153,10 @@ class StageManagerAgent(Agent[BeatDirection]):
                 "copy each one as given. "
                 f"{_DIRECTION_RULES}{genre_clause(genre)}"
                 f"{_MODE_CLAUSES[mode].format(language=language)}"
+                + (TYPED_CLAUSES if typed else "")
             ),
             prompt=context,
-            schema=BeatCheckDraft,
+            schema=TypedBeatCheckDraft if typed else BeatCheckDraft,
             profile="review",
         )
 

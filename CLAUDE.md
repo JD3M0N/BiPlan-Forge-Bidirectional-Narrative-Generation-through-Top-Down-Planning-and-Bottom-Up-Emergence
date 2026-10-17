@@ -160,6 +160,16 @@ En la raíz quedan la fachada y el contrato: `__init__`, `version`, `formats`, `
   kwarg en la fachada, consumirlo donde vive el mecanismo (sin tocar los prompts cuando está
   apagada) y, si la interfaz la muestra, su entrada en `apps/studio/src/asg_studio/catalog.py`.
   El bot no ofrece opciones: las toma todas del `.env`.
+- **Los brazos de 7.17 están apagados por defecto** y van en `API_ONLY_OPTIONS`, cada uno con
+  su variable `ASG_*` y su flag de `asg-generate`: `style_examples`, `line_editor`,
+  `scene_cards`, `anchored_critic`, `narration_method` (`reported` o `selected`) y
+  `typed_clauses`. Apagados, el comportamiento es el de 7.16 más los arreglos siempre activos. El
+  predeterminado cambia solo por lectura humana a ciegas (SIM-25, TD-10 y SIM-26).
+- **Dos replays para comparar sobre la misma entrada.**
+  - `asg-generate --narrate-from <run>` narra otra vez una función guardada sin representarla:
+    unas 12 llamadas frente a 130. Registra las opciones de la función de origen.
+  - `--plan-from` reutiliza el plan también con `--format narrative`.
+  - Los dos escriben `source_run.json` con `reused`.
 - `StoryBrief` (`brief.py`) es la obra estructurada: trama y reparto se componen en un prompt
   determinista que el analista lee como cualquier otro, así que `StoryRequest` y el esquema que
   va a Gemini no cambian. El run guarda `brief.json`.
@@ -301,12 +311,15 @@ A esa lista, el guion y el simulado añaden los suyos.
   Los rasgos T de `asg-evaluation` las recalculan desde `story.md`, así que también miden los
   runs anteriores a 6.5.0, que no las traen.
 
-`version.py` fija `PIPELINE_VERSION` (7.16) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.16).
+`version.py` fija `PIPELINE_VERSION` (7.17) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.17).
 Desde 7.11 un run nuevo ya no trae `evaluation.json`; 7.12 añade `style_request` a
 `request.json`, `prose_model` a `metadata.json` y el contrato 4 de `narration.json`; en 7.13
 `stage_model` pasa a ser el modelo de los actores; 7.14 añade `localization.json` y cambia el
 esquema del pensamiento del actor; 7.15 cambia la narración y la validación del turno; 7.16
-añade `narration/chapter-NNN-reported.json` y cambia el log que lee el narrador y el último beat.
+añade `narration/chapter-NNN-reported.json` y cambia el log que lee el narrador y el último beat;
+7.17 añade los artefactos de sus brazos (`line_edits/`, `scene_cards.json`,
+`review_anchors.json`, `narration/chapter-NNN-selection.json`), `name_choices.json` y la fuente
+y la coartada del dossier.
 `StoryRun` se niega a abrir un run incompleto o de una versión no soportada. Si cambias el
 conjunto de artefactos o su significado, sube la versión en vez de romper los runs ya generados:
 son datos de la tesis. Una limpieza que no toca artefactos sube solo el parche de
@@ -459,7 +472,19 @@ que saber antes de tocar `stage/`:
   intento con esas notas, que solo se entrega si pasa la revisión y mejora la cifra medida
   (7.15.1: en 7.15 el segundo intento se pasó al imperfecto y se entregó). Es una nota, nunca
   un rechazo. Desde 7.16 también cuenta como nota `DROPPED_EVENT`, un suceso del mundo que el
-  capítulo no cuenta.
+  capítulo no cuenta. Con `line_editor` (7.17) solo `DROPPED_EVENT` pide el segundo intento: de
+  las acotaciones se ocupa el editor, párrafo a párrafo.
+- **El narrador por selección (7.17, `narration_method=selected`) no recibe el log.**
+  - `NarratorAgent.select` agrupa el log en momentos (`scene` o `summary`, con frase y puente).
+  - `stage/selection.py` los valida: devuelve las líneas clave y los sucesos del mundo, rechaza
+    el resumen que copia y limita a la mitad lo jugado.
+  - `NarratorAgent.write` escribe desde los momentos, los lugares y la cara pública del reparto.
+  - La revisión editorial sigue leyendo los turnos.
+  - Si la selección falla, se narra como en 7.16 (`[SELECTION_FALLBACK]`).
+- **El editor por fragmentos (7.17, `line_editor`) solo ve los párrafos que marca el código.**
+  Lo hace `asg_core.craft.paragraph_flags`, y `writing/line_edit.py` acepta una edición solo si
+  la marca baja, no alarga, no inventa nombres ni réplicas y no cambia el tiempo verbal. Sirve
+  para los dos formatos.
 - **Un estancamiento sin evento del mundo se pregunta una vez más** (7.15.1), pidiendo una
   presión visible, nunca el desenlace: un beat final sin evento dejó una historia sin final.
 - **La excepción es el último beat de la obra** (7.16, `CLOSING_STALL`).

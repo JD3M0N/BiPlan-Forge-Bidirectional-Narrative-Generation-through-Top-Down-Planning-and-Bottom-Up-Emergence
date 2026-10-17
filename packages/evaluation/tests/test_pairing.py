@@ -130,6 +130,13 @@ def test_a_figure_a_run_never_recorded_is_none_not_zero(tmp_path) -> None:
     values = run_measurements(run_72(tmp_path, "old"))
     assert values["beats_forced"] is None
     assert values["story_words"] is None
+    assert values["speech_tag_ratio"] is None
+    # Readability is read from the story itself, so a run that never recorded it is measured.
+    run = run_73(tmp_path, "tagged")
+    story = "# T\n\n—Ven —dijo Ana, sonriendo.\n\nAna se fue."
+    (run / "story.md").write_text(story, encoding="utf-8")
+    values = run_measurements(run)
+    assert (values["speech_tag_ratio"], values["gerund_tag_ratio"]) == (1.0, 1.0)
 
 
 def test_guidance_strategy_is_an_axis_only_when_both_guides_are_enabled(tmp_path) -> None:

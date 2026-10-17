@@ -36,6 +36,8 @@ def materialize_bible(
     characters: CharactersArtifact,
     plan: StoryPlan,
     drop_invalid_gates: bool = False,
+    future_events: dict[str, set[str]] | None = None,
+    on_stage: dict[str, set[str]] | None = None,
 ) -> CastBible:
     """Validate one proposed cast bible and mint the trusted version.
 
@@ -51,13 +53,17 @@ def materialize_bible(
     _validate_coverage(dossiers, required)
     _validate_playable(dossiers)
     dossiers = [_normalize_dossier(item, known_characters) for item in dossiers]
+    observations: list[str] = []
+    if future_events is not None:
+        dossiers = [_without_future_facts(item, future_events, observations) for item in dossiers]
 
     gates = _normalize_gates(draft.knowledge_gates, known_characters)
-    observations: list[str] = []
     if drop_invalid_gates:
         kept: list[KnowledgeGate] = []
         for gate in gates:
-            issue = _gate_issue(gate, gates, dossiers, plan, known_events)
+            issue = _gate_issue(gate, gates, dossiers, plan, known_events) or _revealer_issue(
+                gate, on_stage
+            )
             if issue:
                 observations.append(f"gate {gate.id} dropped: {issue}")
             else:
@@ -66,6 +72,10 @@ def materialize_bible(
         # A premise that was dropped takes its deductions with it.
         gates = [gate for gate in kept if not dropped & set(gate.premise_gate_ids)]
     _validate_gates(gates, dossiers, plan, known_events)
+    for gate in gates:
+        issue = _revealer_issue(gate, on_stage)
+        if issue:
+            raise ValueError(issue)
 
     return CastBible(
         dossiers=dossiers,
@@ -102,6 +112,59 @@ def _gate_issue(
         _validate_premises(gates, dossiers, plan, only=gate.id)
     except ValueError as exc:
         return str(exc)
+    return ""
+
+
+def _without_future_facts(
+    dossier: ActorDossier, future_events: dict[str, set[str]], observations: list[str]
+) -> ActorDossier:
+    """Drop the initial facts that come from an event at or after the character's first scene.
+
+    7.17: in 20261017-184641 Ilse, still at sea, already knew the ship was stranded on the
+    island and its crew declared fallen - the outcome of the second event - and Celestina knew
+    the Column was failing before measuring it. The casting declares where each fact comes from,
+    and dropping the one from the future is its only correction. Sources that do not line up
+    with the facts say nothing, so they are left alone.
+    """
+    sources = dossier.knowledge_sources
+    future = future_events.get(dossier.character_id, set())
+    if len(sources) != len(dossier.initial_knowledge) or not future:
+        return dossier
+    kept = [
+        (fact, source)
+        for fact, source in zip(dossier.initial_knowledge, sources, strict=True)
+        if source.strip() not in future
+    ]
+    for source in sources:
+        if source.strip() in future:
+            observations.append(f"fact dropped from {dossier.character_id}: comes from {source}")
+    return dossier.model_copy(
+        update={
+            "initial_knowledge": [fact for fact, _ in kept],
+            "knowledge_sources": [source for _, source in kept],
+        }
+    )
+
+
+def _revealer_issue(gate: KnowledgeGate, on_stage: dict[str, set[str]] | None) -> str:
+    """Say why a gate cannot be revealed in its event because its revealer is absent, or ''.
+
+    Only with typed_clauses (7.17): 3 of the 22 beats forced in the 7.12-7.16 runs needed
+    someone who was not in the scene. Whoever brings a fact out has to be there to do it.
+    """
+    if on_stage is None or not gate.revealed_at_event_id:
+        return ""
+    present = on_stage.get(gate.revealed_at_event_id, set())
+    if gate.revealed_by and gate.revealed_by not in present:
+        return (
+            f"gate {gate.id} is revealed at {gate.revealed_at_event_id} by {gate.revealed_by}, "
+            "who is not on stage in that event's scene"
+        )
+    if gate.how == "confession" and not present & set(gate.known_by):
+        return (
+            f"gate {gate.id} is confessed at {gate.revealed_at_event_id}, but nobody who knows "
+            "it is on stage in that event's scene"
+        )
     return ""
 
 

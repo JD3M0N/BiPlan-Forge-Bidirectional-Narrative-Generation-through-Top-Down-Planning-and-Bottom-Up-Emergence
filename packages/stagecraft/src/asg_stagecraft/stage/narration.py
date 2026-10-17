@@ -212,14 +212,14 @@ def accept_reports(lines: list[dict], drafted: ReportedLines, keep: int = 0) -> 
         report = " ".join(item.report.split())
         if line is None or line["turn_id"] in accepted.reports:
             accepted.rejected[item.id] = "unknown or repeated line"
-        elif _shares_run(report, line["speech"]):
+        elif shares_run(report, line["speech"]):
             accepted.rejected[line["turn_id"]] = "copies the line"
         else:
             accepted.reports[line["turn_id"]] = report
     return accepted
 
 
-def _shares_run(report: str, speech: str) -> bool:
+def shares_run(report: str, speech: str) -> bool:
     """Say whether a retelling repeats COPIED_RUN or more words of the line in a row."""
     said = [word.casefold() for word in _REPORT_WORD.findall(speech)]
     runs = {tuple(said[index : index + COPIED_RUN]) for index in range(len(said) - COPIED_RUN + 1)}
