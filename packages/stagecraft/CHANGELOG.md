@@ -1,5 +1,99 @@
 # Historial de cambios
 
+## 7.19.0
+
+Viene de los seis avisos de la híbrida `20261018-131131-las-islas-del-cielo`. Cada uno tenía una
+causa en el código. Cambian el conjunto de artefactos del simulado y varios prompts, así que
+`PIPELINE_VERSION` pasa a 7.19.
+
+- **El guion del simulado ya no se critica ni se revisa** (`SCRIPT_REVISION_REJECTED`).
+  - La función lee del guion las escenas, el reparto y los objetivos, nunca las réplicas
+    (`scripted_lines` solo alimenta `script_echo`). La crítica y la revisión solo podían cambiar
+    réplicas: la única nota del run era sobre acotaciones entre paréntesis.
+  - Un run simulado ya no escribe `review.json`, `revision_report.json`, `revisions/`, `writer/`
+    ni `script_promise_audit.json`, y ahorra de 1 a 7 llamadas.
+- **Una réplica larga se corta en una cláusula** (`STAGE_TURN_SKIPPED`).
+  - Hanu perdió su turno por una sola frase de más de 45 palabras partida por «;», y
+    `repair_form` solo cortaba en un fin de frase.
+  - Ahora, si ninguna frase entera cabe, se corta en el último «;» o «:» que quepa. Así se
+    reparan 11 de los 12 `LONG_SPEECH` de octubre.
+- **El director juzga lo representado** (`BEAT_FORCED`).
+  - El outcome de `event_5` pedía que Nilo «devolviera las provisiones» que nunca tuvo en
+    escena. Nilo cedió en t4 y sujetó el saco con Remedios en t11, y el beat se forzó.
+  - Ahora, cuando el beat da por hecho algo que la función no estableció, se juzga el cambio que
+    nombra y manda el log.
+- **Secretos sin compuerta: una reparación** (`CAST_NO_GATES`).
+  - Hanu guardaba como secreto el descubrimiento de `event_3` y no había ninguna compuerta.
+  - `unkept_secrets` (`stage/casting.py`) pide al casting, en el primer intento, que haga de cada
+    secreto una compuerta. Si la reparación sale peor, se entrega la primera biblia, nunca el
+    respaldo.
+- **Fuentes válidas en el casting** (`CAST_FACT_DROPPED`).
+  - `FIRST SCENES` dice a cada personaje qué fuentes puede citar: `world`, `backstory` y los
+    eventos anteriores a su primera escena. Cuatro hechos venían de `event_1`, su propia primera
+    escena.
+  - La observación guarda ahora el hecho descartado.
+- **Las réplicas sin resumen se piden otra vez** (`NARRATION_CRAFT_KEPT_FIRST`).
+  - El resumidor devolvió 4 de las réplicas del capítulo 1, todas de la primera escena. El resto
+    llegó entero al narrador, que transcribió.
+  - `unreported` (`stage/narration.py`) da las réplicas que faltan o que copian, y se piden una
+    vez más, solo esas. `chapter-NNN-reported.json` las registra en `retried`.
+
+## 7.18.1
+
+- **Los nombres que el autor escribe en el prompt se respetan.** La elección de nombres de 7.17
+  (`planning/names.py`) solo fijaba el reparto de un `brief.json`.
+  - Con la ficha de «Las islas del cielo» como prompt libre, que pide «usa exactamente estos
+    nombres», Ilse Marvento salió como Isolda Viento o Gisela Tides.
+  - En la híbrida `20261018-124228` el planificador repartió los eventos con los nombres de la
+    ficha, el plan se rechazó tres veces y el run murió.
+  - Ahora un nombre completo que aparece en el prompt original queda fijo, igual que el reparto
+    de un brief.
+
+## 7.18.0
+
+Viene del capítulo 3 de `20261018-035939-la-luz-de-los-hundidos`. El crítico le dio una nota
+`major` de ritmo, y el Writer devolvió el borrador byte a byte dos veces:
+`UNCHANGED_SIGNIFICANT_NOTES` dos veces, y se entregó el borrador. Cambia el esquema de lo que
+devuelve el Writer y el de `revision_report.json`, así que `PIPELINE_VERSION` pasa a 7.18.
+
+**Lo que dejó claro el corpus:**
+
+- El fallo visible era la punta. 17 de los 29 intentos del Writer guardados se parecían a su
+  borrador en un 95 % o más.
+- Unas ocho casi copias se aceptaron como revisión de una nota `major`, porque solo se rechazaba
+  la copia exacta.
+- El reintento no cambiaba nada: el mismo prompt, la misma temperatura y la corrección pegada
+  detrás del cuerpo del capítulo.
+
+**El Writer edita párrafos (`writing/chapter_edits.py`).**
+
+- Lee el capítulo numerado (`P1`, `P2`…) y devuelve solo sus ediciones:
+  - `replace` reescribe un párrafo;
+  - `insert_after` añade párrafos detrás de uno, solo para una nota que pide escenificar algo.
+- Cada edición cita las notas que atiende. El código las aplica y rechaza cada una con su
+  motivo: párrafo o nota desconocidos, texto sin cambios, o inserción sin nota que la pida.
+- Copiar ya no puede pasar por revisión: una lista vacía dice que no cambió nada.
+
+**`NOTE_NOT_APPLIED`.**
+
+- Una nota crítica o mayor sin edición aceptada se reintenta, con una corrección que la nombra
+  y que va **delante** de los párrafos.
+- Una nota de artesanía se juzga por el texto: si su observación sobrevive, no se atendió.
+  Con `line_editor`, solo cuentan las observaciones de escena.
+
+**El mejor candidato, no el borrador.**
+
+- Si ningún intento pasa, se entrega el que menos notas deja sin atender y menos degrada
+  (`final_source: best_candidate`, `final_attempt`, `[WRITER_BEST_CANDIDATE]`).
+- Una copia nunca se entrega.
+
+**Un solo bucle de reintento (`writing/revision_loop.py`).** Lo usan el Writer y el Script
+Writer. El del narrador se queda aparte a propósito: tiene revisión editorial y candidato
+reservado.
+
+**Guion.** `script/validation.revision_issue` rechaza la casi copia de un acto (`NEAR_COPY_RATIO`,
+0,95 palabra a palabra), no solo la idéntica. La corrección del reintento va delante del acto.
+
 ## 7.17.0
 
 Viene del análisis de los runs de 7.10 a 7.16 contrastado con la literatura de 2023 a 2026. El

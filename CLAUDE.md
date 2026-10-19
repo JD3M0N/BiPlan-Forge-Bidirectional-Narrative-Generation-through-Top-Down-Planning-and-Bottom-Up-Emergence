@@ -311,7 +311,7 @@ A esa lista, el guion y el simulado añaden los suyos.
   Los rasgos T de `asg-evaluation` las recalculan desde `story.md`, así que también miden los
   runs anteriores a 6.5.0, que no las traen.
 
-`version.py` fija `PIPELINE_VERSION` (7.17) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.17).
+`version.py` fija `PIPELINE_VERSION` (7.19) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.19).
 Desde 7.11 un run nuevo ya no trae `evaluation.json`; 7.12 añade `style_request` a
 `request.json`, `prose_model` a `metadata.json` y el contrato 4 de `narration.json`; en 7.13
 `stage_model` pasa a ser el modelo de los actores; 7.14 añade `localization.json` y cambia el
@@ -319,7 +319,11 @@ esquema del pensamiento del actor; 7.15 cambia la narración y la validación de
 añade `narration/chapter-NNN-reported.json` y cambia el log que lee el narrador y el último beat;
 7.17 añade los artefactos de sus brazos (`line_edits/`, `scene_cards.json`,
 `review_anchors.json`, `narration/chapter-NNN-selection.json`), `name_choices.json` y la fuente
-y la coartada del dossier.
+y la coartada del dossier; 7.18 cambia el Writer a ediciones por párrafo
+(`writer/chapter-NNN-attempt-NNN-edits.json`), añade `NOTE_NOT_APPLIED` y el
+`final_source: best_candidate` de `revision_report.json`; 7.19 deja el guion del simulado sin
+crítica ni revisión (sin `review.json`, `revision_report.json` ni `script_promise_audit.json`),
+pide al casting una vez las compuertas de sus secretos y vuelve a pedir las réplicas sin resumen.
 `StoryRun` se niega a abrir un run incompleto o de una versión no soportada. Si cambias el
 conjunto de artefactos o su significado, sube la versión en vez de romper los runs ya generados:
 son datos de la tesis. Una limpieza que no toca artefactos sube solo el parche de
@@ -456,6 +460,8 @@ que saber antes de tocar `stage/`:
   - `stage/narration.accept_reports` descarta la paráfrasis que comparte cuatro palabras
     seguidas con su réplica. Lo aceptado y lo descartado queda en
     `narration/chapter-NNN-reported.json`.
+  - Las réplicas que el resumen omite o copia se piden una vez más, solo ellas (7.19): en
+    7.18 un resumen cubrió solo la primera escena y el capítulo transcribió la segunda.
   - Si el resumen no puede correr, las réplicas van enteras con `[REPORT_FALLBACK]`.
   - La revisión y las métricas siguen leyendo los turnos completos.
 - **El respaldo es contrato.** Si el casting, la utilería o la narración no pueden correr,
@@ -481,6 +487,17 @@ que saber antes de tocar `stage/`:
   - `NarratorAgent.write` escribe desde los momentos, los lugares y la cara pública del reparto.
   - La revisión editorial sigue leyendo los turnos.
   - Si la selección falla, se narra como en 7.16 (`[SELECTION_FALLBACK]`).
+- **El Writer de Top-Down edita párrafos, no reescribe el capítulo** (7.18, TD-3).
+  - Reescribiendo el capítulo entero, Flash-Lite devolvía el borrador: 17 de 29 intentos, al 95 %
+    o más.
+  - Ahora devuelve `ParagraphEdits` (`replace` o `insert_after`, cada edición con las notas que
+    cita) y `writing/chapter_edits.py` las aplica.
+  - `writing/acceptance.writer_edit_issue` da `NOTE_NOT_APPLIED` a la nota grave sin edición
+    aceptada, y a la nota de artesanía cuya observación sobrevive.
+  - El reintento y la elección del mejor candidato viven en `writing/revision_loop.py`, que
+    comparte con el Script Writer. Si ningún intento pasa, se entrega el mejor, nunca una copia.
+  - La corrección va **delante** de los párrafos; detrás del cuerpo, el modelo la ignoraba.
+    No vuelvas a pedir el capítulo entero.
 - **El editor por fragmentos (7.17, `line_editor`) solo ve los párrafos que marca el código.**
   Lo hace `asg_core.craft.paragraph_flags`, y `writing/line_edit.py` acepta una edición solo si
   la marca baja, no alarga, no inventa nombres ni réplicas y no cambia el tiempo verbal. Sirve

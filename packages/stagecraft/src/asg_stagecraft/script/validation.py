@@ -41,6 +41,7 @@ from ..schemas import (
     WorldArtifact,
     WriterCandidateDiagnostic,
 )
+from ..writing.acceptance import SIGNIFICANT, near_copy
 
 _LEADING_DASHES = "—–-"
 _WHITESPACE = re.compile(r"\s+")
@@ -217,15 +218,23 @@ def revision_issue(
             retry_instruction="Return a complete act that satisfies every staging rule.",
             actual_words=0,
         )
-    significant = any(note.priority in {"critical", "major"} for note in notes)
-    if significant and revised.as_draft() == original.as_draft():
+    significant = any(note.priority in SIGNIFICANT for note in notes)
+    # 7.18: a near copy counts as unchanged; only an identical act was rejected before.
+    if significant and near_copy(_act_text(revised), _act_text(original)):
         return None, WriterCandidateDiagnostic(
             code="UNCHANGED_SIGNIFICANT_NOTES",
-            message="the act is unchanged despite critical or major revision notes",
+            message=(
+                "the act is unchanged or barely changed despite critical or major revision notes"
+            ),
             retry_instruction="Apply every critical and major note with visible staging changes.",
             actual_words=0,
         )
     return revised, None
+
+
+def _act_text(act: ActScript) -> str:
+    """Join every line an act's characters say or do, in order, for the near-copy check."""
+    return " ".join(line.text for scene in act.scenes for line in scene.lines)
 
 
 def _chapter_events(plan: StoryPlan, chapter: ChapterPlan) -> list[PlotEvent]:

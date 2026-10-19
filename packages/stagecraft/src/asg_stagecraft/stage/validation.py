@@ -191,6 +191,8 @@ _CLAUSE_VERB = re.compile(
 )
 # Where one spoken sentence ends and the next begins.
 _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
+# Where a clause ends inside one long sentence: the second cut, when no whole sentence fits.
+_CLAUSE_END = re.compile(r"(?<=[;:])\s+")
 
 
 class TurnIssue(ValueError):
@@ -250,10 +252,12 @@ def repair_form(turn: ActorTurnDraft) -> tuple[ActorTurnDraft, list[str]]:
 
     Two rejections used to bounce turns that only needed trimming, and two of them in a row
     skip the turn: three of the 7.8 lighthouse run's turns were lost to lines of 46 to 55 words.
-    A line over the limit is cut at its last sentence end that fits; a stage direction that
-    says "mi" or "mis" or "conmigo" gets the third person. Anything else is left for
-    validate_turn to reject as before: a line with no sentence end inside the limit, or a
-    direction that opens on "me" or "yo", which would need a verb conjugated to fix.
+    A line over the limit is cut at its last sentence end that fits, or, when its first
+    sentence alone is too long, at its last semicolon or colon that fits (7.19: 11 of the 12
+    October rejections were one sentence of clauses); a stage direction that says "mi" or
+    "mis" or "conmigo" gets the third person. Anything else is left for validate_turn to
+    reject as before: a line with no sentence or clause end inside the limit, or a direction
+    that opens on "me" or "yo", which would need a verb conjugated to fix.
     """
     repairs: list[str] = []
     speech, action = turn.speech, turn.action
@@ -273,14 +277,23 @@ def repair_form(turn: ActorTurnDraft) -> tuple[ActorTurnDraft, list[str]]:
 
 
 def _trim_to_sentences(speech: str) -> str:
-    """Keep the leading whole sentences that fit the limit, or nothing when the first does not."""
+    """Keep the leading whole sentences that fit the limit, else the leading clauses, or ''."""
+    kept = _leading_parts(_SENTENCE_END.split(speech.strip()))
+    if kept:
+        return kept
+    clauses = _leading_parts(_CLAUSE_END.split(speech.strip()))
+    return clauses[:-1].rstrip() + "." if clauses else ""
+
+
+def _leading_parts(parts: list[str]) -> str:
+    """Join the leading parts whose words fit the limit, or nothing when the first does not."""
     kept: list[str] = []
     words = 0
-    for sentence in _SENTENCE_END.split(speech.strip()):
-        count = len(sentence.split())
+    for part in parts:
+        count = len(part.split())
         if words + count > MAX_SPEECH_WORDS:
             break
-        kept.append(sentence)
+        kept.append(part)
         words += count
     return " ".join(kept)
 

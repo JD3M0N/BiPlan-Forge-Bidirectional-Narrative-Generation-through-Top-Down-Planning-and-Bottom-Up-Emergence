@@ -44,13 +44,25 @@ def _stock(name: str) -> bool:
 
 
 def choose_names(
-    characters: CharactersArtifact, fixed: Collection[str] = ()
+    characters: CharactersArtifact, fixed: Collection[str] = (), authored_text: str = ""
 ) -> tuple[CharactersArtifact, list[dict]]:
     """Keep each character's least typical acceptable candidate, renaming it everywhere.
 
-    A name the author fixed (a brief's cast) is never touched, and a character with no
-    acceptable candidate keeps the name it came with. Returns the cast and what was chosen.
+    A name the author fixed is never touched: a brief's cast, or a whole name written in the
+    author's own prompt (7.18.1). The 7.18 "Islas del cielo" runs asked for their cast by name in
+    a free prompt; the author's names scored as the most typical and lost every time, and the
+    planner, which reads that prompt, cast events with names the cast no longer had. A character
+    with no acceptable candidate keeps the name it came with. Returns the cast and what was chosen.
     """
+    authored = f" {' '.join(_WORDS.findall(_fold(authored_text)))} "
+    fixed = [
+        *fixed,
+        *(
+            character.name
+            for character in characters.characters
+            if f" {' '.join(_WORDS.findall(_fold(character.name)))} " in authored
+        ),
+    ]
     pinned = {_fold(name) for name in fixed} | {_first(name) for name in fixed}
     taken: set[str] = set()
     renames: dict[str, tuple[str, str]] = {}

@@ -339,10 +339,16 @@ def test_revision_issue_reports_invalid_candidates() -> None:
     assert diagnostic.code == "INVALID_SCRIPT_ACT"
 
 
-def test_revision_issue_rejects_unchanged_significant_notes() -> None:
+@pytest.mark.parametrize("touched", ["", " otra"], ids=["identical", "one-word-added"])
+def test_revision_issue_rejects_unchanged_significant_notes(touched) -> None:
+    """7.18: a near copy is as unchanged as an identical act."""
     ctx = context()
-    original = materialize_act(valid_draft(), **ctx)
+    speech = " ".join(f"palabra{index}" for index in range(60)) + "."
+    drafted = valid_draft()
+    drafted.scenes[0].lines[1] = dialogue("ana", speech)
+    original = materialize_act(drafted, **ctx)
     unchanged = valid_draft()
+    unchanged.scenes[0].lines[1] = dialogue("ana", speech + touched)
     note = RevisionNote(
         id="note-1",
         priority="major",

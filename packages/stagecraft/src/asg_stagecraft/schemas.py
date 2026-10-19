@@ -829,10 +829,13 @@ class WriterCandidateDiagnostic(BaseModel):
         "MERGED_PARAGRAPHS",
         "LENGTHENED_WITHOUT_CAUSE",
         "WORSE_CRAFT",
+        "NOTE_NOT_APPLIED",
     ]
     message: str
     retry_instruction: str
     actual_words: int
+    # 7.18: the critical or major notes no accepted edit answered, for NOTE_NOT_APPLIED.
+    note_ids: list[str] = Field(default_factory=list)
 
 
 class ChapterRevisionAttempt(BaseModel):
@@ -853,9 +856,14 @@ class ChapterRevisionResult(BaseModel):
     note_ids: list[str] = Field(default_factory=list)
     draft_words: int
     attempts: list[ChapterRevisionAttempt] = Field(default_factory=list)
-    final_source: Literal["revision", "draft"]
+    # 7.18: best_candidate is a rejected attempt that still beat the draft, named by final_attempt.
+    final_source: Literal["revision", "best_candidate", "draft"]
     final_words: int
-    warning_code: Literal["WRITER_REVISION_REJECTED", "SCRIPT_REVISION_REJECTED"] | None = None
+    final_attempt: int | None = None
+    warning_code: (
+        Literal["WRITER_REVISION_REJECTED", "WRITER_BEST_CANDIDATE", "SCRIPT_REVISION_REJECTED"]
+        | None
+    ) = None
 
 
 class RevisionReport(BaseModel):

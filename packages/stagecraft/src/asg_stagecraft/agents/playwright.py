@@ -159,8 +159,9 @@ class ScriptWriterAgent(Agent[ActScriptDraft]):
                 + (f"\n\nPROMISE OBLIGATIONS:\n{promise_brief}" if promise_brief else "")
                 + f"\n\nPREVIOUS REVISED ACT:\n{previous_revised_act or 'none'}"
                 f"\n\n{anchor_index}"
-                f"\n\nORIGINAL ACT:\n{json_text(original_act)}"
+                # Ahead of the act, as in the Writer (7.18): trailing it, the retry was ignored.
                 f"{retry_feedback}"
+                f"\n\nORIGINAL ACT:\n{json_text(original_act)}"
             ),
             schema=ActScriptDraft,
             profile="rewrite",

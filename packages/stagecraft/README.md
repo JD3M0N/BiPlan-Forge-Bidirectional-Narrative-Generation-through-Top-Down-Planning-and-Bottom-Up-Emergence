@@ -80,10 +80,13 @@ story.mp3 + audio.json
 
 - **Narrativo**: `chapters/`, `draft.md`, `review.json`, `writer/`, `revisions/`,
   `revision_report.json`, `promise_audit.json`, `craft_evidence.json` y `story_metrics.json`, con
-  la artesanía observada de la prosa. Ninguna de esas cifras viaja a un prompt.
+  la artesanía observada de la prosa. Ninguna de esas cifras viaja a un prompt. Desde 7.18,
+  `writer/` guarda por intento las ediciones por párrafo que devolvió el Writer
+  (`-edits.json`), el capítulo ensamblado (`.md`) y su veredicto (`-validation.json`).
 - **Guion**: `script.json`, el contrato que comparten los dos métodos, más `script_metrics.json`.
   La lista por método está en `docs/resumen.md`.
-- **Simulado**: el guion nativo más `cast_bible.json`, `stage/`, `memory/`, `performance.json`,
+- **Simulado**: el borrador del guion nativo (desde 7.19, sin crítica ni revisión, porque los
+  actores no leen sus réplicas) más `cast_bible.json`, `stage/`, `memory/`, `performance.json`,
   `narration/`, `narration.json`, `simulation_metrics.json` y `story_metrics.json`, detallados en
   `docs/resumen.md`.
 

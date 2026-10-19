@@ -16,6 +16,7 @@ from asg_stagecraft.stage.casting import (
     gates_for,
     gates_known_by_discoverer,
     materialize_bible,
+    unkept_secrets,
 )
 from asg_stagecraft.stage.editorial import craft_findings, editorial_verdict, strip_markers
 from asg_stagecraft.stage.fallback import narrate
@@ -26,6 +27,7 @@ from asg_stagecraft.stage.narration import (
     accept_reports,
     lines_to_report,
     reporter_view,
+    unreported,
     whole_lines_wanted,
 )
 from asg_stagecraft.stage.perception import visible_text, witnesses
@@ -509,6 +511,11 @@ def test_a_speech_is_not_a_turn() -> None:
     trimmed, repairs = repair_form(act(speech=f"{opening} {speech}"))
     assert (trimmed.speech, repairs) == (opening, ["LONG_SPEECH"])
     validate_turn(trimmed, previous_speech=[])
+    # 7.19: one sentence of clauses is cut at the last semicolon that fits.
+    clause = "Esa puerta no se abre sin el juez"
+    trimmed, repairs = repair_form(act(speech=f"{clause}; {speech}"))
+    assert (trimmed.speech, repairs) == (f"{clause}.", ["LONG_SPEECH"])
+    validate_turn(trimmed, previous_speech=[])
 
 
 @pytest.mark.parametrize(
@@ -757,6 +764,15 @@ def test_unknown_relationships_are_dropped_rather_than_rejected() -> None:
     assert bible.dossiers[0].relationships == []
     # 7.13: a plan of several chapters with nothing to find out is reported.
     assert len(plan.chapters) > 1 and gateless(bible, plan)
+    assert unkept_secrets(bible, plan) == []
+    # 7.19: a secret with no gate to keep it in is worth one casting repair.
+    hidden = materialize_bible(
+        CastBibleDraft(dossiers=[dossier(known, secret="Robó el mapa.")]),
+        cast_ids=[known],
+        characters=characters,
+        plan=plan,
+    )
+    assert [item.character_id for item in unkept_secrets(hidden, plan)] == [known]
 
 
 def test_a_gate_anchored_to_an_unknown_event_is_rejected() -> None:
@@ -799,7 +815,10 @@ def test_a_fact_from_the_future_is_dropped_and_an_absent_revealer_rejected() -> 
         future_events={known: {first}},
     )
     assert bible.dossiers[0].initial_knowledge == ["El mar es salado."]
-    assert any(note.startswith("fact dropped") for note in bible.observations)
+    assert any(
+        note.startswith("fact dropped") and note.endswith("El barco acabará varado.")
+        for note in bible.observations
+    )
     gate = KnowledgeGate(
         id="gate-1",
         fact="la grieta",
@@ -1176,6 +1195,9 @@ def test_a_retelling_that_copies_its_line_is_turned_away(report: str, accepted: 
     assert room == 1
     assert accept_reports(lines, drafted, keep=room).kept == [line.id]
     assert result.kept == []
+    # 7.19: a line left without a retelling is asked for again, unless it is kept whole.
+    assert unreported(lines, result) == ([] if accepted else lines)
+    assert unreported(lines, accept_reports(lines, ReportedLines(lines=[]))) == lines
 
 
 @pytest.mark.parametrize(

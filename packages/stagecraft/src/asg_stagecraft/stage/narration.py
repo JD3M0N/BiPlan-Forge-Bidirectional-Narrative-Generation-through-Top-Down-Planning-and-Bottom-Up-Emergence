@@ -156,10 +156,25 @@ class AcceptedReports:
     reports: dict[str, str] = field(default_factory=dict)
     rejected: dict[str, str] = field(default_factory=dict)
     kept: list[str] = field(default_factory=list)
+    retried: list[str] = field(default_factory=list)
 
     def as_record(self) -> dict:
         """The decision as stored next to the chapter on disk."""
-        return {"kept": self.kept, "accepted": self.reports, "rejected": self.rejected}
+        return {
+            "kept": self.kept,
+            "accepted": self.reports,
+            "rejected": self.rejected,
+            "retried": self.retried,
+        }
+
+    def merge(self, retry: AcceptedReports) -> None:
+        """Take the retellings a second request got, keeping this one's whole lines."""
+        self.reports.update(retry.reports)
+        for turn_id in retry.reports:
+            self.rejected.pop(turn_id, None)
+        self.rejected.update(
+            {key: why for key, why in retry.rejected.items() if key not in self.reports}
+        )
 
 
 def whole_lines_wanted(turns: list[StageTurn], key_ids: Collection[str]) -> int:
@@ -217,6 +232,16 @@ def accept_reports(lines: list[dict], drafted: ReportedLines, keep: int = 0) -> 
         else:
             accepted.reports[line["turn_id"]] = report
     return accepted
+
+
+def unreported(lines: list[dict], accepted: AcceptedReports) -> list[dict]:
+    """List the lines with no accepted retelling that are not kept whole either (7.19).
+
+    In the 7.18 islands run the reporter retold four of a chapter's lines, all from its first
+    scene; the rest reached the narrator whole, and the chapter transcribed them.
+    """
+    done = set(accepted.reports) | set(accepted.kept)
+    return [line for line in lines if line["turn_id"] not in done]
 
 
 def shares_run(report: str, speech: str) -> bool:

@@ -63,7 +63,6 @@ from .runtime.provider import COUNT_TOKENS_OPERATION, call_context
 from .runtime.storage import ArtifactRepository
 from .schemas import (
     ChapterPlan,
-    ChapterRevisionAttempt,
     ChapterRevisionResult,
     CharacterProfile,
     CharactersArtifact,
@@ -93,16 +92,25 @@ from .stage.metrics import SimulationMetrics, renarrated_metrics
 from .stage.schemas import CastBible, PerformanceArtifact
 from .stage.stages import SimulationStagesMixin
 from .version import SUPPORTED_PIPELINE_VERSIONS
-from .writing.acceptance import writer_candidate_issue, writer_fallback_warning
+from .writing.acceptance import (
+    writer_best_candidate_warning,
+    writer_edit_issue,
+    writer_fallback_warning,
+)
 from .writing.anchoring import anchor_review
 from .writing.assembly import assemble_story
 from .writing.audit import story_metrics, word_count
+from .writing.chapter_edits import ParagraphEdits, apply_chapter_edits
 from .writing.craft_evidence import character_names, craft_evidence, craft_notes, known_names
 from .writing.language import language_code, prompt_language
 from .writing.line_edit import edit_chapter
 from .writing.localization import LocalizationMixin
+from .writing.revision_loop import Judgement, revise_with_retries
 
 T = TypeVar("T")
+
+# The Writer's attempts per chapter: the first, and one retry with the correction.
+WRITER_ATTEMPTS = 2
 
 # Canonical order of pipeline checkpoint stages, shared by every _notify/complete_stage
 # pair below; "rate_limit" is intentionally excluded (see _notify).
@@ -132,7 +140,7 @@ CHECKPOINT_STAGES = (
 )
 
 # In a simulated run the script is the director's book rather than the deliverable, so every
-# stage up to and including the script's own revision is compressed into the first half of the
+# stage up to and including the drafted script is compressed into the first half of the
 # progress range and the performance and narration own the rest.
 PRE_PERFORMANCE_CEILING = 48
 PRE_PERFORMANCE_STAGES = frozenset(CHECKPOINT_STAGES[: CHECKPOINT_STAGES.index("casting")])
@@ -793,7 +801,7 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin, LocalizationMixin)
         if self.brief is not None and self.brief.cast:
             characters = self._keep_declared_cast(characters, build_characters)
         fixed = [member.name for member in self.brief.cast] if self.brief is not None else []
-        characters, choices = choose_names(characters, fixed)
+        characters, choices = choose_names(characters, fixed, request.original_prompt)
         if choices:
             self.repository.save_data("name_choices.json", {"choices": choices})
         characters = self._localized_characters(request, characters)
@@ -1545,86 +1553,90 @@ class StoryPipeline(ScriptStagesMixin, SimulationStagesMixin, LocalizationMixin)
         chapter_index: int,
         promise_brief: str = "",
     ) -> tuple[str, ChapterRevisionResult]:
-        """Return the first valid Writer candidate or the safe original fallback."""
+        """Return the first valid edited chapter, the best rejected one, or the draft (7.18)."""
         assert self.repository is not None
+        repository = self.repository
         draft_words = word_count(draft_body)
-        attempts: list[ChapterRevisionAttempt] = []
-        retry_feedback = ""
-        for attempt in range(1, 3):
-            prefix = f"writer/chapter-{chapter_index:03d}-attempt-{attempt:03d}"
-            try:
+        names = character_names(characters)
 
-                def revise_chapter(feedback_snapshot: str = retry_feedback):
-                    """Rewrite the bound chapter with this attempt's feedback."""
-                    return writer.run(
-                        request,
-                        characters,
-                        plan,
-                        presentation,
-                        chapter,
-                        events,
-                        notes,
-                        draft_body,
-                        previous_revised,
-                        feedback_snapshot,
-                        promise_brief,
-                        style_examples=self.options.style_examples,
-                    )
+        def prefix(attempt: int) -> str:
+            """Name the artifacts of one Writer attempt on the bound chapter."""
+            return f"writer/chapter-{chapter_index:03d}-attempt-{attempt:03d}"
 
-                candidate = self._call_agent("writer", revise_chapter).strip()
-            except NON_DEGRADABLE_ERRORS:
-                raise
-            except Exception as exc:
-                attempt_result = ChapterRevisionAttempt(
-                    attempt=attempt,
-                    status="failed",
-                    exception_type=type(exc).__name__,
-                )
-                attempts.append(attempt_result)
-                self.repository.save_json(f"{prefix}-validation.json", attempt_result)
-                retry_feedback = (
-                    "\n\nRETRY CORRECTION:\nThe previous rewrite could not be completed "
-                    f"({type(exc).__name__}). Return a complete corrected chapter body."
-                )
-                continue
-            self.repository.save_text(f"{prefix}.md", candidate)
-            diagnostic = writer_candidate_issue(candidate, draft_body, notes)
-            attempt_result = ChapterRevisionAttempt(
-                attempt=attempt,
-                status="accepted" if diagnostic is None else "rejected",
-                artifact=f"{prefix}.md",
-                diagnostic=diagnostic,
+        def call(attempt: int, feedback: str) -> ParagraphEdits:
+            """Ask the Writer for the bound chapter's edits with this attempt's feedback."""
+            return self._call_agent(
+                "writer",
+                lambda: writer.run(
+                    request,
+                    characters,
+                    plan,
+                    presentation,
+                    chapter,
+                    events,
+                    notes,
+                    draft_body,
+                    previous_revised,
+                    feedback,
+                    promise_brief,
+                    style_examples=self.options.style_examples,
+                ),
             )
-            attempts.append(attempt_result)
-            self.repository.save_json(f"{prefix}-validation.json", attempt_result)
-            if diagnostic is None:
-                return candidate, ChapterRevisionResult(
-                    chapter_id=chapter.id,
-                    chapter_index=chapter_index,
-                    note_ids=[note.id for note in notes],
-                    draft_words=draft_words,
-                    attempts=attempts,
-                    final_source="revision",
-                    final_words=word_count(candidate),
-                )
-            retry_feedback = (
-                "\n\nRETRY CORRECTION:\nThe previous rewrite was rejected because "
-                f"{diagnostic.message}. {diagnostic.retry_instruction} "
-                "Return a complete corrected chapter body."
+
+        def judge(attempt: int, edits: ParagraphEdits) -> Judgement[str]:
+            """Apply one attempt's edits to the draft, save them and judge the chapter."""
+            edited = apply_chapter_edits(draft_body, notes, edits)
+            repository.save_data(
+                f"{prefix(attempt)}-edits.json",
+                {"edits": edits.model_dump(mode="json")["edits"], **edited.as_record()},
             )
-        warning = writer_fallback_warning(chapter_index, draft_words, attempts)
-        self.repository.add_warning(warning)
-        self._emit("writer_fallback", warning, stage="revision")
-        return draft_body, ChapterRevisionResult(
+            repository.save_text(f"{prefix(attempt)}.md", edited.body)
+            diagnostic, rank = writer_edit_issue(
+                edited, draft_body, notes, names=names, editor=self.options.line_editor
+            )
+            return Judgement(edited.body, diagnostic, f"{prefix(attempt)}.md", rank)
+
+        outcome = revise_with_retries(
+            WRITER_ATTEMPTS,
+            call,
+            judge,
+            lambda result: repository.save_json(
+                f"{prefix(result.attempt)}-validation.json", result
+            ),
+            "Return the complete list of edits.",
+        )
+        result = ChapterRevisionResult(
             chapter_id=chapter.id,
             chapter_index=chapter_index,
             note_ids=[note.id for note in notes],
             draft_words=draft_words,
-            attempts=attempts,
+            attempts=outcome.attempts,
             final_source="draft",
             final_words=draft_words,
-            warning_code="WRITER_REVISION_REJECTED",
         )
+        if outcome.accepted is not None:
+            return outcome.accepted, result.model_copy(
+                update={"final_source": "revision", "final_words": word_count(outcome.accepted)}
+            )
+        if outcome.best is not None and outcome.best_attempt is not None:
+            # 7.18 (TD-3): an attempt that landed some edits beats the draft it was asked to fix.
+            warning = writer_best_candidate_warning(
+                chapter_index, outcome.best_attempt, outcome.attempts
+            )
+            self.repository.add_warning(warning)
+            self._emit("writer_best_candidate", warning, stage="revision")
+            return outcome.best, result.model_copy(
+                update={
+                    "final_source": "best_candidate",
+                    "final_words": word_count(outcome.best),
+                    "final_attempt": outcome.best_attempt,
+                    "warning_code": "WRITER_BEST_CANDIDATE",
+                }
+            )
+        warning = writer_fallback_warning(chapter_index, draft_words, outcome.attempts)
+        self.repository.add_warning(warning)
+        self._emit("writer_fallback", warning, stage="revision")
+        return draft_body, result.model_copy(update={"warning_code": "WRITER_REVISION_REJECTED"})
 
     def _finalize(
         self,

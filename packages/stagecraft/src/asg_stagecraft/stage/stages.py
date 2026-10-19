@@ -42,7 +42,14 @@ from ..writing.acceptance import writer_candidate_issue
 from ..writing.assembly import assemble_story, narrated_plan
 from ..writing.audit import story_metrics, word_count
 from . import fallback
-from .casting import dossier_index, fallback_bible, gateless, gates_for, materialize_bible
+from .casting import (
+    dossier_index,
+    fallback_bible,
+    gateless,
+    gates_for,
+    materialize_bible,
+    unkept_secrets,
+)
 from .editorial import craft_findings, editorial_verdict, review_turns, severity, strip_markers
 from .engine import CODA_TURNS, REACTION_TURNS, PerformanceEngine
 from .inventory import StageInventory
@@ -56,6 +63,7 @@ from .narration import (
     lines_to_report,
     narrated_chapter_ids,
     scene_presence,
+    unreported,
     whole_lines_wanted,
 )
 from .policy import CHECK_EVERY
@@ -146,6 +154,8 @@ class SimulationStagesMixin:
         staging = staging_index(play)
         agent = CastingDirectorAgent(self.provider)
         feedback = ""
+        # A bible good in all but its secrets, kept while one repair asks for their gates.
+        candidate: CastBible | None = None
         for attempt in range(1, CASTING_ATTEMPTS + 1):
 
             def draw_bible(feedback_snapshot: str = feedback):
@@ -199,30 +209,56 @@ class SimulationStagesMixin:
                     f"REJECTED CANDIDATE:\n{draft.model_dump_json()}"
                 )
                 continue
-            facts = [note for note in bible.observations if note.startswith("fact dropped")]
-            if facts:
-                warning = f"Se quitaron {len(facts)} hechos iniciales que venían del futuro."
-                self.repository.add_warning(f"[CAST_FACT_DROPPED] {warning}")
-                self._emit("cast_fact_dropped", warning, stage="casting")
-            dropped = [note for note in bible.observations if " dropped: " in note]
-            if dropped:
-                warning = f"Se descartaron {len(dropped)} compuertas inválidas del reparto."
-                self.repository.add_warning(f"[CAST_GATE_DROPPED] {warning}")
-                self._emit("cast_gate_dropped", warning, stage="casting")
-            if gateless(bible, plan):
-                warning = "El reparto no tiene compuertas: nadie descubre nada en escena."
-                self.repository.add_warning(f"[CAST_NO_GATES] {warning}")
-                self._emit("cast_no_gates", warning, stage="casting")
-            self.repository.save_json("cast_bible.json", bible)
-            self.repository.complete_stage("casting")
-            return bible
+            secrets = unkept_secrets(bible, plan)
+            if secrets and attempt < CASTING_ATTEMPTS:
+                candidate = bible
+                self.repository.save_data(
+                    f"casting/attempt-{attempt:03d}.json",
+                    {"attempt": attempt, "issue": "secrets without gates"},
+                )
+                feedback = (
+                    "\n\nCASTING REPAIR REQUIRED. RETURN A COMPLETE REPLACEMENT CAST BIBLE. "
+                    "The previous one has no knowledge_gates, yet these characters keep a "
+                    "secret: "
+                    + "; ".join(f"{item.character_id} ({item.secret})" for item in secrets)
+                    + ". A secret is a fact some characters hold and others do not: make each "
+                    "one a knowledge gate, known_by whoever already holds it, with revealed_by, "
+                    "how and revealed_at_event_id when the plan brings it out on stage. Keep "
+                    "every other field of the previous candidate as it was.\n"
+                    f"PREVIOUS CANDIDATE:\n{draft.model_dump_json()}"
+                )
+                continue
+            return self._keep_bible(bible, plan)
 
+        if candidate is not None:
+            return self._keep_bible(candidate, plan)
         warning = (
             "No se pudo escribir la biblia de reparto; los actores se derivan de characters.json."
         )
         self.repository.add_warning(f"[CASTING_FALLBACK] {warning}")
         self._emit("casting_fallback", warning, stage="casting")
         bible = fallback_bible(cast_ids, characters)
+        self.repository.save_json("cast_bible.json", bible)
+        self.repository.complete_stage("casting")
+        return bible
+
+    def _keep_bible(self, bible: CastBible, plan: StoryPlan) -> CastBible:
+        """Report what the casting validation dropped or missed, and save the bible."""
+        assert self.repository is not None
+        facts = [note for note in bible.observations if note.startswith("fact dropped")]
+        if facts:
+            warning = f"Se quitaron {len(facts)} hechos iniciales que venían del futuro."
+            self.repository.add_warning(f"[CAST_FACT_DROPPED] {warning}")
+            self._emit("cast_fact_dropped", warning, stage="casting")
+        dropped = [note for note in bible.observations if " dropped: " in note]
+        if dropped:
+            warning = f"Se descartaron {len(dropped)} compuertas inválidas del reparto."
+            self.repository.add_warning(f"[CAST_GATE_DROPPED] {warning}")
+            self._emit("cast_gate_dropped", warning, stage="casting")
+        if gateless(bible, plan):
+            warning = "El reparto no tiene compuertas: nadie descubre nada en escena."
+            self.repository.add_warning(f"[CAST_NO_GATES] {warning}")
+            self._emit("cast_no_gates", warning, stage="casting")
         self.repository.save_json("cast_bible.json", bible)
         self.repository.complete_stage("casting")
         return bible
@@ -1065,6 +1101,20 @@ class SimulationStagesMixin:
             self._emit("report_fallback", warning, stage="narration")
             return None
         accepted = accept_reports(lines, drafted, keep=whole_lines_wanted(visible, key_ids))
+        missing = unreported(lines, accepted)
+        if missing:
+            # One more request for the lines left out or copied, never for the whole chapter.
+            accepted.retried = [line["turn_id"] for line in missing]
+            try:
+                again = self._call_agent(
+                    "narrator_report", lambda: agent.report(request=request, lines=missing)
+                )
+            except NON_DEGRADABLE_ERRORS:
+                raise
+            except Exception:
+                again = None
+            if again is not None:
+                accepted.merge(accept_reports(missing, again))
         self.repository.save_data(
             f"narration/chapter-{index:03d}-reported.json", accepted.as_record()
         )
@@ -1435,16 +1485,25 @@ def future_events(play: PlayScript) -> dict[str, set[str]]:
 
 
 def first_scenes_block(play: PlayScript) -> str:
-    """Tell the casting director the events of each character's first scene."""
+    """Tell the casting director each character's first scene and the sources they may cite.
+
+    7.19: the 7.18 islands run cited the first event as the source of four starting facts, all
+    dropped; naming the earlier events, and only those, says where a fact may come from.
+    """
     names = {member.character_id: member.name for member in play.cast}
-    seen: dict[str, list[str]] = {}
+    future = future_events(play)
+    seen: dict[str, tuple[list[str], list[str]]] = {}
+    earlier: list[str] = []
     for scene in _scenes_in_order(play):
         for member in scene.cast:
-            seen.setdefault(member.character_id, list(scene.event_ids))
+            past = [item for item in earlier if item not in future[member.character_id]]
+            seen.setdefault(member.character_id, (list(scene.event_ids), past))
+        earlier.extend(item for item in scene.event_ids if item not in earlier)
     return "\n".join(
         f"- {character_id} ({names.get(character_id, character_id)}): first on stage in the "
-        f"scene of {', '.join(events) or 'no event'}"
-        for character_id, events in seen.items()
+        f"scene of {', '.join(events) or 'no event'}; knowledge_sources may be: "
+        f"{', '.join(['world', 'backstory', *before])}"
+        for character_id, (events, before) in seen.items()
     )
 
 

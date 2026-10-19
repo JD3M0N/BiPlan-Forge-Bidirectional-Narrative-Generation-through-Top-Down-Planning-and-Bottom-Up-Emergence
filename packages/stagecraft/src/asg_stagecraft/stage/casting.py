@@ -130,14 +130,13 @@ def _without_future_facts(
     future = future_events.get(dossier.character_id, set())
     if len(sources) != len(dossier.initial_knowledge) or not future:
         return dossier
-    kept = [
-        (fact, source)
-        for fact, source in zip(dossier.initial_knowledge, sources, strict=True)
-        if source.strip() not in future
-    ]
-    for source in sources:
+    pairs = list(zip(dossier.initial_knowledge, sources, strict=True))
+    kept = [(fact, source) for fact, source in pairs if source.strip() not in future]
+    for fact, source in pairs:
         if source.strip() in future:
-            observations.append(f"fact dropped from {dossier.character_id}: comes from {source}")
+            observations.append(
+                f"fact dropped from {dossier.character_id}: comes from {source}: {fact}"
+            )
     return dossier.model_copy(
         update={
             "initial_knowledge": [fact for fact, _ in kept],
@@ -196,6 +195,18 @@ def gateless(bible: CastBible, plan: StoryPlan) -> bool:
     not rejected: a story may truly hold no secret, and the run is not worth losing over it.
     """
     return not bible.fallback and not bible.knowledge_gates and len(plan.chapters) > 1
+
+
+def unkept_secrets(bible: CastBible, plan: StoryPlan) -> list[ActorDossier]:
+    """List the dossiers that keep a secret in a bible with no gate to keep it in (7.19).
+
+    The 7.18 islands run gave the Custodian the very discovery of the third event as a secret,
+    with no gate, so nobody found anything out on stage. A secret is a fact some characters hold
+    and others do not, which is what a gate is; these are worth one casting repair.
+    """
+    if not gateless(bible, plan):
+        return []
+    return [item for item in bible.dossiers if item.secret.strip()]
 
 
 def dossier_index(bible: CastBible) -> dict[str, ActorDossier]:

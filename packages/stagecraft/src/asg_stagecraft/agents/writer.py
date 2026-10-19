@@ -1,4 +1,4 @@
-"""First-draft generation and note-driven chapter rewriting."""
+"""First-draft generation and note-driven chapter editing."""
 
 from ..schemas import (
     ChapterPlan,
@@ -11,6 +11,7 @@ from ..schemas import (
     StoryRequest,
     WorldArtifact,
 )
+from ..writing.chapter_edits import ParagraphEdits, edit_request
 from .base import Agent, json_text, story_specification_header
 from .style import style_clause
 
@@ -121,8 +122,8 @@ class DrafterAgent(Agent[str]):
         )
 
 
-class WriterAgent(Agent[str]):
-    """Apply the critic's coordinated notes to one chapter."""
+class WriterAgent(Agent[ParagraphEdits]):
+    """Apply the critic's coordinated notes to one chapter as paragraph edits (7.18)."""
 
     name = "writer"
 
@@ -141,22 +142,30 @@ class WriterAgent(Agent[str]):
         promise_brief: str = "",
         *,
         style_examples: bool = False,
-    ) -> str:
-        """Rewrite one chapter body in the requested fiction language."""
-        return self.provider.generate_text(
+    ) -> ParagraphEdits:
+        """Return the edits that apply the notes to one chapter in the fiction language.
+
+        Until 7.17 the Writer returned the whole chapter, and a light model mostly copied it
+        back. writing/chapter_edits.py applies what comes back and keeps the rest as drafted.
+        """
+        return self.provider.generate_structured(
             system_instruction=(
-                f"You are the final Writer. Rewrite only this chapter body in {request.language}; "
-                "return no heading, commentary, note IDs, or process language. Apply every "
-                "supplied global and local revision note, preserve correct material, planned "
-                "causality, and continuity, and honor the depth and pacing of the qualitative "
-                "narrative profile. Preserve every distinct planned event and expand through "
-                "meaningful action, reaction, and consequence rather than summary, repetition, or "
-                "decorative filler. Preserve the dramatized scene you are given: keep every "
-                "character speaking in the voice recorded in their profile, never turn a spoken "
-                "exchange into reported summary, and never merge separated beats back into one "
-                "block. Coordinate the opening with the previously revised chapter. When PROMISE "
-                "OBLIGATIONS are supplied, the rewrite must still deliver every one of them "
-                "inside the event it names: never drop an expectation the draft already planted."
+                "You are the final Writer. The chapter below is split into numbered paragraphs. "
+                "Apply the revision notes by editing those paragraphs, in "
+                f"{request.language}, and return only your edits: 'replace' rewrites one "
+                "paragraph, and 'insert_after' adds new paragraphs right after one, only to stage "
+                "a beat a note asks for. Every critical or major note needs at least one visible "
+                "edit that cites its id; a minor note may be left out. A paragraph you do not "
+                "edit stays exactly as drafted, so returning no edit means the chapter is "
+                "unchanged. Write the new text as finished prose, with no heading, commentary, "
+                "note IDs or process language. Preserve correct material, planned causality, "
+                "continuity and every distinct planned event, and honor the depth and pacing of "
+                "the qualitative narrative profile. Keep every character speaking in the voice "
+                "recorded in their profile, never turn a spoken exchange into reported summary, "
+                "and keep a new paragraph for each new speaker or shift of attention. When "
+                "PROMISE OBLIGATIONS are supplied, the edited chapter must still deliver every one "
+                "of them inside the event it names: never drop an expectation the draft already "
+                "planted."
                 f"{style_clause(request, examples=style_examples)}"
             ),
             prompt=(
@@ -167,12 +176,13 @@ class WriterAgent(Agent[str]):
                 f"\n\nCURRENT CHAPTER:\n{json_text(chapter)}"
                 f"\n\nORDERED EVENTS:\n{json_text(events)}"
                 f"\n\nREVISION NOTES:\n{json_text(notes)}"
-                # Ahead of the original body on purpose: everything after that marker is read
-                # back as the chapter body itself, by the retry diagnostics and by the tests.
                 + (f"\n\nPROMISE OBLIGATIONS:\n{promise_brief}" if promise_brief else "")
                 + f"\n\nPREVIOUS REVISED CHAPTER:\n{previous_revised_chapter or 'none'}"
-                f"\n\nORIGINAL CHAPTER BODY:\n{draft_body}"
+                # The correction goes ahead of the paragraphs: in 7.17 it trailed the chapter
+                # body, and the retry came back as the same copy of the draft.
                 f"{retry_feedback}"
+                f"\n\nCHAPTER PARAGRAPHS:\n{json_text(edit_request(draft_body))}"
             ),
+            schema=ParagraphEdits,
             profile="rewrite",
         )

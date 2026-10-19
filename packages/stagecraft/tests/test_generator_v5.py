@@ -57,6 +57,7 @@ from asg_stagecraft.schemas import (
 )
 from asg_stagecraft.writing.acceptance import writer_candidate_issue
 from asg_stagecraft.writing.audit import parse_chapter_bodies
+from asg_stagecraft.writing.chapter_edits import ParagraphEdit, ParagraphEdits
 from asg_stagecraft.writing.craft_evidence import NO_DIALOGUE, RARE_DIALOGUE
 from asg_stagecraft.writing.line_edit import LineEdits
 
@@ -434,14 +435,56 @@ def script_act(plan: StoryPlanDraft, chapter_id: str) -> ActScriptDraft:
 
 
 def _touched_act(draft: ActScriptDraft) -> ActScriptDraft:
-    """Return a copy of a script act with its first dialogue line visibly changed."""
+    """Return a copy of a script act with every dialogue line visibly changed.
+
+    One touched line in a long act is a near copy since 7.18, and the revision rejects it.
+    """
     scenes = [scene.model_copy(deep=True) for scene in draft.scenes]
     for scene in scenes:
         for line in scene.lines:
             if line.kind == "dialogue":
                 line.text = f"{line.text} (revisado)"
-                return ActScriptDraft(scenes=scenes)
     return ActScriptDraft(scenes=scenes)
+
+
+def writer_paragraphs(prompt: str) -> list[dict]:
+    """Read the numbered paragraphs a Writer prompt hands over, always its last block."""
+    return json.loads(prompt.rsplit("CHAPTER PARAGRAPHS:\n", 1)[1])
+
+
+def writer_note_ids(prompt: str) -> list[str]:
+    """Read the ids of the revision notes a Writer prompt carries."""
+    block = prompt.split("REVISION NOTES:\n", 1)[1]
+    block = re.split(r"\n\n(?:PROMISE OBLIGATIONS|PREVIOUS REVISED CHAPTER):", block, maxsplit=1)
+    return [note["id"] for note in json.loads(block[0])]
+
+
+def spoken_edits(prompt: str, number: int) -> ParagraphEdits:
+    """A sound set of edits: every paragraph replaced, narration played as short spoken lines.
+
+    It answers every note and clears what a test draft is measured for (no dialogue, block
+    paragraphs) without growing it, so the default run's revision is accepted at once.
+    """
+    note_ids = writer_note_ids(prompt)
+    edits = []
+    for paragraph in writer_paragraphs(prompt):
+        words = paragraph["text"].split()
+        words[0] = f"{words[0]}-r{number}"
+        if paragraph["text"].startswith("—"):
+            text = " ".join(words)
+        else:
+            text = "\n\n".join(
+                "—" + " ".join(words[start : start + 30]) for start in range(0, len(words), 30)
+            )
+        edits.append(
+            ParagraphEdit(note_ids=note_ids, paragraph=paragraph["id"], action="replace", text=text)
+        )
+    return ParagraphEdits(edits=edits)
+
+
+def writer_prompts(provider) -> list[str]:
+    """Every prompt the Writer received, in order."""
+    return [prompt for name, _, prompt in provider.structured_calls if name == "ParagraphEdits"]
 
 
 class FakeProvider:
@@ -454,9 +497,9 @@ class FakeProvider:
         fail_quality=False,
         plan_review: PlanReview | None = None,
         story_review: StoryReview | None = None,
-        writer_identical_once=False,
+        writer_unchanged_once=False,
         fail_writer_call: int | set[int] | None = None,
-        writer_outputs: list[str] | None = None,
+        writer_edits: list[ParagraphEdits] | None = None,
         analyzed_request: StoryRequest | None = None,
         quota_error_at: str | None = None,
         fail_semantic_ranking=False,
@@ -466,8 +509,6 @@ class FakeProvider:
         fail_promise_ledger=False,
         promise_verdict: str = "fulfilled",
         act_outputs: list[ActScriptDraft] | None = None,
-        script_writer_outputs: list[ActScriptDraft] | None = None,
-        script_writer_identical_once=False,
         fail_act_call: int | set[int] | None = None,
         fail_script_writer_call: int | set[int] | None = None,
         fail_script_critic=False,
@@ -488,14 +529,14 @@ class FakeProvider:
         self.plan_review = plan_review or PlanReview(approved=True)
         self.story_review = story_review or StoryReview(strengths=["Clear progression"])
         self.explicit_review = story_review is not None
-        self.writer_identical_once = writer_identical_once
+        self.writer_unchanged_once = writer_unchanged_once
         if fail_writer_call is None:
             self.fail_writer_calls: set[int] = set()
         elif isinstance(fail_writer_call, int):
             self.fail_writer_calls = {fail_writer_call}
         else:
             self.fail_writer_calls = set(fail_writer_call)
-        self.writer_outputs = list(writer_outputs) if writer_outputs is not None else None
+        self.writer_edits = list(writer_edits) if writer_edits is not None else None
         self.drafter_outputs = list(drafter_outputs) if drafter_outputs is not None else None
         self.analyzed_request = analyzed_request or make_request()
         self.fail_semantic_ranking = fail_semantic_ranking
@@ -508,10 +549,6 @@ class FakeProvider:
         self.draft_number = 0
         self.writer_number = 0
         self.act_outputs = list(act_outputs) if act_outputs is not None else None
-        self.script_writer_outputs = (
-            list(script_writer_outputs) if script_writer_outputs is not None else None
-        )
-        self.script_writer_identical_once = script_writer_identical_once
         if fail_act_call is None:
             self.fail_act_calls: set[int] = set()
         elif isinstance(fail_act_call, int):
@@ -546,6 +583,7 @@ class FakeProvider:
             SemanticSkeletonRanking: lambda: self._architecture_response(schema),
             NarrativeBlueprintDraft: lambda: self._architecture_response(schema),
             LineEdits: lambda: self.line_edits.pop(0) if self.line_edits else LineEdits(),
+            ParagraphEdits: lambda: self._writer_response(prompt),
             SceneCardsDraft: lambda: self._scene_cards_response(prompt),
         }
         handler = handlers.get(schema)
@@ -610,14 +648,7 @@ class FakeProvider:
                 raise RuntimeError("script writer unavailable")
             if self.quota_error_at == "script_writer":
                 raise GeminiDailyQuotaError("daily quota exhausted")
-            original_text = prompt.split("ORIGINAL ACT:\n", 1)[1].split("\n\nRETRY CORRECTION:", 1)[
-                0
-            ]
-            original = ActScriptDraft.model_validate_json(original_text)
-            if self.script_writer_identical_once and self.script_writer_number == 1:
-                return original
-            if self.script_writer_outputs is not None:
-                return self.script_writer_outputs.pop(0)
+            original = ActScriptDraft.model_validate_json(prompt.split("ORIGINAL ACT:\n", 1)[1])
             return _touched_act(original)
         self.act_number += 1
         if self.act_number in self.fail_act_calls:
@@ -662,28 +693,21 @@ class FakeProvider:
             unexpected_angle="The truth is already known and nobody acts on it.",
         )
 
+    def _writer_response(self, prompt: str) -> ParagraphEdits:
+        """Answer one Writer call: a failure, no edit, a queued set, or sound default edits."""
+        self.writer_number += 1
+        if self.writer_number in self.fail_writer_calls:
+            raise RuntimeError("writer unavailable")
+        if self.quota_error_at == "writer":
+            raise GeminiDailyQuotaError("daily quota exhausted")
+        if self.writer_unchanged_once and self.writer_number == 1:
+            return ParagraphEdits()
+        if self.writer_edits:
+            return self.writer_edits.pop(0)
+        return spoken_edits(prompt, self.writer_number)
+
     def generate_text(self, *, system_instruction, prompt, profile):
         self.text_calls.append((system_instruction, prompt))
-        if "final Writer" in system_instruction:
-            self.writer_number += 1
-            if self.writer_number in self.fail_writer_calls:
-                raise RuntimeError("writer unavailable")
-            if self.quota_error_at == "writer":
-                raise GeminiDailyQuotaError("daily quota exhausted")
-            original = prompt.split("ORIGINAL CHAPTER BODY:\n", 1)[1].split(
-                "\n\nRETRY CORRECTION:",
-                1,
-            )[0]
-            if self.writer_identical_once and self.writer_number == 1:
-                return original
-            if self.writer_outputs is not None:
-                return self.writer_outputs.pop(0)
-            # A sound rewrite keeps the draft's paragraphs (7.17 rejects one that merges them).
-            blocks = [block for block in original.split("\n\n") if block.strip()]
-            return "\n\n".join(
-                f"{block} revisado{self.writer_number}-{index}"
-                for index, block in enumerate(blocks)
-            )
         self.draft_number += 1
         if self.drafter_outputs is not None:
             return self.drafter_outputs.pop(0)
@@ -760,6 +784,9 @@ def test_a_name_is_the_least_typical_acceptable_candidate_and_renames_everywhere
     assert chosen.relationships[0].target_character_id == "ilse_marvento"
     assert [item["chosen"] for item in choices] == ["Ilse Marvento", "Bruno"]
     assert "name_options" not in chosen.model_dump_json()
+    # 7.18.1: a whole name the author wrote in the prompt is fixed like a brief's cast.
+    kept, _ = choose_names(cast, authored_text="Reparto: - Elena Vance (ella), protagonista.")
+    assert kept.characters[0].name == "Elena Vance"
 
 
 def test_scene_cards_reach_the_drafter_and_a_rejected_set_is_repaired(tmp_path) -> None:
@@ -801,9 +828,9 @@ def test_an_anchored_approval_needs_a_quote_the_draft_contains(tmp_path) -> None
     anchors = json.loads((run.run_dir / "review_anchors.json").read_text(encoding="utf-8"))
     assert [item["found"] for item in anchors["constraints"]] == [True, False]
     assert "ANCHORED REVIEW" in structured_prompt_system(provider, "StoryReview")
-    writer_prompts = [prompt for system, prompt in provider.text_calls if "final Writer" in system]
-    assert writer_prompts
-    assert all("Ana casi pierde" in prompt for prompt in writer_prompts)
+    prompts = writer_prompts(provider)
+    assert prompts
+    assert all("Ana casi pierde" in prompt for prompt in prompts)
 
 
 def test_a_new_draft_reuses_the_exact_plan_of_a_finished_run(tmp_path) -> None:
@@ -1310,13 +1337,13 @@ def test_a_craft_observation_reaches_the_writer_as_a_note_on_that_chapter_alone(
     assert f"- chapter-1: {RARE_DIALOGUE}." in critic_prompt
     assert "chapter-2:" not in critic_prompt
 
-    writer_calls = [item for item in provider.text_calls if "final Writer" in item[0]]
-    assert len(writer_calls) == 1
-    assert "REVISION NOTES:" in writer_calls[0][1]
-    assert "Stage the confrontation as a live spoken scene." in writer_calls[0][1]
+    prompts = writer_prompts(provider)
+    assert len(prompts) == 1
+    assert "REVISION NOTES:" in prompts[0]
+    assert "Stage the confrontation as a live spoken scene." in prompts[0]
 
     # The measured observation travels too, as a note of its own (7.12).
-    assert "play the key exchange as spoken scene" in writer_calls[0][1]
+    assert "play the key exchange as spoken scene" in prompts[0]
 
     report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
     assert report["chapters"][0]["note_ids"] == ["chapter-1-dialogue", "craft_chapter-1"]
@@ -1328,23 +1355,60 @@ def test_a_craft_observation_reaches_the_writer_as_a_note_on_that_chapter_alone(
 def test_the_writer_is_given_the_voices_it_must_preserve(tmp_path) -> None:
     provider = FakeProvider(story_review=major_story_review())
     StoryGenerator(provider, tmp_path).generate(make_request())
-    writer_calls = [item for item in provider.text_calls if "final Writer" in item[0]]
+    prompts = writer_prompts(provider)
 
-    assert writer_calls
-    assert all("RELEVANT CHARACTERS:" in prompt for _, prompt in writer_calls)
-    assert all('"voice": "Precise and restrained"' in prompt for _, prompt in writer_calls)
+    assert prompts
+    assert all("RELEVANT CHARACTERS:" in prompt for prompt in prompts)
+    assert all('"voice": "Precise and restrained"' in prompt for prompt in prompts)
 
 
-def test_writer_retries_unchanged_major_revision_and_saves_attempt(tmp_path) -> None:
-    provider = FakeProvider(
-        story_review=major_story_review(),
-        writer_identical_once=True,
+def spoken(label: str, words: int) -> str:
+    """Prose played as short spoken lines, the shape a sound Writer edit takes."""
+    tokens = prose(label, words).split()
+    return "\n\n".join("—" + " ".join(tokens[start : start + 25]) for start in range(0, words, 25))
+
+
+def replace_chapter(text: str, note_ids: tuple[str, ...] = ("story-note-1",)) -> ParagraphEdits:
+    """One edit that replaces a one-paragraph test draft, citing the given notes."""
+    return ParagraphEdits(
+        edits=[ParagraphEdit(note_ids=list(note_ids), paragraph="P1", action="replace", text=text)]
     )
+
+
+@pytest.mark.parametrize(
+    ("knobs", "unapplied"),
+    [
+        ({"writer_unchanged_once": True}, ["story-note-1", "craft_chapter-1"]),
+        # 7.18 (TD-3): the edit cites the craft note but leaves the observation in place.
+        (
+            {
+                "writer_edits": [
+                    replace_chapter(prose("otro-", 300), ("story-note-1", "craft_chapter-1"))
+                ]
+            },
+            ["craft_chapter-1"],
+        ),
+    ],
+    ids=["no-edit", "observation-survives"],
+)
+def test_writer_retries_unchanged_major_revision_and_saves_attempt(
+    tmp_path, knobs, unapplied
+) -> None:
+    """7.18: a significant note no edit answered is named back, ahead of the paragraphs."""
+    provider = FakeProvider(story_review=major_story_review(), **knobs)
     run = StoryGenerator(provider, tmp_path).generate(make_request())
-    writer_calls = [item for item in provider.text_calls if "final Writer" in item[0]]
-    assert len(writer_calls) == 3
+    prompts = writer_prompts(provider)
+    assert len(prompts) == 3
     assert (run.run_dir / "writer" / "chapter-001-attempt-001.md").is_file()
-    assert "RETRY CORRECTION" in writer_calls[1][1]
+    assert (run.run_dir / "writer" / "chapter-001-attempt-001-edits.json").is_file()
+    report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
+    first = report["chapters"][0]
+    assert first["final_source"] == "revision"
+    assert first["attempts"][0]["diagnostic"]["code"] == "NOTE_NOT_APPLIED"
+    assert first["attempts"][0]["diagnostic"]["note_ids"] == unapplied
+    retry = prompts[1]
+    assert retry.index("RETRY CORRECTION") < retry.index("CHAPTER PARAGRAPHS:")
+    assert all(note_id in retry.split("CHAPTER PARAGRAPHS:")[0] for note_id in unapplied)
 
 
 @pytest.mark.parametrize(
@@ -1357,12 +1421,6 @@ def test_writer_retries_unchanged_major_revision_and_saves_attempt(tmp_path) -> 
             [],
             "MARKDOWN_HEADINGS",
         ),
-        (
-            prose("original-", 300),
-            prose("original-", 300),
-            major_story_review().notes,
-            "UNCHANGED_SIGNIFICANT_NOTES",
-        ),
         # 7.17 (TD-3): what the code can tell is worse than the draft.
         (prose("bloque-", 300), scene_prose(), [], "MERGED_PARAGRAPHS"),
         (prose("largo-", 400), prose("original-", 300), [], "LENGTHENED_WITHOUT_CAUSE"),
@@ -1371,7 +1429,6 @@ def test_writer_retries_unchanged_major_revision_and_saves_attempt(tmp_path) -> 
     ids=[
         "empty-body",
         "markdown-headings",
-        "unchanged-with-significant-notes",
         "merged",
         "lengthened",
         "worse-craft",
@@ -1387,30 +1444,42 @@ def test_writer_candidate_diagnostics_are_structured(
     assert diagnostic.retry_instruction
 
 
-def test_a_rewrite_may_shorten_but_grows_only_when_a_note_asks_for_staging(tmp_path) -> None:
+@pytest.mark.parametrize(
+    ("retry_words", "source", "final_attempt", "warning_code"),
+    [
+        # The longer one is sent back once, and the retry keeps the draft's length.
+        (300, "revision", None, None),
+        # 7.18 (TD-3): both attempts grew; the latest, equally ranked, ships instead of the draft.
+        (450, "best_candidate", 2, "WRITER_BEST_CANDIDATE"),
+    ],
+    ids=["retry-keeps-length", "best-candidate"],
+)
+def test_a_rewrite_may_shorten_but_grows_only_when_a_note_asks_for_staging(
+    tmp_path, retry_words, source, final_attempt, warning_code
+) -> None:
     """7.17 (TD-3): in 6.2, 66 of 69 revisions came back longer; growth now needs a cause."""
     provider = FakeProvider(
         story_review=major_story_review(),
-        writer_outputs=[
-            prose("corto-a-", 100),
-            prose("largo-", 500),
-            prose("ajustado-", 300),
+        writer_edits=[
+            replace_chapter(spoken("corto-", 100)),
+            replace_chapter(spoken("largo-", 500)),
+            replace_chapter(spoken("otro-", retry_words)),
         ],
     )
     run = StoryGenerator(provider, tmp_path).generate(make_request())
     report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
-    assert [chapter["final_source"] for chapter in report["chapters"]] == [
-        "revision",
-        "revision",
-    ]
-    # The longer one is sent back once, and the retry keeps the draft's length.
-    assert [chapter["final_words"] for chapter in report["chapters"]] == [100, 300]
-    grown = report["chapters"][1]["attempts"][0]
-    assert grown["diagnostic"]["code"] == "LENGTHENED_WITHOUT_CAUSE"
-    writer_calls = [item for item in provider.text_calls if "final Writer" in item[0]]
-    assert len(writer_calls) == 3
+    assert [chapter["final_source"] for chapter in report["chapters"]] == ["revision", source]
+    assert [chapter["final_words"] for chapter in report["chapters"]] == [100, retry_words]
+    grown = report["chapters"][1]
+    assert grown["attempts"][0]["diagnostic"]["code"] == "LENGTHENED_WITHOUT_CAUSE"
+    assert grown["final_attempt"] == final_attempt
+    assert grown["warning_code"] == warning_code
+    assert len(writer_prompts(provider)) == 3
     metadata = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))
     assert not any("longitud" in warning.casefold() for warning in metadata["warnings"])
+    assert any("[WRITER_BEST_CANDIDATE]" in item for item in metadata["warnings"]) == bool(
+        warning_code
+    )
 
 
 def test_writer_failure_is_isolated_to_its_chapter(tmp_path) -> None:
@@ -1448,7 +1517,7 @@ def test_writer_retries_after_a_transient_failure(tmp_path) -> None:
 def test_chapters_without_notes_skip_the_writer(tmp_path) -> None:
     provider = FakeProvider(drafter_outputs=[scene_prose(), scene_prose()])
     run = StoryGenerator(provider, tmp_path).generate(make_request())
-    assert [item for item in provider.text_calls if "final Writer" in item[0]] == []
+    assert writer_prompts(provider) == []
     report = json.loads((run.run_dir / "revision_report.json").read_text(encoding="utf-8"))
     for chapter in report["chapters"]:
         assert chapter["final_source"] == "draft"
@@ -1476,8 +1545,7 @@ def test_a_note_with_only_event_ids_reaches_just_the_owning_chapter(tmp_path) ->
     assert by_chapter["chapter-1"]["final_source"] == "draft"
     assert by_chapter["chapter-2"]["note_ids"] == ["story-note-1"]
     assert by_chapter["chapter-2"]["final_source"] == "revision"
-    writer_prompts = [item for item in provider.text_calls if "final Writer" in item[0]]
-    assert len(writer_prompts) == 1
+    assert len(writer_prompts(provider)) == 1
 
 
 def test_analyst_prompt_separates_explicit_constraints_and_inferences() -> None:
@@ -1536,8 +1604,11 @@ def test_the_author_style_reaches_every_prose_writer_and_the_critic(tmp_path) ->
     request = make_request().model_copy(update={"style_request": "lenguaje jovial con cubanismos"})
     provider = FakeProvider(story_review=major_story_review())
     StoryGenerator(provider, tmp_path).generate(request)
-    prose_systems = [system for system, _ in provider.text_calls]
-    assert prose_systems
+    writer_systems = [
+        system for name, system, _ in provider.structured_calls if name == "ParagraphEdits"
+    ]
+    prose_systems = [system for system, _ in provider.text_calls] + writer_systems
+    assert writer_systems
     assert all("STYLE FOR THE READER" in system for system in prose_systems)
     assert all("lenguaje jovial con cubanismos" in system for system in prose_systems)
     critic_prompt = structured_prompt(provider, "StoryReview")
@@ -1606,9 +1677,13 @@ def test_internal_agents_use_english_until_drafting(tmp_path) -> None:
     all_calls = json.dumps(provider.structured_calls) + json.dumps(provider.text_calls)
     assert "EXACT EVENT COUNTS" not in all_calls
     assert "word budget" not in all_calls
+    writer_systems = [
+        system for name, system, _ in provider.structured_calls if name == "ParagraphEdits"
+    ]
+    assert writer_systems
     assert all(
         "Spanish" in system
-        for system, _ in provider.text_calls
+        for system in [*(system for system, _ in provider.text_calls), *writer_systems]
         if "Drafter" in system or "final Writer" in system
     )
 
@@ -1652,7 +1727,7 @@ def test_architecture_stage_writes_a_blueprint_and_guides_only_the_agents_that_s
     for _, prompt in provider.text_calls:
         assert "NARRATIVE INSPIRATION" not in prompt
     for name, _, prompt in provider.structured_calls:
-        if name in {"PlanReview", "StoryReview"}:
+        if name in {"PlanReview", "StoryReview", "ParagraphEdits"}:
             assert "NARRATIVE INSPIRATION" not in prompt
 
 
@@ -1687,15 +1762,13 @@ def test_the_ledger_reaches_the_drafter_and_the_writer_as_chapter_obligations(tm
     assert ledger["chapter_by_event"]["event-1"] == "chapter-1"
 
     drafts = [item for item in provider.text_calls if "first-draft fiction chapter" in item[0]]
-    writes = [item for item in provider.text_calls if "final Writer" in item[0]]
+    writes = writer_prompts(provider)
     assert "PROMISE OBLIGATIONS:" in drafts[0][1]
     assert "OPEN promise-1" in drafts[0][1]
     assert "PAY OFF promise-1" in drafts[-1][1]
-    assert "PROMISE OBLIGATIONS:" in writes[0][1]
-    # The obligations must sit ahead of the body the Writer is asked to improve, or the retry
-    # diagnostics would read them back as part of the chapter.
-    body_at = writes[0][1].index("ORIGINAL CHAPTER BODY:")
-    assert writes[0][1].index("PROMISE OBLIGATIONS:") < body_at
+    assert "PROMISE OBLIGATIONS:" in writes[0]
+    # The obligations sit ahead of the paragraphs the Writer edits, which close the prompt.
+    assert writes[0].index("PROMISE OBLIGATIONS:") < writes[0].index("CHAPTER PARAGRAPHS:")
     assert "PROMISE OBLIGATIONS:" in structured_prompt(provider, "StoryReview")
 
 
@@ -1730,7 +1803,7 @@ def test_disabled_ledger_removes_the_stage_and_its_vocabulary(tmp_path) -> None:
     assert "promises" not in metadata["completed_stages"]
     assert not metadata["warnings"]
     assert all(name != "PromiseLedgerDraft" for name, _, _ in provider.structured_calls)
-    for _, prompt in provider.text_calls:
+    for prompt in [*(prompt for _, prompt in provider.text_calls), *writer_prompts(provider)]:
         assert "PROMISE OBLIGATIONS" not in prompt
 
 

@@ -142,6 +142,13 @@ def chapter_blocks(body: str) -> list[str]:
     return [block.strip() for block in _BLOCKS.split(body.strip()) if block.strip()]
 
 
+def paragraph_index(paragraph_id: str, count: int) -> int | None:
+    """Turn a paragraph id such as P3 into its position, or None when no such paragraph exists."""
+    match = _PARAGRAPH_ID.match(paragraph_id.strip())
+    index = int(match.group(1)) - 1 if match else -1
+    return index if 0 <= index < count else None
+
+
 def block_flags(
     block: str, names: list[str], *, opening: bool = False, examples: tuple[str, ...] = ()
 ) -> tuple[str, ...]:
@@ -235,8 +242,7 @@ def edit_chapter(
     )
     replaced: dict[int, str] = {}
     for edit in edits.edits:
-        match = _PARAGRAPH_ID.match(edit.id.strip())
-        index = int(match.group(1)) - 1 if match else -1
+        index = paragraph_index(edit.id, len(blocks))
         if index not in flags or index in replaced:
             result.rejected[edit.id] = "not a flagged paragraph"
             continue

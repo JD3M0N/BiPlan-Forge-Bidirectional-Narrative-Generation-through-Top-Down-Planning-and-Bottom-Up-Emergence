@@ -22,7 +22,6 @@ from ..schemas import (
     ActScript,
     ActScriptDraft,
     ChapterPlan,
-    ChapterRevisionAttempt,
     ChapterRevisionResult,
     CharacterProfile,
     CharactersArtifact,
@@ -40,6 +39,7 @@ from ..schemas import (
     WorldArtifact,
 )
 from ..writing.audit import script_metrics, word_count
+from ..writing.revision_loop import Judgement, revise_with_retries
 from .render import render_act, render_script, staging_index
 from .validation import (
     act_anchor_index,
@@ -64,12 +64,18 @@ class ScriptStagesMixin:
         plan: StoryPlan,
         ledger: PromiseLedger | None,
     ) -> PlayScript:
-        """Draft, critique, and revise a native theater script from the frozen plan."""
+        """Draft, critique, and revise a native theater script from the frozen plan.
+
+        A simulated run keeps the draft (7.19): its performance reads the scenes, casts and
+        objectives, never the lines, and the critique and revision could only change lines.
+        """
         presentation, acts = self._draft_acts(request, world, characters, plan, ledger)
         draft_play = assemble_play(
             presentation, characters, acts, language=request.language, method=ScriptMethod.NATIVE
         )
         self.repository.save_text("draft.md", render_script(draft_play))
+        if self.story_format is StoryFormat.SIMULATED:
+            return draft_play
         review = self._critique_script(
             request, world, characters, plan, presentation, draft_play, ledger
         )
@@ -415,44 +421,38 @@ class ScriptStagesMixin:
             if previous_revised_act
             else ""
         )
-        attempts: list[ChapterRevisionAttempt] = []
-        retry_feedback = ""
-        for attempt in range(1, SCRIPT_REVISION_ATTEMPTS + 1):
-            prefix = f"writer/act-{chapter_index:03d}-attempt-{attempt:03d}"
-            try:
+        repository = self.repository
 
-                def revise_act(feedback_snapshot: str = retry_feedback) -> ActScriptDraft:
-                    """Rewrite the bound act with this attempt's feedback."""
-                    return writer.run(
-                        request,
-                        relevant_characters,
-                        plan,
-                        presentation,
-                        chapter,
-                        events,
-                        notes,
-                        original_act.as_draft(),
-                        previous_text,
-                        anchor_index,
-                        feedback_snapshot,
-                        promise_brief,
-                    )
+        def prefix(attempt: int) -> str:
+            """Name the artifacts of one Script Writer attempt on the bound act."""
+            return f"writer/act-{chapter_index:03d}-attempt-{attempt:03d}"
 
-                candidate = self._call_agent("script_writer", revise_act)
-            except NON_DEGRADABLE_ERRORS:
-                raise
-            except Exception as exc:
-                attempt_result = ChapterRevisionAttempt(
-                    attempt=attempt, status="failed", exception_type=type(exc).__name__
-                )
-                attempts.append(attempt_result)
-                self.repository.save_json(f"{prefix}-validation.json", attempt_result)
-                retry_feedback = (
-                    "\n\nRETRY CORRECTION:\nThe previous rewrite could not be completed "
-                    f"({type(exc).__name__}). Return a complete corrected act."
-                )
-                continue
-            self.repository.save_json(f"{prefix}.json", candidate)
+        def call(attempt: int, feedback: str) -> ActScriptDraft:
+            """Rewrite the bound act with this attempt's feedback."""
+            return self._call_agent(
+                "script_writer",
+                lambda: writer.run(
+                    request,
+                    relevant_characters,
+                    plan,
+                    presentation,
+                    chapter,
+                    events,
+                    notes,
+                    original_act.as_draft(),
+                    previous_text,
+                    anchor_index,
+                    feedback,
+                    promise_brief,
+                ),
+            )
+
+        def judge(attempt: int, candidate: ActScriptDraft) -> Judgement[ActScript]:
+            """Save one rewritten act and validate it against the frozen plan.
+
+            An act that fails is never shipped in place of the original, so it has no rank.
+            """
+            repository.save_json(f"{prefix(attempt)}.json", candidate)
             revised, diagnostic = revision_issue(
                 candidate,
                 original_act,
@@ -463,48 +463,40 @@ class ScriptStagesMixin:
                 world=world,
                 characters=characters,
             )
-            attempt_result = ChapterRevisionAttempt(
-                attempt=attempt,
-                status="accepted" if diagnostic is None else "rejected",
-                artifact=f"{prefix}.json",
-                diagnostic=diagnostic,
-            )
-            attempts.append(attempt_result)
-            self.repository.save_json(f"{prefix}-validation.json", attempt_result)
-            if diagnostic is None:
-                final_words = sum(
-                    word_count(line.text) for scene in revised.scenes for line in scene.lines
-                )
-                return revised, ChapterRevisionResult(
-                    chapter_id=chapter.id,
-                    chapter_index=chapter_index,
-                    note_ids=[note.id for note in notes],
-                    draft_words=draft_words,
-                    attempts=attempts,
-                    final_source="revision",
-                    final_words=final_words,
-                )
-            retry_feedback = (
-                "\n\nRETRY CORRECTION:\nThe previous rewrite was rejected because "
-                f"{diagnostic.message}. {diagnostic.retry_instruction} "
-                "Return a complete corrected act."
-            )
-        warning = (
-            f"[SCRIPT_REVISION_REJECTED] Acto {chapter_index}: no hubo una revision valida tras "
-            f"{len(attempts)} intentos. Se entrego el acto de {draft_words} palabras."
+            return Judgement(revised, diagnostic, f"{prefix(attempt)}.json")
+
+        outcome = revise_with_retries(
+            SCRIPT_REVISION_ATTEMPTS,
+            call,
+            judge,
+            lambda result: repository.save_json(
+                f"{prefix(result.attempt)}-validation.json", result
+            ),
+            "Return a complete corrected act.",
         )
-        self.repository.add_warning(warning)
-        self._emit("script_writer_fallback", warning, stage="revision")
-        return original_act, ChapterRevisionResult(
+        result = ChapterRevisionResult(
             chapter_id=chapter.id,
             chapter_index=chapter_index,
             note_ids=[note.id for note in notes],
             draft_words=draft_words,
-            attempts=attempts,
+            attempts=outcome.attempts,
             final_source="draft",
             final_words=draft_words,
-            warning_code="SCRIPT_REVISION_REJECTED",
         )
+        if outcome.accepted is not None:
+            final_words = sum(
+                word_count(line.text) for scene in outcome.accepted.scenes for line in scene.lines
+            )
+            return outcome.accepted, result.model_copy(
+                update={"final_source": "revision", "final_words": final_words}
+            )
+        warning = (
+            f"[SCRIPT_REVISION_REJECTED] Acto {chapter_index}: no hubo una revision valida tras "
+            f"{len(outcome.attempts)} intentos. Se entrego el acto de {draft_words} palabras."
+        )
+        self.repository.add_warning(warning)
+        self._emit("script_writer_fallback", warning, stage="revision")
+        return original_act, result.model_copy(update={"warning_code": "SCRIPT_REVISION_REJECTED"})
 
     def _script_frame(
         self,

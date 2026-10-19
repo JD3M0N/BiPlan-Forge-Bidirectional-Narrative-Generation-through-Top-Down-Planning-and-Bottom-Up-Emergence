@@ -40,6 +40,12 @@ Seis brazos apagados por defecto (estilo con ejemplos, editor por fragmentos, fi
 escena, crítico con cita, narración por selección y cláusulas por tipo), más arreglos siempre
 activos. La validación en real está en SIM-25, TD-10 y SIM-26. 781 tests en verde.
 
+**7.18.0, 2026-10-18: el Writer edita párrafos.** En `20261018-035939` el Writer devolvió el
+capítulo 3 byte a byte dos veces, y en el corpus 17 de 29 intentos eran casi copias. Ahora
+devuelve ediciones por párrafo que aplica el código, reintenta la nota que no atendió
+(`NOTE_NOT_APPLIED`) y, si nada pasa, entrega el mejor candidato. El bucle de reintento es uno
+solo. Falta validarlo en real (TD-3). 793 tests en verde.
+
 **Estado medido el 2026-10-09 con `asg-stagecraft` 7.9.0 (pipeline 7.9).** Un solo generador,
 Stagecraft, con tres formatos: `narrative`, `script` y `simulated`. La función simulada puede
 llevar inventario de objetos, la guía narrativa tiene una estrategia experimental
@@ -357,8 +363,6 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
     `GEMINI_PROSE_MODEL` (Flash, ~20 peticiones gratis al día).
   - Llevar `readability_signals` a la capa T de `asg-report-features`, que solo lee disco, para
     comparar antes y después sin leer a mano.
-  - Si una observación sobrevive a la reescritura, reintentar una vez con ella como corrección
-    (lo que queda de TD-3).
 - **Hecho cuando.** Los dos runs nuevos dan coletillas y nombres repetidos por debajo de los
   umbrales de `writing/craft_evidence.py`, la cubana sale Esencial y en el registro pedido, el
   título y el slug van en español, y los amigos la prefieren a ciegas frente a la de 7.10.
@@ -1161,39 +1165,32 @@ versión definitiva del generador
 - **Ojo.** Casar un nombre de objeto en texto libre falla con los sinónimos. Usar los nombres
   normalizados de `stage/props.py` y aceptar el falso negativo.
 
-### TD-3 · La revisión alarga en vez de reparar
+### TD-3 · Validar en real el Writer por ediciones
 
-*Área:* top-down · *Cuota:* ~17 llamadas para validar · *Depende de:* —
+*Área:* top-down · *Cuota:* ~19 llamadas (una narrativa con `--plan-from`) · *Depende de:* —
 
 - **Síntoma.**
-  - **Casi toda revisión alarga.** En 6.2, 69 de 69 capítulos con nota se revisaron y aceptaron,
-    y 66 salieron más largos, con una mediana de +82 palabras.
-  - **La corrida de control repite el patrón.** El capítulo 1 volvió idéntico al primer intento
-    (`UNCHANGED_SIGNIFICANT_NOTES`) y pasó de 1.034 a 1.107 palabras al segundo; el 2, de 704 a
-    765.
-  - **El caso más claro** sigue siendo `Top-Down/20260920-135822-el-computo-de-la-deriva`: una
-    nota de ritmo por un `dialogue_ratio` de 0,1765, reescritura de 424 a 589 palabras, y el mismo
-    0,1765 después.
-  - **Nada comprueba el arreglo.** `writer_candidate_issue` (`writing/acceptance.py`) solo rechaza
-    un cuerpo vacío, encabezados y texto idéntico. Tras dos rechazos, `_revise_one_chapter`
-    devuelve el borrador. No hay segunda crítica, así que nada mide si la revisión arregló algo.
-  - **El bucle de `RETRY CORRECTION` está copiado tres veces**: en `pipeline.py`,
-    `script/stages.py` y `stage/stages.py`.
+  - **El Writer copiaba.** En `20261018-035939-la-luz-de-los-hundidos`, el capítulo 3 volvió
+    byte a byte dos veces y se entregó el borrador.
+  - **El corpus repite el patrón.** 17 de 29 intentos guardados eran casi copias, y unas ocho se
+    aceptaron con nota `major`.
+  - **La revisión alargaba.** En 6.2, 66 de 69 capítulos salieron más largos, con una mediana de
+    +82 palabras.
+  - **Código hecho en 7.18.0, probado solo con dobles:**
+    - ediciones por párrafo (`writing/chapter_edits.py`);
+    - `NOTE_NOT_APPLIED`, también cuando sobrevive la observación de una nota de artesanía;
+    - el mejor candidato en vez del borrador;
+    - el bucle común (`writing/revision_loop.py`).
 - **Qué hacer.**
-  - Primero, extraer el bucle de reintento compartido.
-  - Después, llevar hasta la revisión las observaciones de `craft_evidence` que
-    `_critique_and_revise` ya calcula. Si la misma observación sobrevive al candidato, usarla como
-    corrección del siguiente.
-  - Rechazo blando: devolver el mejor candidato, nunca el borrador degradado.
-  - El feedback nombra la observación y jamás una cifra; para eso existe
-    `test_no_measurement_ever_reaches_the_prompt`.
-- **Avance 7.17.** `writer_candidate_issue` rechaza la fusión de párrafos, el alargamiento sin
-  nota que lo pida y la reescritura que empeora lo medido. Quedan el bucle compartido y entregar
-  el mejor candidato en lugar del borrador.
+  - `asg-generate --plan-from Stories/Stagecraft/20261018-035939-la-luz-de-los-hundidos --format narrative --no-audio`.
+  - Leer `writer/*-edits.json` y `revision_report.json`, y comparar la similitud de cada capítulo
+    revisado con su borrador frente al 1,0 de `035939`.
 - **Hecho cuando.**
-  - Una reescritura que no mueve la observación se reintenta.
-  - El capítulo entregado nunca es el borrador.
-  - El bucle vive en un solo sitio, y hay test del camino.
+  - Ningún capítulo con nota grave sale como `draft`.
+  - Las ediciones aceptadas atienden la nota que citan, leído a mano.
+  - Flash-Lite responde al esquema sin fallos estructurados.
+- **Ojo.** Si el esquema le cuesta a Flash-Lite, cada fallo queda como intento `failed`. Es la
+  cifra que dice si hace falta `GEMINI_PROSE_MODEL` para el Writer.
 
 ### TD-4 · La resolución se apoya en hechos que no se plantaron
 
@@ -1514,9 +1511,9 @@ EXP-7
     tiene unas 51 aserciones de subcadena sobre prompts y textos de sistema. Hay más en
     `test_script_pipeline` (5), `test_stage_engine` (4) y `test_audit_stage` (4).
   - **Dobles que enrutan por el texto.** Los dobles de proveedor eligen respuesta por subcadenas
-    del prompt de sistema («final Writer», «Script Critic», «Playwright»; y en `stage_fakes.py`,
-    «You are the Narrator» o «Name turning_actor_id»). Además parten el prompt del Writer por
-    `ORIGINAL CHAPTER BODY:` y `RETRY CORRECTION:`.
+    del prompt de sistema («Script Critic», «Playwright»; y en `stage_fakes.py`,
+    «You are the Narrator» o «Name turning_actor_id»). El Writer ya se enruta por su esquema
+    (`ParagraphEdits`, 7.18).
   - **El coste.** Reescribir un prompt, que es el trabajo central de la tesis y el de SIM-1,
     SIM-2, TD-2 y TD-4, rompe tests que no tienen nada que ver.
 - **Qué hacer.**
@@ -1543,7 +1540,7 @@ EXP-7
 
 ### ING-3 · Dividir `pipeline.py`
 
-*Área:* ingeniería · *Cuota:* sin cuota · *Depende de:* TD-3 (el bucle de reintento)
+*Área:* ingeniería · *Cuota:* sin cuota · *Depende de:* —
 
 - **Síntoma.**
   - **Tamaño.** `StoryPipeline` tiene 1.197 líneas y 48 métodos, más los mixins de
@@ -1557,7 +1554,9 @@ EXP-7
     `planning/repair.py`, `writing/assembly.py` y `writing/acceptance.py`.
 - **Qué hacer.**
   - Sacar la telemetría y la contabilidad de uso como colaboradores (su lectura ya existe: capa K).
-  - Sacar el bucle de reintento compartido (TD-3).
+  - El bucle de reintento ya está en `writing/revision_loop.py` (7.18). El del narrador
+    (`stage/stages.py`) se queda aparte a propósito: tiene revisión editorial, candidato
+    reservado y su propia severidad.
   - Al final, convertir las etapas en clases con estado propio, que es lo que elimina los asserts.
   - No hacerlo de paso dentro de otro cambio.
 - **Hecho cuando.**

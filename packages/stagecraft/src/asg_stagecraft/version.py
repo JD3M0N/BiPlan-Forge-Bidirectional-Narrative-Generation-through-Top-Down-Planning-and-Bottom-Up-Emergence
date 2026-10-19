@@ -1,9 +1,9 @@
 """Version identifiers persisted with every generated story."""
 
 GENERATOR_NAME = "asg-stagecraft"
-__version__ = "7.17.0"
+__version__ = "7.19.0"
 GENERATOR_VERSION = __version__
-PIPELINE_VERSION = "7.17"
+PIPELINE_VERSION = "7.19"
 # Runs written as Top-Down 5.x and 6.x stay readable: renaming the package and adding the
 # hybrid stages is additive, so every earlier contract still opens as a StoryRun. 7.1 changed
 # what a simulated beat's "achieved" means and added director.jsonl; 7.2 changed what
@@ -39,7 +39,13 @@ PIPELINE_VERSION = "7.17"
 # anchored critic (review_anchors.json), a narration from selected moments
 # (narration/chapter-NNN-selection.json) and typed clauses; and, always on, name candidates
 # (name_choices.json), dossier knowledge sources and cover stories, the Writer's measured
-# acceptance and the stricter turn rules. Earlier runs open.
+# acceptance and the stricter turn rules. 7.18 has the Writer return paragraph edits instead
+# of a whole chapter (writer/chapter-NNN-attempt-NNN-edits.json), retries a significant note
+# no edit answered (NOTE_NOT_APPLIED) and ships the best candidate instead of the draft
+# (revision_report.json's best_candidate). 7.19 stops critiquing and revising a simulated
+# run's script (no review.json, revision_report.json or script_promise_audit.json), asks the
+# casting once for the gates of its secrets, retells the lines a first report left out, cuts a
+# long line at a clause, and has the director judge a beat by what was played. Earlier runs open.
 SUPPORTED_PIPELINE_VERSIONS = frozenset(
     {
         "5.0",
@@ -66,6 +72,8 @@ SUPPORTED_PIPELINE_VERSIONS = frozenset(
         "7.14",
         "7.15",
         "7.16",
+        "7.17",
+        "7.18",
         PIPELINE_VERSION,
     }
 )

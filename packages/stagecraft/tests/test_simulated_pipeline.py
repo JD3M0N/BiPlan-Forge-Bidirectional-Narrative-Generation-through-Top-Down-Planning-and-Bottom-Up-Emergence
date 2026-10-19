@@ -69,7 +69,10 @@ def test_simulated_run_writes_every_artifact_and_completes(tmp_path) -> None:
     assert run.narration_path.is_file()
     assert read_json(run, "promise_audit.json")["source"] == "narration"
     assert read_json(run, "performance_promise_audit.json")["source"] == "performance"
-    assert (run.run_dir / "script_promise_audit.json").is_file()
+    # 7.19: the actors never read the script's lines, so the script is neither critiqued nor
+    # revised, and no audit of it is kept.
+    for name in ("review.json", "revision_report.json", "script_promise_audit.json"):
+        assert not (run.run_dir / name).exists(), name
     for source in ("performance", "narration"):
         assert (run.run_dir / f"stage/{source}_promise_audit_draft.json").is_file()
     completed = metadata["completed_stages"]
@@ -453,6 +456,7 @@ def test_every_stage_call_is_tagged_with_its_agent(tmp_path) -> None:
     assert all(stage and agent for stage, agent in contexts), contexts
     assert {("performance", "actor"), ("performance", "stage_manager")} <= set(contexts)
     assert ("narration", "narrator") in set(contexts)
+    assert not {agent for _, agent in contexts} & {"script_critic", "script_writer"}
 
 
 class RecordingStageProvider(StageFakeProvider):

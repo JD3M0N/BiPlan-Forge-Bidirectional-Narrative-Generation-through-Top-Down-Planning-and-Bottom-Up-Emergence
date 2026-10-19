@@ -44,6 +44,8 @@ SIMILE_CHAINS = "comparisons pile up, so the prose reads as ornament instead of 
 # What the critic is shown: whether a chapter plays as scene. Readability goes to the Writer as a
 # note of its own, so the critic's prompt did not change when it was added.
 SCENE_OBSERVATIONS = frozenset({NO_DIALOGUE, RARE_DIALOGUE, BLOCK_PARAGRAPHS})
+# The id of a measured note starts with this; the Writer's acceptance judges it by the text.
+CRAFT_NOTE_PREFIX = "craft_"
 # Titles, and since 7.17 the articles too: "Los Sobrinos" was counted as a character named "Los".
 _TITLES = frozenset(
     "lord lady sir don dona doña doctor doctora dr. dra. capitan capitana capitán custodio "
@@ -127,7 +129,7 @@ def craft_notes(evidence: CraftEvidenceArtifact) -> list[RevisionNote]:
     """
     return [
         RevisionNote(
-            id=f"craft_{item.chapter_id}",
+            id=f"{CRAFT_NOTE_PREFIX}{item.chapter_id}",
             priority="major",
             category="voice_style",
             evidence=f"Observed in this chapter: {'; '.join(item.observations)}.",
