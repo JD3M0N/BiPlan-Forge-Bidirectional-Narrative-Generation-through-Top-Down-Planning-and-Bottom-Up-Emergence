@@ -89,6 +89,12 @@ THOUGHT_ECHO = 0.5
 # The longest line that still reads as a turn rather than a speech. It lives here and never in a
 # prompt, like every other figure the stage measures.
 MAX_SPEECH_WORDS = 45
+# The longest stage direction kept whole (7.20). The corpus median is 22 words, nearly all of
+# them one gesture with a trailing clause ("..., haciendo que las astillas se claven"), and the
+# narrator pasted them as prose. A longer one is cut, never rejected: see repair_form.
+MAX_ACTION_WORDS = 20
+# A cut that leaves fewer words than this is not a gesture, so the direction stays whole.
+MIN_ACTION_WORDS = 3
 
 _WHITESPACE = re.compile(r"\s+")
 _LEADING_DASHES = "—–-"
@@ -193,6 +199,11 @@ _CLAUSE_VERB = re.compile(
 _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
 # Where a clause ends inside one long sentence: the second cut, when no whole sentence fits.
 _CLAUSE_END = re.compile(r"(?<=[;:])\s+")
+# The comma before a trailing gerund clause: ", haciendo que...", ", obligándole a...".
+_GERUND_CLAUSE = re.compile(
+    r",\s+(?:y\s+)?[^\W\d_]+(?:ando|iendo|yendo|ándo[^\W\d_]+|iéndo[^\W\d_]+)\b",
+    re.IGNORECASE,
+)
 
 
 class TurnIssue(ValueError):
@@ -255,9 +266,11 @@ def repair_form(turn: ActorTurnDraft) -> tuple[ActorTurnDraft, list[str]]:
     A line over the limit is cut at its last sentence end that fits, or, when its first
     sentence alone is too long, at its last semicolon or colon that fits (7.19: 11 of the 12
     October rejections were one sentence of clauses); a stage direction that says "mi" or
-    "mis" or "conmigo" gets the third person. Anything else is left for validate_turn to
-    reject as before: a line with no sentence or clause end inside the limit, or a direction
-    that opens on "me" or "yo", which would need a verb conjugated to fix.
+    "mis" or "conmigo" gets the third person. A direction over MAX_ACTION_WORDS keeps its
+    leading sentences that fit, or loses its trailing gerund clause (7.20). Anything else is
+    left for validate_turn to reject as before: a line with no sentence or clause end inside
+    the limit, or a direction that opens on "me" or "yo", which would need a verb conjugated
+    to fix.
     """
     repairs: list[str] = []
     speech, action = turn.speech, turn.action
@@ -271,6 +284,10 @@ def repair_form(turn: ActorTurnDraft) -> tuple[ActorTurnDraft, list[str]]:
         if third != action and not _FIRST_PERSON.search(third):
             action = third
             repairs.append("FIRST_PERSON_ACTION")
+        trimmed = _trim_action(action)
+        if trimmed:
+            action = trimmed
+            repairs.append("LONG_ACTION")
     if not repairs:
         return turn, repairs
     return turn.model_copy(update={"speech": speech, "action": action}), repairs
@@ -285,13 +302,26 @@ def _trim_to_sentences(speech: str) -> str:
     return clauses[:-1].rstrip() + "." if clauses else ""
 
 
-def _leading_parts(parts: list[str]) -> str:
+def _trim_action(action: str) -> str:
+    """Return a long direction cut to its first gesture, or '' when it is short or has no cut."""
+    if len(action.split()) <= MAX_ACTION_WORDS:
+        return ""
+    kept = _leading_parts(_SENTENCE_END.split(action.strip()), MAX_ACTION_WORDS)
+    if kept:
+        return kept
+    match = _GERUND_CLAUSE.search(action)
+    if match and len(action[: match.start()].split()) >= MIN_ACTION_WORDS:
+        return action[: match.start()].rstrip() + "."
+    return ""
+
+
+def _leading_parts(parts: list[str], limit: int = MAX_SPEECH_WORDS) -> str:
     """Join the leading parts whose words fit the limit, or nothing when the first does not."""
     kept: list[str] = []
     words = 0
     for part in parts:
         count = len(part.split())
-        if words + count > MAX_SPEECH_WORDS:
+        if words + count > limit:
             break
         kept.append(part)
         words += count

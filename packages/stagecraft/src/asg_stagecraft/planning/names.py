@@ -24,6 +24,13 @@ STOCK_NAMES = frozenset(
     "seraphina silas julian mara".split()
 )
 _WORDS = re.compile(r"[^\W\d_]+")
+# Titles a name may carry, folded. They are not the name: in the 7.19 Antarctic run the first
+# word of "Dra. Elena Vargas" was "Dra.", so "Elena" was never renamed and reached the plan 36
+# times while the story called her Irene.
+_TITLES = frozenset(
+    "dr dra doctor doctora don dona sr sra srta senor senora sir lady lord rey reina "
+    "capitan capitana fray sor mr mrs ms miss prof profesor profesora".split()
+)
 
 
 def _fold(text: str) -> str:
@@ -32,9 +39,17 @@ def _fold(text: str) -> str:
     return folded.encode("ascii", "ignore").decode()
 
 
+def _name_words(name: str) -> list[str]:
+    """Return the words of a name as written, without the titles before it."""
+    words = name.split()
+    while len(words) > 1 and _fold(words[0].rstrip(".")) in _TITLES:
+        words = words[1:]
+    return words
+
+
 def _first(name: str) -> str:
-    """Return the folded first word of a name."""
-    words = _WORDS.findall(name)
+    """Return the folded first word of a name, its title left out."""
+    words = _WORDS.findall(" ".join(_name_words(name)))
     return _fold(words[0]) if words else ""
 
 
@@ -105,7 +120,7 @@ def _new_ids(characters: CharactersArtifact, renames: dict[str, tuple[str, str]]
     used = {character.id for character in characters.characters}
     ids: dict[str, str] = {}
     for character_id, (old, new) in renames.items():
-        minted = re.sub(r"[^a-z0-9]+", "_", _fold(new)).strip("_")
+        minted = re.sub(r"[^a-z0-9]+", "_", _fold(" ".join(_name_words(new)))).strip("_")
         if _first(old) in character_id and minted and minted not in used:
             ids[character_id] = minted
             used.add(minted)
@@ -115,14 +130,21 @@ def _new_ids(characters: CharactersArtifact, renames: dict[str, tuple[str, str]]
 def _renamed(
     characters: CharactersArtifact, renames: dict[str, tuple[str, str]]
 ) -> CharactersArtifact:
-    """Apply every rename to every name, id and text of the cast, whole names and first names."""
+    """Apply every rename to every name, id and text of the cast: whole, first and last names."""
     ids = _new_ids(characters, renames)
     pairs: list[tuple[str, str]] = []
     for old, new in renames.values():
         pairs.append((old, new))
-        old_first, new_first = old.split()[0], new.split()[0]
-        if old_first != old:
-            pairs.append((old_first, new_first))
+        old_words, new_words = _name_words(old), _name_words(new)
+        if " ".join(old_words) != old:
+            pairs.append((" ".join(old_words), " ".join(new_words)))
+        if len(old_words) > 1:
+            pairs.append((old_words[0], new_words[0]))
+            # 7.20: the surname alone too, as in "la doctora Vargas".
+            if len(new_words) > 1:
+                pairs.append((old_words[-1], new_words[-1]))
+    # Longer names first, so one character's surname never cuts into another's whole name.
+    pairs.sort(key=lambda pair: -len(pair[0].split()))
     patterns = [(re.compile(r"\b" + re.escape(old) + r"\b"), new) for old, new in pairs]
 
     def rewrite(text: str) -> str:

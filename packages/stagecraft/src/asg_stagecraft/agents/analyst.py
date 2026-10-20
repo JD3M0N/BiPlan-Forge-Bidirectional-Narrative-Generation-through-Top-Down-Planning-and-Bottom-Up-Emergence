@@ -3,7 +3,8 @@
 import json
 import re
 
-from ..planning.profiles import PROFILE_GUIDANCE, NarrativeProfile, profile_event_target
+from ..planning.length import requested_profile
+from ..planning.profiles import PROFILE_GUIDANCE, profile_event_target
 from ..schemas import StoryRequest
 from .base import Agent
 
@@ -11,29 +12,6 @@ NUMERIC_SCOPE = re.compile(
     r"(?<!\w)\d[\d.,_ ]*\s*(?:palabras?|words?|cap(?:í|i)tulos?|chapters?)\b",
     re.IGNORECASE,
 )
-EXPLICIT_PROFILE = re.compile(
-    r"\b(?:perfil(?:\s+narrativo)?|narrative\s+profile)\s*[:=-]?\s*"
-    r"(esencial|essential|desarrollada|developed|expansiva|expansive)\b",
-    re.IGNORECASE,
-)
-# A request for a short piece is not ambiguous, yet "historia corta de unas 500 palabras" came
-# back Developed and produced 3,052 words (7.10). Below this many requested words, or with these
-# words, the profile is Essential. The figure never reaches a prompt.
-ESSENTIAL_WORD_CEILING = 1500
-SHORT_REQUEST = re.compile(
-    r"\b(?:historia|cuento|relato|narraci(?:ó|o)n|obra)\s+(?:muy\s+)?(?:cort[ao]|breve)\b"
-    r"|\bmicrorrelato\b|\bshort story\b|\bflash fiction\b",
-    re.IGNORECASE,
-)
-WORD_REQUEST = re.compile(r"(?<![\w.,])(\d[\d.,]*)\s*(?:palabras?|words?)\b", re.IGNORECASE)
-PROFILE_ALIASES = {
-    "esencial": NarrativeProfile.ESSENTIAL,
-    "essential": NarrativeProfile.ESSENTIAL,
-    "desarrollada": NarrativeProfile.DEVELOPED,
-    "developed": NarrativeProfile.DEVELOPED,
-    "expansiva": NarrativeProfile.EXPANSIVE,
-    "expansive": NarrativeProfile.EXPANSIVE,
-}
 
 
 class AnalystAgent(Agent[StoryRequest]):
@@ -118,13 +96,10 @@ class AnalystAgent(Agent[StoryRequest]):
             schema=StoryRequest,
             profile="extraction",
         )
-        profile_match = EXPLICIT_PROFILE.search(prompt)
-        if profile_match:
-            profile = PROFILE_ALIASES[profile_match.group(1).casefold()]
-        elif self._asks_for_short(prompt):
-            profile = NarrativeProfile.ESSENTIAL
-        else:
-            profile = request.narrative_profile
+        # A request is not ambiguous about its length, yet "historia corta de unas 500 palabras"
+        # came back Developed with 3,052 words (7.10). The code reads it (planning/length.py).
+        asked = requested_profile(prompt)
+        profile = asked[0] if asked else request.narrative_profile
         values = request.model_dump(mode="python")
         return StoryRequest.model_validate(
             {
@@ -137,17 +112,6 @@ class AnalystAgent(Agent[StoryRequest]):
                 "creative_directions": self._clean_items(request.creative_directions),
             }
         )
-
-    @staticmethod
-    def _asks_for_short(prompt: str) -> bool:
-        """Tell whether the author asked for a short piece, in words or with a word count."""
-        if SHORT_REQUEST.search(prompt):
-            return True
-        for match in WORD_REQUEST.finditer(prompt):
-            digits = re.sub(r"[.,]", "", match.group(1))
-            if digits.isdigit() and int(digits) <= ESSENTIAL_WORD_CEILING:
-                return True
-        return False
 
     @staticmethod
     def _without_numeric_scope(value: str) -> str:

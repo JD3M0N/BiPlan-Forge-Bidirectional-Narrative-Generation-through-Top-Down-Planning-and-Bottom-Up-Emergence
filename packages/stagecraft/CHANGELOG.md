@@ -1,5 +1,112 @@
 # Historial de cambios
 
+## 7.20.0
+
+Viene de la tanda 7.19 del 19 de octubre: cinco Top-Down y una híbrida, todas Esencial y sin
+avisos de error. La híbrida (`20261019-023436-las-islas-del-cielo`) entregó sus tres capítulos
+como `NARRATION_BEST_ATTEMPT`. Cambian `reported.json`, los códigos de la revisión, las
+reparaciones del turno y el esquema del actor, así que `PIPELINE_VERSION` pasa a 7.20.
+
+**Lo que se midió en la híbrida.**
+
+- **El narrador pegaba el log.** Las acotaciones tienen una mediana de 27 palabras, escritas como
+  prosa en presente. El intento 1 del capítulo 2 está entero en presente, y en `story.md`
+  quedaron párrafos como «Ilse apuñala la madera del mástil».
+- **El revisor castigaba el estilo indirecto.** No veía los resúmenes que leyó el narrador. De
+  sus 10 hallazgos bloqueantes, 7 `INVENTED_EVENT` citaban esos resúmenes y uno era una queja
+  de tiempo verbal sin turno.
+- **Sus correcciones llevaban la réplica literal** («Hanu dice textualmente: …») al siguiente
+  intento, y el capítulo la contó dos veces.
+
+**La narración (`stage/narration_stage.py`, `stage/narration.py`, `stage/editorial.py`).**
+
+- El reportero cuenta en pasado, además de las réplicas sin peso, cada gesto, cada suceso del
+  mundo, la ambientación de cada escena y el pensamiento de los turnos clave.
+  - El narrador ya no recibe prosa en presente.
+  - Un gesto que abre con las palabras de su acotación se rechaza y se pide otra vez.
+  - Lo que queda sin resumir llega como antes, con `[GESTURE_REPORT_FALLBACK]`.
+- **El log abre cada escena con su lugar** (`[escena: …]`, que `strip_markers` borra) y el
+  capítulo con REPARTO, solo para quien aparece por primera vez, y FINAL DEL CAPÍTULO ANTERIOR.
+- **La revisión editorial se fundamenta.**
+  - El revisor ve `retold_as` en cada turno resumido.
+  - Un `INVENTED_EVENT` cuya cita comparte cuatro palabras seguidas con un turno o un resumen
+    se descarta («grounded in …»).
+  - Un `CONTRADICTION` sin turno pasa a nota.
+  - Una corrección que cita una réplica se sustituye por una instrucción fija.
+  - `DUPLICATED_LINE` bloquea el capítulo que cuenta una réplica dos veces.
+- **`COPIED_DIRECTION` sustituye al `WRONG_TENSE` que daba una acotación pegada.**
+  - Nombra los párrafos.
+  - Antes de revisar, el editor por fragmentos repara solo esos párrafos, aunque `line_editor`
+    esté apagado, y solo acepta la edición si la copia desaparece.
+  - Bloquea con dos párrafos o más.
+- Una réplica pegada a la narración recibe su propio párrafo.
+- `chapter_places` del brazo `selected` usa la ambientación del guion, en el idioma de la
+  ficción, y no la descripción de `world.json`, que está en inglés.
+
+**La función.** Una acotación de más de `MAX_ACTION_WORDS` (20) se recorta en una frase o antes
+de su gerundio final (`LONG_ACTION`), nunca se rechaza. El esquema del actor pide un solo gesto.
+
+**La petición.**
+
+- **`planning/length.py`: la longitud pedida elige el perfil.**
+  - Hasta 2.000 palabras es Esencial, hasta 4.000 Desarrollada, y más, Expansiva. Las palabras
+    pueden ir en cifras o en letra.
+  - También cuentan las páginas, a 300 palabras cada una, y «N capítulos».
+  - Y «historia extensa», «larga», «novela corta», «corta», «breve» o «de longitud media»,
+    siempre junto al sustantivo.
+  - El perfil nombrado sigue mandando.
+  - Sustituye a la regla de 7.12, que solo leía lo corto.
+- `[PROFILE_CONFLICT]` avisa cuando un `--profile` forzado contradice la petición.
+- **`StoryBrief.from_prompt`.** Un prompt con la forma de una ficha se lee como `--brief`
+  (`[BRIEF_FROM_PROMPT]`), y su reparto y su trama llegan como canon.
+- **`repair_mojibake`.** Repara un prompt con UTF-8 leído como Windows-1252
+  (`[PROMPT_ENCODING_REPAIRED]`).
+- **`asg-generate --prompt-file`** lee el prompt de un archivo UTF-8.
+
+**Top-Down.**
+
+- **Renombrado** (`planning/names._renamed`). Salta tratamientos como «Dra.» y renombra también
+  el apellido. En «Invierno blanco», «Elena» llegaba al plan 36 veces.
+- **Writer** (`writing/chapter_edits.py`). Rechaza una inserción que repite una frase de los
+  párrafos que la rodean.
+- **Evidencia de artesanía** (`writing/craft_evidence.py`). Añade `GERUND_TAGS`, la coletilla
+  en gerundio tras la acotación de diálogo. No se medía: `craft_evidence.json` salía vacío en
+  4 de 5 runs con el 100 % de las réplicas etiquetadas. Ahora la ven 4 de esos 5 runs.
+
+**Refactor (ING-3, sin cambiar artefactos).** `pipeline.py` pasa de 1.880 a 723 líneas. Las
+etapas de plan van a `planning/stages.py`, las de escritura a `writing/stages.py`, el progreso y
+el uso a `runtime/reporting.py` y la narración a `stage/narration_stage.py`. Un run narrativo y
+otro simulado con los dobles dan los mismos artefactos, byte a byte, antes y después.
+
+**Validación con `--narrate-from` sobre la misma función** (`20261019-023436`, unas 16 llamadas
+por renarración):
+
+| | 7.19 | 7.20 |
+|---|---|---|
+| Capítulos aceptados al primer intento | 0 de 3 | 3 de 3 (`133532`) |
+| Hallazgos bloqueantes | 10 | 0 |
+| Párrafos en presente pegados | 3 | 0 |
+| Réplicas contadas dos veces | 3 | 0 |
+
+**Validación en real, 2026-10-19:**
+
+- **Las islas, híbrida** (`20261019-141038`): la ficha como prompt libre, sin `--profile`.
+  - Salió `[BRIEF_FROM_PROMPT]`, y Expansiva por «Historia extensa».
+  - El reparto es fiel a la ficha, que en 7.19 se había reescrito: grumete, cocinera,
+    carpintero, Custodio del Viento Norte.
+  - 5 de 5 capítulos del narrador, ninguno `NARRATION_BEST_ATTEMPT`, 4 aceptados al primer
+    intento.
+  - Pero 4 de 10 beats forzados y 337 llamadas, por 2.418 palabras. La función Expansiva sigue
+    siendo el cuello de botella (SIM-26).
+- **El relojero con «unas 3.000 palabras»** (`20261019-161904`): Desarrollada, como pide el
+  corte. Salen 2.109 palabras: el perfil acierta, pero Desarrollada se queda corta frente a lo
+  pedido.
+- **Invierno blanco** (`20261019-161556`): sin longitud en la petición, el analista eligió
+  Desarrollada. Reparto sin «Elena» ni nombres de la lista de los repetidos.
+
+Quedan en la prosa los párrafos de acta (SIM-24) y los epítetos en lugar del nombre: son el
+terreno del editor por fragmentos, que sigue apagado hasta la lectura a ciegas (SIM-25).
+
 ## 7.19.0
 
 Viene de los seis avisos de la híbrida `20261018-131131-las-islas-del-cielo`. Cada uno tenía una

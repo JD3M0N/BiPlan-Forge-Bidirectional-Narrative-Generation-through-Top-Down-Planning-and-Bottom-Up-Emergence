@@ -1,9 +1,9 @@
 """Version identifiers persisted with every generated story."""
 
 GENERATOR_NAME = "asg-stagecraft"
-__version__ = "7.19.0"
+__version__ = "7.20.0"
 GENERATOR_VERSION = __version__
-PIPELINE_VERSION = "7.19"
+PIPELINE_VERSION = "7.20"
 # Runs written as Top-Down 5.x and 6.x stay readable: renaming the package and adding the
 # hybrid stages is additive, so every earlier contract still opens as a StoryRun. 7.1 changed
 # what a simulated beat's "achieved" means and added director.jsonl; 7.2 changed what
@@ -45,7 +45,12 @@ PIPELINE_VERSION = "7.19"
 # (revision_report.json's best_candidate). 7.19 stops critiquing and revising a simulated
 # run's script (no review.json, revision_report.json or script_promise_audit.json), asks the
 # casting once for the gates of its secrets, retells the lines a first report left out, cuts a
-# long line at a clause, and has the director judge a beat by what was played. Earlier runs open.
+# long line at a clause, and has the director judge a beat by what was played. 7.20 checks the
+# narration review against the retellings the narrator read (new code DUPLICATED_LINE, findings
+# discarded as grounded), retells gestures and thoughts before the narrator reads them
+# (narration/chapter-NNN-reported.json gains gestures and thoughts), adds COPIED_DIRECTION,
+# trims long actions (LONG_ACTION), reads a brief out of a prompt shaped like one and a profile
+# out of the requested length. Earlier runs open.
 SUPPORTED_PIPELINE_VERSIONS = frozenset(
     {
         "5.0",
@@ -74,6 +79,7 @@ SUPPORTED_PIPELINE_VERSIONS = frozenset(
         "7.16",
         "7.17",
         "7.18",
+        "7.19",
         PIPELINE_VERSION,
     }
 )

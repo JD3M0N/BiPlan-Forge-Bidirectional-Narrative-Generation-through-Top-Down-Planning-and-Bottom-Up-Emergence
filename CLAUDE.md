@@ -137,11 +137,11 @@ Dentro de `stagecraft`, los módulos van por subpaquete:
 
 | Subpaquete | Contenido |
 |---|---|
-| `runtime/` | configuración, proveedor, cuota, almacenamiento, errores, progreso |
-| `planning/` | perfiles, grafo, esqueletos, promesas, reparación |
-| `writing/` | auditoría, evidencia de artesanía, ensamblado, aceptación |
+| `runtime/` | configuración, proveedor, cuota, almacenamiento, errores, progreso y su reporte (`reporting.py`) |
+| `planning/` | perfiles, longitud pedida, grafo, esqueletos, promesas, reparación y las etapas de plan (`stages.py`) |
+| `writing/` | auditoría, evidencia de artesanía, ensamblado, aceptación y las etapas de escritura (`stages.py`) |
 | `script/` | validación, render y etapas del guion |
-| `stage/` | la función simulada y el árbitro del inventario |
+| `stage/` | la función simulada, su narración (`narration_stage.py`) y el árbitro del inventario |
 | `tools/` | los comandos: `generate`, `baseline`, `extract_features`, `budget`, `recovery`, `recompute` |
 
 En la raíz quedan la fachada y el contrato: `__init__`, `version`, `formats`, `options`,
@@ -173,6 +173,12 @@ En la raíz quedan la fachada y el contrato: `__init__`, `version`, `formats`, `
 - `StoryBrief` (`brief.py`) es la obra estructurada: trama y reparto se componen en un prompt
   determinista que el analista lee como cualquier otro, así que `StoryRequest` y el esquema que
   va a Gemini no cambian. El run guarda `brief.json`.
+  - Desde 7.20, un prompt libre con la forma exacta de una ficha se lee de vuelta
+    (`StoryBrief.from_prompt`, `[BRIEF_FROM_PROMPT]`): en 7.19 la ficha de las islas se pegó
+    como prompt y su reparto no llegó como canon.
+  - `StoryPipeline.execute` repara también un prompt con UTF-8 leído como Windows-1252
+    (`[PROMPT_ENCODING_REPAIRED]`). Windows PowerShell 5.1 los pasa así por argv; para eso está
+    `asg-generate --prompt-file`.
 
 ### Top-Down: el plan es un DAG validado, no texto
 
@@ -211,6 +217,18 @@ este pipeline distinto de «pedirle una historia al modelo»:
   - `MIN_EVENTS_PER_CHAPTER` también se valida: un capítulo con un solo evento rechaza el plan.
   - Al planificador se le enseña además `profile_event_aim`, el centro de la banda, para que no
     apunte a la frontera de rechazo.
+- **La longitud que pide la persona elige el perfil, en código** (`planning/length.py`, 7.20).
+  - Lo que lee:
+    - el perfil nombrado;
+    - las palabras, en cifras o en letra: hasta 2.000 Esencial, hasta 4.000 Desarrollada, más
+      Expansiva;
+    - las páginas, a 300 palabras;
+    - «N capítulos», por las bandas;
+    - «historia extensa», «corta» o «novela corta», siempre junto al sustantivo.
+  - El analista solo decide si la petición no dice nada de su tamaño.
+  - Un `--profile` forzado sigue mandando, pero si contradice la petición el run lo dice con
+    `[PROFILE_CONFLICT]`.
+  - Las cifras eligen el perfil y nunca viajan a un prompt.
 - **Los reintentos son por perfil.** `PLAN_ATTEMPTS_BY_PROFILE` da a Expansiva un intento
   extra, porque es la única con contrato de rama y reunión causal.
 - **Los fallos se clasifican.** `runtime/errors.py` define `ASGError` con código, etapa, resumen
@@ -311,7 +329,7 @@ A esa lista, el guion y el simulado añaden los suyos.
   Los rasgos T de `asg-evaluation` las recalculan desde `story.md`, así que también miden los
   runs anteriores a 6.5.0, que no las traen.
 
-`version.py` fija `PIPELINE_VERSION` (7.19) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.19).
+`version.py` fija `PIPELINE_VERSION` (7.20) y `SUPPORTED_PIPELINE_VERSIONS` (de 5.0 a 7.20).
 Desde 7.11 un run nuevo ya no trae `evaluation.json`; 7.12 añade `style_request` a
 `request.json`, `prose_model` a `metadata.json` y el contrato 4 de `narration.json`; en 7.13
 `stage_model` pasa a ser el modelo de los actores; 7.14 añade `localization.json` y cambia el
@@ -323,7 +341,11 @@ y la coartada del dossier; 7.18 cambia el Writer a ediciones por párrafo
 (`writer/chapter-NNN-attempt-NNN-edits.json`), añade `NOTE_NOT_APPLIED` y el
 `final_source: best_candidate` de `revision_report.json`; 7.19 deja el guion del simulado sin
 crítica ni revisión (sin `review.json`, `revision_report.json` ni `script_promise_audit.json`),
-pide al casting una vez las compuertas de sus secretos y vuelve a pedir las réplicas sin resumen.
+pide al casting una vez las compuertas de sus secretos y vuelve a pedir las réplicas sin resumen;
+7.20 añade a `reported.json` los gestos, pensamientos y ambientaciones contados en pasado, los
+códigos `COPIED_DIRECTION` y `DUPLICATED_LINE`, la reparación `LONG_ACTION` del turno,
+`line_edits/chapter-NNN-attempt-NNN-directions.json` y el `brief.json` de un prompt con forma
+de ficha.
 `StoryRun` se niega a abrir un run incompleto o de una versión no soportada. Si cambias el
 conjunto de artefactos o su significado, sube la versión en vez de romper los runs ya generados:
 son datos de la tesis. Una limpieza que no toca artefactos sube solo el parche de
@@ -463,6 +485,16 @@ que saber antes de tocar `stage/`:
   - Las réplicas que el resumen omite o copia se piden una vez más, solo ellas (7.19): en
     7.18 un resumen cubrió solo la primera escena y el capítulo transcribió la segunda.
   - Si el resumen no puede correr, las réplicas van enteras con `[REPORT_FALLBACK]`.
+  - **Desde 7.20 el narrador no recibe nada escrito en presente.**
+    - En 7.19 pegaba las acotaciones del log, que son prosa en presente, y el capítulo salía con
+      párrafos como «Ilse apuñala…».
+    - Ahora el mismo resumen cuenta en pasado cada gesto (`G1`), suceso del mundo (`E1`) y
+      ambientación de escena (`S1`), y solo el pensamiento de los turnos clave (`T1`).
+    - Un gesto que abre con las primeras cuatro palabras de su acotación es copia.
+    - Lo que queda sin resumir llega como antes, con `[GESTURE_REPORT_FALLBACK]`.
+    - El log abre cada escena con `[escena: …]` y el capítulo con REPARTO, solo de quien aparece
+      por primera vez, y FINAL DEL CAPÍTULO ANTERIOR.
+    - No vuelvas a pasarle al narrador una acotación o un pensamiento crudos.
   - La revisión y las métricas siguen leyendo los turnos completos.
 - **El respaldo es contrato.** Si el casting, la utilería o la narración no pueden correr,
   `stage/casting.py`, `stage/props.py` y `stage/fallback.py` derivan un resultado determinista.
@@ -473,6 +505,18 @@ que saber antes de tocar `stage/`:
   `INVENTED_EVENT` y `CONTRADICTION`, una revisión que falla acepta el capítulo y, agotados los
   intentos, se entrega el de menos hallazgos. El respaldo queda para cuando no hubo texto. No
   vuelvas a rechazar por un hallazgo leve.
+  - **El revisor no puede castigar el estilo indirecto** (7.20). En 7.19, 7 de 10 hallazgos
+    bloqueantes llamaban «invención» al resumen que el propio reportero escribió. Ahora:
+    - el revisor ve `retold_as`;
+    - un `INVENTED_EVENT` que comparte cuatro palabras seguidas con un turno o un resumen se
+      descarta;
+    - un `CONTRADICTION` sin turno es nota;
+    - una corrección que cita una réplica se cambia por una instrucción fija, porque llevaba la
+      réplica al siguiente intento y el capítulo la contaba dos veces (`DUPLICATED_LINE`, que
+      también bloquea).
+  - **Una acotación pegada tiene su código** (`COPIED_DIRECTION`, 7.20; antes era
+    `WRONG_TENSE`). El editor por fragmentos repara solo esos párrafos antes de la revisión,
+    aunque `line_editor` esté apagado.
 - **Un capítulo aceptado que transcribe se narra una vez más** (7.15). `craft_findings` mide
   si copia casi todas las réplicas del log o las etiqueta todas. Si pasa, se pide un segundo
   intento con esas notas, que solo se entrega si pasa la revisión y mejora la cifra medida
@@ -518,6 +562,9 @@ que saber antes de tocar `stage/`:
   persona, literal. `writing/craft_evidence.craft_notes` convierte cada observación medida
   (también nombres repetidos, coletillas y símiles) en una nota para el Writer aunque el
   crítico no dé ninguna.
+  - Hasta 7.19, «coletilla» solo medía la que explica la emoción («con una mezcla de…»).
+  - `GERUND_TAGS` (7.20) mide la del gerundio («—dijo, señalando…»), que llevaba el 67-83 % de
+    las réplicas del corpus sin que ninguna nota lo dijera.
 - **Ninguna cifra viaja a un prompt**, como en el resto del pipeline, y un test lo comprueba
   sobre las etapas nuevas.
 - **El inventario es opcional y el código es el árbitro** (7.6). `inventory=True` añade la etapa
@@ -559,9 +606,21 @@ que saber antes de tocar `stage/`:
 - **Solo crea historias y las compara.** Sin clave, perfiles ni opciones por usuario: todo sale
   del `.env`. Corre en la PC del investigador (`asg-telegram`), que abre y cierra la votación
   con `asg-study`.
-- Crear: `handlers.py` ofrece Top-Down (`narrative`) o Híbrido (`simulated`), y prompt libre u
-  obra guiada. `wizard.py` es el asistente como máquina de estados pura (`start`, `answer`,
-  `press`) y devuelve un `StoryOutline`.
+- Crear: un solo menú con cuatro opciones (`c:o:<formato>:<modo>`): libre o guiada, Top-Down
+  (`narrative`) o Híbrido (`simulated`). `wizard.py` es el asistente como máquina de estados
+  pura (`start`, `answer`, `press`) y devuelve un `StoryOutline`.
+- **El bot recomienda siempre el siguiente paso** (`guide.next_step`, 6.0):
+  - primero Top-Down;
+  - después «la misma idea» con el otro modelo, que repite la petición (`source_job` en la
+    cola);
+  - y, con una de cada modelo, compararlas.
+- **`/evaluar` compara las dos historias propias** (`review.py`, `pairs.py`), con el método del
+  tutor aplicado a su propio par.
+  - A y B a ciegas, en orden aleatorio.
+  - Las tres preguntas de `asg_evaluation.catalog`, una a una, con «¿por qué?» opcional.
+  - Nada de escalas numéricas.
+  - Se guarda por modelo en `Evaluations/estudio/pares_propios.sqlite3` (`ASG_OWN_PAIRS`), y
+    `asg-telegram --export` lo vuelca.
 - `jobs.py`: `JobQueue` es la cola FIFO SQLite (`Stories/telegram_jobs.sqlite3`), con una
   solicitud activa por persona; un run interrumpido por un reinicio vuelve a la cola una vez.
   `StoryWorker` genera de una en una, edita un solo mensaje de progreso, entrega (`delivery.py`:
@@ -570,11 +629,16 @@ que saber antes de tocar `stage/`:
   audio y traduce los errores a `GenerationFailure` (con `quota` si se acabó la cuota).
 - **La cancelación pasa `should_cancel` a `generate()`,** nunca lanza desde el callback de
   progreso.
-- `voting.py` es `/evaluar`: envía las historias sin leer (texto y audio) con «Ya la leí» y «Ya
-  la conocía», y después la pregunta con A, B y «No puedo decidir». Un candado por lector evita
-  carreras de doble pulsación.
-- `tests/test_bot.py` recorre los cuatro caminos, la cola, la votación y el adaptador con un
-  Telegram y un generador falsos (`telegram_fakes.py`).
+- `voting.py` es `/estudio`, el estudio a ciegas entre personas, oculto hasta que haya
+  historias suficientes. Envía las historias sin leer (texto y audio) con «Ya la leí» y «Ya la
+  conocía», y después la pregunta con A, B y «No puedo decidir». Un candado por lector evita
+  carreras de doble pulsación; `review.py` hace lo mismo.
+- `tests/test_bot.py` recorre con un Telegram y un generador falsos (`telegram_fakes.py`):
+  - las cuatro opciones y «la misma idea»;
+  - la comparación propia;
+  - la cola;
+  - el estudio a ciegas;
+  - el adaptador.
 
 ### StageCraft: la interfaz gráfica
 
@@ -673,10 +737,16 @@ que saber antes de tocar `stage/`:
 - **`.cache/` contiene sqlite y cachés de pytest de experimentos previos**
   (`pytest-top-down-*`, `pytest-profile-*`…). Son artefactos de ejecución: no razonar sobre el
   estado del proyecto a partir de sus nombres.
-- **`pipeline.py` (1197 líneas) y `skeletons.py` (1485) siguen siendo grandes.** La
-  reorganización 7.0.0 sacó de `pipeline.py` los prompts de reparación, el ensamblado y las
-  reglas de aceptación; lo que queda es la ficha ING-3 del `TODO.md`. No lo hagas de paso
-  dentro de otro cambio.
+- **`StoryPipeline` es una fachada de mixins** (7.20, ING-3).
+  - `pipeline.py` (723 líneas) guarda `execute*`, el análisis, el repositorio y el cierre.
+  - Las etapas viven en mixins, uno por mitad: `planning/stages.py`, `writing/stages.py`,
+    `script/stages.py`, `stage/stages.py` y `stage/narration_stage.py`.
+  - El progreso, los eventos y el uso van en `runtime/reporting.py`, que define
+    `CHECKPOINT_STAGES`. `pipeline.py` la reexporta porque los tests la leen de ahí.
+  - Un mixin llama a lo que define otro a través de `self`: búscalo por nombre en todos.
+  - Falta la otra mitad de ING-3: etapas con estado propio que eliminen los
+    `assert self.repository is not None`. No lo hagas de paso dentro de otro cambio.
+  - `skeletons.py` (1485 líneas) sigue grande.
 - **Dos serializadores de JSON distintos a propósito.**
   - `agents/base.json_text` serializa lo que viaja al **prompt**: convierte modelos Pydantic y no
     añade salto de línea final.

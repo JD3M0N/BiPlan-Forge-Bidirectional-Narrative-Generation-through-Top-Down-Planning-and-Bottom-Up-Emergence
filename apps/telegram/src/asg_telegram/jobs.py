@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .delivery import send_retrying, send_story
 from .generator import METHODS, GenerationCancelled, GenerationFailure, StoryOutline
+from .guide import next_step
 
 LOGGER = logging.getLogger(__name__)
 ACTIVE = ("queued", "running")
@@ -24,6 +25,8 @@ _SCHEMA = (
     "cancel INTEGER NOT NULL DEFAULT 0, run_dir TEXT, error TEXT, "
     "created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
 )
+# The job whose request this one repeats with the other model ("la misma idea con Híbrido").
+_SOURCE_COLUMN = "ALTER TABLE jobs ADD COLUMN source_job INTEGER"
 
 
 def _now() -> str:
@@ -39,6 +42,9 @@ class JobQueue:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._run(_SCHEMA)
+        columns = {row["name"] for row in self._run("PRAGMA table_info(jobs)")}
+        if "source_job" not in columns:
+            self._run(_SOURCE_COLUMN)
 
     def _db(self) -> sqlite3.Connection:
         """Open a connection whose context manager commits or rolls back."""
@@ -52,7 +58,13 @@ class JobQueue:
             return db.execute(sql, args).fetchall()
 
     def enqueue(
-        self, chat_id: int, user_id: int, story_format: str, request: str | StoryOutline
+        self,
+        chat_id: int,
+        user_id: int,
+        story_format: str,
+        request: str | StoryOutline,
+        *,
+        source_job: int | None = None,
     ) -> int:
         """Queue a request; one active request per participant."""
         if story_format not in METHODS:
@@ -69,8 +81,8 @@ class JobQueue:
             )
             cursor = db.execute(
                 "INSERT INTO jobs(chat_id,user_id,story_format,prompt,brief,status,created_at,"
-                "updated_at) VALUES (?,?,?,?,?,'queued',?,?)",
-                (chat_id, user_id, story_format, prompt, brief, _now(), _now()),
+                "updated_at,source_job) VALUES (?,?,?,?,?,'queued',?,?,?)",
+                (chat_id, user_id, story_format, prompt, brief, _now(), _now(), source_job),
             )
             return cursor.lastrowid
 
@@ -92,11 +104,21 @@ class JobQueue:
                 "UPDATE jobs SET status='running', attempts=attempts+1, updated_at=? WHERE id=?",
                 (_now(), row["id"]),
             )
-        job = dict(row)
-        job["request"] = (
-            StoryOutline.from_dict(json.loads(job["brief"])) if job["brief"] else job["prompt"]
+        return _with_request(dict(row))
+
+    def job(self, job_id: int) -> dict | None:
+        """Return one job with its request rebuilt, or None."""
+        rows = self._run("SELECT * FROM jobs WHERE id=?", (job_id,))
+        return _with_request(dict(rows[0])) if rows else None
+
+    def completed(self, user_id: int) -> list[dict]:
+        """Return the participant's finished stories, newest first."""
+        rows = self._run(
+            "SELECT * FROM jobs WHERE user_id=? AND status='completed' AND run_dir IS NOT NULL "
+            "ORDER BY id DESC",
+            (user_id,),
         )
-        return job
+        return [dict(row) for row in rows]
 
     def finish(self, job_id: int, status: str, *, run_dir: Path | None = None, error=None):
         """Close a request as completed, failed or cancelled."""
@@ -143,15 +165,24 @@ class JobQueue:
         return rows
 
 
-class StoryWorker:
-    """Generate queued stories one by one, deliver them and enroll them in the study."""
+def _with_request(job: dict) -> dict:
+    """Rebuild the request a job stored: the free prompt or the guided outline."""
+    job["request"] = (
+        StoryOutline.from_dict(json.loads(job["brief"])) if job["brief"] else job["prompt"]
+    )
+    return job
 
-    def __init__(self, bot, queue: JobQueue, generator, study) -> None:
-        """Wire the worker to the bot, the queue, the generator and the study."""
+
+class StoryWorker:
+    """Generate queued stories one by one, deliver them and recommend the next step."""
+
+    def __init__(self, bot, queue: JobQueue, generator, study, pairs) -> None:
+        """Wire the worker to the bot, the queue, the generator, the study and the pairs."""
         self.bot = bot
         self.queue = queue
         self.generator = generator
         self.study = study
+        self.pairs = pairs
         self._wake = asyncio.Event()
 
     def wake(self) -> None:
@@ -226,15 +257,22 @@ class StoryWorker:
             ticker.cancel()
         self.queue.finish(job["id"], "completed", run_dir=run_dir)
         await send_retrying(lambda: message.edit_text("✅ Historia terminada."), "el progreso")
-        await send_story(self.bot, chat, run_dir, heading="Tu historia")
-        await self.bot.send_message(chat_id=chat, text=self._enroll(job, run_dir))
+        await send_story(
+            self.bot, chat, run_dir, heading=f"Tu historia ({METHODS[job['story_format']]})"
+        )
+        self._enroll(job, run_dir)
+        text, markup = next_step(self.queue, self.pairs, job["user_id"])
+        await send_retrying(
+            lambda: self.bot.send_message(chat_id=chat, text=text, reply_markup=markup),
+            "la recomendación",
+        )
 
-    def _enroll(self, job: dict, run_dir: Path) -> str:
-        """Add the story to the study while it collects stories, and say so."""
+    def _enroll(self, job: dict, run_dir: Path) -> None:
+        """Add the story to the blind study while it collects stories, for the pairs later."""
+        if self.study is None:
+            return
         try:
             owner = self.study.participant(str(job["user_id"]))
             self.study.add_story(run_dir, owner=owner)
         except ValueError as exc:
             LOGGER.info("Historia %s fuera del estudio: %s", run_dir.name, exc)
-            return "Gracias. Puedes crear otra con /crear o votar con /evaluar."
-        return "Gracias: tu historia entra en el estudio. Crea otra con /crear."

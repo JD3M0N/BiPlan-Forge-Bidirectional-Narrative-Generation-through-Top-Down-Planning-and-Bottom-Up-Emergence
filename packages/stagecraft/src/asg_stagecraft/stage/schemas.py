@@ -521,8 +521,10 @@ class ActorTurnDraft(BaseModel):
         default="",
         description=(
             "In the fiction language, third person present and without the character's own name, "
-            "as a stage direction: 'cruza los brazos', never 'cruzo los brazos'. Only what an "
-            "audience would see; no thoughts, no backstory. Empty when they only speak."
+            "as a stage direction: one visible gesture in a short clause, 'cruza los brazos', "
+            "never 'cruzo los brazos'. Only what an audience would see; no thoughts, no "
+            "backstory, no trailing clause about its effect ('haciendo que...'). Empty when they "
+            "only speak."
         ),
     )
     speech: str = Field(
@@ -1117,16 +1119,19 @@ class NarrationReview(BaseModel):
 
 
 class ReportedLine(BaseModel):
-    """One line of speech retold in indirect style, so the narrator has nothing to copy."""
+    """One item of the log retold as past-tense narration, so the narrator has nothing to copy."""
 
     model_config = ConfigDict(extra="forbid")
-    id: str = Field(description="The id of the line this retells, exactly as given (L1, L2...).")
+    id: str = Field(
+        description="The id of the item this retells, exactly as given (L1, G1, T1, E1...)."
+    )
     report: str = Field(
         min_length=1,
         description=(
-            "One short sentence in the past tense and in the fiction's language, with its "
-            "accents, that says what the speaker said or wanted, in indirect style and in your "
-            "own words, e.g. 'Gaspar insistió en soltar el lastre'. Never quote the line."
+            "One short sentence in the past tense, the third person and the fiction's language, "
+            "with its accents, in your own words: what was said in indirect style ('Gaspar "
+            "insistió en soltar el lastre'), done ('Ilse golpeó la borda'), felt ('Aleth temía "
+            "al Consejo') or what happened. Never quote the item."
         ),
     )
 

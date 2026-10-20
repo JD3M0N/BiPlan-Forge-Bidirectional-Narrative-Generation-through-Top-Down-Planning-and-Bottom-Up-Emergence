@@ -3,6 +3,7 @@ from asg_stagecraft.schemas import ChapterPlan
 from asg_stagecraft.writing.craft_evidence import (
     BLOCK_PARAGRAPHS,
     EMOTION_TAGS,
+    GERUND_TAGS,
     NO_DIALOGUE,
     RARE_DIALOGUE,
     REPEATED_NAMES,
@@ -59,6 +60,11 @@ def narration(words_per_paragraph: int, paragraphs: int = 4) -> str:
             "\n\n".join([f"{DASH}Sube {DASH}dijo.", "Subio como si flotara, como un nino."] * 4),
             [SIMILE_CHAINS],
         ),
+        # 7.20: a gerund after every tag, which no earlier observation measured.
+        (
+            "\n\n".join([f"{DASH}Sube {DASH}dijo, señalando la torre.", "Subio."] * 4),
+            [GERUND_TAGS],
+        ),
     ],
     ids=[
         "silent-chapter",
@@ -69,6 +75,7 @@ def narration(words_per_paragraph: int, paragraphs: int = 4) -> str:
         "name-in-every-sentence",
         "explained-emotions",
         "chained-similes",
+        "gerund-tags",
     ],
 )
 def test_chapter_observations(body, expected) -> None:

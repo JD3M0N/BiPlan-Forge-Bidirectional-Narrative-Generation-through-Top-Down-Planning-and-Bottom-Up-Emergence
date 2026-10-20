@@ -66,6 +66,9 @@ def test_the_prompt_is_composed_the_same_way_every_time() -> None:
         "Notas: Final abierto."
     )
     assert story.to_prompt() == story.model_copy().to_prompt()
+    # 7.20: a composed brief pasted as a prompt is read back; any other prompt is not one.
+    assert StoryBrief.from_prompt(story.to_prompt()).to_prompt() == story.to_prompt()
+    assert StoryBrief.from_prompt("Una historia sobre Zoe.\nTrama: nada.") is None
 
 
 def test_a_bare_brief_is_only_its_plot() -> None:
@@ -105,10 +108,23 @@ def test_a_declared_cast_is_matched_by_name_not_by_id() -> None:
     assert "- Zoe" in feedback
 
 
-def test_a_brief_run_keeps_the_brief_and_analyzes_its_prompt(tmp_path) -> None:
+@pytest.mark.parametrize(
+    ("submit", "warnings"),
+    [
+        (lambda story: story, []),
+        (lambda story: story.to_prompt(), ["BRIEF_FROM_PROMPT"]),
+        (
+            lambda story: story.to_prompt().encode("utf-8").decode("cp1252"),
+            ["PROMPT_ENCODING_REPAIRED", "BRIEF_FROM_PROMPT"],
+        ),
+    ],
+    ids=["brief", "pasted-prompt", "double-encoded-prompt"],
+)
+def test_a_brief_run_keeps_the_brief_and_analyzes_its_prompt(tmp_path, submit, warnings) -> None:
+    """7.20: the 7.19 islands runs pasted the brief as a prompt, through PowerShell 5.1."""
     story = brief(CastMember(name="Ana", role="protagonista", secret="se llevó el expediente"))
     provider = FakeProvider()
-    run = StoryGenerator(provider, tmp_path).generate(story)
+    run = StoryGenerator(provider, tmp_path).generate(submit(story))
     assert StoryBrief.model_validate(read_json(run.run_dir, "brief.json")) == story
     assert read_json(run.run_dir, "request.json")["original_prompt"] == story.to_prompt()
     assert "pipeline_manifest.json" in {path.name for path in run.run_dir.iterdir()}
@@ -121,7 +137,8 @@ def test_a_brief_run_keeps_the_brief_and_analyzes_its_prompt(tmp_path) -> None:
     for schema in ("StoryPlanDraft", "PlanReview"):
         assert "AUTHOR'S PLOT" in characters_calls(provider, schema)[0]
         assert story.plot in characters_calls(provider, schema)[0]
-    assert read_json(run.run_dir, "metadata.json")["warnings"] == []
+    recorded = read_json(run.run_dir, "metadata.json")["warnings"]
+    assert [item[1:].split("]")[0] for item in recorded] == warnings
 
 
 def test_a_missing_character_gets_one_repair_and_then_a_warning(tmp_path) -> None:

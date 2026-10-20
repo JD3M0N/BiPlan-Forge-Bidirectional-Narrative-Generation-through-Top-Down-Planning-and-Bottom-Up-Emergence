@@ -34,6 +34,12 @@ def edit(paragraph: str, text: str, note: str = "voz", action: str = "replace") 
             "",
             "Primero.\n\nNuevo.\n\nSegundo párrafo.",
         ),
+        # 7.20: an insertion that says again what the next paragraph says is turned down.
+        (
+            edit("P1", "Nuevo.\n\nSegundo párrafo.", note="ritmo", action="insert_after"),
+            "insert_after repeats a sentence of the paragraphs around it",
+            DRAFT,
+        ),
     ],
     ids=[
         "unknown-paragraph",
@@ -42,6 +48,7 @@ def edit(paragraph: str, text: str, note: str = "voz", action: str = "replace") 
         "insert-without-staging",
         "split",
         "insert",
+        "insert-repeating",
     ],
 )
 def test_an_edit_lands_only_where_the_draft_and_the_notes_allow(change, reason, body) -> None:

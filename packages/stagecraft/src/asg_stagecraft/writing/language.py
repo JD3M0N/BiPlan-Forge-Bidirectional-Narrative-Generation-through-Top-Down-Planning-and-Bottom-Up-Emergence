@@ -82,3 +82,24 @@ def prompt_language(text: str) -> str:
     if counts[best] >= _MIN_PROMPT_HITS and counts[best] >= _PROMPT_MARGIN * counts[other]:
         return _LANGUAGE_NAMES[best]
     return ""
+
+
+# What UTF-8 text looks like once something read it as Windows-1252: an accented letter
+# becomes a capital A with a tilde or circumflex followed by a symbol: "dia" with an accent
+# comes out as "d", a capital A with a tilde, a soft hyphen and "a".
+_MOJIBAKE = re.compile("[\u00c3\u00c2][\u0080-\u00bf\u2018-\u203a\u0152-\u017e]")
+
+
+def repair_mojibake(text: str) -> str:
+    """Undo UTF-8 read as Windows-1252, when the text plainly is that and decodes back cleanly.
+
+    Found in the 7.19 batch of 2026-10-19: Windows PowerShell 5.1 handed every prompt to
+    asg-generate double-encoded, and request.json kept the author's accents as pairs of
+    Windows-1252 symbols.
+    """
+    if not _MOJIBAKE.search(text):
+        return text
+    try:
+        return text.encode("cp1252").decode("utf-8")
+    except UnicodeError:
+        return text

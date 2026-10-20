@@ -140,6 +140,10 @@ def narrated_chapter_ids(views: Collection[ChapterView]) -> list[str]:
 # How many words in a row a retelling may share with the line it retells before it counts as a
 # copy. Four is a phrase ("no pienso soltar nada"); a name plus a verb is three.
 COPIED_RUN = 4
+# A stage direction is written in the present, so a sentence that opens on its first words has
+# copied its tense too. Measured on the 7.13 navigators run: the chapter told in the present
+# reused 15 directions this way, every other chapter of that run and of 7.12 at most one.
+DIRECTION_WORDS = 4
 # The narrator still reads one line in WHOLE_EVERY of a chapter's speech whole, and at least
 # MIN_WHOLE. Key lines come from the beats that landed, so a forced beat has none: the 7.15.2
 # finale had 12 lines and no key one, and would have reached the narrator as summary only.
@@ -148,33 +152,58 @@ WHOLE_EVERY = 3
 MIN_WHOLE = 2
 _REPORT_WORD = re.compile(r"[^\W_]+", re.UNICODE)
 
+# The short id prefix each kind of item reaches the reporter with.
+_PREFIX: dict[str, str] = {
+    "setting": "S",
+    "speech": "L",
+    "gesture": "G",
+    "thought": "T",
+    "event": "E",
+}
+
 
 @dataclass
 class AcceptedReports:
-    """The retellings the narrator may read, and the ones the code turned away and why."""
+    """The retellings the narrator may read, and the ones the code turned away and why.
+
+    Since 7.20 the reporter retells every gesture, thought and world event as well as the lines
+    nobody turns on: a direction reached the narrator in the present, and in the 7.19 islands run
+    the narrator pasted it whole, tense and all, into chapters told in the past.
+    """
 
     reports: dict[str, str] = field(default_factory=dict)
+    gestures: dict[str, str] = field(default_factory=dict)
+    thoughts: dict[str, str] = field(default_factory=dict)
+    settings: dict[str, str] = field(default_factory=dict)
     rejected: dict[str, str] = field(default_factory=dict)
     kept: list[str] = field(default_factory=list)
     retried: list[str] = field(default_factory=list)
+    done: set[str] = field(default_factory=set)
+
+    def bucket(self, kind: str) -> dict[str, str]:
+        """Return where the retellings of one kind of item are kept, by turn or scene id."""
+        buckets = {"speech": self.reports, "thought": self.thoughts, "setting": self.settings}
+        return buckets.get(kind, self.gestures)
 
     def as_record(self) -> dict:
         """The decision as stored next to the chapter on disk."""
         return {
             "kept": self.kept,
             "accepted": self.reports,
+            "gestures": self.gestures,
+            "thoughts": self.thoughts,
+            "settings": self.settings,
             "rejected": self.rejected,
             "retried": self.retried,
         }
 
     def merge(self, retry: AcceptedReports) -> None:
         """Take the retellings a second request got, keeping this one's whole lines."""
-        self.reports.update(retry.reports)
-        for turn_id in retry.reports:
-            self.rejected.pop(turn_id, None)
-        self.rejected.update(
-            {key: why for key, why in retry.rejected.items() if key not in self.reports}
-        )
+        for kind in ("speech", "gesture", "thought", "setting"):
+            self.bucket(kind).update(retry.bucket(kind))
+        self.done |= retry.done
+        self.rejected = {key: why for key, why in self.rejected.items() if key not in retry.done}
+        self.rejected.update(retry.rejected)
 
 
 def whole_lines_wanted(turns: list[StageTurn], key_ids: Collection[str]) -> int:
@@ -185,27 +214,71 @@ def whole_lines_wanted(turns: list[StageTurn], key_ids: Collection[str]) -> int:
 
 
 def lines_to_report(
-    turns: list[StageTurn], key_ids: Collection[str], names: dict[str, str]
+    turns: list[StageTurn],
+    key_ids: Collection[str],
+    names: dict[str, str],
+    *,
+    settings: dict[str, str] | None = None,
 ) -> list[dict]:
-    """List the lines of speech a chapter does not turn on, as the reporter reads them.
+    """List what the reporter retells: lines nobody turns on, every gesture and world event.
 
-    Each line gets a short id (L1, L2...). Given turn ids, the model renumbered the second
-    scene's lines as the first scene's and lost 12 of 16 retellings.
+    Each item gets a short id by kind (L1, G1, T1, E1...). Given turn ids, the model renumbered
+    the second scene's lines as the first scene's and lost 12 of 16 retellings. A key line stays
+    whole; its gesture is retold all the same, since a direction is never prose. Only a key
+    turn's thought is retold: handed all eleven of a chapter's thoughts as narration, the first
+    7.20 replay closed nearly every line with "Temia que...". ``settings`` are the scenes'
+    settings, by scene id: written in the present, they were pasted as the chapter's opening.
     """
-    spoken = [
-        turn for turn in turns if turn.kind == "actor" and turn.speech and turn.id not in key_ids
-    ]
-    return [
-        {
-            "id": f"L{number}",
-            "turn_id": turn.id,
-            "speaker": names.get(turn.actor_id, turn.actor_id),
-            "to": [names.get(item, item) for item in turn.addressed_to],
-            "whispered": turn.visibility == "whisper",
-            "speech": turn.speech,
-        }
-        for number, turn in enumerate(spoken, 1)
-    ]
+    counts = dict.fromkeys(_PREFIX, 0)
+    items: list[dict] = []
+    for scene_id, setting in (settings or {}).items():
+        if setting:
+            counts["setting"] += 1
+            items.append(
+                {
+                    "id": f"S{counts['setting']}",
+                    "turn_id": scene_id,
+                    "kind": "setting",
+                    "speaker": "",
+                    "text": setting,
+                }
+            )
+
+    def add(turn: StageTurn, kind: str, text: str, **extra) -> None:
+        """Append one item of the given kind for a turn."""
+        counts[kind] += 1
+        speaker = names.get(turn.actor_id, turn.actor_id) if kind != "event" else ""
+        items.append(
+            {
+                "id": f"{_PREFIX[kind]}{counts[kind]}",
+                "turn_id": turn.id,
+                "kind": kind,
+                "speaker": speaker,
+                **extra,
+                "text": text,
+            }
+        )
+
+    for turn in turns:
+        if turn.kind == "world":
+            if turn.action:
+                add(turn, "event", turn.action)
+            continue
+        if turn.kind != "actor":
+            continue
+        if turn.action:
+            add(turn, "gesture", turn.action)
+        if turn.speech and turn.id not in key_ids:
+            add(
+                turn,
+                "speech",
+                turn.speech,
+                to=[names.get(item, item) for item in turn.addressed_to],
+                whispered=turn.visibility == "whisper",
+            )
+        if turn.thought and turn.id in key_ids:
+            add(turn, "thought", turn.thought)
+    return items
 
 
 def reporter_view(line: dict) -> dict:
@@ -214,42 +287,65 @@ def reporter_view(line: dict) -> dict:
 
 
 def accept_reports(lines: list[dict], drafted: ReportedLines, keep: int = 0) -> AcceptedReports:
-    """Keep one retelling per requested line, turning away any that copies the line itself.
+    """Keep one retelling per requested item, turning away any that copies what it retells.
 
-    Up to ``keep`` of the lines the reporter ranked as memorable stay whole, in its order.
+    Up to ``keep`` of the lines of speech the reporter ranked as memorable stay whole, in its
+    order.
     """
     by_id = {line["id"]: line for line in lines}
     accepted = AcceptedReports()
-    ranked = [item for item in dict.fromkeys(drafted.memorable) if item in by_id]
+    ranked = [
+        item
+        for item in dict.fromkeys(drafted.memorable)
+        if item in by_id and by_id[item]["kind"] == "speech"
+    ]
     accepted.kept = [by_id[item]["turn_id"] for item in ranked[:keep]]
     for item in drafted.lines:
         line = by_id.get(item.id)
         report = " ".join(item.report.split())
-        if line is None or line["turn_id"] in accepted.reports:
+        if line is None or item.id in accepted.done:
             accepted.rejected[item.id] = "unknown or repeated line"
-        elif shares_run(report, line["speech"]):
-            accepted.rejected[line["turn_id"]] = "copies the line"
+        elif copies_source(report, line["text"], line["kind"]):
+            accepted.rejected[item.id] = "copies the line"
         else:
-            accepted.reports[line["turn_id"]] = report
+            accepted.bucket(line["kind"])[line["turn_id"]] = report
+            accepted.done.add(item.id)
     return accepted
 
 
+def copies_source(report: str, text: str, kind: str) -> bool:
+    """Say whether a retelling copies its source: a phrase of a line, a direction's opening."""
+    if kind in ("gesture", "event", "setting"):
+        return opens_with_direction(report, text)
+    return shares_run(report, text)
+
+
+def opens_with_direction(prose: str, direction: str) -> bool:
+    """Say whether a text contains the first DIRECTION_WORDS words of a stage direction."""
+    words = [word.casefold() for word in _REPORT_WORD.findall(direction)][:DIRECTION_WORDS]
+    if len(words) < DIRECTION_WORDS:
+        return False
+    told = " ".join(word.casefold() for word in _REPORT_WORD.findall(prose))
+    return f" {' '.join(words)} " in f" {told} "
+
+
 def unreported(lines: list[dict], accepted: AcceptedReports) -> list[dict]:
-    """List the lines with no accepted retelling that are not kept whole either (7.19).
+    """List the items with no accepted retelling that are not kept whole either (7.19).
 
     In the 7.18 islands run the reporter retold four of a chapter's lines, all from its first
     scene; the rest reached the narrator whole, and the chapter transcribed them.
     """
-    done = set(accepted.reports) | set(accepted.kept)
-    return [line for line in lines if line["turn_id"] not in done]
+    return [
+        line
+        for line in lines
+        if line["id"] not in accepted.done
+        and not (line["kind"] == "speech" and line["turn_id"] in accepted.kept)
+    ]
 
 
-def shares_run(report: str, speech: str) -> bool:
-    """Say whether a retelling repeats COPIED_RUN or more words of the line in a row."""
+def shares_run(report: str, speech: str, run: int = COPIED_RUN) -> bool:
+    """Say whether a retelling repeats ``run`` or more words of the line in a row."""
     said = [word.casefold() for word in _REPORT_WORD.findall(speech)]
-    runs = {tuple(said[index : index + COPIED_RUN]) for index in range(len(said) - COPIED_RUN + 1)}
+    runs = {tuple(said[index : index + run]) for index in range(len(said) - run + 1)}
     told = [word.casefold() for word in _REPORT_WORD.findall(report)]
-    return any(
-        tuple(told[index : index + COPIED_RUN]) in runs
-        for index in range(len(told) - COPIED_RUN + 1)
-    )
+    return any(tuple(told[index : index + run]) in runs for index in range(len(told) - run + 1))

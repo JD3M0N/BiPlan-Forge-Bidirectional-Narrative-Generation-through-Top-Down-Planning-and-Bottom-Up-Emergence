@@ -31,6 +31,10 @@ BLOCK_PARAGRAPH_WORDS = 90.0
 REPEATED_NAME_RATIO = 0.20
 TAGGED_DIALOGUE_RATIO = 0.30
 SIMILES_PER_100_WORDS = 0.25
+# Gerund tails on dialogue tags ("—dijo Ana, señalando el mapa") (7.20). No healthy corpus to
+# calibrate on: the median chapter of every corpus, 6.x to 7.19, tags 0.67 to 0.83 of its lines
+# this way. The 7.10 readers rejected 0.40 to 0.62, so the net sits at the low end of that.
+GERUND_TAG_RATIO = 0.40
 
 NO_DIALOGUE = "no spoken exchange appears anywhere in this chapter"
 RARE_DIALOGUE = "spoken exchange is rare, so the chapter is reported rather than played out"
@@ -40,6 +44,7 @@ REPEATED_NAMES = (
     "pronoun carry the subject"
 )
 EMOTION_TAGS = "dialogue lines are followed by tags that explain the emotion instead of showing it"
+GERUND_TAGS = "dialogue tags trail a gerund clause line after line ('dijo, señalando...')"
 SIMILE_CHAINS = "comparisons pile up, so the prose reads as ornament instead of story"
 # What the critic is shown: whether a chapter plays as scene. Readability goes to the Writer as a
 # note of its own, so the critic's prompt did not change when it was added.
@@ -76,6 +81,8 @@ def chapter_observations(body: str, names: list[str] | tuple[str, ...] = ()) -> 
         observations.append(REPEATED_NAMES)
     if signals.tagged_dialogue_ratio >= TAGGED_DIALOGUE_RATIO:
         observations.append(EMOTION_TAGS)
+    if signals.gerund_tag_ratio >= GERUND_TAG_RATIO:
+        observations.append(GERUND_TAGS)
     if signals.similes_per_100_words >= SIMILES_PER_100_WORDS:
         observations.append(SIMILE_CHAINS)
     return observations
@@ -154,5 +161,9 @@ _REMEDIES = {
         "description carry the subject"
     ),
     EMOTION_TAGS: "cut the tags that explain how a line was said and keep a gesture or nothing",
+    GERUND_TAGS: (
+        "cut the gerund clause after a dialogue tag: drop the tag where the speaker is clear, or "
+        "make the gesture a sentence of its own"
+    ),
     SIMILE_CHAINS: "keep at most one comparison per paragraph and cut ornamental adjectives",
 }

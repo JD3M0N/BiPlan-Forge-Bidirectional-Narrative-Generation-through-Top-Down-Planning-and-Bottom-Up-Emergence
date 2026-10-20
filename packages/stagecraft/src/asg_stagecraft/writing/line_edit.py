@@ -37,9 +37,15 @@ from asg_core.craft import (
 )
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..stage.narration import opens_with_direction
+
 # A paragraph that repeats this many words in a row of a style example copied it.
 EXAMPLE_ECHO = "example_echo"
 EXAMPLE_RUN = 5
+# A narrated paragraph that opens a performer's stage direction word for word (7.20). The
+# direction is in the present, so the paragraph is too: three of them shipped in the 7.19 islands
+# run inside a chapter told in the preterite.
+COPIED_DIRECTION = "copied_direction"
 # An edit may grow a paragraph by this share at most, or by one word when it is very short.
 MAX_GROWTH = 1.1
 
@@ -78,6 +84,10 @@ OBSERVATIONS = {
         "and keep the detail only if it matters"
     ),
     EXAMPLE_ECHO: "it copies the style example word for word: say it in this scene's own words",
+    COPIED_DIRECTION: (
+        "it pastes a stage direction, in the present tense: tell what the character did in the "
+        "past tense, like the rest of the chapter, and in your own words"
+    ),
 }
 
 _BLOCKS = re.compile(r"\n[ \t]*\n+")
@@ -150,12 +160,19 @@ def paragraph_index(paragraph_id: str, count: int) -> int | None:
 
 
 def block_flags(
-    block: str, names: list[str], *, opening: bool = False, examples: tuple[str, ...] = ()
+    block: str,
+    names: list[str],
+    *,
+    opening: bool = False,
+    examples: tuple[str, ...] = (),
+    directions: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
-    """Name the observations of one paragraph, the copied style example included."""
+    """Name the observations of one paragraph, the copied example and direction included."""
     codes = paragraph_flags(block, names, opening=opening)
     if examples and _echoes(block, examples):
         codes = (*codes, EXAMPLE_ECHO)
+    if not opens_with_dash(block) and any(opens_with_direction(block, item) for item in directions):
+        codes = (*codes, COPIED_DIRECTION)
     return codes
 
 
@@ -186,6 +203,7 @@ def check_edit(
     known_names: set[str],
     opening: bool = False,
     examples: tuple[str, ...] = (),
+    directions: tuple[str, ...] = (),
 ) -> str:
     """Say why a replacement may not ship, or return an empty string when it may."""
     text = replacement.strip()
@@ -194,10 +212,11 @@ def check_edit(
     length = _word_count(original)
     if _word_count(text) > max(length + 1, MAX_GROWTH * length):
         return "longer than the paragraph it replaces"
-    before = set(block_flags(original, names, opening=opening, examples=examples))
+    flags = {"examples": examples, "directions": directions}
+    before = set(block_flags(original, names, opening=opening, **flags))
     after: set[str] = set()
     for index, part in enumerate(chapter_blocks(text)):
-        after |= set(block_flags(part, names, opening=opening and index == 0, examples=examples))
+        after |= set(block_flags(part, names, opening=opening and index == 0, **flags))
     if not after < before:
         return "the observations are not reduced"
     invented = _names_outside(text, original, known_names)
@@ -224,14 +243,24 @@ def edit_chapter(
     call: Callable[[list[dict]], LineEdits],
     *,
     examples: tuple[str, ...] = (),
+    directions: tuple[str, ...] = (),
+    only: frozenset[str] | None = None,
 ) -> ChapterEdit:
-    """Edit the flagged paragraphs of one chapter, keeping each edit only if it passes."""
+    """Edit the flagged paragraphs of one chapter, keeping each edit only if it passes.
+
+    ``only`` limits the pass to some observations: the narration repairs pasted directions
+    this way whether or not the run asked for the line editor (7.20).
+    """
     blocks = chapter_blocks(body)
-    flags = {
-        index: codes
-        for index, block in enumerate(blocks)
-        if (codes := block_flags(block, names, opening=index == 0, examples=examples))
-    }
+    flags = {}
+    for index, block in enumerate(blocks):
+        codes = block_flags(
+            block, names, opening=index == 0, examples=examples, directions=directions
+        )
+        if only is not None:
+            codes = tuple(code for code in codes if code in only)
+        if codes:
+            flags[index] = codes
     if not flags:
         return ChapterEdit(body=body)
     edits = call(edit_request(blocks, flags))
@@ -253,6 +282,7 @@ def edit_chapter(
             known_names=known_names,
             opening=index == 0,
             examples=examples,
+            directions=directions,
         )
         if reason:
             result.rejected[edit.id] = reason

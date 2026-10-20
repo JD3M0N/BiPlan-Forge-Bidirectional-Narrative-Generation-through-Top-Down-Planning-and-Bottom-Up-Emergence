@@ -138,6 +138,10 @@ def test_a_brief_file_is_read_as_the_request(tmp_path) -> None:
     path.write_text(brief.model_dump_json(), encoding="utf-8")
     assert read_request(parser().parse_args(["--brief", str(path)])) == brief
     assert read_request(parser().parse_args(["  Una historia  "])) == "Una historia"
+    # 7.20: a prompt file is read as UTF-8, with or without a byte order mark.
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("\ufeffUn día en Zéfara\n", encoding="utf-8")
+    assert read_request(parser().parse_args(["--prompt-file", str(prompt)])) == "Un día en Zéfara"
 
 
 def test_a_prompt_and_a_brief_together_are_refused(tmp_path, capsys) -> None:

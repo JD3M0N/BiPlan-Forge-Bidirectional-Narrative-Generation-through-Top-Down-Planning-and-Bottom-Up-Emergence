@@ -1,5 +1,30 @@
 # Historial de cambios
 
+## [6.0.0] - 2026-10-19
+
+Pensado para ponerlo en marcha en la PC del investigador y empezar a evaluar ya, antes de tener
+historias suficientes para el estudio a ciegas entre personas.
+
+- **Cuatro opciones en un solo menú:** Libre · Top-Down, Guiada · Top-Down, Libre · Híbrido y
+  Guiada · Híbrido. Antes eran dos menús seguidos.
+- **El bot recomienda el siguiente paso.**
+  - Al empezar, crear dos historias con la misma idea, primero Top-Down.
+  - Tras una historia, «🔁 La misma idea con Híbrido», que repite la petición con el otro modelo
+    (`source_job` en la cola).
+  - Con una de cada modelo, compararlas.
+- **`/evaluar` compara las dos historias propias**, paso a paso, como pide el tutor en el audio
+  del 3 de octubre: nada de notas del 1 al 10, solo cuál de las dos.
+  - Llegan como Historia A y B a ciegas, en orden aleatorio, con «Ya la leí» en cada una.
+  - Después vienen las tres preguntas del estudio (`asg_evaluation.catalog`): creatividad,
+    personajes y trama. Se responde A, B o «No puedo decidir», con un «¿por qué?» opcional.
+  - Al final se revela qué modelo era cada una.
+  - Se guarda en `Evaluations/estudio/pares_propios.sqlite3` (`ASG_OWN_PAIRS`), por modelo y no
+    por letra. `asg-telegram --export ruta.json` lo vuelca.
+- **El estudio a ciegas entre personas sigue entero**, en `/estudio`, un comando oculto. Las
+  historias se siguen inscribiendo mientras está en recogida.
+- Módulos nuevos: `guide.py` (textos, menús y siguiente paso), `pairs.py` (el almacén de las
+  comparaciones) y `review.py` (el flujo de `/evaluar`).
+
 ## [5.0.0] - 2026-10-12
 
 Reescrito para el cierre: el bot solo crea historias y las compara. Corre en la PC del

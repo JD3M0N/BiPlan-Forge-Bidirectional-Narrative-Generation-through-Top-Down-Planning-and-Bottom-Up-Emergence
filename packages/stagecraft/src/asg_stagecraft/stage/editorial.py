@@ -12,7 +12,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from .schemas import NarrationReview, StageTurn
+from .narration import opens_with_direction, shares_run
+from .schemas import NarrationFinding, NarrationReview, StageTurn
 
 # Findings that make the chapter tell something that did not happen. The rest are craft notes:
 # they travel to the next attempt as corrections, but never cost the chapter its narrator.
@@ -21,11 +22,31 @@ BLOCKING_CODES = frozenset({"INVENTED_EVENT", "CONTRADICTION"})
 # or a marker the code measured spoils the whole chapter; a reviewer's contradiction is often one
 # slip. In 20261017-184650 a tie on one finding each shipped the later attempt, told in the
 # present with 16 "dice", over one whose only finding was a single untranslated word.
-_SEVERITY = {"WRONG_TENSE": 3, "INTERNAL_MARKER": 3, "INVENTED_EVENT": 2, "CONTRADICTION": 1}
+_SEVERITY = {
+    "WRONG_TENSE": 3,
+    "COPIED_DIRECTION": 3,
+    "INTERNAL_MARKER": 3,
+    "INVENTED_EVENT": 2,
+    "DUPLICATED_LINE": 2,
+    "CONTRADICTION": 1,
+}
+# A line the narrator only read as a retelling cannot reach the prose whole by itself. In the
+# 7.19 islands run a reviewer's correction carried it there, and the chapter told it twice: the
+# retelling, then the line. Six words in a row is a phrase of the line, not a shared idiom.
+_DUPLICATE_RUN = 6
+# The fixed repair each code sends forward when the reviewer's own correction quoted the log.
+# In the 7.19 islands run "Hanu dice textualmente: <the whole line>" reached the next attempt.
+_LOG_FREE_REPAIR = {
+    "INVENTED_EVENT": "rewrite this passage so it tells only what the log records, in your own "
+    "words",
+    "CONTRADICTION": "make this passage agree with the cited turn, in your own words",
+}
+_DEFAULT_REPAIR = "revise this passage in your own words"
 
 _KEY_MARK = re.compile(r"\[clave\][ \t]*", re.I)
 _THOUGHT_LABEL = re.compile(r"\[[^]\n]+? piensa:\s*([^]\n]*)\]")
 _WRAPPED_LINE = re.compile(r"^[ \t]*\(([^()\n]+)\)[ \t]*$", re.M)
+_SCENE_LABEL = re.compile(r"^[ \t]*\[escena:[^]\n]*\][ \t]*\n?", re.M | re.I)
 _INTERNAL_ID = re.compile(r"\b(?:chapter|scene|event)[_-]\d+", re.I)
 # Spanish dialogue tags after a dash: present-tense speech verbs, and any preterite in -o.
 # Every voice narrates in the past; in 7.12.1 a chapter came back as a dash line and
@@ -39,11 +60,12 @@ _PRESENT_TAG = re.compile(
 _PAST_TAG = re.compile(r"—\s*\w+ó\b", re.I)
 # Below this many present tags a chapter has not settled into the present, it slipped once.
 _MIN_PRESENT_TAGS = 3
-# A stage direction is written in the present, so a narration that copies its opening words
-# copies its tense. Measured on the 7.13 navigators run: the chapter told in the present
-# reused 15 directions this way, every other chapter of that run and of 7.12 at most one.
-_DIRECTION_WORDS = 4
-_MIN_COPIED_DIRECTIONS = 3
+# How many words of a pasted paragraph a COPIED_DIRECTION finding quotes to point at it.
+_OPENING_WORDS = 6
+# Chapters told in the past still share an opening with one direction now and then ("con un
+# gesto brusco"); measured on 7.12 and 7.13, at most one each. Two pasted paragraphs block.
+MIN_COPIED_DIRECTIONS = 2
+_PARAGRAPHS = re.compile(r"\n[ \t]*\n+")
 _WORD = re.compile(r"[^\W\d_]+", re.UNICODE)
 
 
@@ -85,34 +107,75 @@ def strip_markers(story: str) -> str:
     cleaned = _THOUGHT_LABEL.sub(r"\1", _KEY_MARK.sub("", story))
     # 7.16: a world event marked key was copied whole, parentheses and all, as a paragraph.
     cleaned = _WRAPPED_LINE.sub(r"\1", cleaned)
-    return "\n".join(line.rstrip() for line in cleaned.splitlines()).strip()
+    # 7.20: the label that opens each scene of the log is for the narrator, never the reader.
+    cleaned = _SCENE_LABEL.sub("", cleaned)
+    return _dialogue_apart("\n".join(line.rstrip() for line in cleaned.splitlines()).strip())
+
+
+def _dialogue_apart(story: str) -> str:
+    """Give every line of dialogue a paragraph of its own, as the dash convention expects.
+
+    The first 7.20 replay glued lines to the narration before them with a single line break,
+    which Markdown renders as one paragraph.
+    """
+    lines = story.splitlines()
+    spaced: list[str] = []
+    for index, line in enumerate(lines):
+        if index and line.lstrip().startswith("—") and lines[index - 1].strip():
+            spaced.append("")
+        elif index and lines[index - 1].lstrip().startswith("—") and line.strip():
+            spaced.append("")
+        spaced.append(line)
+    return "\n".join(spaced)
 
 
 def editorial_verdict(
-    review: NarrationReview, story: str, turns: list[StageTurn], language: str = ""
+    review: NarrationReview,
+    story: str,
+    turns: list[StageTurn],
+    language: str = "",
+    reports: dict[str, str] | None = None,
 ) -> EditorialVerdict:
-    """Sort findings into blocking and advisory, dropping the ones the source cannot support."""
+    """Sort findings into blocking and advisory, dropping the ones the source cannot support.
+
+    ``reports`` are the retellings the narrator read in place of whole lines (7.16). Since 7.20
+    a finding is checked against them too: in the 7.19 islands run 7 of 10 blocking findings
+    called the reporter's own retellings invented, and every chapter shipped as a leftover.
+    """
+    reports = reports or {}
     known = {turn.id for turn in turns}
     verdict = EditorialVerdict()
     for finding in review.findings:
-        reason = _unsupported(finding.quote, finding.turn_ids, story, known)
-        line = f"{finding.code}: {finding.correction}"
+        line = f"{finding.code}: {_repair_text(finding, turns)}"
+        reason = _unsupported(finding.quote, finding.turn_ids, story, known) or _grounded(
+            finding, turns, reports
+        )
         if reason:
             verdict.discarded.append(f"{line} ({reason})")
-        elif finding.code in BLOCKING_CODES:
+        elif finding.code in BLOCKING_CODES and (
+            finding.code != "CONTRADICTION" or finding.turn_ids
+        ):
             verdict.blocking.append(line)
         else:
+            # A contradiction that names no turn has nothing to contradict: in the 7.19 islands
+            # run the only one was a tense complaint, which the review prompt rules out.
             verdict.advisory.append(line)
+    verdict.blocking.extend(_duplicated_lines(story, turns, reports))
     if _INTERNAL_ID.search(story):
         verdict.blocking.append("INTERNAL_MARKER: remove internal identifiers from the prose")
-    if (
-        _in_present(story, language)
-        or _copies_directions(story, turns)
-        or narrative_tense(story, language) == "imperfect"
-    ):
+    if _in_present(story, language) or narrative_tense(story, language) == "imperfect":
         verdict.blocking.append(
             "WRONG_TENSE: narrate in the past tense, dialogue tags included ('dijo', never "
             "'dice'), and curate the exchanges instead of rendering every turn"
+        )
+    pasted = copied_directions(story, turns)
+    if len(pasted) >= MIN_COPIED_DIRECTIONS:
+        # 7.20: until now this was a WRONG_TENSE, which named no paragraph. In the 7.19 islands
+        # run the chapter was in the preterite and three pasted paragraphs were not.
+        verdict.blocking.append(
+            "COPIED_DIRECTION: these paragraphs paste a stage direction, in the present: "
+            + "; ".join(f'"{opening}..."' for opening in pasted)
+            + ". Retell each one in the past tense and in your own words"
         )
     return verdict
 
@@ -238,18 +301,53 @@ def narrative_tense(story: str, language: str = "Spanish") -> str:
     return ""
 
 
-def _copies_directions(story: str, turns: list[StageTurn]) -> bool:
-    """Say whether the narration outside dialogue copies the log's present-tense directions."""
-    narration = " ".join(
-        line for line in story.lower().splitlines() if not line.lstrip().startswith("—")
-    )
-    narration = " ".join(_WORD.findall(narration))
-    copied = 0
+def copied_directions(story: str, turns: list[StageTurn]) -> list[str]:
+    """Return the opening words of every narration paragraph that pastes a stage direction."""
+    actions = [turn.action for turn in turns if turn.action]
+    pasted = []
+    for block in _PARAGRAPHS.split(story.strip()):
+        if not block.strip() or block.lstrip().startswith("—"):
+            continue
+        if any(opens_with_direction(block, action) for action in actions):
+            pasted.append(" ".join(block.split()[:_OPENING_WORDS]))
+    return pasted
+
+
+def _grounded(finding: NarrationFinding, turns: list[StageTurn], reports: dict[str, str]) -> str:
+    """Say which source an 'invented' passage actually comes from, or return nothing."""
+    if finding.code != "INVENTED_EVENT" or not finding.quote:
+        return ""
     for turn in turns:
-        words = _WORD.findall(turn.action.lower())[:_DIRECTION_WORDS]
-        if len(words) == _DIRECTION_WORDS and " ".join(words) in narration:
-            copied += 1
-    return copied >= _MIN_COPIED_DIRECTIONS
+        sources = (turn.speech, turn.action, turn.thought, reports.get(turn.id, ""))
+        if any(source and shares_run(finding.quote, source) for source in sources):
+            return f"grounded in {turn.id}"
+    return ""
+
+
+def _repair_text(finding: NarrationFinding, turns: list[StageTurn]) -> str:
+    """Return the correction to send forward, never one that hands the narrator a log line."""
+    if not any(turn.speech and shares_run(finding.correction, turn.speech) for turn in turns):
+        return finding.correction
+    repair = _LOG_FREE_REPAIR.get(finding.code, _DEFAULT_REPAIR)
+    return f'"{finding.quote}": {repair}' if finding.quote else repair
+
+
+def _duplicated_lines(story: str, turns: list[StageTurn], reports: dict[str, str]) -> list[str]:
+    """Flag a line told twice: once as its retelling and once in the speaker's own words."""
+    findings = []
+    for turn in turns:
+        report = reports.get(turn.id, "")
+        if (
+            report
+            and turn.speech
+            and shares_run(story, report)
+            and shares_run(story, turn.speech, _DUPLICATE_RUN)
+        ):
+            findings.append(
+                f'DUPLICATED_LINE: "{report}" is told twice, as a summary and again in the '
+                "speaker's words; keep the summary and cut the repetition"
+            )
+    return findings
 
 
 def _unsupported(quote: str, turn_ids: list[str], story: str, known: set[str]) -> str:
@@ -275,12 +373,20 @@ def _normalized(text: str) -> str:
     return _DASH_SPACING.sub("-", spaced).casefold()
 
 
-def review_turns(turns: list[StageTurn]) -> list[dict]:
-    """Project only fields the selected narrative perspective has already authorized."""
-    return [
-        {
+def review_turns(turns: list[StageTurn], retold: dict[str, str] | None = None) -> list[dict]:
+    """Project only fields the selected narrative perspective has already authorized.
+
+    A turn the narrator read as a retelling carries it as ``retold_as`` (7.20), so the reviewer
+    knows that sentence is the line in indirect style and not an invention.
+    """
+    retold = retold or {}
+    projected = []
+    for turn in turns:
+        item = {
             key: getattr(turn, key)
             for key in ("id", "actor_id", "kind", "action", "speech", "thought")
         }
-        for turn in turns
-    ]
+        if retold.get(turn.id):
+            item["retold_as"] = retold[turn.id]
+        projected.append(item)
+    return projected

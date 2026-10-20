@@ -395,10 +395,15 @@ def test_copied_log_marks_are_stripped_and_internal_ids_still_block() -> None:
     )
     assert not editorial_verdict(NarrationReview(), "Ocurrio en chapter_2.", []).accepted
     # A reviewer quoting Spanish dialogue with other quote marks still quotes the candidate.
+    said = turn("ana", speech="Quédate aquí.")
     review = NarrationReview(
-        findings=[NarrationFinding(code="CONTRADICTION", quote='"Ve" - dijo', correction="x")]
+        findings=[
+            NarrationFinding(
+                code="CONTRADICTION", quote='"Ve" - dijo', turn_ids=[said.id], correction="x"
+            )
+        ]
     )
-    assert editorial_verdict(review, "«Ve» —dijo Ana.", []).blocking
+    assert editorial_verdict(review, "«Ve» —dijo Ana.", [said]).blocking
     # Found in 7.12.1: a chapter tagged every line in the present, next to one in the past.
     present = "\n\n".join(f"—Uno —dice Ana.\n\n—Dos —pregunta Bruno. {n}" for n in range(2))
     verdict = editorial_verdict(NarrationReview(), present, [], "Spanish")
@@ -414,8 +419,62 @@ def test_copied_log_marks_are_stripped_and_internal_ids_still_block() -> None:
     ]
     turns = [turn("ana", action=item, number=n) for n, item in enumerate(directions, 1)]
     copied = "\n\n".join(f"Ana {item} con calma." for item in directions)
-    for prose, accepted in [(copied, False), (copied.replace("señala", "señaló"), True)]:
-        assert editorial_verdict(NarrationReview(), prose, turns, "English").accepted is accepted
+    # 7.20: its own code, naming each pasted paragraph; one paste alone is tolerated.
+    blocked = editorial_verdict(NarrationReview(), copied, turns, "English").blocking
+    assert blocked[0].startswith("COPIED_DIRECTION: these paragraphs paste a stage direction, in")
+    assert '"Ana acaricia una cuerda de plata..."' in blocked[0]
+    retold = copied.replace("señala", "señaló").replace("se interpone", "se interpuso")
+    assert editorial_verdict(NarrationReview(), retold, turns, "English").accepted
+
+
+_HANU = (
+    "Cualquier marinero que susurre sobre el hundimiento de Zéfara será puesto bajo custodia "
+    "inmediatamente."
+)
+_RETOLD = "Hanu ordenó arrestar a todo marinero que hablara del hundimiento."
+
+
+@pytest.mark.parametrize(
+    ("finding", "story", "blocking", "discarded"),
+    [
+        (
+            NarrationFinding(
+                code="INVENTED_EVENT",
+                quote="El Custodio ordenó arrestar a todo marinero que hablara",
+                correction=f"Hanu dice textualmente: {_HANU}",
+            ),
+            "El Custodio ordenó arrestar a todo marinero que hablara.",
+            [],
+            ["INVENTED_EVENT"],
+        ),
+        (
+            NarrationFinding(code="CONTRADICTION", quote="se despliega", correction="usa pasado"),
+            "Hanu se despliega.",
+            [],
+            [],
+        ),
+        (
+            NarrationFinding(
+                code="INVENTED_EVENT", quote="Ilse besó a Hanu", correction=f"Mejor: {_HANU}"
+            ),
+            "Ilse besó a Hanu.",
+            ['INVENTED_EVENT: "Ilse besó a Hanu": rewrite'],
+            [],
+        ),
+        (None, f"{_RETOLD}\n\n—{_HANU}", ["DUPLICATED_LINE"], []),
+    ],
+    ids=["retelling-is-grounded", "contradiction-without-turn", "log-free-repair", "told-twice"],
+)
+def test_a_review_cannot_block_the_indirect_style(finding, story, blocking, discarded) -> None:
+    """7.19 islands run: 7 of 10 blocking findings called the reporter's retellings invented."""
+    hanu = turn("hanu", speech=_HANU)
+    review = NarrationReview(findings=[finding] if finding else [])
+    verdict = editorial_verdict(review, story, [hanu], reports={hanu.id: _RETOLD})
+    assert len(verdict.blocking) == len(blocking)
+    pairs = zip(verdict.blocking, blocking, strict=True)
+    assert all(line.startswith(prefix) for line, prefix in pairs)
+    assert [line.split(":")[0] for line in verdict.discarded] == discarded
+    assert not any(_HANU[:40] in line for line in verdict.issues)
 
 
 def test_the_first_person_detector_is_conservative_by_design() -> None:
@@ -516,6 +575,15 @@ def test_a_speech_is_not_a_turn() -> None:
     trimmed, repairs = repair_form(act(speech=f"{clause}; {speech}"))
     assert (trimmed.speech, repairs) == (f"{clause}.", ["LONG_SPEECH"])
     validate_turn(trimmed, previous_speech=[])
+    # 7.20, the islands run: a long direction loses its trailing gerund clause, never the turn.
+    gesture = "Baja de un salto a la superficie de roca suspendida"
+    trailing = ", hundiendo sus botas en el suelo inestable mientras señala una fisura al este."
+    trimmed, repairs = repair_form(act(action=gesture + trailing, speech="Vamos."))
+    assert (trimmed.action, repairs) == (f"{gesture}.", ["LONG_ACTION"])
+    # A long direction with nowhere to cut is kept whole: it is still a valid turn.
+    plain = "camina despacio por el muelle de piedra gris " * 3
+    kept, repairs = repair_form(act(action=plain.strip(), speech="Vamos."))
+    assert (kept.action, repairs) == (plain.strip(), [])
 
 
 @pytest.mark.parametrize(
@@ -1166,37 +1234,93 @@ def test_the_narrator_log_marks_the_turns_the_beat_turned_on() -> None:
         "[clave]",
         "(El suelo tiembla.)",
     ]
+    # 7.20: gestures, thoughts and world events arrive retold in the past, a thought with no
+    # retelling not at all, and each scene opens with its setting, which strip_markers drops.
+    acting = [
+        turn("ana", action="cruza los brazos", thought="No le creo", speech="Una."),
+        turn("bruno", action="se sienta", thought="Miente", speech="Dos.", number=2),
+        jolt,
+    ]
+    retold = scene_log(
+        acting,
+        NAMES,
+        thoughts=True,
+        key_ids={"chapter-1-scene-1-t001", "chapter-1-scene-1-t002"},
+        gestures={acting[0].id: "Ana se cruzó de brazos.", jolt.id: "El suelo tembló."},
+        retold_thoughts={acting[0].id: "Ana no le creía."},
+        scene_labels={"chapter-1-scene-1": "El muelle al alba"},
+    ).splitlines()
+    assert retold == [
+        "[escena: El muelle al alba]",
+        "[clave]",
+        "Ana se cruzó de brazos.",
+        "Ana: Una.",
+        "Ana no le creía.",
+        "[clave]",
+        "(Bruno se sienta)",
+        "Bruno: Dos.",
+        "[clave]",
+        "(El suelo tembló.)",
+    ]
+    assert strip_markers("\n".join(retold[:3])) == "Ana se cruzó de brazos."
+    # A line of dialogue glued to the narration gets a paragraph of its own.
+    assert strip_markers("Ana esperó.\n—Ven.\nBruno vino.") == "Ana esperó.\n\n—Ven.\n\nBruno vino."
 
 
 @pytest.mark.parametrize(
-    ("report", "accepted"),
+    ("item", "report", "accepted"),
     [
-        ("Ana se nego a soltar el lastre.", True),
+        ("L1", "Ana se nego a soltar el lastre.", True),
         # Four words of the line in a row is a copy, whatever surrounds them.
-        ("Ana dijo que no pienso soltar nada.", False),
+        ("L1", "Ana dijo que no pienso soltar nada.", False),
+        # 7.20: a gesture is retold in the past; opening with the direction keeps its present.
+        ("G1", "Ana se aferró a la borda.", True),
+        ("G1", "Ana se aferra a la borda.", False),
+        ("T1", "Ana temía que Gaspar la traicionara.", True),
+        ("T1", "Ana pensó que me va a traicionar.", False),
     ],
+    ids=["line", "line-copied", "gesture", "gesture-copied", "thought", "thought-copied"],
 )
-def test_a_retelling_that_copies_its_line_is_turned_away(report: str, accepted: bool) -> None:
-    line = turn("ana", speech="No pienso soltar nada, Gaspar.", addressed=["bruno"])
-    key = turn("bruno", speech="Suelta el lastre.", number=2)
+def test_a_retelling_that_copies_its_line_is_turned_away(item, report, accepted) -> None:
+    line = turn(
+        "ana",
+        speech="No pienso soltar nada, Gaspar.",
+        action="se aferra a la borda",
+        thought="Ya veremos quién manda.",
+        addressed=["bruno"],
+    )
+    key = turn(
+        "bruno", speech="Suelta el lastre.", thought="Me va a traicionar en cuanto pueda.", number=2
+    )
     lines = lines_to_report([line, key], {key.id}, NAMES)
-    # The reporter reads short line ids, never turn ids: it renumbered those (7.16 probe).
-    assert [(item["id"], item["turn_id"]) for item in lines] == [("L1", line.id)]
+    # The reporter reads short ids by kind, never turn ids: it renumbered those (7.16 probe).
+    # A key line stays whole; every gesture is retold, and only a key turn's thought (7.20).
+    assert [(entry["id"], entry["turn_id"]) for entry in lines] == [
+        ("G1", line.id),
+        ("L1", line.id),
+        ("T1", key.id),
+    ]
     assert "turn_id" not in reporter_view(lines[0])
+    # A scene's setting, written in the present, is retold first, by scene (7.20).
+    staged = lines_to_report([line], set(), NAMES, settings={line.scene_id: "El muelle cruje."})
+    assert (staged[0]["id"], staged[0]["turn_id"]) == ("S1", line.scene_id)
     drafted = ReportedLines(
-        lines=[ReportedLine(id="L1", report=report), ReportedLine(id="L9", report="Nada.")],
+        lines=[ReportedLine(id=item, report=report), ReportedLine(id="L9", report="Nada.")],
         memorable=["L1"],
     )
     result = accept_reports(lines, drafted)
-    assert (line.id in result.reports) is accepted
+    kind = {"L": "speech", "G": "gesture", "T": "thought"}[item[0]]
+    assert ((key if kind == "thought" else line).id in result.bucket(kind)) is accepted
     assert "L9" in result.rejected
     # A ranked line stays whole only up to what the code allows the chapter.
     room = whole_lines_wanted([line, key], {key.id})
     assert room == 1
     assert accept_reports(lines, drafted, keep=room).kept == [line.id]
     assert result.kept == []
-    # 7.19: a line left without a retelling is asked for again, unless it is kept whole.
-    assert unreported(lines, result) == ([] if accepted else lines)
+    # 7.19: an item left without a retelling is asked for again, unless it is kept whole.
+    assert unreported(lines, result) == [
+        entry for entry in lines if not (accepted and entry["id"] == item)
+    ]
     assert unreported(lines, accept_reports(lines, ReportedLines(lines=[]))) == lines
 
 

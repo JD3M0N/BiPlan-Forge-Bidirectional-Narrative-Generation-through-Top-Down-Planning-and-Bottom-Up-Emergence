@@ -6,6 +6,8 @@ from asg_stagecraft.writing.line_edit import check_edit
 TAGGED = "—Ven —dijo Ana, sonriendo."
 STOCK = "Ana dio un paso al frente y abrió la puerta."
 MINUTES = "Ana ordenó a Bruno que callara, preguntando por el mapa."
+PASTED = "Ana apuñala la madera del mástil con fuerza."
+DIRECTION = "apuñala la madera del mástil con fuerza"
 
 
 @pytest.mark.parametrize(
@@ -18,6 +20,8 @@ MINUTES = "Ana ordenó a Bruno que callara, preguntando por el mapa."
         (MINUTES, "Ana pidió silencio.\n\n—¿Y el mapa?", "line of dialogue"),
         (TAGGED, "—Ven ya.", "new words"),
         (STOCK, "Ana caminaba y abría la puerta.", "tense"),
+        (PASTED, "Ana clavó la daga en el mástil.", ""),
+        (PASTED, "Luego Ana apuñala la madera del mástil.", "not reduced"),
     ],
     ids=[
         "fewer-observations",
@@ -27,8 +31,16 @@ MINUTES = "Ana ordenó a Bruno que callara, preguntando por el mapa."
         "invented-line",
         "words-put-in-a-mouth",
         "tense",
+        "direction-retold",
+        "direction-still-pasted",
     ],
 )
 def test_an_edit_ships_only_when_it_helps_and_changes_nothing_else(original, replacement, reason):
-    found = check_edit(original, replacement, names=["Ana"], known_names={"Ana", "Bruno"})
+    found = check_edit(
+        original,
+        replacement,
+        names=["Ana"],
+        known_names={"Ana", "Bruno"},
+        directions=(DIRECTION,),
+    )
     assert (reason in found) if reason else found == ""

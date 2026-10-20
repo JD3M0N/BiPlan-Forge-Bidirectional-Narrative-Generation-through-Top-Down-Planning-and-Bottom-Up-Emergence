@@ -111,9 +111,18 @@ class NarratorAgent(Agent[str]):
                 "a revelation the log does not contain, and where the log and any plan disagree, "
                 "the log is what happened. "
                 "Curate, do not transcribe: the finished chapter should be shorter than the log. "
-                'Lines with no speaker label ("Gaspar insistió en…") are speech already '
-                "retold for you: narrate them as summary or cut them, and never turn them back "
-                "into dialogue with words the log does not contain. "
+                'Lines with no speaker label ("Gaspar insistió en…", "Ilse golpeó la borda", '
+                '"Aleth temía al Consejo") are what was said, done or felt, already retold for '
+                "you in the past: use them as the raw material of your sentences, merge them or "
+                "cut them, never paste one whole, and never turn retold speech back into "
+                "dialogue with words the log does not contain. "
+                "A label in brackets that opens a scene ([escena: ...]) says where it happens: "
+                "take the reader there in one sentence of your own, in the past tense, and never "
+                "copy the label or its wording. REPARTO lists who appears for the first time in "
+                "the story and how they look to anyone: the first time one of them appears, call "
+                "them by name and give one detail of it in your own words, never the whole "
+                "description; everyone else is already known and is called by name. If FINAL DEL "
+                "CAPÍTULO ANTERIOR is given, begin where it leaves off, without repeating it. "
                 "Moments marked [clave] are the ones the chapter turns on; play those in full, "
                 "as scene, and never copy the mark itself into the prose. Compress everything "
                 "else - a standoff where both sides repeat their position, a gesture made "
@@ -137,7 +146,7 @@ class NarratorAgent(Agent[str]):
             prompt=(
                 "PREMISA Y REGLAS (son contexto, no sucesos ya ocurridos):\n"
                 f"{json_text(stable_context)}"
-                f"\n\nCHAPTER: {chapter_title}" + f"\n\nPERFORMANCE LOG:\n{log}" + retry_feedback
+                f"\n\nCHAPTER: {chapter_title}\n\n{log}" + retry_feedback
             ),
             profile="prose",
         )
@@ -224,17 +233,27 @@ class NarratorAgent(Agent[str]):
         )
 
     def report(self, *, request: StoryRequest, lines: list[dict]) -> ReportedLines:
-        """Retell the lines a chapter does not turn on in indirect style, one sentence each."""
+        """Retell lines, gestures, thoughts and world events as past-tense narration (7.20)."""
         return self.provider.generate_structured(
             system_instruction=(
-                "You prepare a performance log for a narrator. For every line of speech you "
-                f"receive, write one short sentence in {request.language}, in the past tense and "
-                "in indirect style, that says what the speaker said or wanted: who, to whom and "
-                "the gist, as a narrator would summarize it. Use your own words: never quote the "
-                "line, never copy a phrase of it, never add anything it does not say. Keep "
-                "questions as questions asked, refusals as refusals, threats as threats. Return "
-                "one entry per line, with its id exactly as given, and rank in memorable the "
-                "lines worth hearing in the speaker's own words."
+                "You prepare a performance log for a narrator. For every item you receive, "
+                f"write one short sentence in {request.language}, in the third person and in "
+                "the past tense (the preterite for what happened, the imperfect only for a "
+                "state), as a narrator would tell it. By kind: "
+                "speech - what the speaker said or wanted, in indirect style: who, to whom and "
+                "the gist; keep questions as questions asked, refusals as refusals, threats as "
+                "threats. "
+                "gesture - what the speaker visibly did, shorter than the direction: the one "
+                "movement that matters, with its object, without the adjectives. "
+                "thought - what the speaker privately felt, feared or suspected, never in the "
+                "first person ('Ilse sospechaba que la guía mentía'). "
+                "event - what happened in the world, with no speaker. "
+                "setting - the place where a scene happens, as a narrator would describe it, "
+                "keeping the place's own name. "
+                "Use your own words: never quote the item, never copy a phrase of it, never open "
+                "with its first words, never add anything it does not say. Return one entry per "
+                "item, with its id exactly as given, and rank in memorable the speech lines "
+                "worth hearing in the speaker's own words."
             ),
             prompt=json_text({"lines": [reporter_view(line) for line in lines]}),
             schema=ReportedLines,
@@ -258,6 +277,9 @@ class NarratorAgent(Agent[str]):
                 "setting, weather, sensory detail and a character's evident motive are not "
                 "events. CONTRADICTION means the prose states the opposite of a turn; a change "
                 "of tense, wording or order is never a contradiction. "
+                "A turn with retold_as reached the narrator only as that sentence, in indirect "
+                "style: prose that tells it in summary is faithful, never an invention, and never "
+                "ask for the turn's own words instead. A correction never quotes a turn's line. "
                 "Premise is context, "
                 "not performed events. Each finding needs an exact prose quote copied from the "
                 "story, or source turn IDs for an omission. Return no findings when the chapter "

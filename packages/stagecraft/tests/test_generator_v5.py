@@ -787,6 +787,17 @@ def test_a_name_is_the_least_typical_acceptable_candidate_and_renames_everywhere
     # 7.18.1: a whole name the author wrote in the prompt is fixed like a brief's cast.
     kept, _ = choose_names(cast, authored_text="Reparto: - Elena Vance (ella), protagonista.")
     assert kept.characters[0].name == "Elena Vance"
+    # 7.20, the Antarctic run: a title is not the first name, and the surname is renamed too.
+    doctor = person(
+        "elena",
+        "Dra. Elena Vargas",
+        [("Dra. Elena Vargas", 1.0), ("Dra. Irene Ruiz", 0.1)],
+        "Elena sospecha; la doctora Vargas no duerme.",
+    )
+    titled, _ = choose_names(CharactersArtifact(characters=[doctor]))
+    assert [(item.id, item.name, item.goal) for item in titled.characters] == [
+        ("irene_ruiz", "Dra. Irene Ruiz", "Irene sospecha; la doctora Ruiz no duerme.")
+    ]
 
 
 def test_scene_cards_reach_the_drafter_and_a_rejected_set_is_repaired(tmp_path) -> None:
@@ -1586,8 +1597,23 @@ def test_analyst_prompt_separates_explicit_constraints_and_inferences() -> None:
         ("Escribe una historia corta de unas 500 palabras con cubanismos.", "essential"),
         ("Escribe un drama familiar en 900 palabras.", "essential"),
         ("Escribe un drama familiar con cubanismos.", "developed"),
+        # 7.20: every length the request states chooses the profile, not only a short one.
+        ("Un drama familiar de unas 3.000 palabras.", "developed"),
+        ("Un drama familiar de seis mil palabras.", "expansive"),
+        ("Notas: Historia extensa, con muchas escenas.", "expansive"),
+        ("Un drama familiar en 2 capítulos.", "essential"),
+        ("Una larga noche en familia.", "developed"),
     ],
-    ids=["short-story", "word-count", "no-length"],
+    ids=[
+        "short-story",
+        "word-count",
+        "no-length",
+        "middle-count",
+        "long-count-in-words",
+        "long-story",
+        "chapters",
+        "size-word-without-story",
+    ],
 )
 def test_a_short_request_is_essential_and_its_style_keeps_the_author_words(raw, profile) -> None:
     """Found in 7.10: "historia corta de unas 500 palabras" came back Developed, 3,052 words."""
@@ -1929,11 +1955,17 @@ def test_forced_profile_outranks_the_prompt_derived_one(tmp_path) -> None:
         provider,
         tmp_path,
         narrative_profile=NarrativeProfile.EXPANSIVE,
-    ).generate(make_request())
+    ).generate("Escribe una historia corta sobre un faro.")
 
     request = json.loads((run.run_dir / "request.json").read_text(encoding="utf-8"))
     assert request["narrative_profile"] == "expansive"
     assert "5 to 7 chapters" in structured_prompt_system(provider, "StoryPlanDraft")
+    # 7.20: the run says the request asked for another profile; the 7.19 islands runs did not.
+    warnings = json.loads((run.run_dir / "metadata.json").read_text(encoding="utf-8"))["warnings"]
+    assert [item for item in warnings if item.startswith("[PROFILE_")] == [
+        "[PROFILE_CONFLICT] La petición pide «historia corta», que corresponde a Esencial, "
+        "pero el run se forzó en Expansiva."
+    ]
 
 
 def test_audio_can_be_skipped_without_touching_the_story(tmp_path, monkeypatch) -> None:

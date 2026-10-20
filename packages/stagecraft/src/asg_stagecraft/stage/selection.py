@@ -215,7 +215,12 @@ def scene_settings(turns: list[StageTurn], scenes: dict[str, ScriptScene]) -> di
 def chapter_places(
     turns: list[StageTurn], scenes: dict[str, ScriptScene], world: WorldArtifact | None
 ) -> list[str]:
-    """Describe the places a chapter happens in, from the world or else from the script."""
+    """Describe the places a chapter happens in, from the script, or by the world's name.
+
+    The script's setting comes first (7.20): it is written in the fiction's language, while the
+    world's descriptions are planned in English, so the 7.17 selection could read "The elevated
+    residential platforms..." in a Spanish chapter.
+    """
     locations = {location.id: location for location in (world.locations if world else [])}
     places: list[str] = []
     for scene_id in _scene_order(turns):
@@ -223,10 +228,20 @@ def chapter_places(
         if scene is None:
             continue
         location = locations.get(scene.location_id or "")
-        place = f"{location.name}: {location.description}" if location else scene.setting
+        place = scene.setting or (location.name if location else "")
         if place and place not in places:
             places.append(place)
     return places
+
+
+def on_stage(turns: list[StageTurn], scenes: dict[str, ScriptScene]) -> list[str]:
+    """Return everyone on stage in the scenes a chapter's turns reach, in order of entrance."""
+    present: list[str] = []
+    for scene_id in _scene_order(turns):
+        for member in scenes[scene_id].cast if scene_id in scenes else []:
+            if member.character_id not in present:
+                present.append(member.character_id)
+    return present
 
 
 def chapter_cast(
@@ -234,17 +249,19 @@ def chapter_cast(
     scenes: dict[str, ScriptScene],
     names: dict[str, str],
     bible: CastBible | None,
+    *,
+    introduced: Collection[str] = (),
 ) -> list[str]:
-    """Name everyone on stage in a chapter, with what anyone can see of them (SIM-5)."""
+    """Name everyone on stage in a chapter, with what anyone can see of them (SIM-5).
+
+    ``introduced`` leaves out whoever an earlier chapter already brought on (7.20): handed the
+    whole cast again, the 7.19 islands narrator described Nilo by his looks in chapter 3.
+    """
     faces = {item.character_id: item.public_face for item in (bible.dossiers if bible else [])}
-    on_stage: list[str] = []
-    for scene_id in _scene_order(turns):
-        for member in scenes[scene_id].cast if scene_id in scenes else []:
-            if member.character_id not in on_stage:
-                on_stage.append(member.character_id)
     return [
         f"{names.get(item, item)}: {faces[item]}" if faces.get(item) else names.get(item, item)
-        for item in on_stage
+        for item in on_stage(turns, scenes)
+        if item not in introduced
     ]
 
 

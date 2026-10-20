@@ -185,6 +185,14 @@ def parser() -> argparse.ArgumentParser:
         help="Lanza el run aunque la cuota que queda hoy no alcance para una historia media",
     )
     result.add_argument(
+        "--prompt-file",
+        type=Path,
+        help=(
+            "Archivo de texto UTF-8 con el prompt. Evita que Windows PowerShell 5.1 rompa las "
+            "tildes al pasar el prompt como argumento"
+        ),
+    )
+    result.add_argument(
         "--brief",
         type=Path,
         help=(
@@ -262,6 +270,8 @@ def read_request(args: argparse.Namespace) -> StoryBrief | str:
         return ""
     if args.brief:
         return StoryBrief.model_validate_json(args.brief.read_text(encoding="utf-8"))
+    if args.prompt_file:
+        return args.prompt_file.read_text(encoding="utf-8-sig").strip()
     return (args.prompt or input("Describe la historia que quieres generar:\n> ")).strip()
 
 
@@ -289,7 +299,7 @@ def request_problem(
 def print_banner(args: argparse.Namespace) -> None:
     """Greet, and show the example prompt only when one is about to be typed in."""
     print("Generador automático de historias — Stagecraft")
-    if not (args.prompt or args.brief or _reuses(args)):
+    if not (args.prompt or args.prompt_file or args.brief or _reuses(args)):
         print("\nEjemplo de prompt ideal:\n")
         print(f"  {EXAMPLE_PROMPT}\n")
 
@@ -318,8 +328,9 @@ def main(argv: list[str] | None = None) -> int:
     use_utf8_output()
     args = parser().parse_args(argv)
     print_banner(args)
-    if (args.brief and args.prompt) or (_reuses(args) and (args.prompt or args.brief)):
-        print("Error: usa un prompt o --brief, no los dos.", file=sys.stderr)
+    given = [item for item in (args.prompt, args.prompt_file, args.brief) if item]
+    if len(given) > 1 or (_reuses(args) and given):
+        print("Error: usa un prompt, --prompt-file o --brief, solo uno.", file=sys.stderr)
         return 2
     try:
         try:

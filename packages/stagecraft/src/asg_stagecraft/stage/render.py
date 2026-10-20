@@ -381,6 +381,9 @@ def scene_log(
     key_ids: frozenset[str] | set[str] = frozenset(),
     short_names: bool = False,
     reported: dict[str, str] | None = None,
+    gestures: dict[str, str] | None = None,
+    retold_thoughts: dict[str, str] | None = None,
+    scene_labels: dict[str, str] | None = None,
 ) -> str:
     """Render one scene's log for the narrator, with or without access to inner life.
 
@@ -394,21 +397,34 @@ def scene_log(
     accepted retelling is left out. World events always count as key: the only one in the
     7.15.2 finale never reached the prose. The editorial review and the metrics still read the
     full turns.
+
+    ``gestures`` and ``retold_thoughts`` (7.20) replace a direction, a world event and a thought
+    with its retelling in the past tense when there is one: the narrator pasted present-tense
+    directions whole into the 7.19 islands run. A thought with no retelling is left out; a
+    direction with none keeps its old line. ``scene_labels`` opens each scene with its setting.
     """
     calls = ShortNames(names) if short_names else None
     lines = []
+    scene = None
     for turn in turns:
+        if scene_labels is not None and turn.scene_id != scene:
+            scene = turn.scene_id
+            if scene_labels.get(scene):
+                lines.append(f"[escena: {scene_labels[scene]}]")
+        retold = (gestures or {}).get(turn.id, "")
         # On its own line for every kind of turn: sharing a line with a world event, the mark
         # was copied into the prose as part of the sentence (7.10).
         key = turn.id in key_ids or turn.kind == "world"
         if key:
             lines.append("[clave]")
         if turn.kind == "world":
-            lines.append(f"({turn.action})")
+            lines.append(f"({retold or turn.action})")
             continue
         # The narrator copies what it reads: with short_names it reads a name as prose would.
         speaker = calls.name(turn.actor_id) if calls else names.get(turn.actor_id, turn.actor_id)
-        if turn.action:
+        if retold:
+            lines.append(retold)
+        elif turn.action:
             lines.append(f"({stage_direction(speaker, turn.action, names)})")
         for move in item_moves(turn):
             # The narrator is told what actually changed hands, so it can dramatize the gap
@@ -416,18 +432,34 @@ def scene_log(
             moved = item_line(move, names, concealed_from=len(move.witnesses) == 1)
             if moved:
                 lines.append(f"{speaker} {moved}")
-        if turn.speech and reported is not None and not key:
-            if reported.get(turn.id):
-                lines.append(reported[turn.id])
-        elif turn.speech:
-            aside = ""
-            if turn.visibility == "whisper":
-                addressed = ", ".join(names.get(item, item) for item in turn.addressed_to)
-                aside = f" [en voz baja a {addressed}]" if addressed else " [en voz baja]"
-            lines.append(f"{speaker}{aside}: {turn.speech}")
-        if thoughts and turn.thought:
-            lines.append(f"[{speaker} piensa: {turn.thought}]")
+        lines.extend(_speech_line(turn, speaker, names, None if key else reported))
+        if thoughts:
+            lines.extend(_thought_line(turn, speaker, retold_thoughts))
     return "\n".join(lines)
+
+
+def _speech_line(
+    turn: StageTurn, speaker: str, names: dict[str, str], reported: dict[str, str] | None
+) -> list[str]:
+    """Render a turn's speech whole, or as its retelling when one is given, or not at all."""
+    if not turn.speech:
+        return []
+    if reported is not None:
+        return [reported[turn.id]] if reported.get(turn.id) else []
+    aside = ""
+    if turn.visibility == "whisper":
+        addressed = ", ".join(names.get(item, item) for item in turn.addressed_to)
+        aside = f" [en voz baja a {addressed}]" if addressed else " [en voz baja]"
+    return [f"{speaker}{aside}: {turn.speech}"]
+
+
+def _thought_line(turn: StageTurn, speaker: str, retold: dict[str, str] | None) -> list[str]:
+    """Render a turn's thought labelled, or as its retelling when thoughts are retold."""
+    if not turn.thought:
+        return []
+    if retold is None:
+        return [f"[{speaker} piensa: {turn.thought}]"]
+    return [retold[turn.id]] if retold.get(turn.id) else []
 
 
 def prop_line(prop: Prop) -> str:

@@ -46,6 +46,18 @@ devuelve ediciones por párrafo que aplica el código, reintenta la nota que no 
 (`NOTE_NOT_APPLIED`) y, si nada pasa, entrega el mejor candidato. El bucle de reintento es uno
 solo. Falta validarlo en real (TD-3). 793 tests en verde.
 
+**7.20.0, 2026-10-19: el narrador deja de pegar el log y la petición se lee entera.** En la
+tanda 7.19 del 19-oct la híbrida entregó sus 3 capítulos como `NARRATION_BEST_ATTEMPT`:
+- el revisor castigaba el estilo indirecto;
+- el narrador pegaba acotaciones en presente;
+- la ficha pegada como prompt perdió su reparto;
+- «Historia extensa» se corrió en Esencial sin aviso.
+
+7.20 arregla todo eso. Detalle en `packages/stagecraft/CHANGELOG.md`.
+- Sobre la misma función (`--narrate-from`), los capítulos aceptados al primer intento pasan de
+  0 de 3 a 3 de 3, y los hallazgos bloqueantes de 10 a 0.
+- `pipeline.py` se divide en mixins (mitad de ING-3).
+
 **Estado medido el 2026-10-09 con `asg-stagecraft` 7.9.0 (pipeline 7.9).** Un solo generador,
 Stagecraft, con tres formatos: `narrative`, `script` y `simulated`. La función simulada puede
 llevar inventario de objetos, la guía narrativa tiene una estrategia experimental
@@ -410,6 +422,11 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   recibe el giro antes de su tope.
 - **Ojo.** Medir cuántos capítulos salen como `NARRATION_BEST_ATTEMPT`: si son muchos, el
   revisor sigue marcando como contradicción lo que no lo es, y hay que mirar sus códigos.
+- **Medido en 7.19 y arreglado en 7.20.**
+  - En `20261019-023436` fueron 3 de 3. De los 10 hallazgos bloqueantes, 7 llamaban invención
+    al estilo indirecto.
+  - El revisor ve ahora `retold_as`, y el código descarta lo que está en el log.
+  - La renarración 7.20 (`20261019-133532`) dio 3 de 3 aceptados al primer intento.
 
 ### TD-9 · El plan no cumple el brief
 
@@ -433,6 +450,11 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   tripulación y una decisión final con pérdida, y el crítico rechaza un plan sin ellos.
 - **Implementado en 7.14** (`brief.authored_plot_block` llega al planificador y al crítico);
   falta medirlo en real.
+- **7.20.** Una ficha pegada como prompt libre se lee como `--brief`
+  (`StoryBrief.from_prompt`).
+  - Los runs 7.19 de las islas la habían pegado así, y no recibieron ni el reparto ni la trama
+    como canon.
+  - «Historia extensa» elige ya Expansiva.
 - **Ruido sin medir.** Beats forzados del mismo brief Esencial: 1/6 (7.14), 2/5 (7.15) y 4/6
   (7.15.1). Con un run por versión no se puede atribuir la diferencia a un cambio: hace falta
   medir 2 o 3 runs por versión.
@@ -472,6 +494,12 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
 - **Qué hacer.**
   - Pedir al narrador que funda varias réplicas indirectas en una frase, o que las corte.
   - Medir `TAGGED` también por debajo de 8 líneas.
+- **7.20 no lo cierra.**
+  - El camino `reported` ya no pega acotaciones ni réplicas dobladas.
+  - Pero en `20261019-133532` siguen los párrafos de acta («exigió…, advirtió…, declaró…») y los
+    epítetos en lugar del nombre («la alada», «el mecánico»).
+  - El brazo `selected` (`20261019-131241`) añade otro defecto: «Pensaba: …» en primera persona
+    tras casi cada réplica.
 - **Respuesta en 7.17.** El brazo `narration_method=selected` (el narrador escribe desde momentos
   elegidos, nunca desde el log), más el editor por fragmentos. Se mide en SIM-25.
 - **Hecho cuando.** En un par nuevo, `dialogue_survival` sigue por debajo de 0,6, ningún
@@ -1559,6 +1587,13 @@ EXP-7
     reservado y su propia severidad.
   - Al final, convertir las etapas en clases con estado propio, que es lo que elimina los asserts.
   - No hacerlo de paso dentro de otro cambio.
+- **Hecho en 7.20.**
+  - `pipeline.py` baja de 1.880 a 723 líneas. Las etapas pasan a mixins: `planning/stages.py`,
+    `writing/stages.py` y `stage/narration_stage.py`. El progreso y el uso van a
+    `runtime/reporting.py`.
+  - Un run narrativo y otro simulado con dobles dan los mismos artefactos, byte a byte.
+  - Falta lo que de verdad pide el «Hecho cuando»: etapas con estado propio y test propio, sin
+    asserts.
 - **Hecho cuando.**
   - Plan, borrador, revisión y función son unidades con test propio.
   - El estado deja de pasarse como parámetros posicionales.

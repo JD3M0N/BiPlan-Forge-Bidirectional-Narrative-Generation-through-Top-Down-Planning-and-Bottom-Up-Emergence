@@ -15,11 +15,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+from asg_core.craft import split_sentences
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..schemas import RevisionNote
 from .acceptance import STAGING_CATEGORIES, text_similarity
 from .line_edit import chapter_blocks, paragraph_index
+
+# An inserted sentence this close, word for word, to one of the paragraphs it sits between repeats
+# it (7.20). In 20261018-124059 the Writer inserted the judge's line again at 0.93; the other
+# insertions of the corpus reach 0.21 at most.
+DUPLICATE_SENTENCE = 0.6
 
 
 class ParagraphEdit(BaseModel):
@@ -100,7 +106,19 @@ def check_paragraph_edit(
             return "the paragraph is already replaced"
     elif not any(notes[note_id].category in STAGING_CATEGORIES for note_id in edit.note_ids):
         return "insert_after is only for notes that ask for a beat to be staged"
+    elif _repeats_neighbour(text, blocks[index : index + 2]):
+        return "insert_after repeats a sentence of the paragraphs around it"
     return ""
+
+
+def _repeats_neighbour(text: str, neighbours: list[str]) -> bool:
+    """Say whether an inserted text says again a sentence the paragraphs around it already say."""
+    near = [sentence for block in neighbours for sentence in split_sentences(block)]
+    return any(
+        text_similarity(sentence, other) >= DUPLICATE_SENTENCE
+        for sentence in split_sentences(text)
+        for other in near
+    )
 
 
 def apply_chapter_edits(

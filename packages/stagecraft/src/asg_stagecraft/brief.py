@@ -64,6 +64,50 @@ def _closed(text: str) -> str:
     return text if text[-1:] in ".!?…" else f"{text}."
 
 
+def _opened(text: str) -> str:
+    """Drop the one full stop _closed would add back, keeping an ellipsis whole."""
+    return text[:-1] if text.endswith(".") and not text.endswith("..") else text
+
+
+_BRIEF_HEADER = "Escribe una historia a partir de esta ficha."
+_CAST_HEADER = "Reparto ("
+_ONE_LINE_LABELS = {"Título provisional": "title", "Género": "genre", "Ambientación": "setting"}
+_BLOCK_LABELS = {"Trama": "plot", "Notas": "notes"}
+_PRONOUNS = {"ella", "él", "elle"}
+_ROLES = {"protagonista", "antagonista", "aliado", "secundario"}
+
+
+def _cast_member(line: str) -> CastMember | None:
+    """Read one cast line of a composed brief back into the member it describes."""
+    head, _, secret = line.partition(" Secreto: ")
+    name, _, description = head.partition(": ")
+    if not description:
+        name = _opened(name)
+    role = ""
+    name, comma, maybe_role = name.rpartition(", ")
+    if not comma:
+        name = maybe_role
+    elif maybe_role in _ROLES:
+        role = maybe_role
+    else:
+        name = f"{name}, {maybe_role}"
+    pronoun = ""
+    if name.endswith(")") and " (" in name:
+        bare, _, inside = name[:-1].rpartition(" (")
+        if inside in _PRONOUNS:
+            name, pronoun = bare, inside
+    try:
+        return CastMember(
+            name=name,
+            role=role,
+            pronoun=pronoun,
+            description=_opened(description),
+            secret=_opened(secret),
+        )
+    except ValueError:
+        return None
+
+
 class CastMember(BaseModel):
     """One character the author declares, by the name the story must keep."""
 
@@ -142,9 +186,47 @@ class StoryBrief(BaseModel):
             seen.add(key)
         return self
 
+    @classmethod
+    def from_prompt(cls, prompt: str) -> StoryBrief | None:
+        """Read back a brief from the prompt to_prompt composes, or None for any other prompt.
+
+        Added in 7.20. The 7.19 islands runs pasted a composed brief as a free prompt, so the
+        author's cast and plot never reached the agents as canon: the cabin boy came back a
+        carpenter, the cook a surgeon, and every secret was gone.
+        """
+        lines = [line.rstrip() for line in prompt.strip().splitlines()]
+        if not lines or lines[0].strip() != _BRIEF_HEADER:
+            return None
+        fields: dict[str, object] = {}
+        cast: list[CastMember] = []
+        current = ""
+        for line in lines[1:]:
+            label, _, value = line.partition(": ")
+            if label in _ONE_LINE_LABELS and value:
+                fields[_ONE_LINE_LABELS[label]] = _opened(value.strip())
+                current = ""
+            elif label in _BLOCK_LABELS:
+                current = _BLOCK_LABELS[label]
+                fields[current] = value
+            elif line.startswith(_CAST_HEADER):
+                current = "cast"
+            elif current == "cast" and line.startswith("- "):
+                member = _cast_member(line[2:])
+                if member is None:
+                    return None
+                cast.append(member)
+            elif current in _BLOCK_LABELS.values():
+                fields[current] = f"{fields[current]}\n{line}"
+        if not fields.get("plot"):
+            return None
+        try:
+            return cls.model_validate({**fields, "cast": cast})
+        except ValueError:
+            return None
+
     def to_prompt(self) -> str:
         """Compose the Spanish prompt this brief stands for, the same one every time."""
-        lines = ["Escribe una historia a partir de esta ficha."]
+        lines = [_BRIEF_HEADER]
         if self.title:
             lines.append(f"Título provisional: {_closed(self.title)}")
         if self.genre:
@@ -153,7 +235,9 @@ class StoryBrief(BaseModel):
             lines.append(f"Ambientación: {_closed(self.setting)}")
         lines.append(f"Trama: {self.plot}")
         if self.cast:
-            lines.append("Reparto (usa exactamente estos nombres, sin traducirlos ni cambiarlos):")
+            lines.append(
+                f"{_CAST_HEADER}usa exactamente estos nombres, sin traducirlos ni cambiarlos):"
+            )
             lines.extend(f"- {member.prompt_line()}" for member in self.cast)
         if self.notes:
             lines.append(f"Notas: {self.notes}")
