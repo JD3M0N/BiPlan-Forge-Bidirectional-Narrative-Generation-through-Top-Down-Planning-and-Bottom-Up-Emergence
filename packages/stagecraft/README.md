@@ -22,6 +22,29 @@ Analyst → Architect → World → Characters → Plot Planner → Plan Critic 
 Los prompts y los artefactos internos van en inglés. El idioma de la ficción empieza cuando se
 localizan los títulos y se escribe el primer capítulo, el primer acto o la primera réplica.
 
+## Contexto y continuidad
+
+Desde 7.21, ambos enfoques presentan brevemente personajes y lugares y revisan los cambios de
+ubicación. El registro del lector conserva citas de la prosa aceptada: aparecer en el reparto
+no equivale a haber sido presentado. Menciones incidentales y traslados evidentes no necesitan
+explicación adicional.
+
+El híbrido utiliza el segundo intento de narración para corregir estas observaciones.
+`narration/chapter-NNN-reader-state.json` y `-reader-review.json` guardan las evidencias finales.
+Una edición de estilo que elimine contexto comprobado se revierte. Antes de aceptar una acción,
+el control espacial comprueba su compatibilidad con el escenario y guarda el dictamen en
+`stage/spatial_reviews.jsonl`; los rechazos citados usan `SPATIAL_CONTINUITY`.
+
+Top-Down guarda `reader_context/draft-chapter-NNN-*` y `final-chapter-NNN-*`. Audita cada capítulo
+al redactarlo y después de editarlo; permite una reparación localizada que solo acepta si la
+revisión confirma fidelidad y menos problemas. Añade dos revisiones por capítulo y, cuando hace
+falta reparar, una llamada de edición y otra de verificación. El híbrido añade una revisión por
+acción propuesta; solo repite la revisión final si cambió el texto o no había revisión disponible.
+
+`READER_CONTEXT_UNRESOLVED` indica observaciones pendientes; `READER_CONTEXT_UNAVAILABLE`, una
+comprobación no disponible. No se inventan viajes para resolver contradicciones originales.
+Los artefactos anteriores siguen siendo legibles y las historias guardadas no se modifican.
+
 ## Uso
 
 ```python
@@ -48,7 +71,7 @@ pipeline soportada (`SUPPORTED_PIPELINE_VERSIONS`: de 5.0 a 7.5).
 
 El resto de opciones de la fachada (`narrative_profile`, `promise_ledger`, `audio`,
 `script_method`, `narrative_voice`, `actor_memory`, `turns_per_beat`) tienen su opción en
-`asg-generate` o su variable `ASG_*` en `.env.example`; ver `asg-help`.
+`asg-generate` o su variable `ASG_*` en `.env.example`; ver `asg help`.
 
 ## Plan y garantías
 

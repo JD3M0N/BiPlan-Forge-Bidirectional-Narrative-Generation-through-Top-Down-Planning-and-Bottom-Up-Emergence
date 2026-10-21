@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Replaced `asg-help` with the root command `asg help`, which lists every installed project
+  command without changing their independent entry points.
+
 ## [0.7.0] - 2026-10-09
 
 - Added `format_progress` and its `Progress` protocol: the one progress bar the Stagecraft CLI,

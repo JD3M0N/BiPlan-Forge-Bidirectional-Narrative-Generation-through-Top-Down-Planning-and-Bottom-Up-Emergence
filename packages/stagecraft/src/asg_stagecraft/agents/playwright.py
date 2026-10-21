@@ -13,6 +13,7 @@ from ..schemas import (
     StoryRequest,
     WorldArtifact,
 )
+from ..writing.orientation import SPATIAL_RULES
 from .base import Agent, json_text, story_specification_header
 
 STAGING_RULES = (
@@ -23,7 +24,7 @@ STAGING_RULES = (
     "may appear only inside a stage direction, never in the cast. A stage direction shows only "
     "what an audience can see or hear on stage: no thoughts, no backstory, no narrator's "
     "commentary. Never expose internal IDs or planning terminology in any text a reader would "
-    "see."
+    "see." + SPATIAL_RULES
 )
 
 

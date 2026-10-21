@@ -16,5 +16,5 @@ En el archivo `.env` pon tu `GEMINI_API_KEY` y el `TELEGRAM_BOT_TOKEN` de tu bot
 
 ```powershell
 asg-telegram   # inicializa el bot de telegram
-asg-help       # muestra todos los comandos
+asg help       # muestra todos los comandos
 ```

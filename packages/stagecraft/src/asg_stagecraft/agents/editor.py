@@ -29,7 +29,8 @@ class LineEditorAgent(Agent[LineEdits]):
                 "the paragraph it replaces. 'before' is the paragraph that comes first, given "
                 "only so you can tell who is speaking: never return it. Return one entry per "
                 "paragraph you improve, with its id exactly as given, and leave out any you "
-                "cannot improve without breaking these rules."
+                "cannot improve without breaking these rules. Preserve character introductions, "
+                "spatial descriptions and transition cues; shortening must not erase them."
                 f"{style_clause(request, examples=style_examples)}"
             ),
             prompt=json_text({"paragraphs": paragraphs}),

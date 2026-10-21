@@ -12,6 +12,7 @@ from ..schemas import (
     WorldArtifact,
 )
 from ..writing.chapter_edits import ParagraphEdits, edit_request
+from ..writing.orientation import ORIENTATION_RULES
 from .base import Agent, json_text, story_specification_header
 from .style import style_clause
 
@@ -21,7 +22,7 @@ SCENE_CARD_CLAUSE = (
     "open where the card places it, let each character go after what they want, make the first "
     "attempt fail on the obstacle, land the turn, use the sensory detail once, leave what is "
     "unsaid unsaid, and end the scene on its closing. Move between scenes with one sentence of "
-    "place or time, never with a summary of what happened in between."
+    "place or time; briefly summarize an established transfer when needed for orientation."
 )
 
 
@@ -62,6 +63,7 @@ class DrafterAgent(Agent[str]):
         *,
         style_examples: bool = False,
         scene_cards: list[SceneCard] | None = None,
+        reader_context: dict | None = None,
     ) -> str:
         """Draft one fiction chapter from its validated event context.
 
@@ -103,11 +105,12 @@ class DrafterAgent(Agent[str]):
                 "what is said, so the reader is left expecting, or satisfied, without ever being "
                 "told so. Do not expose internal IDs or planning terminology."
                 + (SCENE_CARD_CLAUSE if scene_cards else "")
-                + f"{style_clause(request, examples=style_examples)}"
+                + f"{ORIENTATION_RULES}{style_clause(request, examples=style_examples)}"
             ),
             prompt=(
                 f"{story_specification_header(request)}"
                 f"\n\nWORLD:\n{json_text(world)}"
+                f"\n\nREADER CONTEXT:\n{json_text(reader_context or {})}"
                 f"\n\nRELEVANT CHARACTERS:\n{json_text(characters)}"
                 f"\n\nGLOBAL PLAN:\n{json_text(plan_context)}"
                 f"\n\nLOCALIZED PRESENTATION:\n{json_text(presentation)}"
@@ -166,7 +169,7 @@ class WriterAgent(Agent[ParagraphEdits]):
                 "PROMISE OBLIGATIONS are supplied, the edited chapter must still deliver every one "
                 "of them inside the event it names: never drop an expectation the draft already "
                 "planted."
-                f"{style_clause(request, examples=style_examples)}"
+                f"{ORIENTATION_RULES}{style_clause(request, examples=style_examples)}"
             ),
             prompt=(
                 f"{story_specification_header(request)}"

@@ -22,6 +22,7 @@ from ..agents import (
     PropMasterAgent,
     StageManagerAgent,
 )
+from ..agents.orientation import OrientationAgent
 from ..agents.promise_auditor import PromiseStoryAuditorAgent
 from ..brief import authored_cast_block
 from ..formats import SimulationMode
@@ -306,6 +307,22 @@ class SimulationStagesMixin(NarrationStageMixin):
 
     # -- the performance -----------------------------------------------------------------
 
+    def _review_space(self, stage_call, decision_id, context, action):
+        """Persist the grounded spatial verdict for one proposed actor action."""
+        review = stage_call(
+            "spatial_review", lambda: OrientationAgent(self.provider).review_space(context, action)
+        )
+        self.repository.append_jsonl(
+            "stage/spatial_reviews.jsonl",
+            {
+                "decision_id": decision_id,
+                "context": context,
+                "action": action,
+                "review": review.model_dump(mode="json"),
+            },
+        )
+        return review
+
     def _perform_play(
         self,
         request: StoryRequest,
@@ -362,6 +379,9 @@ class SimulationStagesMixin(NarrationStageMixin):
                 return self._call_agent(name, function)
 
         engine = PerformanceEngine(
+            review_space=lambda context, action: self._review_space(
+                stage_call, active_decision["id"], context, action
+            ),
             take_turn=lambda system, context, feedback: stage_call(
                 "actor",
                 lambda: actor.run(system, context, feedback, items=inventory is not None),

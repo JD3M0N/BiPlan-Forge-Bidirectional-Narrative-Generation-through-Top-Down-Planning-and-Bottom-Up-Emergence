@@ -188,6 +188,7 @@ class PerformanceEngine:
         language: str,
         knowledge_gates: list[KnowledgeGate] | None = None,
         review_world: Callable[[str], WorldEventAssessment] | None = None,
+        review_space: Callable | None = None,
         constraints: str = "",
         actor_memory: ActorMemory = ActorMemory.OWN,
         simulation_mode: SimulationMode = SimulationMode.FIXED,
@@ -217,6 +218,8 @@ class PerformanceEngine:
         self.gate_facts = gate_facts
         self.knowledge_gates = knowledge_gates or []
         self.review_world = review_world
+        self.review_space = review_space
+        self._spatial_warning = False
         self.constraints = constraints
         self.gate_witnesses = {gate.id: set(gate.known_by) for gate in self.knowledge_gates}
         self.narrative_outcome = "open"
@@ -729,6 +732,7 @@ class PerformanceEngine:
                     play_actions=previous_actions if attempt == 1 else None,
                     scene_tactics=scene_tactics if attempt == 1 else None,
                 )
+                self._check_space(candidate, scene, witnessed)
                 candidate, dropped = settle_state_evidence(candidate)
                 repairs = [*repairs, *dropped]
                 moves = self._arbitrate(candidate, actor_id, scene, on_stage)
@@ -877,6 +881,39 @@ class PerformanceEngine:
                 or "world event resolves the conflict or violates established circumstances"
             )
         return ""
+
+    def _check_space(self, candidate, scene, witnessed) -> None:
+        """Reject cited spatial contradictions before a proposed action enters history."""
+        if self.review_space is None or not candidate.action:
+            return
+        # Only observable action in this scene reaches the guard, never private memories.
+        context = (
+            "CURRENT SETTING: "
+            + scene.setting
+            + "\nESTABLISHED ACTION:\n"
+            + "\n".join(turn.action for turn in witnessed if turn.action)
+        )
+        try:
+            review = self.review_space(context, candidate.action)
+        except NON_DEGRADABLE_ERRORS:
+            raise
+        except Exception:
+            if not self._spatial_warning:
+                self.warnings.append(
+                    "[SPATIAL_REVIEW_UNAVAILABLE] Spatial action review unavailable"
+                )
+                if self.on_event:
+                    self.on_event("spatial_review_unavailable", "Spatial action review unavailable")
+            self._spatial_warning = True
+            return
+        if (
+            review.action_quote.strip()
+            and review.context_quote.strip()
+            and review.action_quote in candidate.action
+            and review.context_quote in context
+            and review.correction.strip()
+        ):
+            raise TurnIssue("SPATIAL_CONTINUITY", review.correction)
 
     def _stage_event_turn(
         self, run: _SceneRun, beat_index: int, beat: BeatBrief, text: str

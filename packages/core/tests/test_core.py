@@ -328,11 +328,11 @@ def test_threads_take_the_lock_one_at_a_time(tmp_path):
     assert not (tmp_path / "evaluation.json.lock").exists()
 
 
-def test_asg_help_lists_exactly_the_published_commands():
+def test_asg_help_lists_exactly_the_published_commands(capsys):
     import re
     from pathlib import Path
 
-    from asg_core.help import COMMANDS
+    from asg_core.help import COMMANDS, main
 
     root = Path(__file__).resolve().parents[3]
     published = set()
@@ -344,5 +344,18 @@ def test_asg_help_lists_exactly_the_published_commands():
             else ""
         )
         published |= set(re.findall(r"^([\w-]+)\s*=", section, re.M))
-    assert {name for name, _ in COMMANDS} == published
-    assert all(name.startswith("asg-") for name in published)
+    displayed = {name for name, _ in COMMANDS}
+    assert displayed == {"asg help" if name == "asg" else name for name in published}
+    assert "asg-help" not in published
+    assert main(["help"]) == 0
+    output = capsys.readouterr().out
+    assert all(name in output for name in displayed)
+    assert "Añade --help" in output
+
+
+def test_asg_rejects_unknown_subcommands():
+    from asg_core.help import main
+
+    with pytest.raises(SystemExit) as error:
+        main(["desconocido"])
+    assert error.value.code == 2

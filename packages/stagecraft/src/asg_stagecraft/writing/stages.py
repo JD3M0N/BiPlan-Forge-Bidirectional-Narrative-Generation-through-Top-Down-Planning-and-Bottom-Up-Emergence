@@ -14,6 +14,7 @@ from ..agents import (
     WriterAgent,
 )
 from ..agents.editor import LineEditorAgent
+from ..agents.orientation import OrientationAgent
 from ..agents.scene_cards import SceneCardAgent
 from ..agents.style import STYLE_EXAMPLES
 from ..planning.graph import relevant_prior_events
@@ -45,12 +46,13 @@ from .acceptance import (
     writer_edit_issue,
     writer_fallback_warning,
 )
-from .anchoring import anchor_review
+from .anchoring import anchor_review, quoted
 from .assembly import assemble_story
 from .audit import story_metrics, word_count
 from .chapter_edits import ParagraphEdits, apply_chapter_edits
 from .craft_evidence import character_names, craft_evidence, craft_notes, known_names
 from .line_edit import edit_chapter
+from .orientation import ReaderState, narrative_context
 from .revision_loop import Judgement, revise_with_retries
 
 # The Writer's attempts per chapter: the first, and one retry with the correction.
@@ -86,6 +88,7 @@ class WritingStagesMixin:
         self.repository.save_json("draft_presentation.json", presentation)
         event_by_id = {item.id: item for item in plan.events}
         bodies: list[str] = []
+        reader = ReaderState()
         for index, chapter in enumerate(plan.chapters, 1):
             self._notify_draft_chapter(index, len(plan.chapters))
             events = [
@@ -97,6 +100,7 @@ class WritingStagesMixin:
             character_ids = {item for event in events for item in event.character_ids}
             relevant = [item for item in characters.characters if item.id in character_ids]
             scenes = chapter_cards(cards, plan, chapter.id)
+            context = narrative_context(characters, world, events, reader)
 
             def draft_chapter(
                 character_snapshot=relevant or characters.characters,
@@ -106,6 +110,7 @@ class WritingStagesMixin:
                 previous_body: str = bodies[-1] if bodies else "",
                 brief: str = self._promise_brief(ledger, chapter.id),
                 scenes=scenes,
+                context=context,
             ):
                 """Draft one chapter with loop values bound to this iteration."""
                 return drafter.run(
@@ -121,9 +126,13 @@ class WritingStagesMixin:
                     brief,
                     style_examples=self.options.style_examples,
                     scene_cards=scenes,
+                    reader_context=context,
                 )
 
             body = self._call_agent("drafter", draft_chapter).strip()
+            body = self._orient_chapter(
+                request, body, context, reader, index, "draft", repair=False
+            )
             self.repository.save_text(f"chapters/chapter-{index:03d}.md", body)
             bodies.append(body)
         self.repository.complete_stage("drafting")
@@ -262,7 +271,7 @@ class WritingStagesMixin:
             )
             self.repository.add_warning(warning)
             self._emit("quality_fallback", warning, stage=self.progress["stage"])
-            return self._line_edited(request, characters, world, draft_bodies)
+            return self._line_edited(request, characters, world, draft_bodies, plan)
         # review.json keeps what the critic said; the Writer also gets what was measured.
         measured = review.model_copy(update={"notes": [*review.notes, *craft_notes(evidence)]})
         revised = self._revise_chapters(
@@ -274,7 +283,7 @@ class WritingStagesMixin:
             measured,
             ledger,
         )
-        return self._line_edited(request, characters, world, revised)
+        return self._line_edited(request, characters, world, revised, plan)
 
     def _line_edited(
         self,
@@ -282,12 +291,61 @@ class WritingStagesMixin:
         characters: CharactersArtifact,
         world: WorldArtifact | None,
         bodies: list[str],
+        plan: StoryPlan | None = None,
     ) -> list[str]:
         """Run the line editor over every finished chapter when the run asks for it (7.17)."""
-        return [
-            self._line_edit_chapter(request, characters, world, index, body)
-            for index, body in enumerate(bodies, 1)
-        ]
+        reader = ReaderState()
+        final = []
+        for index, body in enumerate(bodies, 1):
+            body = self._line_edit_chapter(request, characters, world, index, body)
+            events = (
+                [event for event in plan.events if event.chapter_id == plan.chapters[index - 1].id]
+                if plan
+                else []
+            )
+            context = narrative_context(characters, world, events, reader)
+            body = self._orient_chapter(request, body, context, reader, index, "final")
+            final.append(body)
+        return final
+
+    def _orient_chapter(self, request, body, context, reader, index, phase, *, repair=True):
+        """Audit final prose and allow one verified paragraph repair before recording memory."""
+        assert self.repository is not None
+        agent = OrientationAgent(self.provider)
+        prefix = f"reader_context/{phase}-chapter-{index:03d}"
+        try:
+            review = self._call_agent(
+                "reader_orientation", lambda: agent.review(request, body, context)
+            )
+            self.repository.save_json(f"{prefix}-review.json", review)
+            notes = [note for note in review.notes if quoted(note.evidence, body)]
+            if repair and notes:
+                original = body
+                edits = self._call_agent(
+                    "reader_orientation", lambda: agent.repair(request, original, context, notes)
+                )
+                edited = apply_chapter_edits(original, notes, edits)
+                self.repository.save_data(f"{prefix}-edits.json", edited.as_record())
+                if edited.accepted:
+                    checked = self._call_agent(
+                        "reader_orientation",
+                        lambda: agent.review(request, edited.body, context, original),
+                    )
+                    self.repository.save_json(f"{prefix}-repair-review.json", checked)
+                    remaining = [n for n in checked.notes if quoted(n.evidence, edited.body)]
+                    if checked.faithful and len(remaining) < len(notes):
+                        body, review, notes = edited.body, checked, remaining
+            if repair and notes:
+                self.repository.add_warning(f"[READER_CONTEXT_UNRESOLVED] Chapter {index}")
+            reader.accept(review.reader_evidence, body, context, index)
+        except NON_DEGRADABLE_ERRORS:
+            raise
+        except Exception as exc:
+            self.repository.add_warning(
+                f"[READER_CONTEXT_UNAVAILABLE] Chapter {index}: {type(exc).__name__}"
+            )
+        self.repository.save_data(f"{prefix}-state.json", reader.as_record())
+        return body
 
     def _line_edit_chapter(
         self,
@@ -450,7 +508,7 @@ class WritingStagesMixin:
                     events,
                     notes,
                     draft_body,
-                    revised_bodies[-1] if revised_bodies else "",
+                    "\n\n".join(revised_bodies),
                     index,
                     self._promise_brief(ledger, chapter.id),
                 )

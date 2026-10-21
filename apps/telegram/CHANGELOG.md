@@ -1,5 +1,10 @@
 # Historial de cambios
 
+## Sin publicar
+
+- Si falta `story.mp3` o Telegram no consigue subirlo, el bot entrega igualmente el archivo y
+  el texto de la historia y avisa de forma explícita que el audio no está disponible.
+
 ## [6.0.0] - 2026-10-19
 
 Pensado para ponerlo en marcha en la PC del investigador y empezar a evaluar ya, antes de tener

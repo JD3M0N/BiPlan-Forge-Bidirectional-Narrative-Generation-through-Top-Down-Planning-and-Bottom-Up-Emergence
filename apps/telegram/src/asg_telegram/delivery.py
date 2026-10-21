@@ -16,6 +16,7 @@ LOGGER = logging.getLogger(__name__)
 RETRY_DELAYS = (1, 2, 4)
 CHUNK_LIMIT = 3900
 HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$")
+AUDIO_WARNING = "⚠️ La historia está lista, pero no se pudo crear o enviar su audio."
 
 
 async def send_retrying(send, what: str) -> bool:
@@ -88,15 +89,21 @@ async def send_story(
         ),
         f"el archivo de {name}",
     )
+    audio_sent = False
     audio = story.with_name("story.mp3")
     if audio.is_file():
-        await send_retrying(
+        audio_sent = await send_retrying(
             lambda: bot.send_audio(
                 chat_id=chat_id,
                 audio=InputFile(audio.read_bytes(), filename=f"{name}.mp3"),
                 title=name,
             ),
             f"el audio de {name}",
+        )
+    if not audio_sent:
+        await send_retrying(
+            lambda: bot.send_message(chat_id=chat_id, text=AUDIO_WARNING),
+            f"el aviso de audio de {name}",
         )
     chunks = story_chunks(text)
     for index, chunk in enumerate(chunks):

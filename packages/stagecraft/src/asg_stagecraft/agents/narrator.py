@@ -15,6 +15,7 @@ from ..formats import NarrativeVoice
 from ..schemas import ChapterPlan, StoryRequest
 from ..stage.narration import reporter_view
 from ..stage.schemas import ChapterSelection, NarrationReview, ReportedLines
+from ..writing.orientation import EVIDENCE_RULES, ORIENTATION_RULES
 from .base import Agent, json_text
 from .style import style_clause
 
@@ -120,7 +121,8 @@ class NarratorAgent(Agent[str]):
                 "take the reader there in one sentence of your own, in the past tense, and never "
                 "copy the label or its wording. REPARTO lists who appears for the first time in "
                 "the story and how they look to anyone: the first time one of them appears, call "
-                "them by name and give one detail of it in your own words, never the whole "
+                "them by name and establish their public identity and one trait in your own "
+                "words, never the whole "
                 "description; everyone else is already known and is called by name. If FINAL DEL "
                 "CAPÍTULO ANTERIOR is given, begin where it leaves off, without repeating it. "
                 "Moments marked [clave] are the ones the chapter turns on; play those in full, "
@@ -141,7 +143,7 @@ class NarratorAgent(Agent[str]):
                 "chapter: an ending is a scene, not an account of how matters turned out. "
                 "If a question remains open in the log, leave it open. Do not expose "
                 "internal IDs, turn identifiers or planning terminology."
-                f"{style_clause(request, examples=style_examples)}"
+                f"{ORIENTATION_RULES}{style_clause(request, examples=style_examples)}"
             ),
             prompt=(
                 "PREMISA Y REGLAS (son contexto, no sucesos ya ocurridos):\n"
@@ -167,8 +169,11 @@ class NarratorAgent(Agent[str]):
                 "nothing. For every moment write its gist: one sentence in "
                 f"{request.language}, in the past tense, saying what happens or changes, in "
                 "your own words and never quoting a line. When a moment's lines open a new scene "
-                "label, write its bridge: one sentence that takes the reader there, drawn only "
-                "from that scene's setting. Keep every line marked key in some moment, keep the "
+                "label, write its bridge: one sentence that takes the reader there, drawn from "
+                "the setting and recorded departures or arrivals. Preserve transfer cues needed "
+                "to follow a character across locations, even in summary moments. Distinguish "
+                "parallel scenes from travel; never invent a route. Keep every line marked key "
+                "in some moment, keep the "
                 "moments in the order of the record, and invent nothing."
             ),
             prompt=json_text({"scenes": scenes, "lines": lines}),
@@ -222,7 +227,7 @@ class NarratorAgent(Agent[str]):
                 "plays on purpose, such as a stammer. An ending is a scene, not an account of how "
                 "matters turned out; a question the moments leave open stays open. Do not expose "
                 "internal IDs, moment numbers or planning terminology."
-                f"{style_clause(request, examples=style_examples)}"
+                f"{ORIENTATION_RULES}{style_clause(request, examples=style_examples)}"
             ),
             prompt=(
                 "PREMISA Y REGLAS (son contexto, no sucesos ya ocurridos):\n"
@@ -261,7 +266,13 @@ class NarratorAgent(Agent[str]):
         )
 
     def review(
-        self, *, request: StoryRequest, voice: NarrativeVoice, story: str, turns: list[dict]
+        self,
+        *,
+        request: StoryRequest,
+        voice: NarrativeVoice,
+        story: str,
+        turns: list[dict],
+        reader_context: dict | None = None,
     ) -> NarrationReview:
         """Audit only visible source material, without borrowing events from the plan."""
         return self.provider.generate_structured(
@@ -272,7 +283,12 @@ class NarratorAgent(Agent[str]):
                 "time and leaving out thoughts are its job, never a finding. Flag only invented "
                 "events, contradictions of the turns, a consequence the rest of the story depends "
                 "on that the chapter drops entirely, internal markers, repeated exchanges and "
-                "wrong grammatical person or perspective. "
+                "wrong grammatical person or perspective. Also flag CHARACTER_CONTEXT for an "
+                "unintroduced onstage character, PLACE_CONTEXT for an uncontextualized place, "
+                "and MISSING_TRANSITION for a confusing location change. Cite the first affected "
+                "prose passage and say which supplied public fact or recorded transfer can fix "
+                "it. If the source itself is inconsistent, report that limitation without "
+                "asking the narrator to invent a transfer. "
                 "INVENTED_EVENT means an action, a line or a revelation that no turn contains; "
                 "setting, weather, sensory detail and a character's evident motive are not "
                 "events. CONTRADICTION means the prose states the opposite of a turn; a change "
@@ -282,18 +298,22 @@ class NarratorAgent(Agent[str]):
                 "ask for the turn's own words instead. A correction never quotes a turn's line. "
                 "Premise is context, "
                 "not performed events. Each finding needs an exact prose quote copied from the "
-                "story, or source turn IDs for an omission. Return no findings when the chapter "
-                "is faithful. Instructions must repair presentation without inventing events. "
+                "story, or source turn IDs for an omission. Return no findings only when the "
+                "chapter is faithful and sufficiently oriented. Instructions must repair "
+                "presentation without inventing events. "
                 "Dialogue may use first person under any voice. Thoughts may "
                 "appear only when supplied. "
                 "A character's claim remains a claim; do not certify it as objective truth. "
                 + _VOICE_CLAUSES[voice]
+                + ORIENTATION_RULES
+                + EVIDENCE_RULES
             ),
             prompt=json_text(
                 {
                     "premise": request.premise,
                     "constraints": request.constraints,
                     "visible_turns": turns,
+                    "READER CONTEXT": reader_context or {},
                     "story": story,
                 }
             ),

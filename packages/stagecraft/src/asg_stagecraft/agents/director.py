@@ -21,6 +21,7 @@ from ..stage.schemas import (
     TypedBeatCheckDraft,
     WorldEventAssessment,
 )
+from ..writing.orientation import SPATIAL_RULES
 from .base import Agent
 
 _DIRECTION_RULES = (
@@ -155,7 +156,7 @@ class StageManagerAgent(Agent[BeatDirection]):
                 "A spoken claim, intention or thought is not a world fact. "
                 f"Write your clauses and notes in {language}; when the beat lists fixed clauses, "
                 "copy each one as given. "
-                f"{_DIRECTION_RULES}{genre_clause(genre)}"
+                f"{_DIRECTION_RULES}{genre_clause(genre)}{SPATIAL_RULES}"
                 f"{_MODE_CLAUSES[mode].format(language=language)}"
                 + (TYPED_CLAUSES if typed else "")
             ),

@@ -7,12 +7,14 @@ import random
 
 import pytest
 from asg_evaluation.study import StudyRepository
+from asg_telegram.delivery import AUDIO_WARNING, send_story
 from asg_telegram.generator import GenerationFailure, StoryOutline
 from asg_telegram.handlers import StoryBot
 from asg_telegram.jobs import JobQueue, StoryWorker
 from asg_telegram.pairs import OwnPairs
 from asg_telegram.review import OwnReview
 from asg_telegram.voting import Voting
+from telegram.error import BadRequest
 from telegram_fakes import Chat, FakeBot, FakeGenerator, fake_run
 
 GUIDED = [
@@ -114,6 +116,26 @@ def test_queue_keeps_one_request_per_person_recovers_once_and_reports_failures(t
     asyncio.run(worker.process(queue.claim()))
     assert "Sin cuota" in bot.texts()[-1] and "cuota" in bot.texts()[-1]
     assert study.export()["stories"] == []
+
+
+@pytest.mark.parametrize("failure", ["missing", "upload"], ids=["missing-mp3", "failed-upload"])
+def test_audio_failure_warns_but_still_delivers_the_story(tmp_path, failure):
+    bot = FakeBot()
+    run = fake_run(tmp_path, "historia")
+    if failure == "missing":
+        (run / "story.mp3").unlink()
+    else:
+
+        async def fail_audio(**kwargs):
+            raise BadRequest("audio rechazado")
+
+        bot.send_audio = fail_audio
+
+    assert asyncio.run(send_story(bot, 7, run))
+
+    assert [document["document"].filename for document in bot.documents] == ["historia.md"]
+    assert AUDIO_WARNING in bot.texts()
+    assert any("Ada abre la puerta" in text for text in bot.texts())
 
 
 def test_a_participant_compares_their_own_two_stories_step_by_step(tmp_path):

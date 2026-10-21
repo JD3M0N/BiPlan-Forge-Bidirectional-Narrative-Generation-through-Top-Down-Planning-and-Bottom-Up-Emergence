@@ -9,6 +9,7 @@ from asg_stagecraft import NarrativeProfile, StoryGenerator
 from asg_stagecraft import pipeline as pipeline_module
 from asg_stagecraft import version as version_module
 from asg_stagecraft.agents import AnalystAgent
+from asg_stagecraft.agents.orientation import OrientationReview, SpatialReview
 from asg_stagecraft.pipeline import StoryPipeline
 from asg_stagecraft.planning.graph import materialize_plan, validate_profile_structure
 from asg_stagecraft.planning.names import choose_names
@@ -569,6 +570,8 @@ class FakeProvider:
     def generate_structured(self, *, system_instruction, prompt, schema, profile):
         self.structured_calls.append((schema.__name__, system_instruction, prompt))
         handlers = {
+            OrientationReview: lambda: OrientationReview(),
+            SpatialReview: lambda: SpatialReview(),
             WorldArtifact: lambda: make_world(),
             CharactersArtifact: lambda: make_characters(),
             StoryPlanDraft: self._plan_response,
@@ -943,7 +946,8 @@ def test_complete_pipeline_saves_v60_artifacts_and_agent_order(tmp_path) -> None
     agent_names = [
         event.message.rsplit(" ", 1)[-1] for event in events if event.kind == "agent_called"
     ]
-    assert agent_names[-6:] == [
+    assert agent_names.count("reader_orientation") == 4
+    assert [name for name in agent_names if name != "reader_orientation"][-6:] == [
         "drafter",
         "drafter",
         "drafter",

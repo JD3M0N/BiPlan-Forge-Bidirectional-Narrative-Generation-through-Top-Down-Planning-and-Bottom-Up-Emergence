@@ -1,11 +1,13 @@
-"""The asg-help command: one line per project command."""
+"""The asg help command: one line per project command."""
 
 from __future__ import annotations
+
+import argparse
 
 from .console import use_utf8_output
 
 COMMANDS = (
-    ("asg-help", "muestra esta lista"),
+    ("asg help", "muestra esta lista"),
     ("asg-telegram", "inicializa el bot de telegram"),
     ("asg-studio", "abre StageCraft, la interfaz web local (--demo sin cuota)"),
     ("asg-generate", "genera una historia desde la terminal"),
@@ -23,9 +25,21 @@ COMMANDS = (
 )
 
 
-def main() -> int:
-    """Print every command with its description."""
+def parser() -> argparse.ArgumentParser:
+    """Build the small root parser; project tools remain independent executables."""
+    result = argparse.ArgumentParser(
+        prog="asg", description="Herramientas del generador automático de historias."
+    )
+    result.add_subparsers(dest="command", required=True).add_parser(
+        "help", help="muestra todos los comandos disponibles"
+    )
+    return result
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Handle asg help and print every project command with its description."""
     use_utf8_output()
+    parser().parse_args(argv)
     width = max(len(name) for name, _ in COMMANDS)
     for name, text in COMMANDS:
         print(f"{name.ljust(width)} || {text}")

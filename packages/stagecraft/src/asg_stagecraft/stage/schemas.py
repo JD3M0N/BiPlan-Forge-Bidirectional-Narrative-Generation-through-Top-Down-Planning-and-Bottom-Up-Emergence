@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..formats import ActorMemory, NarrativeVoice, SimulationMode
 from ..schemas import ModelId
+from ..writing.orientation import ReaderSnapshot
 
 # What a character contributes in one turn, and who is allowed to perceive it.
 TurnVisibility = Literal["public", "whisper"]
@@ -647,6 +648,7 @@ class TurnRejection(BaseModel):
         "INVALID_STATE_EVIDENCE",
         "TACTIC_RUN",
         "WRONG_LANGUAGE",
+        "SPATIAL_CONTINUITY",
     ]
     issue: str
     turn: dict | None = None
@@ -1105,13 +1107,16 @@ class NarrationFinding(BaseModel):
         "VOICE",
         "INTERNAL_MARKER",
         "REPETITION",
+        "CHARACTER_CONTEXT",
+        "PLACE_CONTEXT",
+        "MISSING_TRANSITION",
     ]
     quote: str = ""
     turn_ids: list[str] = Field(default_factory=list)
     correction: str = Field(min_length=1)
 
 
-class NarrationReview(BaseModel):
+class NarrationReview(ReaderSnapshot):
     """A bounded editorial review; it never writes new story events."""
 
     model_config = ConfigDict(extra="forbid")

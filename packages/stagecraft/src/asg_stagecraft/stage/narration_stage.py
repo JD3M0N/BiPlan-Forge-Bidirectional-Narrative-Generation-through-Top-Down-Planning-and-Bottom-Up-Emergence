@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ..agents import NarratorAgent
+from ..agents.base import json_text
 from ..formats import NarrationMethod, SimulationMode
 from ..runtime.errors import NON_DEGRADABLE_ERRORS
 from ..schemas import (
@@ -26,6 +27,7 @@ from ..writing.acceptance import writer_candidate_issue
 from ..writing.assembly import assemble_story, narrated_plan
 from ..writing.audit import word_count
 from ..writing.line_edit import COPIED_DIRECTION
+from ..writing.orientation import ORIENTATION_CODES, ReaderState, performance_context
 from . import fallback
 from .editorial import (
     copied_directions,
@@ -128,7 +130,7 @@ class NarrationStageMixin:
         records: list[ChapterNarration] = []
         fallbacks = 0
         # Who an earlier chapter already brought on, so REPARTO introduces each one once.
-        introduced: set[str] = set()
+        reader = ReaderState()
         for view in views:
             index, chapter, total = view.index, view.chapter, len(plan.chapters)
             self._notify(
@@ -155,12 +157,11 @@ class NarrationStageMixin:
                 world=world,
                 bible=bible,
                 previous=bodies[-1] if bodies else "",
-                introduced=introduced,
+                introduced=reader.characters,
             )
-            # Introduced means seen doing something: a silent member of a scene's cast was never
-            # described, and the second 7.20 replay brought Celestina on bare in chapter 2.
-            introduced.update(turn.actor_id for turn in view.visible if turn.kind == "actor")
-            log = material.text
+            context = performance_context(view.visible, play, bible, world, reader)
+            reviews = {}
+            log = material.text + "\n\nREADER CONTEXT:\n" + json_text(context)
             visible_ids = {turn.id for turn in view.visible}
             facts = [
                 fact
@@ -184,12 +185,27 @@ class NarrationStageMixin:
                 index,
                 selected=material.selected,
                 retold=material.retold,
+                reader_context=context,
+                reader_reviews=reviews,
                 characters=characters,
                 world=world,
             )
             fallbacks += int(source == "fallback")
-            if source == "narrator":
-                body = self._line_edit_chapter(request, characters, world, index, body)
+            body = self._finish_reader_chapter(
+                agent,
+                request,
+                characters,
+                world,
+                index,
+                body,
+                source,
+                reviews,
+                context,
+                reader,
+                voice,
+                view.visible,
+                material.retold,
+            )
             bodies.append(body)
             records.append(
                 _chapter_record(view, words=word_count(body), attempts=attempts, source=source)
@@ -209,6 +225,68 @@ class NarrationStageMixin:
         self.repository.complete_stage("narration")
         return story, narration, fallbacks, narrated
 
+    def _finish_reader_chapter(
+        self,
+        agent,
+        request,
+        characters,
+        world,
+        index,
+        body,
+        source,
+        reviews,
+        context,
+        reader,
+        voice,
+        visible,
+        retold,
+    ) -> str:
+        """Recheck edited prose and commit reader memory only from the version that ships."""
+        assert self.repository is not None
+        original = body
+        if source == "narrator":
+            body = self._line_edit_chapter(request, characters, world, index, body)
+        final_review = reviews.get(body)
+        if final_review is None:
+            try:
+                final_review = self._call_agent(
+                    "narrator_review",
+                    lambda: agent.review(
+                        request=request,
+                        voice=voice,
+                        story=body,
+                        turns=review_turns(visible, retold),
+                        reader_context=context,
+                    ),
+                )
+            except NON_DEGRADABLE_ERRORS:
+                raise
+            except Exception as exc:
+                self.repository.add_warning(
+                    f"[READER_CONTEXT_UNAVAILABLE] Chapter {index}: {type(exc).__name__}"
+                )
+        # A cosmetic edit must not erase an introduction or introduce a new continuity fault.
+        before = reviews.get(original)
+        if body != original and before is not None:
+            if not _orientation_preserved(before, final_review, original, body, visible, retold):
+                body, final_review = original, before
+                self.repository.add_warning(f"[READER_CONTEXT_EDIT_REVERTED] Chapter {index}")
+        if final_review is not None:
+            reader.accept(final_review.reader_evidence, body, context, index)
+            remaining = editorial_verdict(
+                final_review, body, visible, request.language, reports=retold
+            )
+            if _orientation_notes(remaining.advisory):
+                self.repository.add_warning(f"[READER_CONTEXT_UNRESOLVED] Chapter {index}")
+            self.repository.save_json(
+                f"narration/chapter-{index:03d}-reader-review.json", final_review
+            )
+        self.repository.save_data(
+            f"narration/chapter-{index:03d}-reader-state.json", reader.as_record()
+        )
+        self.repository.save_text(f"narration/chapter-{index:03d}.md", body)
+        return body
+
     def _chapter_material(
         self, agent, request, view, key_ids, names, play, *, world, bible, previous, introduced=()
     ) -> ChapterMaterial:
@@ -223,7 +301,7 @@ class NarrationStageMixin:
         """
         if self.options.narration_method is NarrationMethod.SELECTED:
             material = self._selected_material(
-                agent, request, view, key_ids, names, play, world, bible, previous
+                agent, request, view, key_ids, names, play, world, bible, previous, introduced
             )
             if material is not None:
                 return ChapterMaterial(material, selected=True)
@@ -264,7 +342,7 @@ class NarrationStageMixin:
         return ChapterMaterial("\n\n".join(parts), retold=retold)
 
     def _selected_material(
-        self, agent, request, view, key_ids, names, play, world, bible, previous
+        self, agent, request, view, key_ids, names, play, world, bible, previous, introduced=()
     ) -> str | None:
         """Choose the moments of one chapter and render them, or None to fall back to 7.16."""
         assert self.repository is not None
@@ -295,7 +373,7 @@ class NarrationStageMixin:
             view.visible,
             names,
             places=chapter_places(view.visible, scenes, world),
-            cast=chapter_cast(view.visible, scenes, names, bible),
+            cast=chapter_cast(view.visible, scenes, names, bible, introduced=introduced),
             previous=last_paragraph(previous),
         )
 
@@ -401,12 +479,15 @@ class NarrationStageMixin:
         *,
         selected: bool = False,
         retold: dict[str, str] | None = None,
+        reader_context: dict | None = None,
+        reader_reviews: dict | None = None,
         characters: CharactersArtifact | None = None,
         world: WorldArtifact | None = None,
     ) -> tuple[str, int, str]:
         """Narrate one chapter, or render its log deterministically when the model cannot."""
         assert self.repository is not None
         feedback = ""
+        reader_reviews = reader_reviews if reader_reviews is not None else {}
         candidates: list[tuple[int, int, int, str]] = []
         # An accepted chapter held back for one more attempt because it transcribed the log.
         polished: tuple[int, str, int] | None = None
@@ -464,6 +545,7 @@ class NarrationStageMixin:
                         voice=voice,
                         story=candidate,
                         turns=review_turns(visible, retold),
+                        reader_context=reader_context,
                     ),
                 )
             except NON_DEGRADABLE_ERRORS:
@@ -486,6 +568,7 @@ class NarrationStageMixin:
                 self._emit("narration_review_unavailable", warning, stage="narration")
                 self.repository.save_text(f"narration/chapter-{index:03d}.md", candidate)
                 return candidate, attempt, "narrator"
+            reader_reviews[candidate] = review
             verdict = editorial_verdict(
                 review, candidate, visible, request.language, reports=retold
             )
@@ -495,6 +578,7 @@ class NarrationStageMixin:
             )
             notes = (
                 _editor_leaves(craft_findings(candidate, visible), self.options.line_editor)
+                + _orientation_notes(verdict.advisory)
                 if verdict.accepted
                 else []
             )
@@ -595,3 +679,25 @@ def _editor_leaves(notes: list[str], editor: bool) -> list[str]:
         return notes
     kept = [note for note in notes if note.startswith("DROPPED_EVENT")]
     return [*kept, *(note for note in notes if note.startswith("KEEP"))] if kept else []
+
+
+def _orientation_notes(notes: list[str]) -> list[str]:
+    """Select grounded orientation notes that deserve a bounded prose retry."""
+    return [note for note in notes if note.split(":", 1)[0] in ORIENTATION_CODES]
+
+
+def _orientation_preserved(before, after, original, body, turns, retold) -> bool:
+    """Reject an unverified cosmetic edit or one that loses established reader context."""
+    from ..writing.anchoring import quoted
+
+    if after is None:
+        return False
+    old = {(e.kind, e.entity_id) for e in before.reader_evidence if quoted(e.quote, original)}
+    new = {(e.kind, e.entity_id) for e in after.reader_evidence if quoted(e.quote, body)}
+    first = editorial_verdict(before, original, turns, reports=retold)
+    last = editorial_verdict(after, body, turns, reports=retold)
+    return (
+        old <= new
+        and len(last.blocking) <= len(first.blocking)
+        and len(_orientation_notes(last.advisory)) <= len(_orientation_notes(first.advisory))
+    )

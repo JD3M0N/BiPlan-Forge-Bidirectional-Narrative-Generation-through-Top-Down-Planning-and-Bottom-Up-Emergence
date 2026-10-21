@@ -10,6 +10,7 @@ from ..schemas import (
     StoryReview,
     WorldArtifact,
 )
+from ..writing.orientation import ORIENTATION_RULES, SPATIAL_RULES
 from .base import Agent, json_text, story_specification_header
 
 
@@ -44,7 +45,7 @@ class PlanCriticAgent(Agent[PlanReview]):
                 "every field in English. Do not score the plan. If no material change is needed, "
                 "approve it with no notes. Otherwise reject it and provide specific notes with "
                 "unique lowercase IDs, evidence, instructions, and valid chapter/event IDs. Do not "
-                "invent user requirements."
+                "invent user requirements." + SPATIAL_RULES
             ),
             prompt=(
                 f"{story_specification_header(request)}"
@@ -127,6 +128,7 @@ class DramaCriticAgent(Agent[StoryReview]):
                 "instruction. Promise IDs belong in promise_checks only: chapter_ids and "
                 "event_ids of a note must contain canonical plan IDs and nothing else. "
                 "Do not score the story or invent user requirements."
+                + ORIENTATION_RULES
                 + (ANCHORED_REVIEW if anchored else "")
             ),
             prompt=(
@@ -192,7 +194,7 @@ class ScriptCriticAgent(Agent[StoryReview]):
                 "major or critical priority, citing the affected plan event IDs. Each note needs "
                 "a unique lowercase ID, priority, category, evidence, and a concrete staging "
                 "instruction the Script Writer can apply. Do not score the script or invent "
-                "user requirements."
+                "user requirements." + SPATIAL_RULES + ORIENTATION_RULES
             ),
             prompt=(
                 f"{story_specification_header(request)}"

@@ -12,6 +12,7 @@ lied, and the narrator can later dramatize the gap.
 """
 
 from ..stage.schemas import ActorTurnDraft, ActorTurnWithItemsDraft, ReflectionDraft
+from ..writing.orientation import SPATIAL_RULES
 from .base import Agent
 
 
@@ -36,7 +37,7 @@ class ActorAgent(Agent[ActorTurnDraft]):
         but unused would change every actor request in the corpus.
         """
         return self.provider.generate_structured(
-            system_instruction=system_instruction,
+            system_instruction=system_instruction + SPATIAL_RULES,
             prompt=(
                 f"{context}\n\n"
                 "Te toca. Haz un solo movimiento: di algo, haz algo, o las dos cosas. "

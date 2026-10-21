@@ -1,5 +1,22 @@
 # Historial de cambios
 
+## 7.21.0
+
+- Reglas compartidas de presentación breve y continuidad espacial en Top-Down e híbrido.
+- Memoria del lector con citas verificadas de la prosa final: actuar no equivale a haber sido
+  presentado. Contexto público filtrado por escenas visibles en el híbrido.
+- Hallazgos `CHARACTER_CONTEXT`, `PLACE_CONTEXT` y `MISSING_TRANSITION`: activan el segundo
+  intento existente y conservan la mejor prosa fiel. La edición final no puede borrar
+  presentaciones comprobadas sin provocar una reversión.
+- Auditoría Top-Down al redactar y tras editar; reparación por párrafos con comprobación de
+  fidelidad y mejora. Los revisores de plan y guion comprueban ubicaciones y objetos.
+- Validación espacial antes de incorporar acciones a la actuación, con citas del escenario
+  y del movimiento rechazado. Una revisión no disponible se registra como aviso.
+- Regresiones para presentaciones omitidas/tardías, valle–garganta, pantano–valle, timón en el
+  templo, persistencia de contexto y revisiones antiguas.
+- Los tests locales verifican contratos; la mejora literaria requiere comparar generaciones
+  reales enviando los textos al proveedor configurado.
+
 ## 7.20.0
 
 Viene de la tanda 7.19 del 19 de octubre: cinco Top-Down y una híbrida, todas Esencial y sin
