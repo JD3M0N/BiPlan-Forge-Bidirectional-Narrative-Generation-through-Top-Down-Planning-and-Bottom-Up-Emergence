@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from ..text import TYPOGRAPHY
 from .narration import opens_with_direction, shares_run
 from .schemas import NarrationFinding, NarrationReview, StageTurn
 
@@ -361,15 +362,12 @@ def _unsupported(quote: str, turn_ids: list[str], story: str, known: set[str]) -
     return ""
 
 
-_TYPOGRAPHY = str.maketrans(
-    {"“": '"', "”": '"', "«": '"', "»": '"', "‘": "'", "’": "'", "—": "-", "–": "-"}
-)
 _DASH_SPACING = re.compile(r" ?- ?")
 
 
 def _normalized(text: str) -> str:
     """Compare quotes without tripping on spacing, quote styles or dialogue dashes."""
-    spaced = " ".join(text.translate(_TYPOGRAPHY).split())
+    spaced = " ".join(text.translate(TYPOGRAPHY).split())
     return _DASH_SPACING.sub("-", spaced).casefold()
 
 

@@ -38,6 +38,7 @@ from asg_core.craft import (
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..stage.narration import opens_with_direction
+from .audit import word_count
 
 # A paragraph that repeats this many words in a row of a style example copied it.
 EXAMPLE_ECHO = "example_echo"
@@ -209,8 +210,8 @@ def check_edit(
     text = replacement.strip()
     if not text or text.startswith("#"):
         return "empty or a heading"
-    length = _word_count(original)
-    if _word_count(text) > max(length + 1, MAX_GROWTH * length):
+    length = word_count(original)
+    if word_count(text) > max(length + 1, MAX_GROWTH * length):
         return "longer than the paragraph it replaces"
     flags = {"examples": examples, "directions": directions}
     before = set(block_flags(original, names, opening=opening, **flags))
@@ -291,11 +292,6 @@ def edit_chapter(
         result.accepted[edit.id] = replaced[index]
     result.body = "\n\n".join(replaced.get(index, block) for index, block in enumerate(blocks))
     return result
-
-
-def _word_count(text: str) -> int:
-    """Count the words of a text the way the length rule does."""
-    return len(text.split())
 
 
 def _folded_words(text: str) -> set[str]:

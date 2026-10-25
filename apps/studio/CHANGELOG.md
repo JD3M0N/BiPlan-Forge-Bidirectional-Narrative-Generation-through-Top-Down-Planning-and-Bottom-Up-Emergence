@@ -1,5 +1,11 @@
 # Historial de cambios
 
+## [0.2.1] - 2026-10-24
+
+- Cotas internas al día: `asg-core>=0.8.0`, `asg-evaluation>=2.0.0` y `asg-stagecraft>=7.21.0`.
+  Declaraba `asg-evaluation>=0.8.0`, que cruza un cambio incompatible como si no lo fuera.
+- Sin cambios de endpoints, de interfaz ni de comportamiento.
+
 ## [0.2.0] - 2026-09-28
 
 - `/api/health` devuelve `stage_model`, el modelo propio de la función (`GEMINI_STAGE_MODEL`) o

@@ -4,12 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "asg-evaluation"
-version = "2.0.0"
+version = "2.0.2"
 description = "Pairwise human study, story features and learned judge for ASG stories"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
-  "asg-core>=0.6.0",
+  "asg-core>=0.8.0",
   "pydantic>=2.7,<3",
   "numpy>=1.26,<3",
   "scipy>=1.11,<2",

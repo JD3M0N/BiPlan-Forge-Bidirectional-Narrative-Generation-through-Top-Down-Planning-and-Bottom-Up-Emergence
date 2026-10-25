@@ -85,25 +85,16 @@ VOICES: dict[NarrativeVoice, VoiceStrategy] = {
 }
 
 
-def narrator_character(
-    voice: NarrativeVoice,
-    scenes: list[ScenePerformance],
-    *,
-    requested: str = "",
-    protagonist: str = "",
-) -> str:
-    """Name the character who narrates, or an empty string when nobody does.
+def narrator_character(voice: NarrativeVoice, scenes: list[ScenePerformance]) -> str:
+    """Name the character who narrates by default, or an empty string when nobody does.
 
-    A character the caller asked for wins, then the declared protagonist; without either, the
-    character who took the most turns does, which is the only measure available that does not
-    require reading the story.
+    The default is whoever took the most turns, the only measure available that does not
+    require reading the story. A requested narrator or a declared protagonist wins over it,
+    but both are resolved by choose_narrator, which can also check that they witnessed a
+    scene; this function is the fallback it lands on.
     """
     if not VOICES[voice].needs_narrator:
         return ""
-    if requested:
-        return requested
-    if protagonist:
-        return protagonist
     tally: Counter[str] = Counter()
     for scene in scenes:
         for turn in scene.turns:

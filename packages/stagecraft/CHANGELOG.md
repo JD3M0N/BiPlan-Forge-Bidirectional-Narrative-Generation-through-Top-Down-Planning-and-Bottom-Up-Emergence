@@ -1,5 +1,32 @@
 # Historial de cambios
 
+## 7.21.2
+
+- `schemas.py` y `stage/schemas.py` pasan a ser paquetes por secciones (petición y mundo, plan,
+  promesas, guion, métricas, ejecución; y vocabulario, fichas, reparto, objetos, turnos,
+  veredictos, memoria, artefactos, narración). Ningún import cambia: los nombres se siguen
+  importando de `asg_stagecraft.schemas` y `asg_stagecraft.stage.schemas`.
+- El pipeline lee sus opciones de `self.options`; retiradas las once propiedades pasamanos.
+- Tabla tipográfica compartida en `text.py`, antes copiada en `stage/editorial.py` y
+  `writing/anchoring.py`; `writing/line_edit.py` reutiliza `writing/audit.word_count`.
+- Retirados de la API pública ocho reexportes sin consumidores (`ChapterMetrics`,
+  `ChapterRevisionAttempt`, `ChapterRevisionResult`, `GeneratorVersionArtifact`,
+  `PipelineEventCallback`, `ProgressCallback`, `RevisionReport`, `StoryMetrics`); las clases
+  siguen disponibles en `asg_stagecraft.schemas` y `asg_stagecraft.runtime.progress`.
+- Retirados los parámetros que ningún llamador pasaba: `requested` y `protagonist` de
+  `narrator_character`, que `choose_narrator` ya resuelve, y `now` de `preflight`.
+- Genérica PEP 695 en `Agent`, `revision_loop` y `guidance_calls`, ahora que el mínimo es 3.12.
+- Sin cambios de prompts, esquemas ni artefactos: el contrato del pipeline sigue en 7.21.
+
+## 7.21.1
+
+- Retiradas las utilidades sin consumidores `perceives_item` y `props_for_event`.
+- Guía general en `AGENTS.md` y contratos por subsistema en `docs/architecture/`;
+  el roadmap conserva el trabajo pendiente y el historial queda en Git y changelogs.
+- Retirados los envoltorios `iniciar-bot.bat`, `venv.ps1` y `Makefile`; instalación,
+  activación, arranque y calidad usan los comandos canónicos.
+- Sin cambios de prompts, esquemas ni artefactos: el contrato del pipeline sigue en 7.21.
+
 ## 7.21.0
 
 - Reglas compartidas de presentación breve y continuidad espacial en Top-Down e híbrido.

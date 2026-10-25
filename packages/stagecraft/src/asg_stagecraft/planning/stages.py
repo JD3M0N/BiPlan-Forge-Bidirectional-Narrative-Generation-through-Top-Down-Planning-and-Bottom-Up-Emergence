@@ -77,7 +77,7 @@ class PlanningStagesMixin:
     ) -> NarrativeBlueprint | CompositionArtifact | None:
         """Propose optional structural inspiration without ever failing the run."""
         assert self.repository is not None
-        if not self.narrative_guidance:
+        if not self.options.narrative_guidance:
             return None
         self._notify(6, "architecture", "Eligiendo el esqueleto narrativo")
 
@@ -388,7 +388,7 @@ class PlanningStagesMixin:
         instead of aborting like planning.
         """
         assert self.repository is not None
-        if not self.promise_ledger:
+        if not self.options.promise_ledger:
             return None
         self._notify(49, "promises", "Trazando las promesas de la historia")
         try:

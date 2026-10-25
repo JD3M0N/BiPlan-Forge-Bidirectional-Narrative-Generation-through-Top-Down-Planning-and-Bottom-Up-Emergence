@@ -86,11 +86,6 @@ def item_line(action: ItemAction, names: dict[str, str], *, concealed_from: bool
     return ""
 
 
-def perceives_item(character_id: str, turn: StageTurn) -> bool:
-    """Say whether one character perceived the object move a turn carried, if it carried one."""
-    return any(character_id in move.witnesses for move in item_moves(turn))
-
-
 def visible_text(
     turn: StageTurn, character_id: str, names: dict[str, str], *, own_thoughts: bool = True
 ) -> str:

@@ -102,7 +102,7 @@ class NarrationStageMixin:
         """
         assert self.repository is not None
         self._notify(84, "narration", "Escribiendo la historia desde la funcion")
-        voice = self.narrative_voice
+        voice = self.options.narrative_voice
         names = {member.character_id: member.name for member in play.cast}
         presence = scene_presence(play)
         choice = choose_narrator(

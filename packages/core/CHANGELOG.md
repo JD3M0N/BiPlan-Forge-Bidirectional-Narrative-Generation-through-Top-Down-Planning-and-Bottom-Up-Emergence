@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## [0.8.0] - 2026-10-24
 
+- Added `audit_timestamp`, the one UTC ISO timestamp every audit column is written with. The
+  bot's pair store, its job queue and the study each carried an identical private copy.
 - Replaced `asg-help` with the root command `asg help`, which lists every installed project
   command without changing their independent entry points.
 

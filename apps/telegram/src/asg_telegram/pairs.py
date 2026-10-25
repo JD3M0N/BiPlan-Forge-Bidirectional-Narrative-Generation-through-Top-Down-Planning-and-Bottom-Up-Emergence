@@ -16,9 +16,9 @@ import json
 import random
 import sqlite3
 from contextlib import closing
-from datetime import UTC, datetime
 from pathlib import Path
 
+from asg_core import audit_timestamp
 from asg_evaluation.catalog import guidance, questions
 
 FORMATS = ("narrative", "simulated")
@@ -34,11 +34,6 @@ _SCHEMA = (
     "shown TEXT NOT NULL, choice TEXT NOT NULL, reason TEXT, answered_at TEXT NOT NULL, "
     "PRIMARY KEY (pair_id, criterion))",
 )
-
-
-def _now() -> str:
-    """Return an ISO timestamp for audit columns."""
-    return datetime.now(UTC).isoformat()
 
 
 def criteria() -> list[tuple[str, str, str]]:
@@ -125,7 +120,7 @@ class OwnPairs:
                     simulated["run_dir"],
                     a_format,
                     int(linked),
-                    _now(),
+                    audit_timestamp(),
                 ),
             )
         return self.pair(cursor.lastrowid)
@@ -150,7 +145,7 @@ class OwnPairs:
             db.execute(
                 "INSERT INTO answers(pair_id,criterion,shown,choice,answered_at) "
                 "VALUES (?,?,?,?,?)",
-                (pair_id, criterion, shown, choice, _now()),
+                (pair_id, criterion, shown, choice, audit_timestamp()),
             )
             db.execute("UPDATE pairs SET awaiting_reason=? WHERE id=?", (criterion, pair_id))
         return self.pair(pair_id)
@@ -168,7 +163,9 @@ class OwnPairs:
                 )
             db.execute("UPDATE pairs SET awaiting_reason=NULL WHERE id=?", (pair_id,))
             if len(pair["answers"]) == len(criteria()):
-                db.execute("UPDATE pairs SET finished_at=? WHERE id=?", (_now(), pair_id))
+                db.execute(
+                    "UPDATE pairs SET finished_at=? WHERE id=?", (audit_timestamp(), pair_id)
+                )
         return self.pair(pair_id)
 
     def awaiting_reason(self, user_id: int) -> dict | None:

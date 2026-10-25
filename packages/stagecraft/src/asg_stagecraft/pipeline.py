@@ -16,13 +16,13 @@ from .agents import (
 from .brief import (
     StoryBrief,
 )
-from .formats import ActorMemory, NarrativeVoice, ScriptMethod, StoryFormat
+from .formats import ScriptMethod, StoryFormat
 from .options import GenerationOptions
 from .planning.graph import (
     validate_story_plan,
 )
 from .planning.length import requested_profile
-from .planning.profiles import PROFILE_LABELS, NarrativeProfile
+from .planning.profiles import PROFILE_LABELS
 from .planning.stages import PlanningStagesMixin
 from .runtime.errors import (
     RunCancelledError,
@@ -161,63 +161,10 @@ class StoryPipeline(
         self.usage_start = 0
         self.repository: ArtifactRepository | None = None
 
-    # The stages read their options under the names they had before GenerationOptions existed,
-    # so the script and simulation mixins did not have to change when the options were gathered.
-
-    @property
-    def narrative_guidance(self) -> bool:
-        """Say whether the plot-skeleton blueprint guides this run."""
-        return self.options.narrative_guidance
-
-    @property
-    def promise_ledger(self) -> bool:
-        """Say whether this run traces a promise ledger over its frozen plan."""
-        return self.options.promise_ledger
-
-    @property
-    def narrative_profile(self) -> NarrativeProfile | None:
-        """Return the profile the caller forced, or None to keep the analyst's inference."""
-        return self.options.narrative_profile
-
-    @property
-    def audio(self) -> bool:
-        """Say whether this run ends by narrating its story as audio."""
-        return self.options.audio
-
-    @property
-    def story_format(self) -> StoryFormat:
-        """Return the shape of the artifact this run delivers."""
-        return self.options.story_format
-
-    @property
-    def script_method(self) -> ScriptMethod:
-        """Return how a script run turns the plan into scenes."""
-        return self.options.script_method
-
-    @property
-    def narrative_voice(self) -> NarrativeVoice:
-        """Return the point of view a simulated run is narrated from."""
-        return self.options.narrative_voice
-
-    @property
-    def actor_memory(self) -> ActorMemory:
-        """Return whether each actor remembers only what it witnessed or everything public."""
-        return self.options.actor_memory
-
-    @property
-    def inventory(self) -> bool:
-        """Say whether the performance tracks and arbitrates physical objects."""
-        return self.options.inventory
-
-    @property
-    def turns_per_beat(self) -> int:
-        """Return how many turns a beat may take before the world closes it."""
-        return self.options.turns_per_beat
-
     @property
     def _simulated(self) -> bool:
         """Say whether this run ends in a performance narrated from its own log."""
-        return self.story_format is StoryFormat.SIMULATED
+        return self.options.story_format is StoryFormat.SIMULATED
 
     @property
     def _stages_the_script(self) -> bool:
@@ -228,13 +175,14 @@ class StoryPipeline(
         would run the same material through the model twice for no gain.
         """
         return self._simulated or (
-            self.story_format is StoryFormat.SCRIPT and self.script_method is ScriptMethod.NATIVE
+            self.options.story_format is StoryFormat.SCRIPT
+            and self.options.script_method is ScriptMethod.NATIVE
         )
 
     def _recorded_script_method(self) -> ScriptMethod | None:
         """Name the script method this run's metadata declares, or none when it has no script."""
-        if self.story_format is StoryFormat.SCRIPT:
-            return self.script_method
+        if self.options.story_format is StoryFormat.SCRIPT:
+            return self.options.script_method
         if self._simulated:
             return ScriptMethod.NATIVE
         return None
@@ -300,7 +248,7 @@ class StoryPipeline(
                 ledger,
             )
             story = assemble_story(plan, presentation, bodies)
-            if self.story_format is StoryFormat.SCRIPT:
+            if self.options.story_format is StoryFormat.SCRIPT:
                 play = self._adapt_story(
                     request, world, characters, plan, presentation, bodies, story, ledger
                 )
@@ -333,7 +281,7 @@ class StoryPipeline(
                 "script.json": PlayScript,
                 "cast_bible.json": CastBible,
             }
-        elif self.story_format is StoryFormat.NARRATIVE:
+        elif self.options.story_format is StoryFormat.NARRATIVE:
             frozen_types = dict(_PLAN_ARTIFACTS)
         else:
             raise ValueError("plan reuse requires the narrative or simulated story format")
@@ -542,7 +490,7 @@ class StoryPipeline(
         if asked is None:
             return
         profile, reason = asked
-        if self.narrative_profile is None or self.narrative_profile == profile:
+        if self.options.narrative_profile is None or self.options.narrative_profile == profile:
             self._emit(
                 "profile_from_request",
                 f"[PROFILE_FROM_REQUEST] {PROFILE_LABELS[profile]}: la petición {reason}.",
@@ -552,7 +500,7 @@ class StoryPipeline(
         warning = (
             f"[PROFILE_CONFLICT] La petición {reason}, que corresponde a "
             f"{PROFILE_LABELS[profile]}, pero el run se forzó en "
-            f"{PROFILE_LABELS[self.narrative_profile]}."
+            f"{PROFILE_LABELS[self.options.narrative_profile]}."
         )
         assert self.repository is not None
         self.repository.add_warning(warning)
@@ -560,9 +508,9 @@ class StoryPipeline(
 
     def _with_forced_profile(self, request: StoryRequest) -> StoryRequest:
         """Apply the caller's explicit profile, which outranks any prompt-derived choice."""
-        if self.narrative_profile is None:
+        if self.options.narrative_profile is None:
             return request
-        return request.model_copy(update={"narrative_profile": self.narrative_profile})
+        return request.model_copy(update={"narrative_profile": self.options.narrative_profile})
 
     @staticmethod
     def _fallback_title(request: StoryRequest | str) -> str:
@@ -578,13 +526,13 @@ class StoryPipeline(
         """Keep what was asked for when analysis failed, so the run can be understood."""
         assert self.repository is not None
         prompt = request.original_prompt if isinstance(request, StoryRequest) else request
-        profile = self.narrative_profile
+        profile = self.options.narrative_profile
         self.repository.save_data(
             "submitted_request.json",
             {
                 "prompt": prompt,
                 "narrative_profile": profile.value if profile else None,
-                "story_format": self.story_format.value,
+                "story_format": self.options.story_format.value,
             },
         )
         if profile:
@@ -599,10 +547,10 @@ class StoryPipeline(
             self.provider.model_name,
             title,
             on_artifact=self._report_artifact,
-            story_format=self.story_format,
+            story_format=self.options.story_format,
             script_method=self._recorded_script_method(),
-            narrative_voice=self.narrative_voice if self._simulated else None,
-            actor_memory=self.actor_memory if self._simulated else None,
+            narrative_voice=self.options.narrative_voice if self._simulated else None,
+            actor_memory=self.options.actor_memory if self._simulated else None,
             stage_model=stage_model if self._simulated else None,
             prose_model=getattr(self.provider, "prose_model_name", None),
         )
@@ -644,7 +592,7 @@ class StoryPipeline(
     def _create_audio(self) -> None:
         """Create optional narration without invalidating a completed story."""
         assert self.repository is not None
-        if not self.audio:
+        if not self.options.audio:
             return
         self._notify(99, "audio", "Generando narración de la historia")
         # Narration never calls the model, so no error reaching here justifies discarding a

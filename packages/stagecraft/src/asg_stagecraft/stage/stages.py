@@ -250,7 +250,7 @@ class SimulationStagesMixin(NarrationStageMixin):
         a run without an inventory is the run 7.5 produced, prompt for prompt.
         """
         assert self.repository is not None
-        if not self.inventory:
+        if not self.options.inventory:
             return None
         self._notify(51, "props", "Preparando la utileria")
         cast_ids = [member.character_id for member in play.cast]
@@ -366,7 +366,7 @@ class SimulationStagesMixin(NarrationStageMixin):
         inventory = (
             StageInventory(
                 props.props,
-                actor_memory=self.actor_memory,
+                actor_memory=self.options.actor_memory,
                 on_item=lambda entry: self.repository.append_jsonl("stage/inventory.jsonl", entry),
             )
             if props is not None
@@ -421,10 +421,10 @@ class SimulationStagesMixin(NarrationStageMixin):
             gate_facts={item: gates_for(bible, item) for item in whole_cast},
             whole_cast=whole_cast,
             language=request.language,
-            actor_memory=self.actor_memory,
+            actor_memory=self.options.actor_memory,
             simulation_mode=self.options.simulation_mode,
             inventory=inventory,
-            turns_per_beat=self.turns_per_beat,
+            turns_per_beat=self.options.turns_per_beat,
             typed_clauses=self.options.typed_clauses,
             reaction_turns=REACTION_TURNS,
             coda_turns=CODA_TURNS,
@@ -542,10 +542,10 @@ class SimulationStagesMixin(NarrationStageMixin):
             facts=engine.facts,
             language=request.language,
             settings=PerformanceSettings(
-                actor_memory=self.actor_memory,
+                actor_memory=self.options.actor_memory,
                 simulation_mode=self.options.simulation_mode,
                 inventory=inventory is not None,
-                turns_per_beat=self.turns_per_beat,
+                turns_per_beat=self.options.turns_per_beat,
                 check_every=CHECK_EVERY,
                 reaction_turns=REACTION_TURNS,
                 coda_turns=CODA_TURNS,

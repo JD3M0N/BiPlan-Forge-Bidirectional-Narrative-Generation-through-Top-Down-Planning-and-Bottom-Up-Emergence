@@ -12,6 +12,7 @@ from .audio import (
     create_voice_sample_sync,
     markdown_to_speech_text,
 )
+from .clock import audit_timestamp
 from .console import use_utf8_output
 from .craft import (
     CraftMetrics,
@@ -36,14 +37,14 @@ __all__ = [
     "Progress",
     "ReadabilitySignals",
     "artifact_json",
+    "audit_timestamp",
     "atomic_write_csv",
     "atomic_write_json",
     "atomic_write_text",
     "craft_metrics",
-    "readability_signals",
-    "create_unique_directory",
     "create_story_audio",
     "create_story_audio_sync",
+    "create_unique_directory",
     "create_voice_sample",
     "create_voice_sample_sync",
     "file_lock",
@@ -51,6 +52,7 @@ __all__ = [
     "format_progress",
     "markdown_to_speech_text",
     "prose_paragraphs",
+    "readability_signals",
     "slugify",
     "split_sentences",
     "stories_path",

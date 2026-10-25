@@ -779,10 +779,6 @@ def test_only_the_first_person_voice_needs_a_narrator() -> None:
     scene = scene_with([turn("ana", speech="A.")])
     assert voices.narrator_character(NarrativeVoice.OMNISCIENT, [scene]) == ""
     assert voices.narrator_character(NarrativeVoice.FIRST_PERSON, [scene]) == "ana"
-    assert (
-        voices.narrator_character(NarrativeVoice.FIRST_PERSON, [scene], protagonist="cora")
-        == "cora"
-    )
 
 
 # -- casting -----------------------------------------------------------------------------

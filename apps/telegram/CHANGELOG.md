@@ -1,9 +1,21 @@
 # Historial de cambios
 
+## 6.0.2
+
+- La cola de trabajos y el almacén de pares escriben sus marcas de tiempo con
+  `asg_core.audit_timestamp`, en lugar de dos copias idénticas. Exige `asg-core>=0.8.0`.
+- Retirado el teclado `MENU`, sin consumidores desde que `next_step` arma el suyo en cada rama.
+- Sin cambios de comandos, de flujo ni de lo que se guarda en SQLite.
+
 ## Sin publicar
 
 - Si falta `story.mp3` o Telegram no consigue subirlo, el bot entrega igualmente el archivo y
   el texto de la historia y avisa de forma explícita que el audio no está disponible.
+
+## [6.0.1] - 2026-10-23
+
+- La votación del estudio reutiliza el constructor de teclados de la guía del bot.
+  Se conservan los textos, botones y datos de callback.
 
 ## [6.0.0] - 2026-10-19
 

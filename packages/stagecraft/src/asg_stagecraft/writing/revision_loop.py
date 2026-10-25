@@ -12,17 +12,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Generic, TypeVar
 
 from ..runtime.errors import NON_DEGRADABLE_ERRORS
 from ..schemas import ChapterRevisionAttempt, WriterCandidateDiagnostic
 
-Response = TypeVar("Response")
-Candidate = TypeVar("Candidate")
-
 
 @dataclass
-class Judgement(Generic[Candidate]):
+class Judgement[Candidate]:
     """The caller's verdict on one candidate: why it fails, and how it ranks if it does.
 
     A rank of None means the candidate may never ship in place of the draft, such as a copy.
@@ -35,7 +31,7 @@ class Judgement(Generic[Candidate]):
 
 
 @dataclass
-class LoopOutcome(Generic[Candidate]):
+class LoopOutcome[Candidate]:
     """What the loop ends with: an accepted candidate, the best rejected one, or neither."""
 
     accepted: Candidate | None = None
@@ -59,7 +55,7 @@ def retry_feedback(
     )
 
 
-def revise_with_retries(
+def revise_with_retries[Response, Candidate](
     attempts: int,
     call: Callable[[int, str], Response],
     judge: Callable[[int, Response], Judgement[Candidate]],

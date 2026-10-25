@@ -2,7 +2,7 @@
 
 import json
 from abc import ABC, abstractmethod
-from typing import Any, Generic, Literal, TypeVar
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -11,8 +11,6 @@ from ..planning.profiles import profile_guidance
 from ..planning.skeletons import blueprint_guidance
 from ..runtime.provider import LanguageModelProvider
 from ..schemas import NarrativeBlueprint, StoryRequest
-
-T = TypeVar("T")
 
 
 def json_text(value: Any) -> str:
@@ -50,7 +48,7 @@ def story_specification_header(
     return f"{header}\n\n{blueprint_guidance(blueprint)}"
 
 
-class Agent(ABC, Generic[T]):
+class Agent[T](ABC):
     """Represent Agent data and behavior."""
 
     name: str

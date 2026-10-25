@@ -17,6 +17,8 @@ from datetime import UTC, datetime
 from itertools import combinations
 from pathlib import Path
 
+from asg_core import audit_timestamp
+
 from .artifacts import load_json_object
 from .catalog import CRITERIA, catalog_snapshot, digest, guidance, questions
 from .preferences import components
@@ -61,11 +63,6 @@ _PRIVATE_KEYS = (
     "bot_token",
     "password",
 )
-
-
-def now() -> str:
-    """Return a timezone-aware audit timestamp."""
-    return datetime.now(UTC).isoformat()
 
 
 def identifier(prefix: str) -> str:
@@ -151,7 +148,12 @@ class StudyRepository:
             if db.execute("SELECT 1 FROM study").fetchone() is None:
                 db.execute(
                     "INSERT INTO study(id,state,seed,created_at) VALUES (?,?,?,?)",
-                    (study_id or self.path.parent.name or "estudio", "collection", 42, now()),
+                    (
+                        study_id or self.path.parent.name or "estudio",
+                        "collection",
+                        42,
+                        audit_timestamp(),
+                    ),
                 )
 
     @contextmanager
@@ -287,7 +289,7 @@ class StudyRepository:
             snapshot["sha256"] = digest(snapshot)
             db.execute(
                 "UPDATE study SET state='evaluation', snapshot=?, opened_at=?",
-                (json.dumps(snapshot, ensure_ascii=False), now()),
+                (json.dumps(snapshot, ensure_ascii=False), audit_timestamp()),
             )
         return snapshot
 
@@ -295,7 +297,7 @@ class StudyRepository:
         """End the vote; recorded answers stay untouched."""
         with self.transaction() as db:
             self._require(db, "evaluation")
-            db.execute("UPDATE study SET state='closed', closed_at=?", (now(),))
+            db.execute("UPDATE study SET state='closed', closed_at=?", (audit_timestamp(),))
 
     @staticmethod
     def _pending(db, participant: str):
@@ -385,7 +387,7 @@ class StudyRepository:
         db.execute(
             "INSERT INTO assignments(id,participant,position,criterion,left_id,right_id,"
             "issued_at) VALUES (?,?,?,?,?,?,?)",
-            (qid, participant, len(mine) + 1, criterion, a, b, now()),
+            (qid, participant, len(mine) + 1, criterion, a, b, audit_timestamp()),
         )
         return db.execute("SELECT * FROM assignments WHERE id=?", (qid,)).fetchone()
 
@@ -436,7 +438,8 @@ class StudyRepository:
                 raise ValueError("Confirma primero la lectura de ambas historias.")
             seconds = (datetime.now(UTC) - datetime.fromisoformat(row["issued_at"])).total_seconds()
             db.execute(
-                "INSERT INTO votes VALUES (?,?,?,?)", (question, choice, max(0, seconds), now())
+                "INSERT INTO votes VALUES (?,?,?,?)",
+                (question, choice, max(0, seconds), audit_timestamp()),
             )
         return True
 

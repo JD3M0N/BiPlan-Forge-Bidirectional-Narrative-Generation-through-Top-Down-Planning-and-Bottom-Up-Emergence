@@ -2,7 +2,9 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.ruff_cache/
 .coverage
+.coverage.*
 htmlcov/
 *.egg-info/
 dist/
@@ -10,8 +12,8 @@ build/
 .venv/
 Stories/
 Evaluations/
-docs/*
-!docs/resumen.md
+docs/*.pdf
+docs/audio_*
 .cache/
 story-comparison.html
 .requirements-setup.txt

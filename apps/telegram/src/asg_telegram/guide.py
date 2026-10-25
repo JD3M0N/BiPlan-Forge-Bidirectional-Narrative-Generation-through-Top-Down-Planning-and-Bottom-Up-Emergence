@@ -52,7 +52,6 @@ CREATE = keyboard(
         for mode in MODES
     ]
 )
-MENU = keyboard([[("✍️ Crear historia", "c:menu")], [("⚖️ Comparar mis historias", "e:go")]])
 
 
 def other_format(story_format: str) -> str:

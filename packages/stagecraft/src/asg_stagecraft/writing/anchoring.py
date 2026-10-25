@@ -12,18 +12,15 @@ counts against the story, as an unjudged promise already did.
 from __future__ import annotations
 
 from ..schemas import ConstraintCheck, PromiseCheck, RevisionNote, StoryReview
+from ..text import TYPOGRAPHY
 
 # A quote shorter than this proves nothing: "dijo que no" is in every story.
 MIN_QUOTE_WORDS = 4
 
-_TYPOGRAPHY = str.maketrans(
-    {"“": '"', "”": '"', "«": '"', "»": '"', "‘": "'", "’": "'", "—": "-", "–": "-"}
-)
-
 
 def _normalized(text: str) -> str:
     """Compare quotes without tripping on spacing, quote styles, dashes or case."""
-    return " ".join(text.translate(_TYPOGRAPHY).replace('"', "").split()).casefold()
+    return " ".join(text.translate(TYPOGRAPHY).replace('"', "").split()).casefold()
 
 
 def quoted(quote: str, text: str) -> bool:

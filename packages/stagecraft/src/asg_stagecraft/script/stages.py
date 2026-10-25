@@ -74,7 +74,7 @@ class ScriptStagesMixin:
             presentation, characters, acts, language=request.language, method=ScriptMethod.NATIVE
         )
         self.repository.save_text("draft.md", render_script(draft_play))
-        if self.story_format is StoryFormat.SIMULATED:
+        if self.options.story_format is StoryFormat.SIMULATED:
             return draft_play
         review = self._critique_script(
             request, world, characters, plan, presentation, draft_play, ledger
@@ -632,7 +632,7 @@ class ScriptStagesMixin:
         self.repository.save_json(
             "script_metrics.json", script_metrics(request, plan, play, rendered)
         )
-        if self.story_format is StoryFormat.SIMULATED:
+        if self.options.story_format is StoryFormat.SIMULATED:
             self.repository.save_text("script.md", rendered)
 
     def _finalize_script(self, request: StoryRequest, plan: StoryPlan, play: PlayScript) -> None:

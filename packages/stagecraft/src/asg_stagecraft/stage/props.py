@@ -84,12 +84,6 @@ def fallback_props(world: WorldArtifact, plan: StoryPlan) -> PropList:
     )
 
 
-def props_for_event(props: list[Prop], event_object_ids: list[str]) -> list[Prop]:
-    """List the props one plan event turns on, so the director can bring them into a beat."""
-    wanted = set(event_object_ids)
-    return [item for item in props if item.object_id and item.object_id in wanted]
-
-
 def _validate_references(
     props: list[PropDraft],
     cast_ids: list[str],

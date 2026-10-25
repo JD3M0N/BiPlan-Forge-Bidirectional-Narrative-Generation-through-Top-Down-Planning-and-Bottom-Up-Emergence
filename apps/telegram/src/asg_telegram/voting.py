@@ -1,25 +1,19 @@
-"""The /evaluar conversation: read two blind stories, then pick one for one criterion."""
+"""The /estudio conversation: read two blind stories, then pick one for one criterion."""
 
 from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import Update
 from telegram.ext import ContextTypes
 
 from .delivery import send_story
+from .guide import keyboard
 
 SIDES = {"L": ("left", "A"), "R": ("right", "B")}
 CHOICES = {"A": "A", "B": "B", "X": "abstain"}
 FINISHED = "¡Gracias! Ya respondiste todas tus comparaciones. Tus votos están guardados."
-
-
-def _keyboard(rows: list[list[tuple[str, str]]]) -> InlineKeyboardMarkup:
-    """Build an inline keyboard from (label, callback data) pairs."""
-    return InlineKeyboardMarkup(
-        [[InlineKeyboardButton(label, callback_data=data) for label, data in row] for row in rows]
-    )
 
 
 class Voting:
@@ -65,7 +59,7 @@ class Voting:
                 question[side]["run_path"],
                 name=f"Historia {label}",
                 heading=f"Historia {label}",
-                keyboard=_keyboard(
+                keyboard=keyboard(
                     [
                         [("✅ Ya la leí", f"v:r:{question['id']}:{key}")],
                         [("Ya la conocía", f"v:k:{question['id']}:{key}")],
@@ -79,7 +73,7 @@ class Voting:
         await bot.send_message(
             chat_id=chat_id,
             text=f"{question['question']}\n\n{question['guidance']}",
-            reply_markup=_keyboard(
+            reply_markup=keyboard(
                 [
                     [("Historia A", f"v:a:{qid}:A"), ("Historia B", f"v:a:{qid}:B")],
                     [("No puedo decidir", f"v:a:{qid}:X")],

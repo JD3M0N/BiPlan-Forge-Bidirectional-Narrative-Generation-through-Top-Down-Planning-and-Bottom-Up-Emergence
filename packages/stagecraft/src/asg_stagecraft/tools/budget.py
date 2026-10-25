@@ -128,13 +128,13 @@ def slot_spending(settings, now: datetime) -> list[tuple[ChainEntry, int, int, d
     return result
 
 
-def preflight(settings, story_format: str, *, now: datetime | None = None) -> str | None:
+def preflight(settings, story_format: str) -> str | None:
     """Return why a run of this format does not fit in what is left today, or None if it may.
 
     Only a run that surely does not fit is refused: without completed runs to estimate from, or
     with a slot that has no known cap, the API stays the only authority.
     """
-    now = now or datetime.now(UTC)
+    now = datetime.now(UTC)
     average = average_story(settings.output_root, story_format)
     if average is None:
         return None

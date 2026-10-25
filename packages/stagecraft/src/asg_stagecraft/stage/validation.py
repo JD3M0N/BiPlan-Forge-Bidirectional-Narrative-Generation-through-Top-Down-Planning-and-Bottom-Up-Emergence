@@ -630,7 +630,7 @@ def strip_internal_ids(value: str) -> str:
 
 
 def _clean(value: str) -> str:
-    """Collapse whitespace and strip a leading Markdown marker."""
+    """Collapse runs of whitespace into single spaces and trim the ends."""
     return _WHITESPACE.sub(" ", value).strip()
 
 

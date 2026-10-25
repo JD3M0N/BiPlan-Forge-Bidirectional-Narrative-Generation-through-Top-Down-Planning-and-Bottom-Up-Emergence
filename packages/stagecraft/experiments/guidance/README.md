@@ -8,6 +8,8 @@ Las seis solicitudes JSON son material propuesto para revisión humana antes de 
 Hay dos por perfil: reencuentro y fuga; descubrimiento y robo; rivalidad política y viaje.
 Incluyen exclusiones explícitas y conflictos relacionales para no medir solo misterios.
 Cada archivo es un `StoryRequest` congelado: no vuelve a pasar por el analista.
+Ningún módulo instalado los lee: son entradas de un experimento pendiente de
+ejecutar, no datos que el pipeline cargue.
 
 ## Preparación sin cuota
 

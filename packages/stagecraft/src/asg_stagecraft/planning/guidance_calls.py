@@ -1,17 +1,14 @@
 """Bounded, context-aware repair for the two optional guidance stages."""
 
 from collections.abc import Callable
-from typing import TypeVar
 
 from pydantic import BaseModel
 
 from ..runtime.errors import NON_DEGRADABLE_ERRORS
 from ..runtime.provider import LanguageModelProvider
 
-T = TypeVar("T", bound=BaseModel)
 
-
-def request_validated(
+def request_validated[T: BaseModel](
     provider: LanguageModelProvider,
     *,
     instruction: str,

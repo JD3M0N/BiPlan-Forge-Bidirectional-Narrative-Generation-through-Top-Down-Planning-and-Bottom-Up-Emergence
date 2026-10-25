@@ -120,6 +120,6 @@ story.mp3 + audio.json
 $env:RUN_GEMINI_LIVE='1'; python -m pytest packages/stagecraft/tests/test_gemini_live.py
 ```
 
-`run-tests.ps1` es el único comando para los tests: ver CLAUDE.md. Las pruebas usan proveedores
+`run-tests.ps1` es el único comando para los tests: ver [AGENTS.md](../../AGENTS.md). Las pruebas usan proveedores
 falsos. `test_gemini_live.py` llama a la API real, consume cuota y se omite salvo con
 `RUN_GEMINI_LIVE=1`.

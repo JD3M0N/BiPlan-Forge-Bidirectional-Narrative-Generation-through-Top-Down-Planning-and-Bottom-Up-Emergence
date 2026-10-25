@@ -7,8 +7,9 @@ import json
 import logging
 import sqlite3
 from contextlib import closing
-from datetime import UTC, datetime
 from pathlib import Path
+
+from asg_core import audit_timestamp
 
 from .delivery import send_retrying, send_story
 from .generator import METHODS, GenerationCancelled, GenerationFailure, StoryOutline
@@ -27,11 +28,6 @@ _SCHEMA = (
 )
 # The job whose request this one repeats with the other model ("la misma idea con Híbrido").
 _SOURCE_COLUMN = "ALTER TABLE jobs ADD COLUMN source_job INTEGER"
-
-
-def _now() -> str:
-    """Return an ISO timestamp for audit columns."""
-    return datetime.now(UTC).isoformat()
 
 
 class JobQueue:
@@ -82,7 +78,16 @@ class JobQueue:
             cursor = db.execute(
                 "INSERT INTO jobs(chat_id,user_id,story_format,prompt,brief,status,created_at,"
                 "updated_at,source_job) VALUES (?,?,?,?,?,'queued',?,?,?)",
-                (chat_id, user_id, story_format, prompt, brief, _now(), _now(), source_job),
+                (
+                    chat_id,
+                    user_id,
+                    story_format,
+                    prompt,
+                    brief,
+                    audit_timestamp(),
+                    audit_timestamp(),
+                    source_job,
+                ),
             )
             return cursor.lastrowid
 
@@ -102,7 +107,7 @@ class JobQueue:
                 return None
             db.execute(
                 "UPDATE jobs SET status='running', attempts=attempts+1, updated_at=? WHERE id=?",
-                (_now(), row["id"]),
+                (audit_timestamp(), row["id"]),
             )
         return _with_request(dict(row))
 
@@ -124,7 +129,7 @@ class JobQueue:
         """Close a request as completed, failed or cancelled."""
         self._run(
             "UPDATE jobs SET status=?, run_dir=?, error=?, updated_at=? WHERE id=?",
-            (status, str(run_dir) if run_dir else None, error, _now(), job_id),
+            (status, str(run_dir) if run_dir else None, error, audit_timestamp(), job_id),
         )
 
     def cancel(self, user_id: int) -> str | None:
@@ -144,7 +149,8 @@ class JobQueue:
     def attach_run(self, job_id: int, run_dir: Path) -> None:
         """Remember the run directory a job is writing, so a restart can close it."""
         self._run(
-            "UPDATE jobs SET run_dir=?, updated_at=? WHERE id=?", (str(run_dir), _now(), job_id)
+            "UPDATE jobs SET run_dir=?, updated_at=? WHERE id=?",
+            (str(run_dir), audit_timestamp(), job_id),
         )
 
     def cancel_requested(self, job_id: int) -> bool:
@@ -160,7 +166,12 @@ class JobQueue:
                 row["status"] = "queued" if retry else "failed"
                 db.execute(
                     "UPDATE jobs SET status=?, error=?, updated_at=? WHERE id=?",
-                    (row["status"], None if retry else "Interrumpida", _now(), row["id"]),
+                    (
+                        row["status"],
+                        None if retry else "Interrumpida",
+                        audit_timestamp(),
+                        row["id"],
+                    ),
                 )
         return rows
 

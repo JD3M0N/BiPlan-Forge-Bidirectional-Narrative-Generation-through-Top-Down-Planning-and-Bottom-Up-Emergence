@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.0.2] - 2026-10-24
+
+- The study writes its audit timestamps with `asg_core.audit_timestamp` instead of its own copy.
+  Requires `asg-core>=0.8.0`. No change to the stored rows.
+
+## [2.0.1] - 2026-10-23
+
+- Removed unused report discovery/grouping helpers and their private support types.
+  Tolerant artifact readers and public commands retain their behavior.
+
 ## [2.0.0] - 2026-10-12
 
 A single pairwise study for the thesis close, as the tutor asked: human pairs, evidence-quoted

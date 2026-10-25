@@ -1,168 +1,13 @@
 # Hoja de ruta
 
-**Cierre, 2026-10-12:** `asg-stagecraft` 7.11.0 (pipeline 7.11), `asg-evaluation` 2.0.0 y
-`asg-telegram` 5.0.0. El bot solo crea historias (Top-Down o híbrido, libre o guiada, con audio)
-y las compara a ciegas por pares; la consola, la evaluación 1-10, los estudios `rolling`/`pack`
-y los informes `report-evaluations`, `report-story-craft`, `report-simulations` y
-`report-llm-usage` se retiraron. Las cifras de proceso y coste se leen con `asg-report-features`
-(capas P y K) o del JSON del run; la comparación de runs, en StageCraft. 672 tests en verde.
+Estado verificado el 2026-10-24, tras la limpieza estructural: Stagecraft 7.21.2
+(pipeline 7.21), core 0.8.0, evaluación 2.0.2, Telegram 6.0.2 y Studio 0.2.1; 836 pruebas
+aprobadas y 2 omitidas, Ruff y dependencias correctos. El mínimo de Python declarado baja a
+3.12, el que `setup.ps1` acepta. Esta revisión no vuelve a medir el corpus ni valida calidad
+literaria.
 
-**7.12.0, 2026-10-12: los primeros lectores de fuera.** Once runs 7.10 hechos por amigos en
-otra PC (`Stories/Stagecraft/20261011-23*` a `20261012-16*`, traídos de `ES/`; su log del bot,
-`Stories/telegram-bot.amigos.log`) no gustaron: «lenguaje super rebuscado», nombres en cada
-línea. Medido: 7 de 14 capítulos simulados en el narrador de respaldo (0 de 50 en 7.8–7.9), el
-Writer sin correr en las narrativas porque el crítico no dio notas, 3.052 palabras para «unas
-500», un run muerto por un id de lugar y 9 de 9 audios con 403. 7.12.0 arregla lo que se
-arreglaba sin cuota (ver `packages/stagecraft/CHANGELOG.md`); falta validarlo en real (SIM-21,
-TD-8). 701 tests en verde.
-
-**7.12.1, 2026-10-13: la primera validación real de 7.12.** Tres runs simulados con Gemini en
-plena tormenta de 503 (`20261013-125004`, `131347` y `145340`); solo el misterio del tren
-terminó. De ellos salieron los arreglos de 7.12.1: la cadena salta un modelo saturado o un 403
-suelto sin matar el run, el casting se repara sobre su candidato, la revisión rechaza un
-capítulo en presente, y el actor lee su contexto con tildes. Resultados en SIM-21. 705 tests
-en verde.
-
-**7.16.0, 2026-10-17: la función acaba en escena y el narrador deja de transcribir.** Dos
-pares 7.15.2 / 7.16 de «Las islas del cielo» (`20261017-182746` / `182756` y `184650` /
-`184641`). El diálogo copiado bajó de 0,9 a 0,47 y el mejor final es de 7.16, pero la prosa
-resume de más (SIM-24) y la lectura por pares quedó 1 a 1. 742 tests en verde.
-
-**7.17.0, 2026-10-17: lo que entra en cada agente y lo que decide el código.** Análisis de los
-runs 7.10–7.16 contrastado con la literatura:
-
-- Flash-Lite copia lo que recibe.
-- Su juicio de calidad no sirve.
-- El 35 % de los beats se fuerzan, la mitad por viajes que nadie puede representar.
-- Los runs 7.16 se lanzaron sin `brief.json` y en Esencial.
-
-Seis brazos apagados por defecto (estilo con ejemplos, editor por fragmentos, fichas de
-escena, crítico con cita, narración por selección y cláusulas por tipo), más arreglos siempre
-activos. La validación en real está en SIM-25, TD-10 y SIM-26. 781 tests en verde.
-
-**7.18.0, 2026-10-18: el Writer edita párrafos.** En `20261018-035939` el Writer devolvió el
-capítulo 3 byte a byte dos veces, y en el corpus 17 de 29 intentos eran casi copias. Ahora
-devuelve ediciones por párrafo que aplica el código, reintenta la nota que no atendió
-(`NOTE_NOT_APPLIED`) y, si nada pasa, entrega el mejor candidato. El bucle de reintento es uno
-solo. Falta validarlo en real (TD-3). 793 tests en verde.
-
-**7.20.0, 2026-10-19: el narrador deja de pegar el log y la petición se lee entera.** En la
-tanda 7.19 del 19-oct la híbrida entregó sus 3 capítulos como `NARRATION_BEST_ATTEMPT`:
-- el revisor castigaba el estilo indirecto;
-- el narrador pegaba acotaciones en presente;
-- la ficha pegada como prompt perdió su reparto;
-- «Historia extensa» se corrió en Esencial sin aviso.
-
-7.20 arregla todo eso. Detalle en `packages/stagecraft/CHANGELOG.md`.
-- Sobre la misma función (`--narrate-from`), los capítulos aceptados al primer intento pasan de
-  0 de 3 a 3 de 3, y los hallazgos bloqueantes de 10 a 0.
-- `pipeline.py` se divide en mixins (mitad de ING-3).
-
-**Estado medido el 2026-10-09 con `asg-stagecraft` 7.9.0 (pipeline 7.9).** Un solo generador,
-Stagecraft, con tres formatos: `narrative`, `script` y `simulated`. La función simulada puede
-llevar inventario de objetos, la guía narrativa tiene una estrategia experimental
-(`compositional_v2`) y la interfaz gráfica StageCraft (`asg-studio`) ya existe (ver
-[docs/resumen.md](docs/resumen.md)).
-
-| Corpus | Runs | Completados | Fallidos | Qué es |
-|---|---|---|---|---|
-| `Stories/Stagecraft/` | 29 | 24 | 4 | 7.0–7.9: veintiún simulados y ocho narrativos; uno quedó en `running` al cancelarse a mano |
-| `Stories/Top-Down/` | 176 | 135 | 41 | 4.0–6.2, anteriores al renombrado; 18 sin versión |
-| `Stories/Bottom-Up/` | 6 | — | — | el escape room retirado en 7.1.1, más tres lotes de CSV |
-
-- **Validación real 7.5:** dos funciones `fixed`/`adaptive` desde el mismo plan congelado; ver [docs/resumen.md](docs/resumen.md). La revisión adaptativa falló con Gemini y se corrigieron sus objetivos parciales después del experimento.
-- **Validación real 7.6:** un par con y sin inventario desde ese mismo plan
-  (`20261002-150355` y `20261002-151512`). Las 21 menciones de un objeto del mundo en una
-  acción pasaron de 0 a 11 respaldadas por un movimiento arbitrado, y el árbitro rechazó un
-  `ITEM_NOT_HELD` que el brazo de control habría aceptado. n=1: prueba de mecanismo, no
-  medición de calidad. La medición es EXP-6.
-- **Validación real 7.8 de la función (2026-10-09):** un replay del plan congelado del volcán
-  (`20261009-184753`, 86 llamadas, par de `150355`/`151512`) y un misterio nuevo con el prompt 03
-  (`20261009-185923`, 116 llamadas), los dos con Gemini puro (`ASG_LLM_CHAIN` vacío) y sin un
-  solo error del proveedor. Leídos enteros junto con las cuatro funciones 7.4–7.6:
-  - **Todo beat con compuertas obligatorias se ha forzado o ha necesitado al mundo:** 6 de 6
-    desde 7.5. Es un bug de emparejamiento de cadenas, no del modelo (SIM-17).
-  - **El contexto del actor llega roto:** ids inventados («con sir_aldren: Aliado táctico»),
-    objetivo en inglés y frases sin concordancia (SIM-18), y notas en inglés porque el esquema
-    lo pide (SIM-2).
-  - **El misterio no se resuelve:** el clímax lo da por alcanzado el director, pero
-    `promise_audit.json` da 0 de 2 promesas pagadas y el mecanismo lo demuestra el mundo
-    (SIM-1).
-  - `audit-stage-run` dio 100 de conocimiento y 100 de fidelidad a los dos: ningún juez ve nada
-    de lo anterior (TD-1).
-- **7.9.0 cierra SIM-16, SIM-17 y SIM-18 y la parte de idioma de SIM-2, verificado en real** con
-  dos replays de esos mismos planes (`20261009-195949` volcán, `20261009-200848` faro):
-
-  | | volcán 7.8 → 7.9 | faro 7.8 → 7.9 |
-  |---|---|---|
-  | Beats forzados / con ayuda del mundo | 1 / 0 → **0 / 0** | 0 / 2 → 0 / 1 |
-  | Notas del director en inglés | 14/38 → **0/35** | 36/42 → **0/38** |
-  | Contextos con ids / con objetivo en inglés | 26 / 41 → **0 / 0** | 24 / 40 → **0 / 0** |
-  | Rechazos / turnos saltados / reparados | 7 / 0 / — → 7 / 0 / 8 | 13 / 3 / — → **1 / 0** / 4 |
-  | Promesas pagadas (`promise_audit.json`) | — | 0/2 → **2/2** |
-
-  - Las compuertas casan por clave (`_clause_key`, `stage/engine.py`). En el volcán, `event_2`
-    se alcanza en el turno 6 con sus dos compuertas citadas; desde 7.5 se había forzado siempre.
-  - Quedan dos rastros de inglés en el estado. El volcán reutiliza un casting de 7.4 sin
-    `initial_goal` en español, y el `commitment` inicial salía del `want` del dossier. Este
-    último se quitó después de los replays y se verá en el siguiente run.
-  - El mundo sigue entregando la prueba del clímax del faro (SIM-2).
-- **Evaluación humana: casi inexistente.** De 146 `evaluation.json`, uno solo tiene puntuaciones
-  reales (`Top-Down/20260831-223547-el-rescate-de-luminaria`). Todo lo demás que se sabe de la
-  calidad sale de métricas automáticas o de jueces LLM, y esos jueces aprueban casi todo (TD-1).
-- **Puerta de calidad limpia.** `ruff check`, `ruff format --check` (190 archivos), la suite y
-  `pip check`. Corren en `.github/workflows/quality.yml` en cada push y pull request, y en local
-  con `.\quality.ps1`. Los tests corren siempre con `.\run-tests.ps1`, el único comando: nunca
-  `pytest` a mano ni un archivo suelto.
-- **La corrida de control** (`Stories/Stagecraft/20260926-094204-el-secreto-del-faro-de-san-telmo`,
-  narrativa, prompt 03 Esencial) fue la primera narrativa desde el renombrado.
-  - Recorrió 7.1.1 entero en 17 llamadas, 97k tokens y unos 92 s de modelo, sin fallos ni
-    avisos, así que el refactor `e4c4d99` no rompió nada en real.
-  - Confirmó en 7.1.1 fallos que se creían propios de la función simulada o de versiones
-    anteriores, detallados en TD-1 a TD-5 y en TD-7:
-    - el primer plan, rechazado por el mismo invariante;
-    - una revisión que solo alarga;
-    - tres confesiones seguidas en la revelación;
-    - una solución que contradice el capítulo 1;
-    - la médica del prompt convertida en «el doctor Vargas»;
-    - el meteorólogo ausente;
-    - y, otra vez, «Elena».
-- **7.2.0 arregla los bugs que se podían arreglar sin cuota**, cada uno con su test:
-  - la memoria sin tope y las réplicas propias releídas (SIM-9);
-  - los destinatarios imposibles y las notas repetidas (SIM-10);
-  - el log incompleto (SIM-3, cerrada);
-  - la cuota diaria tomada por facturación (MED-1, cerrada en 7.8.3);
-  - la telemetría (MED-2, cerrada en 7.8.3);
-  - los runs fallidos que no decían dónde murieron (MED-4, cerrada);
-  - el gate de documentación que pasaba en vacío (ING-1, en parte);
-  - el anexado cuadrático (ING-4, cerrada);
-  - el render del reparto (TD-6, cerrada);
-  - los títulos de acto en inglés (TD-2, en parte);
-  - las cotas internas (ING-5, en parte).
-
-  **SIM-9 y SIM-10 están verificados en real** por el par de 7.2
-  (`Stagecraft/20260927-163733-*`, prompt 03, y `20260927-213245-*`, prompt 07): mediana y máximo
-  de 8 recuerdos por turno frente a los 20,5–29 de mediana y 57–70 de máximo de 7.1, cero material
-  propio recuperado, 38 de 43 y 47 de 51 turnos con destinatario frente a 1 de 80, cero notas
-  repetidas y el primer susurro del corpus. La tabla completa está en
-  [docs/resumen.md](docs/resumen.md), «Validación de 7.2».
-- **La frontera de conocimiento se sostiene en el dato.** Una auditoría determinista de los dos
-  runs sobre `contexts.jsonl`, `turns.jsonl` y `memory/*/records.json` no encontró ningún id ni
-  réplica del guion en un contexto de actor, ningún recuerdo de lo no presenciado, ningún
-  pensamiento ni susurro ajeno, y ninguna compuerta filtrada por el dossier, el objetivo, el
-  escenario o la nota. El juez LLM dio 95,83 y 100 de conocimiento, y 93,33 y 95,0 de fidelidad
-  de la narración, frente a 81,67 y 78,33 en 7.1.
-- **Las funciones 7.0 y 7.1 no se comparan sin más con las de 7.2.** Sus actores leían toda su
-  memoria anterior (medianas de 18 a 29 recuerdos por turno, máximos de 52 a 72, frente a los 8
-  del diseño) y casi nunca tenían destinatario. Sus métricas recalculadas con el código de 7.2
-  están en `simulation_metrics.recomputed.json`.
-- **[docs/resumen.md](docs/resumen.md) fundamenta la tesis y ordena el trabajo de la función:**
-  por qué mezclar Top-Down y Bottom-Up, y el diagnóstico de la actuación en los runs 7.1 con sus
-  mejoras y su respaldo. De ahí salieron SIM-9 a SIM-13, MED-7 y EXP-5; SIM-9 y SIM-10 están
-  cerradas.
-- **Cerradas el 2026-10-09 sin cuota:** MED-1 (comprobación previa de la cuota y libro de
-  cuotas también sin cadena), MED-2 (`report-llm-usage`), ING-6, ING-7 (decisión: se conserva
-  `topological_order`) y SIM-15, que se fundió en SIM-2.
+Esta hoja conserva trabajo abierto. Los cambios terminados y resultados históricos están en
+los changelogs de cada paquete y en Git. Las reglas de trabajo están en [AGENTS.md](AGENTS.md).
 
 ## Cómo leer esto
 
@@ -276,7 +121,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
   sobre la misma función, y uno de escritura Top-Down con `--plan-from` sobre el mismo plan. Así
   el ruido de la función y del plan queda fuera de la comparación.
 - **Por escrito.** El resultado va con cifras y comandos en el doc del formato
-  (`docs/resumen.md` o `docs/resumen.md`), no aquí.
+  (`docs/resumen.md`), no aquí.
 
 ---
 
@@ -780,7 +625,7 @@ Vale para toda ficha `EXP` y para cualquier «Hecho cuando» que pida runs reale
 ### MED-8 · Línea base de un solo prompt
 
 **Actualización 2026-10-04:** infraestructura implementada y demostrable sin red; consultar
-[ESTUDIO_FINAL.md](packages/evaluation/ESTUDIO_FINAL.md). La descripción siguiente conserva
+[README de evaluación](packages/evaluation/README.md). La descripción siguiente conserva
 el diagnóstico inicial. Queda pendiente la ejecución con corpus definitivo y lectores reales.
 
 *Área:* medición · *Cuota:* ~1 llamada por historia · *Depende de:* nada
@@ -1535,9 +1380,8 @@ EXP-7
 *Área:* ingeniería · *Cuota:* sin cuota · *Depende de:* —
 
 - **Síntoma.**
-  - **Aserciones sobre el texto.** `packages/stagecraft/tests/test_generator_v5.py` (1.861 líneas)
-    tiene unas 51 aserciones de subcadena sobre prompts y textos de sistema. Hay más en
-    `test_script_pipeline` (5), `test_stage_engine` (4) y `test_audit_stage` (4).
+  - **Aserciones sobre el texto.** `packages/stagecraft/tests/test_generator_v5.py` y las
+    pruebas de guion y actuación comprueban subcadenas de prompts y textos de sistema.
   - **Dobles que enrutan por el texto.** Los dobles de proveedor eligen respuesta por subcadenas
     del prompt de sistema («Script Critic», «Playwright»; y en `stage_fakes.py`,
     «You are the Narrator» o «Name turning_actor_id»). El Writer ya se enruta por su esquema
@@ -1557,9 +1401,10 @@ EXP-7
 - **Síntoma.** El gate ya no pasa en vacío: desde 7.2.0 resuelve sus rutas desde `Path(__file__)`,
   falla si no encuentra módulos y su marcador corrupto está corregido. Lo que queda es que solo
   exige texto ASCII:
-  - de 862 definiciones en 98 archivos, unas 65 tienen un docstring plantilla: «Represent X data
-    and behavior.», «Initialize the X instance», «Run the XAgent workflow»;
-  - las peores son `schemas.py` (17), `runtime/errors.py` (11) y `runtime/storage.py` (8);
+  - acepta docstrings plantilla como «Represent X data and behavior.» o «Run the XAgent
+    workflow». Son 42, contadas en la limpieza de 7.21.2, concentradas en `schemas/`
+    (15), `runtime/errors.py` (12), `agents/base.py` (4, incluido el público `json_text`),
+    `runtime/quota.py` (4) y `runtime/storage.py` (2);
   - **Ruff no ayuda.** `pyproject.toml` no activa las reglas `D`.
 - **Qué hacer.**
   - Pasar la presencia de docstrings a las reglas `D` de Ruff y dejar el test solo para el idioma.
@@ -1571,29 +1416,17 @@ EXP-7
 *Área:* ingeniería · *Cuota:* sin cuota · *Depende de:* —
 
 - **Síntoma.**
-  - **Tamaño.** `StoryPipeline` tiene 1.197 líneas y 48 métodos, más los mixins de
-    `script/stages.py` (646 líneas) y `stage/stages.py` (574).
-  - **Asserts por culpa de un campo opcional.** El `repository` opcional obliga a 37
-    `assert self.repository is not None`: 22 en `pipeline.py`, 9 en `script/stages.py` y 6 en
-    `stage/stages.py`.
-  - **Métodos largos.** Los peores son `_perform_play` (132 líneas), `_revise_one_act` (118) y
-    `_revise_one_chapter` (94).
-  - **Lo fácil ya está hecho.** Las tres extracciones de riesgo nulo se hicieron en 7.0.0:
-    `planning/repair.py`, `writing/assembly.py` y `writing/acceptance.py`.
+  - `pipeline.py` tiene 671 líneas; las etapas ya viven en mixins de planificación, escritura,
+    guion, actuación y narración. La telemetría está en `runtime/reporting.py`.
+  - Los mixins comparten estado mediante `self`; el repositorio opcional sigue obligando a
+    comprobar su presencia antes de utilizarlo.
+  - Falta convertir las etapas en unidades con estado y pruebas propios.
 - **Qué hacer.**
-  - Sacar la telemetría y la contabilidad de uso como colaboradores (su lectura ya existe: capa K).
   - El bucle de reintento ya está en `writing/revision_loop.py` (7.18). El del narrador
     (`stage/stages.py`) se queda aparte a propósito: tiene revisión editorial, candidato
     reservado y su propia severidad.
   - Al final, convertir las etapas en clases con estado propio, que es lo que elimina los asserts.
   - No hacerlo de paso dentro de otro cambio.
-- **Hecho en 7.20.**
-  - `pipeline.py` baja de 1.880 a 723 líneas. Las etapas pasan a mixins: `planning/stages.py`,
-    `writing/stages.py` y `stage/narration_stage.py`. El progreso y el uso van a
-    `runtime/reporting.py`.
-  - Un run narrativo y otro simulado con dobles dan los mismos artefactos, byte a byte.
-  - Falta lo que de verdad pide el «Hecho cuando»: etapas con estado propio y test propio, sin
-    asserts.
 - **Hecho cuando.**
   - Plan, borrador, revisión y función son unidades con test propio.
   - El estado deja de pasarse como parámetros posicionales.
@@ -1604,20 +1437,20 @@ EXP-7
 *Área:* ingeniería · *Cuota:* sin cuota · *Depende de:* —
 
 - **Síntoma.**
-  - **CI solo prueba una plataforma.** Corre solo en `windows-latest` con Python 3.12; el resto
-    de versiones soportadas (`requires-python = ">=3.11"`) no se comprueban.
-  - **Sin tipos ni cobertura.** No hay comprobador de tipos, aunque ya hay 3
-    `# type: ignore[arg-type]` en `stage/engine.py` y `stage/memory.py`. Tampoco se mide
-    cobertura.
-  - **Más cabos sueltos.** `colorama` no tiene techo, no hay lockfile y los `CHANGELOG` usan dos
-    formatos de cabecera. Las cotas internas se subieron al mínimo real en 7.2.0, pero nada
-    impide que vuelvan a quedarse atrás.
+  - **CI solo prueba una plataforma.** Corre solo en `windows-latest` con Python 3.12. Desde
+    7.21.2 el mínimo declarado es 3.12, así que CI sí cubre la versión mínima, pero 3.15,
+    que `setup.ps1` acepta y tiene sus propias restricciones, no se comprueba nunca.
+  - **Sin tipos ni cobertura en CI.** No hay paso de comprobación de tipos ni informe de
+    cobertura en el workflow de calidad.
+  - **Dependencias.** Las cotas internas se alinearon en 7.21.2 con la minor vigente de cada
+    paquete; nada comprueba que no vuelvan a quedarse atrás.
 - **Qué hacer.**
-  - Ampliar la matriz de CI a Linux y 3.11.
+  - Ampliar la matriz de CI a Linux y a 3.15, con su archivo de restricciones.
   - Añadir pyright o mypy, empezando por `core`.
   - Informar de la cobertura, sin umbral al principio.
-- **Hecho cuando.** CI prueba la versión mínima de Python declarada, y una dependencia interna
-  demasiado vieja falla al instalar, no al importar.
+  - Un test o un paso de CI que falle si una cota interna queda por debajo de la minor instalada.
+- **Hecho cuando.** CI prueba las dos versiones de Python que `setup.ps1` acepta, y una
+  dependencia interna demasiado vieja falla al instalar, no al importar.
 
 ### ING-8 · Documentar los contratos públicos y rellenar el README
 
@@ -1627,13 +1460,52 @@ EXP-7
   - `README.md` de la raíz ya es una portada corta (estructura y puesta en marcha); falta el
     contrato de artefactos.
   - Las fachadas no tienen ejemplos que se ejecuten.
-  - `packages/core/README.md` sigue en inglés y los demás están en español.
+  - `packages/core/README.md` sigue en inglés y los demás están en español; lo mismo
+    pasa con los changelogs de `core` y `evaluation` frente a los otros tres.
 - **Qué hacer.** Al cerrar:
   - ejemplos mínimos de entrada, salida y fallo para `asg_core`, `asg_stagecraft` y
     `asg_evaluation`;
   - el contrato de artefactos en el README de la raíz, en UTF-8.
 - **Hecho cuando.** Los ejemplos se validan en los tests o en CI, y la documentación describe el
   contrato de artefactos vigente y su compatibilidad con los runs anteriores.
+
+### ING-9 · Dos listas de títulos que no coinciden
+
+*Área:* ingeniería · *Cuota:* sin cuota · *Depende de:* —
+
+- **Síntoma.** `planning/names.py` y `stage/names.py` llevan cada uno su `_TITLES` para quitar
+  el tratamiento de un nombre, y no son la misma lista: planning compara formas plegadas
+  (`dra`, `capitan`) con `_fold`, stage compara formas acentuadas (`capitán`, `doña`) con
+  `.lower()`. Se solapan en torno al 70 %, así que «Dra. Elena» se destitula en el plan y no
+  en la función, o al revés. Los mismos dos módulos duplican el plegado: `planning/names.py`
+  `_fold` es el prefijo exacto de `planning/skeleton_match.py` `normalize`, que `stage/names.py`
+  importa desde ahí, un acoplamiento que no corresponde a lo que hace.
+- **Qué hacer.** Una sola lista plegada y un solo comparador, en un módulo de texto del
+  paquete. No es una limpieza incidental: unificarlas cambia nombres en historias generadas,
+  así que entra con una subida de `PIPELINE_VERSION` y un par medido.
+- **Hecho cuando.** El mismo nombre con tratamiento se acorta igual en el plan y en la función,
+  y un test lo cruza con las dos rutas.
+
+### ING-10 · Lo que queda por trocear de la función
+
+*Área:* ingeniería · *Cuota:* sin cuota · *Depende de:* ING-3
+
+- **Síntoma.** La limpieza de 7.21.2 partió los dos módulos de esquemas en paquetes por
+  secciones y dejó identificados los que siguen siendo demasiado grandes:
+  - `stage/engine.py`, 1650 líneas: `PerformanceEngine` tiene 41 métodos, un `__init__` de
+    107 líneas y un `_play_turn` de 175. Los métodos agrupan solos en turno, mundo y
+    arbitraje, derivación de hechos, memoria y estancamiento.
+  - `runtime/provider.py`, 1354 líneas: contexto y errores, los dos clientes concretos y la
+    composición (`RoutedProvider`, `FailoverProvider`, la factoría) no se tocan entre sí.
+  - `stage/stages.py`, 1076 líneas: `_perform_play` ocupa 248 y el bloque de revisión del
+    futuro, otras 200 seguidas.
+  - `BeatCheckDraft.world_effect` no lo lee nadie, pero viaja al director como JSON schema:
+    retirarlo cambia lo que ve el modelo.
+- **Qué hacer.** Trocear por esas costuras, con el patrón de mixins que el paquete ya usa, y
+  retirar el campo muerto en la misma subida de `PIPELINE_VERSION`. Después de ING-3, no a la
+  vez: las etapas con estado propio cambian dónde cae cada corte.
+- **Hecho cuando.** Ningún módulo de la función pasa de 700 líneas, los artefactos no cambian
+  salvo el campo retirado, y el par medido lo confirma.
 
 ---
 
