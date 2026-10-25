@@ -108,30 +108,67 @@ def test_extraction_resumes_reuses_cache_and_invalidates_changed_text(tmp_path):
     )
 
 
-def test_invalid_quotes_get_one_repair_then_remain_failed(tmp_path):
+@pytest.mark.parametrize("defect", ["fabricated quote", "omitted feature"])
+def test_invalid_quotes_get_one_repair_then_remain_failed(tmp_path, defect):
     run = synthetic_run(tmp_path / "run", 1)
     text = (run / "story.md").read_text(encoding="utf-8")
+    prompts = []
 
     class Invalid(SyntheticProvider):
         def generate_structured(self, **kwargs):
+            prompts.append(kwargs["prompt"])
             clean = {**kwargs, "prompt": kwargs["prompt"].split("\nREPAIR:")[0]}
             response = super().generate_structured(**clean)
             if isinstance(response, Findings):
-                response.features[0].occurrences = [
-                    Occurrence(
-                        scene=0,
-                        label="q",
-                        explanation="bad",
-                        evidence=[Quote(paragraph=1, text="A fabricated quote")],
-                    )
-                ]
+                for finding in [f for f in response.features if f.feature == "X23"]:
+                    if defect == "omitted feature":
+                        response.features.remove(finding)
+                        continue
+                    finding.occurrences = [
+                        Occurrence(
+                            scene=0,
+                            label="q",
+                            explanation="bad",
+                            evidence=[Quote(paragraph=1, text="A fabricated quote")],
+                        )
+                    ]
             return response
 
     output = run / "features" / "features.json"
     provider = Invalid()
-    with pytest.raises(ValueError):
-        extract_features(text, provider, model="fake", output=output)
-    report = json.loads(output.read_text(encoding="utf-8"))
-    assert provider.calls == 3
+    report = extract_features(text, provider, model="fake", output=output)
+    # Segmentation, two batches and one repair that asks only for the invalid field.
+    assert provider.calls == 4
+    repair = prompts[2].split("FEATURE DEFINITIONS:\n", 1)[1].split("\nREPAIR:")[0]
+    assert [d["id"] for d in json.loads(repair)] == ["X23"]
+    assert not report["complete"]
     assert report["features"]["X23"]["status"] == "failed"
     assert report["features"]["X23"]["value"] is None
+    assert report["features"]["X24"]["status"] == "failed"
+    assert report["features"]["R02"]["status"] == "measured"  # valid fields in the batch survive
+    retry = SyntheticProvider()
+    report = extract_features(text, retry, model="fake", output=output)
+    assert retry.calls == 1 and report["complete"]
+
+
+def test_payoff_is_inapplicable_when_no_question_was_opened(tmp_path):
+    run = synthetic_run(tmp_path / "run", 1)
+    text = (run / "story.md").read_text(encoding="utf-8")
+    prompts = []
+
+    class NoQuestions(SyntheticProvider):
+        def generate_structured(self, **kwargs):
+            prompts.append(kwargs["prompt"])
+            response = super().generate_structured(**kwargs)
+            for finding in getattr(response, "features", []):
+                if finding.feature == "X23":
+                    finding.applicable, finding.reason = False, "No question is raised"
+                    finding.occurrences = []
+            return response
+
+    provider = NoQuestions()
+    report = extract_features(text, provider, model="fake", output=run / "features.json")
+    assert report["complete"] and provider.calls == 3
+    assert report["features"]["X24"]["status"] == "not_applicable"
+    asked = json.loads(prompts[-1].split("FEATURE DEFINITIONS:\n", 1)[1])
+    assert "X24" not in [d["id"] for d in asked]

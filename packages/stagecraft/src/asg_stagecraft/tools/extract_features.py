@@ -41,14 +41,20 @@ def main(argv: list[str] | None = None) -> int:
         provider = provider_from_settings(settings)
         incomplete = False
         for text, output in sources:
-            report = extract_features(
-                text,
-                provider,
-                model=settings.model,
-                output=output,
-                selection=args.selection,
-                force=args.force,
-            )
+            try:
+                report = extract_features(
+                    text,
+                    provider,
+                    model=settings.model,
+                    output=output,
+                    selection=args.selection,
+                    force=args.force,
+                )
+            except ValueError as exc:
+                # An invalid scene partition stops this text, not the rest of the corpus.
+                print(f"{output}: incompleta ({str(exc).strip()})")
+                incomplete = True
+                continue
             print(f"{output}: {'completa' if report['complete'] else 'incompleta'}")
             incomplete = incomplete or not report["complete"]
         return int(incomplete)

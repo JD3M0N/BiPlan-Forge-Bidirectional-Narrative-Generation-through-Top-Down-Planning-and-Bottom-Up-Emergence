@@ -1,5 +1,11 @@
 # Historial de cambios
 
+## 7.21.3
+
+- `asg-features` sigue con el resto del corpus cuando un texto no se puede segmentar y lo
+  informa como `incompleta` con el motivo. Un error del proveedor (cuota, saturación) sigue
+  deteniendo la extracción. Sin cambios en el pipeline: el contrato sigue en 7.21.
+
 ## 7.21.2
 
 - `schemas.py` y `stage/schemas.py` pasan a ser paquetes por secciones (petición y mundo, plan,

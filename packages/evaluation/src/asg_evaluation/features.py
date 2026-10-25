@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .artifacts import load_json_object
 from .catalog import catalog, catalog_snapshot, core_ids, digest
 
-EXTRACTION_VERSION = 2
+EXTRACTION_VERSION = 3
 PROMPT_VERSION = "evidence-2"
 PHRASES = ("un escalofrío recorrió", "el peso de")
 DERIVED = {"X01", "X02", "X03", "X04", "X05"}
@@ -375,42 +375,75 @@ def _call(provider, prompt: str, schema, validate):
     raise ValueError(feedback)
 
 
+def _question_ids(opening: dict) -> set[str]:
+    """Return the question IDs a measured X23 opened, or none."""
+    if opening.get("status") != "measured":
+        return set()
+    return {o["label"] for o in opening.get("evidence", [])}
+
+
+def _findings(
+    response: Findings,
+    pending: list[str],
+    blocks: list[dict],
+    partition: Segmentation,
+    words: int,
+    open_questions: set[str],
+) -> tuple[dict, dict]:
+    """Aggregate each pending field on its own, returning valid values and per-field errors."""
+    found: dict[str, list[FeatureFinding]] = {}
+    for finding in response.features:
+        found.setdefault(finding.feature, []).append(finding)
+    values, errors = {}, {}
+    questions_ = set(open_questions)
+    # X23 first: payoffs in the same response may reference the questions it opens.
+    for key in sorted(pending, key=lambda k: k != "X23"):
+        if len(found.get(key, [])) != 1:
+            errors[key] = "Return this feature exactly once"
+            continue
+        try:
+            values[key] = aggregate_finding(found[key][0], blocks, partition, words, questions_)
+        except ValueError as exc:
+            errors[key] = str(exc)
+            continue
+        if key == "X23":
+            questions_ |= _question_ids(values[key])
+    return values, errors
+
+
 def _batch(
     provider,
-    prompt: str,
+    prompt_for,
     requested: list[str],
     blocks: list[dict],
     partition: Segmentation,
     words: int,
     open_questions: set[str],
 ) -> dict:
-    """Validate an entire batch, allowing question openings and payoffs in the same response."""
-
-    def validate(response: Findings) -> None:
-        """Require exactly the requested IDs and valid evidence for every complete field."""
-        ids = [f.feature for f in response.features]
-        if sorted(ids) != sorted(requested):
-            raise ValueError("Return each requested feature exactly once")
-        questions_ = open_questions | {
-            o.label
-            for f in response.features
-            if f.feature == "X23" and f.complete and f.applicable
-            for o in f.occurrences
-        }
-        for finding in response.features:
-            aggregate_finding(finding, blocks, partition, words, questions_)
-
-    response = _call(provider, prompt, Findings, validate)
-    questions_ = open_questions | {
-        o.label
-        for f in response.features
-        if f.feature == "X23" and f.complete and f.applicable
-        for o in f.occurrences
-    }
-    return {
-        f.feature: aggregate_finding(f, blocks, partition, words, questions_)
-        for f in response.features
-    }
+    """Validate fields one by one; repair only the invalid ones once, then mark them failed."""
+    values, errors = {}, {}
+    pending = list(requested)
+    for _attempt in range(2):
+        prompt = prompt_for(pending)
+        if errors:
+            details = "; ".join(f"{key}: {error}" for key, error in sorted(errors.items()))
+            prompt += f"\nREPAIR: Return a complete replacement for these features. {details}"
+        try:
+            response = provider.generate_structured(
+                system_instruction=SYSTEM, prompt=prompt, schema=Findings, profile="extraction"
+            )
+        except ValueError as exc:
+            errors = {key: str(exc) for key in pending}
+            continue
+        known = open_questions | _question_ids(values.get("X23", {}))
+        accepted, errors = _findings(response, pending, blocks, partition, words, known)
+        values.update(accepted)
+        pending = sorted(errors)
+        if not pending:
+            break
+    for key, error in errors.items():
+        values[key] = measurement(status="failed", reason=error)
+    return values
 
 
 def extract_features(
@@ -518,29 +551,52 @@ def _extract_batches(
         report["features"]["R14"] = measurement(status="missing")
     for start in range(0, len(remaining), 12):
         requested = remaining[start : start + 12]
-        open_questions = {o["label"] for o in report["features"].get("X23", {}).get("evidence", [])}
-        prompt = (
-            base
-            + "\nSCENES:\n"
-            + partition.model_dump_json()
-            + "\nOPEN QUESTION IDS:\n"
-            + json.dumps(sorted(open_questions))
-            + "\nFEATURE DEFINITIONS:\n"
-            + json.dumps([definitions[k] for k in requested], ensure_ascii=False)
-        )
+        opening = report["features"].get("X23", {})
+        if "X24" in requested and "X23" not in requested and opening.get("status") != "measured":
+            # Payoffs can only be checked against measured questions: do not ask for them.
+            requested.remove("X24")
+            report["features"]["X24"] = (
+                _no_questions()
+                if opening.get("status") == "not_applicable"
+                else measurement(status="failed", reason="Question denominator is incomplete")
+            )
+        if not requested:
+            atomic_write_json(output, report)
+            continue
+        open_questions = _question_ids(opening)
+
+        def prompt_for(keys: list[str], open_questions=open_questions) -> str:
+            """Build the batch prompt for a subset, so a repair asks only for invalid fields."""
+            return (
+                base
+                + "\nSCENES:\n"
+                + partition.model_dump_json()
+                + "\nOPEN QUESTION IDS:\n"
+                + json.dumps(sorted(open_questions))
+                + "\nFEATURE DEFINITIONS:\n"
+                + json.dumps([definitions[k] for k in keys], ensure_ascii=False)
+            )
+
         values = _batch(
             provider,
-            prompt,
+            prompt_for,
             requested,
             blocks,
             partition,
             report["features"]["T01"]["value"],
             open_questions,
         )
-        opening = values.get("X23", report["features"].get("X23", {}))
-        if "X24" in values and opening.get("status") != "measured":
+        opening = values.get("X23", opening)
+        if "X24" in values and opening.get("status") == "not_applicable":
+            values["X24"] = _no_questions()
+        elif "X24" in values and opening.get("status") != "measured":
             values["X24"] = measurement(
                 status="failed", reason="Question denominator is incomplete"
             )
         report["features"].update(values)
         atomic_write_json(output, report)
+
+
+def _no_questions() -> dict:
+    """Mark the payoff ratio inapplicable when the story opened no tracked question."""
+    return measurement(status="not_applicable", reason="X23 found no open question to pay off")

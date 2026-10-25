@@ -62,8 +62,10 @@ asg-report-features Stories --study $db --json tabla.json --csv tabla.csv --hori
 - Solo los 27 rasgos `núcleo` de las capas T, R y X entran al juez; T01 (palabras) controla la
   longitud. Los de proceso (P), coste (K) y configuración (C) van a los informes.
 - Cada medida guarda valor, unidad, evidencias y estado: `measured` (incluido cero),
-  `not_applicable`, `missing` o `failed`. Una cita que no está en el texto se repara una vez y,
-  si sigue mal, queda como fallo, nunca como cero.
+  `not_applicable`, `missing` o `failed`. Cada rasgo se valida por separado: una cita que no
+  está en el texto hace repetir solo ese rasgo, una vez, y si sigue mal queda como fallo, nunca
+  como cero, sin tirar los demás del lote. Volver a lanzar `asg-features` reintenta solo los
+  fallidos. X24 (preguntas pagadas) no aplica si X23 no abrió ninguna.
 - `asg-audit-features --second OTRA.json` compara dos extracciones del mismo texto
   (test-retest). `asg-features --root RUTA` mide un corpus fuera del estudio.
 

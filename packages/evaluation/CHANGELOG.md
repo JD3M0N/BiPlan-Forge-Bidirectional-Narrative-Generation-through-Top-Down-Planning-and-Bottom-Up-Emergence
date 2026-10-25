@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.1.0] - 2026-10-25
+
+- Extraction protocol 3 (`EXTRACTION_VERSION` 3; the prompt stays `evidence-2`). A batch is
+  validated field by field: one invalid quote, scene or label no longer discards the other
+  eleven fields. Only the invalid fields are asked again, once; those still invalid stay
+  `failed` with their reason, and a later run retries just them. Extraction no longer raises
+  on invalid evidence, only on an invalid scene partition or a provider error.
+- X24 is `not_applicable` when X23 opened no question, instead of a permanent `failed`; while
+  X23 is not measured, X24 is no longer requested. Protocol 2 extractions become incompatible
+  and are archived on re-extraction.
+
 ## [2.0.2] - 2026-10-24
 
 - The study writes its audit timestamps with `asg_core.audit_timestamp` instead of its own copy.

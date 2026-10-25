@@ -645,7 +645,7 @@ el diagnóstico inicial. Queda pendiente la ejecución con corpus definitivo y l
 *Área:* medición · *Cuota:* revisión y test-retest con presupuesto por fijar · *Depende de:*
 versión definitiva del generador
 
-- **Síntoma.** El extractor (`packages/evaluation/src/asg_evaluation/features.py`, protocolo 2)
+- **Síntoma.** El extractor (`packages/evaluation/src/asg_evaluation/features.py`, protocolo 3)
   verifica que cada cita es literal, pero nadie ha comprobado todavía que sus interpretaciones
   sean correctas ni que sean estables: la demo ficticia no valida su calidad.
 - **Qué hacer.**
@@ -657,6 +657,11 @@ versión definitiva del generador
   acordada antes del estudio.
 - **Ojo.** Una cita literal no garantiza una interpretación correcta. El log no es un límite
   numérico universal para la prosa.
+- **Medido el 2026-10-25** sobre las 15 historias de `Evaluations/estudio`. El protocolo 2 no
+  completó ninguna: unas 60 llamadas con `gemini-3.5-flash-lite` y 134 con `gemini-3.5-flash`.
+  - Un solo rasgo inválido tiraba los 12 del lote.
+  - Si X23 no aplicaba, X24 quedaba en `failed` para siempre.
+  - El protocolo 3 (evaluación 2.1.0) aísla los fallos por rasgo y resuelve el caso de X24.
 
 ### MED-5 · Comparar formatos y métodos desde un mismo plan congelado
 
