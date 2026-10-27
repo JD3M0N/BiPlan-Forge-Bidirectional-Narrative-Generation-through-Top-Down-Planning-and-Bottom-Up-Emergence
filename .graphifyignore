@@ -1,0 +1,8 @@
+# Además de lo que ya ignora .gitignore (corpus, evaluaciones, entorno, cachés, PDF, audio).
+# Historial largo: se consulta con git, no con el grafo.
+**/CHANGELOG.md
+# Binarios y salidas generadas.
+*.xlsx
+*.sqlite3
+redaccion/build/
+graphify-out/

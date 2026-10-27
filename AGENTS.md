@@ -20,6 +20,9 @@ explican su uso. Lee las referencias pertinentes antes de modificar un subsistem
 ## Navegar con poco contexto
 
 - Empieza por `git status --short` y `git ls-files`; respeta los cambios existentes del usuario.
+- Si existe `graphify-out/graph.json` (local, ignorado por Git), oriéntate primero con
+  `graphify query "<pregunta>"` o `GRAPH_REPORT.md`; tras cambios grandes, `/graphify . --update`.
+  El grafo no lee `Stories/`, `Evaluations/`, los PDF ni los changelogs (`.graphifyignore`).
 - Busca con `rg` dentro del subsistema afectado. Lee rangos o secciones, no el monorepo entero.
 - No cargues corpus, cachés, changelogs completos ni todas las referencias por defecto.
 - El trabajo se hace por fases con la skill `phase`: guía en [planning/phase.md](planning/phase.md),
