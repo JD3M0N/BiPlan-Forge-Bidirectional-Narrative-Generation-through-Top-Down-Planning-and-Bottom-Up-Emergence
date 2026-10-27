@@ -1608,3 +1608,90 @@ dialog.modal::backdrop {
 .page-head .badges {
   margin-top: 10px;
 }
+
+/* ---- lectura ciega ------------------------------------------------------------------ */
+
+.blind-list {
+  display: grid;
+  gap: 12px;
+  max-width: 560px;
+}
+
+.blind-session {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.blind-session:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.blind-progress,
+.blind-count {
+  color: var(--muted);
+}
+
+.blind-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  align-items: start;
+}
+
+.blind-col {
+  min-width: 0;
+  padding: 8px 22px 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.blind-label {
+  margin: 14px 0 0;
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--accent);
+}
+
+.blind-prose {
+  font-size: 16.5px;
+  line-height: 1.68;
+}
+
+.blind-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.blind-end {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .blind-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

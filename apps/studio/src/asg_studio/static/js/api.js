@@ -45,6 +45,10 @@ export const api = {
   replay: (collection, runId) =>
     request("GET", `/api/runs/${enc(collection)}/${enc(runId)}/replay`),
   compare: (references) => request("GET", `/api/compare?runs=${enc(references.join(","))}`),
+  readings: () => request("GET", "/api/lecturas"),
+  readingPair: (name, number) => request("GET", `/api/lecturas/${enc(name)}/pares/${number}`),
+  vote: (name, number, winner) =>
+    request("PUT", `/api/lecturas/${enc(name)}/pares/${number}/voto`, { winner }),
   audioUrl: (collection, runId) => `/api/runs/${enc(collection)}/${enc(runId)}/audio`,
   sampleUrl: (voice) => `/api/voices/${enc(voice)}/sample`,
 };

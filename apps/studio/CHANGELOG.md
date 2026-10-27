@@ -1,5 +1,14 @@
 # Historial de cambios
 
+## [0.3.0] - 2026-10-27
+
+- P02.1a: vista **Lectura ciega**. Enseña dos historias anónimas, X e Y, lado a lado y guarda un
+  voto por par (X, Y o «no distingo»). Lee las sesiones de `Evaluations/estudio/lecturas/<n>.json`
+  y escribe los votos en `<n>.votos.json` a su lado; nunca bajo `Stories/`.
+- Endpoints nuevos: `GET /api/lecturas`, `GET /api/lecturas/{n}/pares/{k}` (sin `run_id`, título
+  ni ejes) y `PUT /api/lecturas/{n}/pares/{k}/voto`. `create_app` gana `blind_dir`.
+- Sin cambios en las vistas ni los endpoints anteriores.
+
 ## [0.2.2] - 2026-10-27
 
 - P01.2: `available_keys()`, `pending_keys()` y `SET_BY_PRESET` salen de `catalog.py` y pasan a

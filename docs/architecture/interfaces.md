@@ -54,6 +54,9 @@ Las reglas generales están en [AGENTS.md](../../AGENTS.md).
   `should_cancel`.
 - **Nunca escribe ni borra en `Stories/`.** La biblioteca y la comparación leen con los lectores
   tolerantes de evaluation (`pairing.py`).
+- **Lectura ciega** (`blind.py`, `routes/blind.py`): pares X/Y sin procedencia y un voto por
+  par, en `Evaluations/estudio/lecturas/<sesión>.votos.json`; es lo único que el studio escribe,
+  y nunca en `Stories/`. Las respuestas no llevan `run_id`, título ni ejes.
 - **Seguridad local:** toda escritura exige la cabecera `X-StageCraft: 1`, el `Host` debe ser
   local y la CSP solo permite los archivos propios. El texto del modelo se pinta con
   `textContent`.

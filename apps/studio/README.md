@@ -20,7 +20,7 @@ Generar necesita `GEMINI_API_KEY` en el `.env` de la raíz; sin ella la interfaz
 indica en la cabecera y deja explorar y comparar las funciones guardadas. Si la función
 simulada tiene modelo propio (`GEMINI_STAGE_MODEL`), la cabecera lo muestra junto al principal.
 
-## Las tres vistas
+## Las cuatro vistas
 
 - **Crear.** La obra, como ficha (título, trama, género, ambientación, notas y reparto) o como
   prompt libre, más el riel de opciones: formato, perfil, narración (visión, personaje de la
@@ -34,6 +34,11 @@ simulada tiene modelo propio (`GEMINI_STAGE_MODEL`), la cabecera lo muestra junt
 - **Comparar.** De dos a cuatro funciones eje por eje: resalta en naranja lo que difiere, dice si
   la comparación está emparejada (misma obra, modelo y perfil, un solo eje distinto) y pone las
   cifras al lado, con «no medido» donde un run no registró algo.
+- **Lectura ciega.** Pares de historias anónimas, X e Y, lado a lado, con un voto por par: X, Y o
+  «no distingo» (atajos 1, 2, 3; ← → para moverse). Lee `Evaluations/estudio/lecturas/<n>.json`
+  (`{"pares": [{"x": "Stagecraft/<run>", "y": "Stagecraft/<run>"}]}`, ya en el orden que se verá)
+  y guarda los votos en `<n>.votos.json`. La API no manda `run_id`, título ni ejes; qué brazo es
+  X o Y se guarda aparte y se desvela fuera de la herramienta.
 
 ## Cómo está hecha
 

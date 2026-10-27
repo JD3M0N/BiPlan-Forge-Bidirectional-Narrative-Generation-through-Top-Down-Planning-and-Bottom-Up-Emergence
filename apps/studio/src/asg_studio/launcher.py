@@ -50,6 +50,7 @@ def main(argv: list[str] | None = None) -> int:
         allowed_hosts=hosts,
         demo=args.demo,
         cache_dir=root / ".cache" / "studio",
+        blind_dir=root / "Evaluations" / "estudio" / "lecturas",
     )
     url = f"http://{'127.0.0.1' if args.host in {'0.0.0.0', '::'} else args.host}:{args.port}/"
     print(f"StageCraft{' (demo)' if args.demo else ''} en {url}  ·  Ctrl+C para cerrar")

@@ -59,6 +59,10 @@ class Library:
         collection, _, run_id = reference.partition("/")
         return self.run_dir(collection, run_id)
 
+    def blind_story(self, reference: str) -> dict[str, Any]:
+        """Return a stored story as chapters of paragraphs, for reading without its provenance."""
+        return parse_story(_read(self.resolve(reference) / "story.md"))
+
     # -- listing -------------------------------------------------------------------------
 
     def list_runs(self, collection: str | None = None) -> list[dict[str, Any]]:

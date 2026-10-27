@@ -1,9 +1,11 @@
 // Arranque de StageCraft: estado del servidor, catálogo de opciones y enrutado por el hash.
 //   #/crear · #/funciones · #/funciones/<colección>/<función> · #/comparar?runs=a,b
+//   #/ciega · #/ciega/<lectura>/<par>
 
 import { api } from "./api.js";
 import { state } from "./store.js";
 import { append, clear, h, toast } from "./ui.js";
+import { renderBlind } from "./views/blind.js";
 import { renderCompare } from "./views/compare.js";
 import { renderCreate } from "./views/create.js";
 import { renderLibrary } from "./views/library.js";
@@ -31,6 +33,8 @@ function route() {
     renderLibrary(view);
   } else if (name === "comparar") {
     renderCompare(view, params);
+  } else if (name === "ciega") {
+    cleanup = renderBlind(view, parts);
   } else {
     cleanup = renderCreate(view);
   }

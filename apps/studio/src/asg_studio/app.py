@@ -20,9 +20,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .blind import BlindStudy, SessionNotFound
 from .jobs import GeneratorFactory, JobRunner
 from .library import Library, RunNotFound
-from .routes import catalog, jobs, runs
+from .routes import blind, catalog, jobs, runs
 from .security import GuardMiddleware
 
 # Windows can map .js to text/plain in its registry, and a browser refuses to run an ES module
@@ -85,6 +86,7 @@ def create_app(
     allowed_hosts: tuple[str, ...] = LOCAL_HOSTS,
     demo: bool = False,
     cache_dir: Path | None = None,
+    blind_dir: Path | None = None,
 ) -> FastAPI:
     """Assemble the StageCraft app around its collaborators."""
     runner = JobRunner(generator_factory or stagecraft_factory(settings_loader))
@@ -102,6 +104,10 @@ def create_app(
     application.state.settings_loader = settings_loader
     application.state.demo = demo
     application.state.cache_dir = cache_dir or (Path(stories_root).parent / ".cache" / "studio")
+    application.state.blind = BlindStudy(
+        blind_dir or (Path(stories_root).parent / "Evaluations" / "estudio" / "lecturas"),
+        application.state.library,
+    )
     application.add_middleware(GuardMiddleware, allowed_hosts=allowed_hosts)
 
     @application.exception_handler(RequestValidationError)
@@ -116,6 +122,12 @@ def create_app(
         """Answer a request for a run that does not exist."""
         return JSONResponse({"detail": "No existe esa función."}, status_code=404)
 
+    @application.exception_handler(SessionNotFound)
+    async def missing_session(request: Request, error: SessionNotFound) -> JSONResponse:
+        """Answer a request for a reading session or pair that does not exist."""
+        return JSONResponse({"detail": "No existe esa lectura."}, status_code=404)
+
+    application.include_router(blind.router)
     application.include_router(catalog.router)
     application.include_router(jobs.router)
     application.include_router(runs.router)
