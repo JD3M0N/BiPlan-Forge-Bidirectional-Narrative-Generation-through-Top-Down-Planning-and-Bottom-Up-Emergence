@@ -126,6 +126,6 @@ principio, porque así se escriben contra el código como está entonces.
 
 ## Ahora mismo
 
-P01 y P02.1 tienen tarjeta: puedes encadenar `/phase` hasta cerrar P01. P02.1 es una decisión
-(`O`): hazla con Opus. El primer `/phase cards` será el de **P03**, o el de P02 si P02.1 no deja
-escritas sus tarjetas.
+P02 tiene tarjetas (P02.1–P02.5): encadena `/phase` con Sonnet. P02.1–P02.3 gastan cuota y te
+piden leer pares a ciegas en `asg-studio`; P02.5 cierra **H1**. El siguiente `/phase cards` es
+el de **P03**.
