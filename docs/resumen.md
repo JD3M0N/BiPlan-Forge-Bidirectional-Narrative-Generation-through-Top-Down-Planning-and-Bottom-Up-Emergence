@@ -18,7 +18,7 @@ petición → plan (DAG) → guion → función (director + actores) → log →
 Hipótesis: H1, representar el plan antes de narrarlo aporta algo que escribirlo directo no (formato
 `simulated` frente a `narrative`); H2, la memoria propia de cada personaje mejora las escenas frente
 a dársela toda (`--actor-memory own` frente a `shared`); H3, cada mecanismo se gana su complejidad.
-Los experimentos están en `TODO.md` (EXP-1, EXP-2, EXP-5).
+Los experimentos están en `planning/fichas.md` (EXP-1, EXP-2, EXP-5), dentro de la fase P05 del `planning/roadmap.md`.
 
 Contexto: la *paradoja narrativa* (la simulación pura no hace historia; la planificación pura con
 LLM pierde compromisos y riqueza). La tradición híbrida (Façade, Thespian, Virtual Storyteller,

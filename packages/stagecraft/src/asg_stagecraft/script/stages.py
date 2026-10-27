@@ -1,8 +1,9 @@
 """Theater-script pipeline stages, mixed into StoryPipeline.
 
-Kept apart from pipeline.py on purpose: the two script methods are an open experiment (see
-TODO.md), and the losing one gets deleted once measured. Isolating its orchestration here means
-that deletion touches this one file instead of pipeline.py's narrative stages.
+Kept apart from pipeline.py on purpose: the two script methods are an open experiment (EXP-3
+in the repository's planning/fichas.md), and the losing one gets deleted once measured.
+Isolating its orchestration here means that deletion touches this one file instead of
+pipeline.py's narrative stages.
 
 This module assumes it is mixed into StoryPipeline: every method below calls attributes and
 helpers pipeline.py defines (self.repository, self.provider, self._notify, self._emit,

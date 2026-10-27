@@ -22,7 +22,11 @@ explican su uso. Lee las referencias pertinentes antes de modificar un subsistem
 - Empieza por `git status --short` y `git ls-files`; respeta los cambios existentes del usuario.
 - Busca con `rg` dentro del subsistema afectado. Lee rangos o secciones, no el monorepo entero.
 - No cargues corpus, cachés, changelogs completos ni todas las referencias por defecto.
-- Consulta [TODO.md](TODO.md) por el ID o área relevante antes de proponer trabajo nuevo.
+- El trabajo se hace por fases con la skill `phase`: guía en [planning/phase.md](planning/phase.md),
+  plan en [planning/roadmap.md](planning/roadmap.md) y decisiones (con las reglas del tutor) en
+  [planning/decisions.md](planning/decisions.md). Consulta el roadmap y
+  [planning/fichas.md](planning/fichas.md) por el ID o área antes de proponer trabajo nuevo.
+- `TODO.md` es de Josue: léelo si hace falta, pero no escribas en él.
 - Los nombres de carpetas de caché o restos locales no prueban que exista una función vigente.
 - Antes de eliminar código, comprueba imports, comandos, registros, reflexión y recursos de
   empaquetado. Los validadores Pydantic y las rutas FastAPI se invocan indirectamente.
@@ -96,7 +100,8 @@ esa lista con los `pyproject.toml`. Conserva los comandos públicos actuales.
 - `README.md` es la portada breve; el detalle operativo vive en los README de los paquetes.
 - `.gitignore` permite `docs/resumen.md` y `docs/architecture/*.md`; comprueba que cualquier
   documento nuevo destinado al repositorio no quede ignorado.
-- Las reglas de IDs, secciones, dependencias y cierre están en «Cómo leer esto» de `TODO.md`.
-  Una tarea cerrada se retira del roadmap; el historial se conserva en Git y changelogs.
+- Las reglas de tareas, tarjetas, hitos y cierre están en [planning/phase.md](planning/phase.md)
+  y en la skill `phase`. Una tarea cerrada se retira del roadmap; el historial se conserva en
+  Git y changelogs.
 - Registra mediciones con fecha y alcance: una suite verde no mide calidad literaria ni actualiza
   los recuentos históricos del corpus.

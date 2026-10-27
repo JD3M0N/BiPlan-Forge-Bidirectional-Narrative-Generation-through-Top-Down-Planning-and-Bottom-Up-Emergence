@@ -102,7 +102,7 @@ Es justo lo que el tutor advierte: la escala absoluta no discrimina.
   pide que cuente cosas y que cite el pasaje de cada una. El código comprueba que la cita está
   literalmente en el texto, como ya hace la auditoría de promesas del formato simulado
   (`stage/promise_audit.py`).
-  - Así se esquiva lo que el [Protocolo de medición](../../TODO.md) ya advierte, y la literatura
+  - Así se esquiva lo que el [Protocolo de medición](../../planning/decisions.md) ya advierte, y la literatura
     confirma: los jueces LLM de calidad creativa no coinciden con los expertos y prefieren su
     propio texto (TTCW, Chhun 2024, Panickssery 2024).
 - **El juez aprendido traduce lo uno a lo otro.** Aprende de los pares humanos qué combinación de

@@ -153,7 +153,7 @@ Las opciones experimentales sin control visual se declaran en `API_ONLY_OPTIONS`
 `ASG_STORY_FORMAT=script` (o `--format script`) pide un guion por escenas en vez de prosa;
 `narrative` sigue siendo el defecto. Hay dos métodos, seleccionables con `ASG_SCRIPT_METHOD`
 (`native` por defecto o `adapted`), implementados los dos para compararlos a ciegas y quedarse
-con uno. Es la ficha EXP-3 del `TODO.md`.
+con uno. Es la ficha EXP-3 de `planning/fichas.md`.
 
 - **Nativo**: tras `promises`, `PlaywrightAgent` escribe cada capítulo del plan directamente
   como un acto de escenas estructurado, con el mismo bucle de reparación que `graph.py`. Lo
