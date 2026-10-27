@@ -35,9 +35,6 @@ from asg_stagecraft.planning.profiles import (
 
 SIMULATED_ONLY = ["simulated"]
 
-# GenerationOptions fields no control sets directly: the format preset sets both of these.
-SET_BY_PRESET = frozenset({"story_format", "script_method"})
-
 # What each run costs, keyed the way the interface groups a run: by story_format.value.
 COST_HINTS = {story_format.value: hint for story_format, hint in FORMAT_COST_HINTS.items()}
 
@@ -326,24 +323,4 @@ def catalog_document(defaults: GenerationOptions) -> dict:
         },
         "cost": COST_HINTS,
         "simulated": StoryFormat.SIMULATED.value,
-    }
-
-
-def available_keys(document: dict) -> set[str]:
-    """Return the keys of every control the interface can already run."""
-    return {
-        option["key"]
-        for group in document["groups"]
-        for option in group["options"]
-        if option["status"] == "available"
-    }
-
-
-def pending_keys(document: dict) -> set[str]:
-    """Return the keys of every control shown as pending."""
-    return {
-        option["key"]
-        for group in document["groups"]
-        for option in group["options"]
-        if option["status"] == "pending"
     }

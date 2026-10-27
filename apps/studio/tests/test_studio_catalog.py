@@ -3,17 +3,32 @@ from asg_stagecraft import GenerationOptions
 from asg_stagecraft.brief import MAX_CAST
 from asg_stagecraft.formats import FORMAT_COST_HINTS, NarrativeVoice
 from asg_stagecraft.options import API_ONLY_OPTIONS
-from asg_studio.catalog import (
-    SET_BY_PRESET,
-    available_keys,
-    catalog_document,
-    pending_keys,
-)
+from asg_studio.catalog import catalog_document
 from pydantic import ValidationError
+
+# GenerationOptions fields no control sets directly: the format preset sets both of these.
+SET_BY_PRESET = frozenset({"story_format", "script_method"})
 
 
 def document():
     return catalog_document(GenerationOptions())
+
+
+def keys_with_status(document: dict, status: str) -> set[str]:
+    return {
+        option["key"]
+        for group in document["groups"]
+        for option in group["options"]
+        if option["status"] == status
+    }
+
+
+def available_keys(document: dict) -> set[str]:
+    return keys_with_status(document, "available")
+
+
+def pending_keys(document: dict) -> set[str]:
+    return keys_with_status(document, "pending")
 
 
 def test_every_available_control_sets_a_real_option() -> None:

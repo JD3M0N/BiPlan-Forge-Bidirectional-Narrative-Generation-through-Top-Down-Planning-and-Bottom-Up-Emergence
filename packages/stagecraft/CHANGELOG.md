@@ -1,5 +1,10 @@
 # Historial de cambios
 
+## 7.21.4
+
+- P01.2: retira `output_choice()` y `output_choice_for()` de `formats.py`, sin llamadores en
+  `src/`. Se conservan `OutputChoice` y `OUTPUT_CHOICES`. Sin cambios en el pipeline: sigue en 7.21.
+
 ## 7.21.3
 
 - `asg-features` sigue con el resto del corpus cuando un texto no se puede segmentar y lo

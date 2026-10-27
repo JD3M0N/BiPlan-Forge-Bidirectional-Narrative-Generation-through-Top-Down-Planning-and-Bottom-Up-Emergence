@@ -1,5 +1,10 @@
 # Historial de cambios
 
+## [0.2.2] - 2026-10-27
+
+- P01.2: `available_keys()`, `pending_keys()` y `SET_BY_PRESET` salen de `catalog.py` y pasan a
+  los tests, su único consumidor. Sin cambios de endpoints, de interfaz ni de comportamiento.
+
 ## [0.2.1] - 2026-10-24
 
 - Cotas internas al día: `asg-core>=0.8.0`, `asg-evaluation>=2.0.0` y `asg-stagecraft>=7.21.0`.

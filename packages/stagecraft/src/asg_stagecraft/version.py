@@ -1,7 +1,7 @@
 """Version identifiers persisted with every generated story."""
 
 GENERATOR_NAME = "asg-stagecraft"
-__version__ = "7.21.3"
+__version__ = "7.21.4"
 GENERATOR_VERSION = __version__
 PIPELINE_VERSION = "7.21"
 # 7.21 adds cited reader context, bounded orientation repairs and spatial action review.

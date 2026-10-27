@@ -6,12 +6,13 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P01.2 · Retirar el código muerto aprobado (`S`).
-- **Versiones** (2026-10-27): Stagecraft 7.21.3 (pipeline 7.21), core 0.8.0, evaluación 2.1.0,
-  Telegram 6.0.2, Studio 0.2.1.
+- **Siguiente:** P01.3 · Docstrings plantilla (ING-1) (`S+P`).
+- **Versiones** (2026-10-27): Stagecraft 7.21.4 (pipeline 7.21), core 0.8.0, evaluación 2.1.0,
+  Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
   - P00 · Arranque: `planning/`, skill `phase`, migración de `TODO.md` y graphify.
   - P01.1 · Inventario de código muerto: 4 candidatos aprobados por Josue (ver P01.2); sin comandos ni módulos huérfanos.
+  - P01.2 · Retirado el código muerto aprobado: `output_choice()`, `output_choice_for()`, `available_keys()`, `pending_keys()` y `SET_BY_PRESET` (los tres últimos pasan a los tests).
 
 ## Cómo leer una tarjeta
 
@@ -60,24 +61,6 @@ y se repasan prioridades antes de seguir.
 Quitar lo que ya no se usa y dejar la documentación fiel al código antes de congelar nada.
 Origen: ING-1 en [fichas.md](fichas.md). Contrato: [AGENTS.md](../AGENTS.md) «Límites y
 compatibilidad» y la referencia del subsistema que se toque.
-
-#### P01.2 · Retirar el código muerto aprobado
-- **Modo:** S · **Cuota:** sin cuota · **Paquete:** asg-stagecraft y asg-studio
-- **Lee:** `packages/stagecraft/src/asg_stagecraft/formats.py`;
-  `packages/stagecraft/tests/test_formats.py`; `apps/studio/src/asg_studio/catalog.py`;
-  `apps/studio/tests/test_studio_catalog.py`.
-- **Haz** (lista aprobada por Josue, inventario de P01.1, 2026-10-27):
-  - Borrar `output_choice()` y `output_choice_for()` de `formats.py` y sus tests en
-    `test_formats.py` (solo ellos llaman a esas funciones). Conservar `OutputChoice` y
-    `OUTPUT_CHOICES`: los usa `studio/catalog.py`. Quitar imports que queden sin uso.
-  - Mover `available_keys()`, `pending_keys()` y `SET_BY_PRESET` de `studio/catalog.py` a
-    `test_studio_catalog.py` (solo los usa ese test), sin cambiar lo que comprueba.
-  - Actualizar docs que citen lo retirado (`rg` por los nombres).
-  - Subir el parche de stagecraft y de studio y escribir su `CHANGELOG.md`; reinstalar editables.
-- **No hagas:** borrar nada más; cambiar prompts, esquemas, defaults ni formatos persistidos;
-  subir `PIPELINE_VERSION`; tocar `API_ONLY_OPTIONS`, `learning_cli` ni rutas FastAPI.
-- **Prueba:** `.un-tests.ps1` completa y `.\quality.ps1`; `asg help` sin cambios.
-- **Hecho cuando:** los cuatro candidatos ya no están en `src/` y la puerta de calidad está verde.
 
 #### P01.3 · Docstrings plantilla (ING-1)
 - **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-stagecraft

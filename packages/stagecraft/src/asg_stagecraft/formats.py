@@ -131,27 +131,6 @@ FORMAT_COST_HINTS: dict[StoryFormat, str] = {
 }
 
 
-def output_choice(story_format: StoryFormat, script_method: ScriptMethod) -> OutputChoice:
-    """Return the combined choice matching one format and method pair."""
-    if story_format is StoryFormat.NARRATIVE:
-        return OUTPUT_CHOICES[0]
-    if story_format is StoryFormat.SIMULATED:
-        return OUTPUT_CHOICES[-1]
-    for choice in OUTPUT_CHOICES:
-        if choice.story_format is story_format and choice.script_method is script_method:
-            return choice
-    raise ValueError(f"no combined choice for {story_format.value}/{script_method.value}")
-
-
-def output_choice_for(key: str) -> OutputChoice:
-    """Look up one combined choice by its stable key, or reject an unknown one."""
-    for choice in OUTPUT_CHOICES:
-        if choice.key == key:
-            return choice
-    allowed = ", ".join(item.key for item in OUTPUT_CHOICES)
-    raise ValueError(f"unknown output choice {key!r}; allowed values: {allowed}")
-
-
 @dataclass(frozen=True)
 class VoiceChoice:
     """One point of view as every surface presents it.
