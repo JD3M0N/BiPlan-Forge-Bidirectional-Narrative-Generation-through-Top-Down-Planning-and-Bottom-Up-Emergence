@@ -156,6 +156,50 @@ Con empate, el predeterminado no cambia: `reported`, sin editor y sin ejemplos, 
 llamadas. B queda como opción para el análisis horizontal (T4, P05). Cinco pares y un solo
 lector no distinguen una preferencia pequeña.
 
+## Brazos Top-Down: fichas, crítico con cita, editor y ejemplos (2026-10-27)
+
+Dos planes nuevos con Flash-Lite, sin `GEMINI_PROSE_MODEL`: la cubana (prompt libre de
+`20261012-163919-de-la-oscuridad-al-mundo`, `essential`) en `20261027-220217-el-giro-de-la-vieja`
+y la regencia (`brief.json` de `20261012-163629-la-regencia-de-las-escamas`, `developed`) en
+`20261027-220405-la-regencia-de-las-escamas`. De cada plan, dos borradores por brazo con
+`--plan-from <run> --format narrative --no-audio`: A sin brazos y B con
+`--scene-cards --anchored-critic --line-editor --style-examples`. Los ocho llevan `source_run.json`
+con `reused: plan`. Dos corridas de la cubana fallaron por infraestructura (límite por minuto y
+respuesta vacía) y se repitieron; los runs fallidos quedan en `Stories/`.
+
+| Medida sobre la prosa final (8 runs) | A (4 runs) | B (4 runs) | Umbral |
+|---|---|---|---|
+| Nombres repetidos | 0,01–0,06 | 0,00–0,03 | 0,20 |
+| Réplicas con coletilla emocional | 0,00–0,21 | 0,00 | 0,30 |
+| Gerundio en la coletilla | 0,06–0,29 | 0,00–0,08 | 0,40 |
+| Símiles por 100 palabras | 0,00–0,11 | 0,00–0,17 | 0,25 |
+| Párrafos marcados | 0,25–0,68 | 0,00–0,10 | — |
+| Palabras | 1.581–1.827 | 1.197–1.503 | — |
+
+**TD-8: cumple** los cuatro umbrales de `writing/craft_evidence.py` en los ocho runs, con o sin
+brazos. Las 500 palabras que pidió la cubana no se alcanzan en ninguno (mínimo 1.197), y la
+legibilidad por palabras largas no tiene umbral (8,4–8,9 % en la cubana, 11,6–13,8 % en la
+regencia).
+
+**TD-3: cumple.** Ningún capítulo con nota grave sale como `draft` (los dos `draft` de la regencia
+A no tenían notas) y no hay fallos de esquema en ningún intento. Cuatro capítulos salieron como
+`best_candidate` con `WRITER_BEST_CANDIDATE` (tres en la cubana A, uno en la cubana B2), ninguno
+copia del borrador. Intentos rechazados: A, 8 en la cubana y 0 en la regencia; B, 3 y 2. Leído a
+mano solo una muestra de dos ediciones de la cubana B1: atienden las notas que citan, pero la
+presentación de los personajes queda forzada («un ser humano brillante que trabajaba como
+programador…»). No se leyeron las demás.
+
+**Lectura a ciegas** de Josue en `asg-studio` (sesión `p022-topdown`, clave en
+`Evaluations/estudio/claves/`): A gana en cubana 1, cubana 2 y regencia 2; B gana en regencia 1.
+**A 3, B 1.**
+
+Lectura: B arregla las cifras de legibilidad (coletillas y gerundios a casi cero) y acorta el
+texto, pero un lector humano prefiere el brazo sin brazos en tres de cuatro. Las cifras de
+legibilidad no predicen la preferencia. Decisión del bloque: `scene_cards`, `anchored_critic`,
+`line_editor` y `style_examples` quedan **apagados** en Top-Down; no se borra ninguno y B queda
+como opción para el análisis horizontal (T4, P05). Cuatro pares y un solo lector no distinguen una
+preferencia pequeña. `name_choices.json` salió en los dos planes y no se evaluó aparte.
+
 ## Amenazas a la validez
 
 Los jueces LLM prefieren sus propias generaciones (Gemini juzga a Gemini) y puntúan mal escritura

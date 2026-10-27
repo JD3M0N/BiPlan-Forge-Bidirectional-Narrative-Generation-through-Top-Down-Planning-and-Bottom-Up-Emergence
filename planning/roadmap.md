@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P02.2 · Brazos Top-Down: fichas, crítico con cita, editor y ejemplos (`S+P`, ~110 llamadas).
+- **Siguiente:** P02.3 · El plan cumple el brief y la ficción va en español (`S`, ~45 llamadas).
 - **Versiones** (2026-10-27): Stagecraft 7.21.5 (pipeline 7.21), core 0.8.0, evaluación 2.1.0,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
@@ -16,6 +16,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P01.3 · Reescritos 39 docstrings plantilla y el gate los rechaza; 12 clases Pydantic enviadas a Gemini quedan exentas (ver ING-1 en `future/idea-bank.md`).
   - P01.4 · Docs cotejados con el código (comandos, rutas, enlaces, versiones, constantes): corregidos 3 desajustes (rango de pipeline en el README de stagecraft, `asg-recompute`, salida de `asg-rank`); cierra H0.
   - P02.1 · Narración simulada, 5 pares a ciegas: empate 2–2–1 (B `selected` + editor + ejemplos corrige las actas pero no gana); se mantiene `reported`, sin editor ni ejemplos (en `docs/resumen.md`).
+  - P02.2 · Brazos Top-Down, 8 borradores sobre 2 planes: TD-8 y TD-3 cumplen; a ciegas A 3, B 1, así que `scene_cards`, `anchored_critic`, `line_editor` y `style_examples` siguen apagados (en `docs/resumen.md`).
 
 ## Cómo leer una tarjeta
 
@@ -87,30 +88,6 @@ esta fase deciden predeterminados del generador; no son el estudio de la tesis (
 Ningún juez LLM cuenta como medida (`decisions.md` §4). Los brazos no adoptados se conservan
 como opciones para el análisis horizontal (T4, P05).
 
-#### P02.2 · Brazos Top-Down: fichas, crítico con cita, editor y ejemplos (TD-10, TD-8, TD-3)
-- **Modo:** S+P · **Cuota:** ~110 llamadas (2 planes y 8 borradores) · **Paquete:** ninguno
-- **Lee:** TD-10, TD-8 y TD-3 en [fichas.md](fichas.md); [decisions.md](decisions.md) §4;
-  «Escritura y edición» en [generation.md](../docs/architecture/generation.md).
-- **Haz:**
-  - Enseñar el coste y esperar el «ok».
-  - Un plan de la cubana (el prompt libre de `20261012-163919-de-la-oscuridad-al-mundo`, con
-    `--prompt-file`) y uno de la regencia (`--brief` con la ficha de
-    `la-regencia-de-las-escamas`; localizar el run con `rg`).
-  - Desde cada plan, dos borradores por brazo con `--plan-from <run> --format narrative`.
-    Brazo A: sin brazos. Brazo B: `--scene-cards --anchored-critic --line-editor
-    --style-examples`.
-  - Leer en cada run: los umbrales de `writing/craft_evidence.py` (TD-8); `writer/*-edits.json`
-    y `revision_report.json`: ningún capítulo con nota grave sale como `draft` y no hay fallos de
-    esquema (TD-3); `review_anchors.json`, `scene_cards.json` y `name_choices.json`.
-  - Josue lee los pares a ciegas en `asg-studio`.
-  - Escribir el resultado en `docs/resumen.md` y la decisión en la lista de P02.4. Con dos
-    runs por brazo, los cuatro brazos se deciden en bloque.
-- **No hagas:** usar `GEMINI_PROSE_MODEL`; tocar código; llevar la legibilidad a la capa T (es
-  `rasgos.csv`, P04).
-- **Prueba:** los 8 borradores tienen `source_run.json` con `reused`; `.\quality.ps1` verde.
-- **Hecho cuando:** hay una decisión escrita del bloque Top-Down con cifras, y TD-3 y TD-8
-  están anotadas como cumple o no cumple.
-
 #### P02.3 · El plan cumple el brief y la ficción va en español (TD-9, TD-2)
 - **Modo:** S · **Cuota:** ~45 llamadas (un narrativo Expansivo con brief y un guion nativo) ·
   **Paquete:** ninguno
@@ -137,10 +114,10 @@ como opciones para el análisis horizontal (T4, P05).
   - `narration_method`: `reported` (empate en P02.1; sin cambio)
   - `line_editor`: apagado (P02.1)
   - `style_examples`: apagado (P02.1)
-  - `scene_cards`: —
-  - `anchored_critic`: —
+  - `scene_cards`: apagado (P02.2: A 3, B 1 a ciegas)
+  - `anchored_critic`: apagado (P02.2)
   - `typed_clauses`: apagado, sin medir (SIM-26 en idea-bank; nivel de P05).
-  - TD-3, TD-8, TD-9, TD-2: —
+  - TD-3: cumple · TD-8: cumple (P02.2) · TD-9, TD-2: —
 - **Haz:**
   - Cambiar los predeterminados en `GenerationOptions` y en los kwargs de `StoryGenerator`. Si
     un brazo gana en un formato y pierde en otro, queda apagado y se avisa: un predeterminado
