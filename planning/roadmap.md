@@ -6,13 +6,14 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P01.3 · Docstrings plantilla (ING-1) (`S+P`).
-- **Versiones** (2026-10-27): Stagecraft 7.21.4 (pipeline 7.21), core 0.8.0, evaluación 2.1.0,
+- **Siguiente:** P01.4 · Documentación fiel al código y cierre de H0 (`S`).
+- **Versiones** (2026-10-27): Stagecraft 7.21.5 (pipeline 7.21), core 0.8.0, evaluación 2.1.0,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
   - P00 · Arranque: `planning/`, skill `phase`, migración de `TODO.md` y graphify.
   - P01.1 · Inventario de código muerto: 4 candidatos aprobados por Josue (ver P01.2); sin comandos ni módulos huérfanos.
   - P01.2 · Retirado el código muerto aprobado: `output_choice()`, `output_choice_for()`, `available_keys()`, `pending_keys()` y `SET_BY_PRESET` (los tres últimos pasan a los tests).
+  - P01.3 · Reescritos 39 docstrings plantilla y el gate los rechaza; 12 clases Pydantic enviadas a Gemini quedan exentas (ver ING-1 en `fichas.md`).
 
 ## Cómo leer una tarjeta
 
@@ -61,21 +62,6 @@ y se repasan prioridades antes de seguir.
 Quitar lo que ya no se usa y dejar la documentación fiel al código antes de congelar nada.
 Origen: ING-1 en [fichas.md](fichas.md). Contrato: [AGENTS.md](../AGENTS.md) «Límites y
 compatibilidad» y la referencia del subsistema que se toque.
-
-#### P01.3 · Docstrings plantilla (ING-1)
-- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-stagecraft
-- **Lee:** ING-1 en [fichas.md](fichas.md); `tests/test_source_documentation.py`;
-  `pyproject.toml` raíz (`[tool.ruff]`).
-- **Haz:**
-  - Plan corto: activar o no las reglas `D` de Ruff (y cuáles), y en qué orden reescribir.
-  - Reescribir los 42 docstrings plantilla (`schemas/`, `runtime/errors.py`, `agents/base.py`,
-    `runtime/quota.py`, `runtime/storage.py`): inglés ASCII, breves, que digan algo que el
-    nombre no dice.
-  - Borrar ING-1 de `fichas.md`.
-- **No hagas:** cambiar código ni firmas; tocar docstrings que ya son útiles.
-- **Prueba:** `.\quality.ps1`; `rg` de las plantillas («Represent .* data and behavior», «Run the
-  .*Agent workflow») sin resultados.
-- **Hecho cuando:** ningún docstring se limita a repetir el nombre y la puerta está verde.
 
 #### P01.4 · Documentación fiel al código y cierre de H0
 - **Modo:** S · **Cuota:** sin cuota · **Paquete:** ninguno (solo docs)

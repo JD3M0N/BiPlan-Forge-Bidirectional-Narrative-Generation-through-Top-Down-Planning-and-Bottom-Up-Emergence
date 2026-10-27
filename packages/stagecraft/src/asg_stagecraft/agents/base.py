@@ -14,10 +14,10 @@ from ..schemas import NarrativeBlueprint, StoryRequest
 
 
 def json_text(value: Any) -> str:
-    """Handle the json text operation for component."""
+    """Serialize a value, including nested Pydantic models, as indented UTF-8 JSON for prompts."""
 
     def convert(item: Any) -> Any:
-        """Handle the convert operation for component."""
+        """Turn models into plain JSON data, recursing through dicts, lists and tuples."""
         if isinstance(item, BaseModel):
             return item.model_dump(mode="json")
         if isinstance(item, dict):
@@ -49,12 +49,12 @@ def story_specification_header(
 
 
 class Agent[T](ABC):
-    """Represent Agent data and behavior."""
+    """Base of the pipeline agents: a named step that makes one artifact via a provider."""
 
     name: str
 
     def __init__(self, provider: LanguageModelProvider) -> None:
-        """Initialize the Agent instance."""
+        """Keep the provider used for every model call."""
         self.provider = provider
 
     @abstractmethod

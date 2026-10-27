@@ -77,7 +77,7 @@ class CharactersArtifact(BaseModel):
 
     @model_validator(mode="after")
     def references_are_valid(self) -> CharactersArtifact:
-        """Handle the references are valid operation for CharactersArtifact."""
+        """Reject duplicate ids or names and relationships that cite unknown characters."""
         ids = [item.id for item in self.characters]
         names = [item.name.casefold().strip() for item in self.characters]
         if len(ids) != len(set(ids)) or len(names) != len(set(names)):

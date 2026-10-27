@@ -5,12 +5,12 @@ from .base import Agent, story_specification_header
 
 
 class WorldBuilderAgent(Agent[WorldArtifact]):
-    """Represent WorldBuilderAgent data and behavior."""
+    """Builds the story world from a request."""
 
     name = "world"
 
     def run(self, request: StoryRequest) -> WorldArtifact:
-        """Run the WorldBuilderAgent workflow."""
+        """Generate the WorldArtifact for the request."""
         return self.provider.generate_structured(
             system_instruction=(
                 "Build a purposeful world scaled to the qualitative narrative profile. Keep "

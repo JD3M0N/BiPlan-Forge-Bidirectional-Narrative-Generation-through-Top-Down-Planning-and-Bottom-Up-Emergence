@@ -95,7 +95,7 @@ class StoryPlanDraft(BaseModel):
 
 
 class StoryPlan(BaseModel):
-    """Represent StoryPlan data and behavior."""
+    """The validated plan: story frame, chapters, events, dependencies and topological order."""
 
     logline: str
     theme: str

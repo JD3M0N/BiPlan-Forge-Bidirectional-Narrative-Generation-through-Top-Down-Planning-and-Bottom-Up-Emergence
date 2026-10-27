@@ -7,7 +7,7 @@ from .base import Agent, json_text, story_specification_header
 
 
 class CharacterDesignerAgent(Agent[CharactersArtifact]):
-    """Represent CharacterDesignerAgent data and behavior."""
+    """Designs the cast for a world and request."""
 
     name = "characters"
 

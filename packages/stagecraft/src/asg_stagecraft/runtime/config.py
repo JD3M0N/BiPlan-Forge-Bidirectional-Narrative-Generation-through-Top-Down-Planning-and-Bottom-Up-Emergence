@@ -40,7 +40,7 @@ class ChainEntry:
 
 @dataclass(frozen=True)
 class Settings:
-    """Represent Settings data and behavior."""
+    """Immutable runtime settings read from the environment: key, model, output root and limits."""
 
     api_key: str
     model: str

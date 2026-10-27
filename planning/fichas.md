@@ -12,20 +12,18 @@ Las cifras y fechas son las de su medición; no se han vuelto a comprobar.
 
 ### ING-1 · Docstrings plantilla que no dicen nada
 
-*Área:* ingeniería · *Cuota:* sin cuota · *Depende de:* —
+*Área:* ingeniería · *Cuota:* sin cuota · *Depende de:* decisión sobre el generador congelado
 
-- **Síntoma.** El gate ya no pasa en vacío: desde 7.2.0 resuelve sus rutas desde `Path(__file__)`,
-  falla si no encuentra módulos y su marcador corrupto está corregido. Lo que queda es que solo
-  exige texto ASCII:
-  - acepta docstrings plantilla como «Represent X data and behavior.» o «Run the XAgent
-    workflow». Son 42, contadas en la limpieza de 7.21.2, concentradas en `schemas/`
-    (15), `runtime/errors.py` (12), `agents/base.py` (4, incluido el público `json_text`),
-    `runtime/quota.py` (4) y `runtime/storage.py` (2);
-  - **Ruff no ayuda.** `pyproject.toml` no activa las reglas `D`.
-- **Qué hacer.**
-  - Pasar la presencia de docstrings a las reglas `D` de Ruff y dejar el test solo para el idioma.
-  - Reescribir los docstrings plantilla, empezando por esos tres archivos.
-- **Hecho cuando.** No queda ningún docstring que se limite a repetir el nombre de la función.
+- **Estado.** P01.3 reescribió 39 docstrings y el gate ya rechaza las plantillas. Quedan 12 clases
+  Pydantic con «Represent X data and behavior»: `StoryRequest`, `WorldArtifact`, `Location`,
+  `StoryObject`, `CharactersArtifact`, `CharacterProfile`, `CharacterRelationship`,
+  `StoryPlanDraft`, `PlotEvent`, `EventDependency`, `StoryReview` y `ConstraintCheck`.
+- **Por qué siguen.** Se envían a Gemini como esquema de respuesta y su docstring es la
+  `description` que lee el modelo; reescribirlas cambia su entrada. Están en la lista
+  `SCHEMA_DESCRIPTIONS_SENT_TO_MODEL` del test.
+- **Qué hacer.** Si se decide cambiar esas descripciones, hacerlo en P02 con medición real y vaciar
+  la lista del test.
+- **Hecho cuando.** La lista del test está vacía.
 
 ## P02 · Congelar el generador (candidatas: P02.1 elige 3-5; el resto pasa a idea-bank)
 

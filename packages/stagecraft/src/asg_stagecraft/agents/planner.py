@@ -19,7 +19,7 @@ from .base import Agent, json_text, story_specification_header
 
 
 class PlotPlannerAgent(Agent[StoryPlanDraft]):
-    """Represent PlotPlannerAgent data and behavior."""
+    """Plans the chapters and events of the story."""
 
     name = "plot_planner"
 

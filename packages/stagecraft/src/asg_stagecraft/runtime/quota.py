@@ -11,17 +11,17 @@ WaitCallback = Callable[[int, str], None]
 
 
 class SlidingWindowLimiter:
-    """Represent SlidingWindowLimiter data and behavior."""
+    """Thread-safe limiter that admits at most a fixed number of requests per time window."""
 
     def __init__(self, capacity: int, window: float = 60.0) -> None:
-        """Initialize the SlidingWindowLimiter instance."""
+        """Set the request capacity (at least 1) and the window length in seconds."""
         self.capacity = max(1, capacity)
         self.window = window
         self._requests: deque[float] = deque()
         self._lock = threading.Lock()
 
     def acquire(self, callback: WaitCallback | None = None) -> float:
-        """Handle the acquire operation for SlidingWindowLimiter."""
+        """Block until a slot is free and return the seconds waited."""
         waited = 0.0
         while True:
             with self._lock:
@@ -37,16 +37,16 @@ class SlidingWindowLimiter:
 
 
 class TokenWindowLimiter:
-    """Represent TokenWindowLimiter data and behavior."""
+    """Thread-safe limiter that admits at most a fixed number of tokens per time window."""
 
     def __init__(self, capacity: int, window: float = 60.0) -> None:
-        """Initialize the TokenWindowLimiter instance."""
+        """Set the token capacity and the window length in seconds."""
         self.capacity, self.window = capacity, window
         self._tokens: deque[tuple[float, int]] = deque()
         self._lock = threading.Lock()
 
     def acquire(self, tokens: int, callback: WaitCallback | None = None) -> float:
-        """Handle the acquire operation for TokenWindowLimiter."""
+        """Block until the tokens fit in the window and return the seconds waited."""
         if tokens > self.capacity:
             raise ValueError("A single prompt exceeds GEMINI_TPM_LIMIT")
         waited = 0.0

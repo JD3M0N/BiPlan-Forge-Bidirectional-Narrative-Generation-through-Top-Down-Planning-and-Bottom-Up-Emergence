@@ -141,7 +141,7 @@ class WorldArtifact(BaseModel):
 
     @model_validator(mode="after")
     def ids_are_unique(self) -> WorldArtifact:
-        """Handle the ids are unique operation for WorldArtifact."""
+        """Reject duplicate location or object ids."""
         location_ids = [item.id for item in self.locations]
         object_ids = [item.id for item in self.objects]
         if len(location_ids) != len(set(location_ids)):

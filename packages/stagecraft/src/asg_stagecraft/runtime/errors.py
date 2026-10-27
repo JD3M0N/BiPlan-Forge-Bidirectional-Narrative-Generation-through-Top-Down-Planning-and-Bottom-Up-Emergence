@@ -4,7 +4,7 @@ from typing import Any
 
 
 class ASGError(Exception):
-    """Represent ASGError data and behavior."""
+    """Base of every Stagecraft error; subclasses fix a stable code and the stage that failed."""
 
     code = "ASG_ERROR"
     stage = "unknown"
@@ -16,7 +16,7 @@ class ASGError(Exception):
         details: dict[str, Any] | None = None,
         recommendations: list[str] | None = None,
     ) -> None:
-        """Initialize the ASGError instance."""
+        """Keep a summary, optional details and recommendations; the run id is set later."""
         super().__init__(summary)
         self.summary = summary
         self.details = details or {}
@@ -24,7 +24,7 @@ class ASGError(Exception):
         self.run_id: str | None = None
 
     def public_message(self) -> str:
-        """Handle the public message operation for ASGError."""
+        """Render the Spanish message shown to the user, with code, first hint and run id."""
         lines = [self.summary, f"Código: {self.code}."]
         if self.recommendations:
             lines.append("Sugerencia: " + self.recommendations[0])
@@ -34,33 +34,33 @@ class ASGError(Exception):
 
 
 class ConfigurationError(ASGError):
-    """Represent ConfigurationError data and behavior."""
+    """Signal missing or invalid local configuration, such as an absent API key."""
 
     code = "CONFIGURATION_ERROR"
     stage = "configuration"
 
 
 class ProviderError(ASGError):
-    """Represent ProviderError data and behavior."""
+    """Base of failures raised while calling a language model provider."""
 
     code = "PROVIDER_ERROR"
     stage = "provider"
 
 
 class EmptyResponseError(ProviderError):
-    """Represent EmptyResponseError data and behavior."""
+    """Signal a provider reply with no usable text."""
 
     code = "PROVIDER_EMPTY_RESPONSE"
 
 
 class StructuredResponseError(ProviderError):
-    """Represent StructuredResponseError data and behavior."""
+    """Signal a provider reply that does not parse into the requested schema."""
 
     code = "PROVIDER_INVALID_SCHEMA"
 
 
 class PlotValidationError(ASGError):
-    """Represent PlotValidationError data and behavior."""
+    """Signal a plan that fails the structural checks after its repair attempts."""
 
     code = "PLOT_VALIDATION_FAILED"
     stage = "planning"
@@ -81,7 +81,7 @@ class StagePerformanceError(ASGError):
 
 
 class RunArtifactError(ASGError):
-    """Represent RunArtifactError data and behavior."""
+    """Signal a stored run whose metadata or artifacts cannot be read or are incompatible."""
 
     code = "RUN_ARTIFACT_INVALID"
     stage = "loading"
@@ -107,13 +107,13 @@ class RunCancelledError(ASGError):
 
 
 class GeminiRPMError(ProviderError):
-    """Represent GeminiRPMError data and behavior."""
+    """Signal that the Gemini requests-per-minute allowance is exhausted."""
 
     code = "GEMINI_RPM_EXHAUSTED"
 
 
 class GeminiTPMError(ProviderError):
-    """Represent GeminiTPMError data and behavior."""
+    """Signal that the Gemini tokens-per-minute allowance is exhausted."""
 
     code = "GEMINI_TPM_EXHAUSTED"
 
@@ -147,13 +147,13 @@ class ProviderOverloadedError(ProviderError):
 
 
 class GeminiDailyQuotaError(ProviderDailyQuotaError):
-    """Represent GeminiDailyQuotaError data and behavior."""
+    """Signal that the Gemini daily request allowance is spent."""
 
     code = "GEMINI_DAILY_QUOTA_EXHAUSTED"
 
 
 class GeminiBillingQuotaError(ProviderError):
-    """Represent GeminiBillingQuotaError data and behavior."""
+    """Signal that the Gemini billing or spending limit is reached."""
 
     code = "GEMINI_BILLING_LIMIT_EXHAUSTED"
 

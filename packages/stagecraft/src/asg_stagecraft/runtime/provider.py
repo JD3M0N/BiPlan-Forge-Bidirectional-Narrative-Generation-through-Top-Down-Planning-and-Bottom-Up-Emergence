@@ -667,7 +667,7 @@ class GeminiProvider(_RecordingProvider):
         overload_wait: float = 10,
         request_timeout_ms: int = 120_000,
     ) -> None:
-        """Initialize the GeminiProvider instance."""
+        """Build the Gemini client and its preventive rate limiters."""
         from google import genai
         from google.genai import types
 

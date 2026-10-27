@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 # Resolved from this file, not the working directory: a relative glob run from anywhere but the
@@ -18,6 +19,29 @@ SPANISH_MARKERS = {
     "maneja ",
     "representa ",
     "resuelve ",
+}
+# Docstrings that only restate the name. Pydantic classes sent to Gemini as response schemas are
+# exempt: their docstring becomes the schema description the model reads, so rewording one changes
+# the frozen generator's input and needs its own decision (P01.3).
+TEMPLATE_PATTERNS = (
+    re.compile(r"^Represent \w+ data and behavior\.$"),
+    re.compile(r"^Run the \w+ workflow\.$"),
+    re.compile(r"^Handle the .+ operation for \w+\.$"),
+    re.compile(r"^Initialize the \w+ instance\.$"),
+)
+SCHEMA_DESCRIPTIONS_SENT_TO_MODEL = {
+    "CharacterProfile",
+    "CharacterRelationship",
+    "CharactersArtifact",
+    "ConstraintCheck",
+    "EventDependency",
+    "Location",
+    "PlotEvent",
+    "StoryObject",
+    "StoryPlanDraft",
+    "StoryRequest",
+    "StoryReview",
+    "WorldArtifact",
 }
 
 
@@ -57,4 +81,8 @@ def test_production_callables_have_english_docstrings() -> None:
             lowered = docstring.casefold()
             if not docstring.isascii() or any(word in lowered for word in SPANISH_MARKERS):
                 failures.append(f"{path}:{line}: non-English docstring for {name}")
+            elif name not in SCHEMA_DESCRIPTIONS_SENT_TO_MODEL and any(
+                pattern.match(docstring.strip()) for pattern in TEMPLATE_PATTERNS
+            ):
+                failures.append(f"{path}:{line}: template docstring for {name}")
     assert not failures, "\n" + "\n".join(failures)

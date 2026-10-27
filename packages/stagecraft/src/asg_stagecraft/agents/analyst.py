@@ -20,7 +20,7 @@ class AnalystAgent(Agent[StoryRequest]):
     name = "analyst"
 
     def run(self, prompt: str) -> StoryRequest:
-        """Run the AnalystAgent workflow."""
+        """Turn the user's prompt into a StoryRequest."""
         if not prompt.strip():
             raise ValueError("The prompt cannot be empty.")
         request = self.provider.generate_structured(

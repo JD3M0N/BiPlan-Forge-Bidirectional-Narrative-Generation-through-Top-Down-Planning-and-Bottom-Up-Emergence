@@ -20,7 +20,7 @@ from .provider import COUNT_TOKENS_OPERATION
 
 
 class ArtifactRepository:
-    """Represent ArtifactRepository data and behavior."""
+    """Writes one run's artifacts atomically and keeps its metadata and hash manifest current."""
 
     def __init__(
         self,
@@ -36,7 +36,7 @@ class ArtifactRepository:
         stage_model: str | None = None,
         prose_model: str | None = None,
     ) -> None:
-        """Initialize the ArtifactRepository instance."""
+        """Create the unique run directory and write the initial metadata and manifest."""
         now = datetime.now(UTC)
         base = f"{now.strftime('%Y%m%d-%H%M%S')}-{slugify(title, fallback='historia')}"
         run_dir = create_unique_directory(output_root, base)
@@ -69,7 +69,7 @@ class ArtifactRepository:
         self.save_json("generator_version.json", GeneratorVersionArtifact())
 
     def _record(self, filename: str, content: str) -> None:
-        """Handle the record operation for ArtifactRepository."""
+        """Record the hash and size of a written artifact in the manifest."""
         if filename in {"pipeline_manifest.json"}:
             return
         self.manifest["artifacts"][filename.replace("\\", "/")] = {
@@ -221,13 +221,13 @@ class ArtifactRepository:
         self._write_metadata()
 
     def _write_metadata(self) -> None:
-        """Handle the write metadata operation for ArtifactRepository."""
+        """Persist metadata.json and refresh its manifest entry."""
         content = artifact_json(self.metadata.model_dump(mode="json"))
         atomic_write_text(self.run_dir / "metadata.json", content)
         if hasattr(self, "manifest"):
             self._record("metadata.json", content)
 
     def _write_manifest(self) -> None:
-        """Handle the write manifest operation for ArtifactRepository."""
+        """Persist pipeline_manifest.json."""
         content = artifact_json(self.manifest)
         atomic_write_text(self.run_dir / "pipeline_manifest.json", content)

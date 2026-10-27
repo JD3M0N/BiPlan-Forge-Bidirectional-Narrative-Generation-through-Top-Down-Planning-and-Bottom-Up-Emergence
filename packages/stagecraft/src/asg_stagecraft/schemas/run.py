@@ -16,7 +16,7 @@ from ..version import GENERATOR_NAME, GENERATOR_VERSION, PIPELINE_VERSION
 
 
 class ErrorReport(BaseModel):
-    """Represent ErrorReport data and behavior."""
+    """The public, serializable report of a failed run (error_report.json)."""
 
     code: str
     stage: str
@@ -82,7 +82,7 @@ class LLMUsageArtifact(BaseModel):
 
 
 class RunMetadata(BaseModel):
-    """Represent RunMetadata data and behavior."""
+    """The state of one run on disk: status, completed stages, versions and failure details."""
 
     run_id: str
     model: str

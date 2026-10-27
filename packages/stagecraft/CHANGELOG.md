@@ -1,5 +1,14 @@
 # Historial de cambios
 
+## 7.21.5
+
+- P01.3: reescribe 39 docstrings plantilla («Represent X data and behavior», «Handle the X
+  operation for Y», «Initialize the X instance») en `runtime/`, `agents/` y `schemas/`. El gate
+  `tests/test_source_documentation.py` rechaza ahora esas plantillas. Se exceptúan 12 clases
+  Pydantic que se envían a Gemini como esquema de respuesta: su docstring es la descripción que
+  lee el modelo y cambiarla altera el generador congelado (ficha ING-1). Sin cambios de
+  esquemas enviados ni del pipeline: sigue en 7.21.
+
 ## 7.21.4
 
 - P01.2: retira `output_choice()` y `output_choice_for()` de `formats.py`, sin llamadores en
