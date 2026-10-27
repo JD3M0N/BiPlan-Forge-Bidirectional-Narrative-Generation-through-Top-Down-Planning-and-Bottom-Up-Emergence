@@ -131,6 +131,31 @@ abierto tras 2 escenas y 16 turnos (1 beat logrado). Ninguna cumplió las 2 prom
 La auditoría literal de 62 contextos de actor no halló pensamientos ajenos ni susurros no
 presenciados. Son dos observaciones de una premisa, no muestra suficiente para inferir calidad.
 
+## Narración simulada: resumida o por selección (2026-10-27)
+
+Cinco funciones completas renarradas con `asg-generate --narrate-from` desde `Stories/Stagecraft/`
+(`20261019-141038`, `20261020-174833`, `20261020-213446`, `20261021-192148`, `20261022-125649`),
+dos brazos cada una: A con las opciones del run (`reported`) y B con
+`--narration-method selected --line-editor --style-examples`. Cero capítulos `fallback`, cero
+`[SELECTION_FALLBACK]` y cero `[LINE_EDIT_UNAVAILABLE]`.
+
+| Medida (5 pares) | A `reported` | B `selected` + editor + ejemplos |
+|---|---|---|
+| `dialogue_survival` | 0,48–0,67 | 0,73–0,85 |
+| Réplicas directas por run | 12–35 | 18–68 |
+| % con verbo de habla (regex) | 30–62 | 3–22 |
+| Párrafos con más de 2 indirectas (regex) | 1–6 por run | 0 en 4 pares, 2 en el par 4 |
+
+Las dos últimas filas salen de un script con expresiones regulares, no del código del repo: son
+aproximadas. Lectura a ciegas de Josue en `asg-studio` (sesión `p021-narracion`): B en los pares
+2 y 5, A en los pares 3 y 4, «ninguno» en el par 1. **Empate 2–2–1.**
+
+Lectura: B corrige lo que SIM-24 describía (actas de réplicas indirectas, verbo de habla en casi
+cada línea), pero conserva más del log (`dialogue_survival` por encima de 0,6) y no gana a ciegas.
+Con empate, el predeterminado no cambia: `reported`, sin editor y sin ejemplos, que gasta menos
+llamadas. B queda como opción para el análisis horizontal (T4, P05). Cinco pares y un solo
+lector no distinguen una preferencia pequeña.
+
 ## Amenazas a la validez
 
 Los jueces LLM prefieren sus propias generaciones (Gemini juzga a Gemini) y puntúan mal escritura

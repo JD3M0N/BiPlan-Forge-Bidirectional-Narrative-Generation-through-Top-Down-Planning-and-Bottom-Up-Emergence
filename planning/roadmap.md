@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P02.1 · Narración simulada: resumida o por selección (`S+P`, ~180 llamadas).
+- **Siguiente:** P02.2 · Brazos Top-Down: fichas, crítico con cita, editor y ejemplos (`S+P`, ~110 llamadas).
 - **Versiones** (2026-10-27): Stagecraft 7.21.5 (pipeline 7.21), core 0.8.0, evaluación 2.1.0,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
@@ -15,6 +15,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P01.2 · Retirado el código muerto aprobado: `output_choice()`, `output_choice_for()`, `available_keys()`, `pending_keys()` y `SET_BY_PRESET` (los tres últimos pasan a los tests).
   - P01.3 · Reescritos 39 docstrings plantilla y el gate los rechaza; 12 clases Pydantic enviadas a Gemini quedan exentas (ver ING-1 en `future/idea-bank.md`).
   - P01.4 · Docs cotejados con el código (comandos, rutas, enlaces, versiones, constantes): corregidos 3 desajustes (rango de pipeline en el README de stagecraft, `asg-recompute`, salida de `asg-rank`); cierra H0.
+  - P02.1 · Narración simulada, 5 pares a ciegas: empate 2–2–1 (B `selected` + editor + ejemplos corrige las actas pero no gana); se mantiene `reported`, sin editor ni ejemplos (en `docs/resumen.md`).
 
 ## Cómo leer una tarjeta
 
@@ -86,31 +87,6 @@ esta fase deciden predeterminados del generador; no son el estudio de la tesis (
 Ningún juez LLM cuenta como medida (`decisions.md` §4). Los brazos no adoptados se conservan
 como opciones para el análisis horizontal (T4, P05).
 
-#### P02.1 · Narración simulada: resumida o por selección (SIM-25, SIM-24)
-- **Modo:** S+P · **Cuota:** ~180 llamadas (5 renarraciones × 2 brazos, modelo principal) ·
-  **Paquete:** ninguno (medición y docs)
-- **Lee:** SIM-25 y SIM-24 en [fichas.md](fichas.md); [decisions.md](decisions.md) §4; la
-  narración en [simulation.md](../docs/architecture/simulation.md); `asg-generate --help`.
-- **Haz:**
-  - Enseñar el coste y esperar el «ok».
-  - Renarrar con `--narrate-from` cinco funciones completas de `Stories/Stagecraft/`:
-    `20261019-141038-las-islas-del-cielo`, `20261020-174833-la-isla-del-cielo`,
-    `20261020-213446-el-pacto-roto`, `20261021-192148-la-isla-del-cielo` y
-    `20261022-125649-el-ultimo-tren`. Brazo A: las opciones del run. Brazo B:
-    `--narration-method selected --line-editor --style-examples`.
-  - Medir por par, con un script en el scratchpad (no en el repo): `dialogue_survival`, párrafos
-    que encadenan más de dos réplicas indirectas, % de réplicas con verbo de habla, capítulos
-    `fallback` y `NARRATION_BEST_ATTEMPT`, avisos `[SELECTION_FALLBACK]` y
-    `[LINE_EDIT_UNAVAILABLE]`.
-  - Josue lee los pares a ciegas en `asg-studio` y elige por par, o «no distingo».
-  - Escribir el resultado (fecha, comandos, cifras, preferencia) en `docs/resumen.md`, y la
-    decisión en la lista de P02.4.
-- **No hagas:** tocar código ni predeterminados; mezclar con runs nuevos; borrar el camino
-  `reported`; contar un juez LLM como medida.
-- **Prueba:** los 10 runs tienen `source_run.json` con `reused`; `.\quality.ps1` sigue verde.
-- **Hecho cuando:** hay una preferencia escrita (o empate) con cifras, y P02.4 dice qué valor
-  toman `narration_method`, `line_editor` y `style_examples` para el simulado.
-
 #### P02.2 · Brazos Top-Down: fichas, crítico con cita, editor y ejemplos (TD-10, TD-8, TD-3)
 - **Modo:** S+P · **Cuota:** ~110 llamadas (2 planes y 8 borradores) · **Paquete:** ninguno
 - **Lee:** TD-10, TD-8 y TD-3 en [fichas.md](fichas.md); [decisions.md](decisions.md) §4;
@@ -158,9 +134,9 @@ como opciones para el análisis horizontal (T4, P05).
   `options.py`; `stage/validation.py`; `writing/language.py`; `test_generation_options.py` y los
   tests de validación de turnos.
 - **Decisiones** (las rellenan P02.1–P02.3):
-  - `narration_method`: —
-  - `line_editor`: —
-  - `style_examples`: —
+  - `narration_method`: `reported` (empate en P02.1; sin cambio)
+  - `line_editor`: apagado (P02.1)
+  - `style_examples`: apagado (P02.1)
   - `scene_cards`: —
   - `anchored_critic`: —
   - `typed_clauses`: apagado, sin medir (SIM-26 en idea-bank; nivel de P05).
