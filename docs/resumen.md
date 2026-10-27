@@ -107,7 +107,7 @@ test lo comprueba sobre los dos brazos.
   `props_used_ratio` (cerca de 0 = los objetos fueron decorado), `hidden_item_actions`,
   `secret_handoffs` e `item_witness_share` (bajo = el tráfico de objetos fue privado, así que dos
   narradores del mismo log discrepan sobre quién tiene qué). Sin inventario son **no medidas**,
-  nunca cero. Todas salen de `performance.json`, así que `recompute-simulation-metrics` las
+  nunca cero. Todas salen de `performance.json`, así que `asg-recompute` las
   reproduce.
 - **Lo que el árbitro no cubre.** El `stage_event` del director es texto libre y no pasa por él:
   en la validación 7.6 cerró un beat diciendo que el sello «resbala de las manos de Aldren»

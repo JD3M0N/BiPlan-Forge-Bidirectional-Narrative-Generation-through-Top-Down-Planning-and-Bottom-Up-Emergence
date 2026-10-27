@@ -81,7 +81,7 @@ asg-rank juez.json Stories --study $db --output ranking.json
   sobre los mismos pares, con y sin el investigador. Sin grafo conectado no hay orden global.
 - Tres regresiones logísticas L2 sobre diferencias de rasgos, validadas dejando fuera historias
   y familias de premisa, frente al azar y a la longitud sola.
-- `asg-rank` ordena el corpus y prepara las fichas de las diez primeras (`ranking.md`).
+- `asg-rank` ordena el corpus y prepara las fichas de las diez primeras (un `.md` junto al `--output`).
 - Un juez que no generaliza es un resultado válido: se marca exploratorio.
 
 ## Módulos
