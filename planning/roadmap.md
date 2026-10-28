@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P02.5 · Validación real, congelación y H1 (SIM-21).
+- **Siguiente:** H1 (Josue prueba el bot en Telegram con los dos enfoques); después `/phase cards P03`.
 - **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.0, evaluación 2.1.0,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
@@ -19,6 +19,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P02.2 · Brazos Top-Down, 8 borradores sobre 2 planes: TD-8 y TD-3 cumplen; a ciegas A 3, B 1, así que `scene_cards`, `anchored_critic`, `line_editor` y `style_examples` siguen apagados (en `docs/resumen.md`).
   - P02.3 · Plan del brief de las islas y guion de la médica: TD-9 no cumple (sin división de la tripulación ni coste final), TD-2 cumple (en `docs/resumen.md`).
   - P02.4 · Predeterminados sin cambio (todos los brazos de 7.17 siguen apagados, `reported`); `OUT_OF_FICTION` general contra vocabulario de código (SIM-14); Stagecraft 7.22.
+  - P02.5 · Validación real de 7.22 (narrativo, guion y simulado del prompt 03 cumplen; beats forzados 3 de 6 como limitación) y generador congelado, etiqueta `generator-frozen`; cierra P02.
 
 ## Cómo leer una tarjeta
 
@@ -89,29 +90,6 @@ mínimo.
 esta fase deciden predeterminados del generador; no son el estudio de la tesis (T5–T7, en P06).
 Ningún juez LLM cuenta como medida (`decisions.md` §4). Los brazos no adoptados se conservan
 como opciones para el análisis horizontal (T4, P05).
-
-#### P02.5 · Validación real, congelación y H1 (SIM-21)
-- **Modo:** S+P · **Cuota:** ~30 llamadas del modelo principal y ~110 del de la función ·
-  **Paquete:** ninguno (docs y etiqueta)
-- **Lee:** SIM-21 en [fichas.md](fichas.md); [decisions.md](decisions.md) §3 y §4.
-- **Haz:**
-  - Comprobar que `.env` no tiene variables `ASG_*` que contradigan los predeterminados (solo
-    nombres, nunca valores).
-  - Enseñar el coste y esperar el «ok».
-  - Con 7.22 ya confirmado en git, el prompt 03 en los tres formatos (simulado, narrativo y
-    guion), en Esencial.
-  - Comprobar: ningún capítulo `fallback`, ningún pensamiento en inglés en `turns.jsonl`, el
-    primer beat en estancamiento recibe el giro antes de su tope, ninguna línea fuera de la
-    ficción, slug y nombres en español. Anotar los beats forzados como limitación conocida.
-  - Escribir el resultado en `docs/resumen.md`.
-  - Con el texto aprobado por Josue, la decisión «Generador congelado en Stagecraft 7.22.x
-    (pipeline 7.22)» en `decisions.md` §3, con los predeterminados, sustituyendo el paréntesis
-    «Se completa en P02».
-  - `git tag generator-frozen` (local, sin push). Borrar SIM-21 de `fichas.md`.
-- **No hagas:** cambiar código; si algo bloquea, parar y proponer P02.4b.
-- **Prueba:** `.\quality.ps1` verde; `git tag -l generator-frozen`.
-- **Hecho cuando:** los tres runs cumplen, la decisión está en `decisions.md`, la etiqueta
-  existe y se anuncia **H1**: Josue prueba el bot en Telegram con los dos enfoques.
 
 ---
 

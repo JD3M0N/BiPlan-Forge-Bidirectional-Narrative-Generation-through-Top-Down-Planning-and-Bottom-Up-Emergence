@@ -43,7 +43,13 @@ rasgos, juez, análisis o tesis se contrasta con esta lista antes de empezar.
   antiguo `TODO.md` está en `git show planning-before-phase:TODO.md`.
 - **2026-10-27 · Generador: congelar pronto.** P02 elige de 3 a 5 fichas que bloquean la calidad,
   las cierra y congela el generador. Desde ahí, ningún cambio de prompt, esquema ni
-  `PIPELINE_VERSION` sin una decisión nueva aquí. (Se completa en P02 con la versión congelada.)
+  `PIPELINE_VERSION` sin una decisión nueva aquí.
+- **2026-10-28 · Generador congelado en Stagecraft 7.22.x (pipeline 7.22)**, etiqueta local
+  `generator-frozen`. Predeterminados: los brazos de 7.17 apagados (`inventory`,
+  `style_examples`, `line_editor`, `scene_cards`, `anchored_critic`, `typed_clauses`), narración
+  `reported`, `OUT_OF_FICTION` general (SIM-14). Validado con tres runs reales del
+  prompt 03 ([docs/resumen.md](../docs/resumen.md)); limitación conocida: ~la mitad de los beats
+  simulados se fuerzan. Los brazos apagados quedan como opciones para el análisis horizontal (T4).
 - **2026-10-27 · Tesis en LaTeX** dentro de `redaccion/`, compilada con `latexmk` (MiKTeX
   instalado). Al final se reescribe con una skill que Josue instalará; sus tarjetas se escriben
   entonces.

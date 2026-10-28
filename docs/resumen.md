@@ -222,6 +222,37 @@ ninguna vez «doctor». Cero palabras en inglés en `story.md`. El plan interno 
 como manda la frontera de idioma. Falta el mismo control en un guion con el objetivo de escena
 visible al lector, que aquí no se imprime.
 
+## Validación real de 7.22 antes de congelar (2026-10-28)
+
+Tres runs con los predeterminados, el prompt 03 (la médica del faro), perfil Esencial y sin audio,
+sin arreglar nada. Llamadas: narrativo 22, guion 18, simulado 227 (0 fallidas en los dos
+primeros; 9 intentos fallidos en el simulado, 570 k tokens).
+
+| Run | Formato | Resultado |
+|---|---|---|
+| `20261028-192554-el-faro-de-la-habitacion-cerrada` | narrativo | completo, 3 capítulos, 1 543 palabras |
+| `20261028-192858-el-misterio-del-faro` | guion nativo | completo, 3 actos, 1 120 palabras |
+| `20261028-192554-el-misterio-del-faro` | simulado | completo, 3 capítulos del narrador, 1 578 palabras |
+
+**Comprobaciones del simulado, todas cumplen.** Ningún capítulo `fallback`
+(`narration_source_fallbacks` 0; 3 de 3 `source: narrator`, uno con dos intentos) ni
+`NARRATION_BEST_ATTEMPT`. 0 de 47 pensamientos en inglés en `turns.jsonl`. Todo estancamiento
+(`stall`) llega después de una decisión `turn` del director en cada escena, antes del tope. Ninguna
+línea fuera de la ficción en `story.md` (sin vocabulario de código). Slug `el-misterio-del-faro` y
+nombres en español en los tres runs.
+
+**Limitación conocida: beats forzados.** 3 de 6 beats se forzaron (`beats_forced` 3,
+`beats_achieved` 3, `beat_completion_ratio` 0,5): son los `final` con `achieved: false` de tres
+escenas. Es la misma proporción que ya se midió en 7.12 (5 de 10) y no es un defecto nuevo.
+
+**Observaciones fuera de los criterios**, sin tocar el código por la congelación:
+- Narrativo: «de el faro» sin contraer en el primer párrafo.
+- Guion: el reparto pierde al meteorólogo (4 de los 5 personajes del brief) y la médica sale con el
+  rol «médica de Beatriz isla».
+- Simulado: los títulos de capítulo salen sin tildes («La habitacion cerrada»).
+
+Un run por formato no distingue ruido de efecto.
+
 ## Amenazas a la validez
 
 Los jueces LLM prefieren sus propias generaciones (Gemini juzga a Gemini) y puntúan mal escritura

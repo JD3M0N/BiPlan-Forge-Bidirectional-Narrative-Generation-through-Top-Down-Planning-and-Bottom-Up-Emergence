@@ -8,52 +8,6 @@ lo que entra en una tarjeta se borra de aquí y lo que se aplaza pasa a
 
 Las cifras y fechas son las de su medición; no se han vuelto a comprobar.
 
-## P02 · Congelar el generador (absorbidas por las tarjetas P02.1–P02.5)
-
-### SIM-21 · Validar en real que la narración no cae al respaldo
-
-*Área:* función simulada · *Cuota:* ~120 llamadas (un run simulado) · *Depende de:* —
-
-- **Síntoma.** En 7.10 la revisión editorial rechazaba por un tiempo verbal o por citar una
-  paráfrasis, y tras dos rechazos el capítulo salía del narrador determinista: 7 de 14
-  capítulos, los 4 de `20261012-000926-la-ciudad-perdida` (64 «penso», 5,4 nombres cada 100
-  palabras). Además la función era un ping-pong: «suplicar» contra «ordenar» tres veces cada
-  uno en el primer beat, y la mitad de los beats forzados. 7.12.0 lo arregla con dobles; el
-  replay de las revisiones guardadas aceptaría o entregaría el mejor intento en los 7.
-- **Medido en 7.12.1, 2026-10-13**, con 3.5 Flash-Lite dando 503 a más de la mitad de las
-  llamadas:
-  - Los navegantes, dos veces: `125004` se canceló en la escena 1 con el casting en respaldo
-    (arreglado: la reparación ve su candidato) y `131347` murió en la escena 5 por dos 403
-    sueltos (arreglado: una ranura que ya respondió no se bloquea). Ninguno llegó a narrar.
-    En sus 37 turnos, ningún pensamiento en inglés; el primer beat recibe el giro del director
-    en el turno 6, antes del tope de 8.
-  - El misterio del tren (`145340`, par de `20261011-233750` de 7.10): 2 de 2 capítulos del
-    narrador (7.10: 1 de 2), ningún `NARRATION_BEST_ATTEMPT`, revisiones sin hallazgos, 0 de 31
-    pensamientos en inglés y nombre repetido en frase seguida en el 18 % de las frases (7.10:
-    40 %). Los dos beats forzados coinciden con comprobaciones del director que los dos modelos
-    rechazaron con 503: miden la caída de Gemini, no la función.
-  - Falta el run completo de los navegantes; `125004` quedó en `running` y se puede cerrar con
-    `asg-recover --discard`.
-- **Medido en 7.12.2, 2026-10-13** (`20261013-180025-las-islas-del-cielo`, los navegantes
-  completos, Expansiva, 2 h 55 min):
-  - 5 de 5 capítulos del narrador, ninguno de respaldo, y un solo `NARRATION_BEST_ATTEMPT`.
-  - Pero 5 de 10 beats forzados: el director citaba «Ilse Marvento [...] observa» y el log
-    guarda «Observa». Arreglado en 7.13 (`stage/causality.py`); falta medirlo en real.
-  - La narración entera salió de 3.1, porque los actores agotaron 3.5 en la llamada 93.
-    Arreglado en 7.13: los actores empiezan por 3.1.
-- **Qué hacer.** Repetir el prompt de los navegantes (`brief.json` de ese run) en real y leer
-  `narration.json`, `narration/*-review-*.json` y `director.jsonl`.
-- **Hecho cuando.** Ningún capítulo con `source: fallback` salvo que el narrador no devolviera
-  texto, ningún pensamiento en inglés en `turns.jsonl`, y el primer beat en estancamiento
-  recibe el giro antes de su tope.
-- **Ojo.** Medir cuántos capítulos salen como `NARRATION_BEST_ATTEMPT`: si son muchos, el
-  revisor sigue marcando como contradicción lo que no lo es, y hay que mirar sus códigos.
-- **Medido en 7.19 y arreglado en 7.20.**
-  - En `20261019-023436` fueron 3 de 3. De los 10 hallazgos bloqueantes, 7 llamaban invención
-    al estilo indirecto.
-  - El revisor ve ahora `retold_as`, y el código descarta lo que está en el log.
-  - La renarración 7.20 (`20261019-133532`) dio 3 de 3 aceptados al primer intento.
-
 ## P03 · Línea base y corpus
 
 ### MED-8 · Línea base de un solo prompt
