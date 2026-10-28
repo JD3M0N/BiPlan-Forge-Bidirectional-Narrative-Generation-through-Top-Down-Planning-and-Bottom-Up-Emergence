@@ -51,6 +51,48 @@ rasgos, juez, análisis o tesis se contrasta con esta lista antes de empezar.
   excluye, con razón escrita: lo anterior a Stagecraft 7 (Top-Down 4.x–6.x y Bottom-Up, incluidos
   los Top-Down sin `story_format`) y los guiones. Hoy son 107 runs (unas 215–320 llamadas de
   extracción en P08), más lo que generen P03.3, P05 y P06.
+- **2026-10-28 · Lista núcleo provisional (P04.2).** Se decide sobre las lagunas y los núcleo
+  dudosos de `packages/evaluation/planilla/cobertura.md` §4, sin haber visto votos ni
+  extracciones. «Lista núcleo» significa `prioridad = núcleo` y `uso = juez`; P, K y H no
+  entran, aunque lleven `núcleo`. **28 rasgos:** T01, T06, T08, R01, R02, R03, R04, R05, R09,
+  R15, R16, R17, R18, R23, R24, X02, X03, X06, X09, X10, X13, X14, X15, X16, X17, X20, X24, X29
+  (personajes 9, trama 15, creatividad 3, T01 sin criterio). Se cierra en P04.9.
+  **Cambios que aplica P04.4 en `rasgos.csv`:**
+  - R12 pasa a `secundario`: son tres comprobaciones de la vida interior del personaje (0–3),
+    no un recuento, y no hay log que lo contraste. El ítem 7 conserva su rasgo.
+  - R18 pasa a `núcleo`: recuento con cita del bloque «mundo», el tercer núcleo de
+    «creatividad».
+  - X29 nuevo, «Reparto del diálogo»: entropía normalizada de las réplicas por hablante,
+    calculada con código desde el desglose de X08 (como X03 con las escenas), en una escala
+    de 0 a 1, `núcleo`, `juez`, criterio «personajes», contrastado con `turns.jsonl` (speech
+    por actor). Cubre el ejemplo 5 del audio sin llamadas nuevas.
+  - R15 se reformula: veces que una acción del protagonista, que el propio texto atribuye a
+    un rasgo suyo (con cita de esa atribución), le causa un fracaso o una pérdida. Desaparece
+    «la cara oscura de una virtud».
+  - R23 se reformula en positivo, «Escenas con cambio»: proporción de escenas (sobre X05) en las
+    que cambia la información, una relación o la situación, con la cita del cambio. El peso
+    esperado pasa a ser positivo.
+  - X09 pierde «sin que el arco lo justifique»: cuenta las réplicas que contradicen un rasgo
+    que el texto afirmó antes de forma explícita, con las dos citas. El signo lo sigue
+    decidiendo el juez.
+  - X24 pasa de cociente a recuento de preguntas abiertas que el texto responde; T01 ya
+    controla la longitud.
+  **Sin cambio, con razón escrita:**
+  - Lo «sorprendente» del ítem 3 queda sin rasgo: depende de lo que esperaba el lector, así
+    que medirlo sería juzgar (T2). Lo valora el criterio humano «creatividad», y X15 es el
+    recuento más cercano.
+  - R13 y R21 siguen secundarios: son una categoría y un binario que salen de leer el arco
+    interno, y con pocas historias apenas varían. Van al análisis horizontal.
+  - R20 sigue secundario: obliga a decidir qué «no hace falta para la trama».
+  - X11 sigue secundario: sale de las mismas mentiras que X10 (X11 ≤ X10).
+  - X05 y X23 siguen secundarios, pero entran en la revisión humana (P04.3, P04.6), porque sus
+    errores se arrastran a X02, X03, X06, R23 y X24.
+  - Los solapes R05/X14/X15, R16/R17 y X13/X15 se mantienen. P07 usa regularización e informa
+    la colinealidad.
+  **Para otras tarjetas:**
+  - P04.3 da más peso en la muestra de la revisión humana a los núcleo sin `validable_contra`.
+  - P04.5 añade el par X29 ↔ réplicas por actor.
+  - P04.9 lleva a H2 la pregunta de qué entiende el tutor por «cosas complicadas» (X14, X15).
 
 ## 3. Decisiones de proyecto
 

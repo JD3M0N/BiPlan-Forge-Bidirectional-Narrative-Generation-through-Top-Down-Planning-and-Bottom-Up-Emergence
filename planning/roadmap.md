@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P04.2 · qué hacer con las lagunas y los dudosos (`/phase`, modo `O`; mejor con Opus).
+- **Siguiente:** P04.3 · diseño de la validación (`/phase`, modo `O`; mejor con Opus).
 - **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.1, evaluación 2.1.1,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
@@ -25,6 +25,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P03.3 · Catálogo restaurado en `planilla/prompts.md` y 9 líneas base (3 por obra 01, 03 y 04, Esencial, Flash-Lite, 7.22) en `Stories/Baseline/`: todas completas, `C01 = Baseline` y elegibles; 10 llamadas, una de ellas reintento de `04-…-3`. Cierra MED-8.
   - P03.4 · Decisión escrita por grupo de anomalías en `METODOLOGIA.md` §10 (inventario 2026-10-28: 331 runs, 116 elegibles); 6 runs `running` sin historia descartados con `asg-recover --discard`, `la-carta-del-faro` (7.10) queda sin cerrar y excluido. Cierra MED-6 y P03.
   - P04.1 · `planilla/cobertura.md`: los 9 ejemplos del audio y las 19 dimensiones aplicables tienen rasgo; quedan 10 lagunas parciales y 4 núcleo de riesgo alto (R12, R15, R23, X09) para P04.2.
+  - P04.2 · Lista núcleo provisional de 28 en `decisions.md` §2: R12 pasa a secundario; entran R18 y X29 (reparto del diálogo, calculado con código); se reformulan R15, R23 (en positivo), X09 y X24 (recuento). P04.4 aplica esos cambios.
 
 ## Cómo leer una tarjeta
 
@@ -135,21 +136,6 @@ rasgo o razón escrita. T8: la lista núcleo queda entre 18 y 30. Los umbrales s
 medir (P04.3) y la lista se cierra al final (P04.9), antes de abrir la votación (P06). T10: nada
 aquí toca el generador. Entre P04.7 y P04.8, Josue rellena la hoja de revisión.
 
-#### P04.2 · Qué hacer con las lagunas y los dudosos
-- **Modo:** O · **Cuota:** sin cuota · **Paquete:** asg-evaluation (decisión)
-- **Lee:** `planilla/cobertura.md`; `planning/decisions.md` §1–§2.
-- **Haz:**
-  1. Por cada laguna, 2–4 opciones: añadir un rasgo, ampliar uno existente, dejarlo secundario o
-     escribir la razón para no tenerlo. Lo mismo con cada núcleo dudoso: mantener, pasar a
-     secundario o reformular como recuento. Recomendación, y espera.
-  2. Con el «ok» de Josue, anota en `decisions.md` §2 «Lista núcleo provisional», con fecha: IDs,
-     tamaño (entre 18 y 30) y los cambios exactos que aplicará P04.4.
-- **No hagas:** editar `rasgos.csv`; cerrar la lista (es P04.9); añadir rasgos que sean un juicio
-  de calidad.
-- **Prueba:** que la lista resultante tenga entre 18 y 30 rasgos, con T01 dentro.
-- **Hecho cuando:** `decisions.md` tiene la lista provisional y los cambios para P04.4, o
-  «sin cambios» con su razón.
-
 #### P04.3 · Diseño de la validación
 - **Modo:** O · **Cuota:** sin cuota · **Paquete:** asg-evaluation (decisión)
 - **Lee:** `METODOLOGIA.md` §3 «El extractor» y §10; `decisions.md` §4;
@@ -195,7 +181,7 @@ aquí toca el generador. Entre P04.7 y P04.8, Josue rellena la hoja de revisión
   1. Calcula P37 (mentiras en el log: turnos con táctica `lie` en `turns.jsonl`) y las réplicas
      por actor para X08.
   2. Añade `compare_with_logs` a `feature_audit.py`: por historia y rasgo, valor extraído, valor
-     del log y si el texto supera al log (techo). Pares: X02/X03↔P35, X08↔réplicas por actor,
+     del log y si el texto supera al log (techo). Pares: X02/X03↔P35, X08 y X29↔réplicas por actor,
      X10↔P37, X13↔P36, X16↔P21, X17↔P39, X18↔P40. Exponla como `asg-audit-features --run DIR`.
   3. Lo que el run no registró sale «no medido», nunca cero. Para cada par que no se pueda
      comparar, deja la razón escrita.
