@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.2] - 2026-10-28
+
+- P04.4: catalog changes decided in P04.2. R12 becomes secondary; R18 and the new X29
+  (dialogue share, normalized entropy of X08's turns per speaker, derived by code) join the
+  core list, now 28 features. R15, R23 (now "scenes with change", a proportion over X05), X09
+  and X24 (now a count of answered questions, no denominator) are redefined; P35 is marked as
+  existing. Cached extractions are archived by the new catalog hash.
+
 ## [2.1.1] - 2026-10-28
 
 - P03.2: new `asg-corpus <Stories> [--json] [--csv]` and `corpus.py`, a read-only inventory of

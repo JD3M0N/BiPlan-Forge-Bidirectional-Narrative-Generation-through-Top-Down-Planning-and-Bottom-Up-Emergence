@@ -3,7 +3,7 @@
 import json
 
 import pytest
-from asg_evaluation.catalog import core_ids
+from asg_evaluation.catalog import catalog, core_ids
 from asg_evaluation.feature_audit import compare_extractions
 from asg_evaluation.feature_report import read_features
 from asg_evaluation.features import (
@@ -15,6 +15,7 @@ from asg_evaluation.features import (
     Scene,
     Segmentation,
     aggregate_finding,
+    dialogue_share,
     extract_features,
     paragraphs,
     scene_features,
@@ -74,6 +75,45 @@ def test_literal_evidence_duplicates_and_empty_denominators():
     assert aggregate_finding(payoff, blocks, partition, 10, set())["status"] == "not_applicable"
     incomplete = payoff.model_copy(update={"complete": False})
     assert aggregate_finding(incomplete, blocks, partition, 10, set())["value"] is None
+
+
+def test_p04_catalog_changes_count_scenes_payoffs_and_dialogue_share():
+    catalog_rows = catalog()
+    assert 18 <= len(core_ids()) <= 30 and {"R18", "X29"} <= set(core_ids())
+    assert "R12" not in core_ids() and catalog_rows["P35"]["estado"] == "existe"
+    text = "Ada habló.\n\nBea calló."
+    blocks = paragraphs(text)
+    partition = Segmentation(scenes=[Scene(first=0, last=0), Scene(first=1, last=1)])
+    change = Occurrence(
+        scene=1,
+        label="q1",
+        explanation="Bea changes",
+        evidence=[Quote(paragraph=1, text="Bea calló.")],
+    )
+    r23 = aggregate_finding(
+        FeatureFinding(feature="R23", complete=True, occurrences=[change]),
+        blocks,
+        partition,
+        10,
+        set(),
+    )
+    assert (r23["raw"], r23["denominator"], r23["value"]) == (1, 2, 0.5)
+    x24 = aggregate_finding(
+        FeatureFinding(feature="X24", complete=True, occurrences=[change]),
+        blocks,
+        partition,
+        10,
+        {"q1", "q2"},
+    )
+    assert x24["value"] == 1 and x24["denominator"] is None
+    turns = {"Ada": {"raw": 3}, "Bea": {"raw": 3}}
+    even = dialogue_share({"status": "measured", "breakdown": turns})
+    skewed = dialogue_share(
+        {"status": "measured", "breakdown": {"Ada": {"raw": 5}, "Bea": {"raw": 1}}}
+    )
+    assert even["value"] == pytest.approx(1.0) and 0 < skewed["value"] < 1
+    assert dialogue_share({"status": "measured", "breakdown": {}})["status"] == "not_applicable"
+    assert dialogue_share({"status": "failed"})["status"] == "failed"
 
 
 def test_extraction_resumes_reuses_cache_and_invalidates_changed_text(tmp_path):

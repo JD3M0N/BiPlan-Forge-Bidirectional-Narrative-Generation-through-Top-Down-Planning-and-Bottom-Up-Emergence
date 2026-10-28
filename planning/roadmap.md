@@ -6,8 +6,8 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P04.4 · aplicar los cambios al catálogo (`/phase`, modo `S+P`).
-- **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.1, evaluación 2.1.1,
+- **Siguiente:** P04.5 · contraste con los logs (`/phase`).
+- **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.1, evaluación 2.1.2,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
   - P00 · Arranque: `planning/`, skill `phase`, migración de `TODO.md` y graphify.
@@ -27,6 +27,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P04.1 · `planilla/cobertura.md`: los 9 ejemplos del audio y las 19 dimensiones aplicables tienen rasgo; quedan 10 lagunas parciales y 4 núcleo de riesgo alto (R12, R15, R23, X09) para P04.2.
   - P04.2 · Lista núcleo provisional de 28 en `decisions.md` §2: R12 pasa a secundario; entran R18 y X29 (reparto del diálogo, calculado con código); se reformulan R15, R23 (en positivo), X09 y X24 (recuento). P04.4 aplica esos cambios.
   - P04.3 · Diseño de la validación en `decisions.md` §2: 12 runs (5 simulados con log, 4 narrativos, 3 líneas base), `flash-lite`, test-retest de 6 (~54 llamadas), revisión de ~7 h y umbrales fijados antes de medir (precisión 0,80, cobertura 0,70, retest 0,25, techo del log) con su regla de salida.
+  - P04.4 · `rasgos.csv` con los cambios de P04.2: núcleo de 28 (R12 sale; entran R18 y X29, entropía de X08 por código); R15, R23 («Escenas con cambio», proporción sobre X05), X09 y X24 (recuento) reformulados; P35 pasa a `existe`; planilla regenerada.
 
 ## Cómo leer una tarjeta
 
@@ -136,23 +137,6 @@ núcleo que se lean como juicio. T3: cada ejemplo del audio y cada dimensión de
 rasgo o razón escrita. T8: la lista núcleo queda entre 18 y 30. Los umbrales se fijan antes de
 medir (P04.3) y la lista se cierra al final (P04.9), antes de abrir la votación (P06). T10: nada
 aquí toca el generador. Entre P04.7 y P04.8, Josue rellena la hoja de revisión.
-
-#### P04.4 · Aplicar los cambios al catálogo
-- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation
-- **Lee:** la decisión de P04.2 en `decisions.md` §2; `catalog.py`; `planilla/build_planilla.py`;
-  `docs/architecture/evaluation.md`.
-- **Haz:**
-  1. Aplica a `planilla/rasgos.csv`, exactamente, los cambios de P04.2. Con P04.9, es la única
-     tarjeta de P04 autorizada a editarlo.
-  2. Corrige el estado de P35 (`por_construir`), que ya calcula `feature_report._simulation_counts`.
-  3. Regenera la planilla con `python packages/evaluation/planilla/build_planilla.py`.
-  4. Si un rasgo nuevo exige tocar el extractor, `features.py` solo en lo mínimo.
-  5. Amplía el test de catálogo: núcleo T, R y X entre 18 y 30.
-- **No hagas:** cambios que P04.2 no listó; tocar el generador; extraer.
-- **Prueba:** `python -m pip install --no-deps -e packages/evaluation`; `.\run-tests.ps1`;
-  `.\quality.ps1`.
-- **Hecho cuando:** CSV, Excel y lista de `decisions.md` coinciden. Si P04.2 dijo «sin
-  cambios», se corrige solo P35 y se regenera la planilla.
 
 #### P04.5 · Contraste con los logs (MED-7 recortado)
 - **Modo:** S · **Cuota:** sin cuota · **Paquete:** asg-evaluation

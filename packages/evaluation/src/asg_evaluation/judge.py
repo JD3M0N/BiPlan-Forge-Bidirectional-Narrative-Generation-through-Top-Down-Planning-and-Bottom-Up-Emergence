@@ -175,7 +175,7 @@ def train_judge(dataset: dict, features: dict[str, dict]) -> dict:
             not in {"measured", "not_applicable"}
             for k in fields
         ):
-            raise ValueError("Completa la extracción de los 27 rasgos antes de entrenar.")
+            raise ValueError("Completa la extracción de los 28 rasgos antes de entrenar.")
     protocols = [protocol(features[s["id"]].get("identity", {})) for s in stories]
     if any(p != protocols[0] for p in protocols):
         raise ValueError(

@@ -18,8 +18,8 @@ from .catalog import catalog, catalog_snapshot, core_ids, digest
 EXTRACTION_VERSION = 3
 PROMPT_VERSION = "evidence-2"
 PHRASES = ("un escalofrío recorrió", "el peso de")
-DERIVED = {"X01", "X02", "X03", "X04", "X05"}
-# Per-speaker dialogue and distinct liars, published beside the 27 judge inputs.
+DERIVED = {"X01", "X02", "X03", "X04", "X05", "X29"}
+# Per-speaker dialogue and distinct liars, published beside the 28 judge inputs.
 AUXILIARY = {"X08", "X11"}
 TWO_QUOTES = {"X09", "X20", "R03", "R16", "R22", "X18"}
 SYSTEM = (
@@ -266,6 +266,16 @@ def scene_features(partition: Segmentation) -> dict:
     }
 
 
+def dialogue_share(dialogue: dict) -> dict:
+    """Derive X29 from the per-speaker turn counts already verified for X08."""
+    if dialogue.get("status") != "measured":
+        return measurement(status=dialogue.get("status", "failed"), reason="X08 is not measured")
+    turns = [v["raw"] for v in (dialogue.get("breakdown") or {}).values()]
+    if not sum(turns):
+        return measurement(status="not_applicable", reason="X08 found no dialogue turns")
+    return measurement(entropy(turns), raw=sum(turns))
+
+
 def _observations(
     finding: FeatureFinding, blocks: list[dict], partition: Segmentation
 ) -> list[dict]:
@@ -309,8 +319,9 @@ def aggregate_finding(
     if key == "X24":
         if not labels <= open_questions:
             raise ValueError("Payoff references an unrecorded question")
-        denominator = len(open_questions)
-    if key == "X06":
+        if not open_questions:
+            return _no_questions()
+    if key in {"X06", "R23"}:
         denominator = len(partition.scenes)
     unit = catalog()[key]["unidad"]
     if unit == "por 1000 palabras":
@@ -508,6 +519,7 @@ def _extract(text, provider, model, output, selection, force) -> dict:
         validate_scenes(partition, blocks)
         report["features"].update(scene_features(partition))
         _extract_batches(report, chosen, definitions, provider, base, blocks, partition, output)
+        report["features"]["X29"] = dialogue_share(report["features"].get("X08", {}))
         if "R14" in chosen and report["features"].get("R14", {}).get("status") not in {
             "measured",
             "not_applicable",

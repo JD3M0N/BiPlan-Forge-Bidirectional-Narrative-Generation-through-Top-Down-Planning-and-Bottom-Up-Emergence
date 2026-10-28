@@ -150,7 +150,7 @@ Los JSON del proceso (P) tienen tres usos:
 
 ### Rasgos núcleo
 
-Solo entran al juez los rasgos marcados `núcleo`: 27, dentro de la horquilla del tutor («18, 20,
+Solo entran al juez los rasgos marcados `núcleo`: 28, dentro de la horquilla del tutor («18, 20,
 30 números»).
 
 - Los demás son `secundario`: se miden y se publican, pero no se ajustan, porque con pocas
@@ -234,7 +234,7 @@ Por cada criterio se ajusta una regresión logística por pares (ficha EXP-7):
 
 **Cómo se valida.** El criterio del tutor es que el juez «recupere el ranking» humano.
 
-- Con 10 historias y 27 rasgos, recuperarlo **dentro de la muestra** es trivial: cualquier modelo
+- Con 10 historias y 28 rasgos, recuperarlo **dentro de la muestra** es trivial: cualquier modelo
   lo memoriza.
 - Por eso se mide **fuera de la muestra**, dejando una historia fuera: el modelo se ajusta sin
   ella, predice sus pares y se informan:
