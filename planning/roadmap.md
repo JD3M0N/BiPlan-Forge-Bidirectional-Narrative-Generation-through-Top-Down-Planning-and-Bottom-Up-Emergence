@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P03.4 (una decisión escrita por cada anomalía, modo `S+P`, sin cuota).
+- **Siguiente:** escribir las tarjetas de P04 (`/clear`, `/model opus`, `/phase cards P04`).
 - **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.1, evaluación 2.1.1,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
@@ -23,6 +23,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P03.1 · Decidido (`decisions.md` §2): 3 líneas base por obra 01/03/04, catálogo en `planilla/prompts.md` (variante Esencial), `Evaluations/estudio` es piloto y el ranking cubre Stagecraft 7.x y las líneas base.
   - P03.2 · `asg-corpus` (solo lectura): 322 runs con 107 elegibles; las diferencias con el recuento de P03 son los 6 runs de `Bottom-Up/Escape-Room`, que el inventario sí cuenta (todos excluidos por generador anterior); `judge._ineligible` reutiliza `exclusion_reason`.
   - P03.3 · Catálogo restaurado en `planilla/prompts.md` y 9 líneas base (3 por obra 01, 03 y 04, Esencial, Flash-Lite, 7.22) en `Stories/Baseline/`: todas completas, `C01 = Baseline` y elegibles; 10 llamadas, una de ellas reintento de `04-…-3`. Cierra MED-8.
+  - P03.4 · Decisión escrita por grupo de anomalías en `METODOLOGIA.md` §10 (inventario 2026-10-28: 331 runs, 116 elegibles); 6 runs `running` sin historia descartados con `asg-recover --discard`, `la-carta-del-faro` (7.10) queda sin cerrar y excluido. Cierra MED-6 y P03.
 
 ## Cómo leer una tarjeta
 
@@ -114,24 +115,6 @@ pipeline, sin plan ni revisión. T9: el inventario dice qué ordenará el juez y
 el resto; no ordena nada. T10: el generador está congelado, así que nada aquí cambia prompts,
 `baseline.py` ni `PIPELINE_VERSION`. T2 y T5: aquí nadie juzga calidad; las líneas base se
 juzgan en P06.
-
-#### P03.4 · Una decisión escrita por cada anomalía
-- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** — (o parche de asg-evaluation si hay que
-  ajustar una razón)
-- **Lee:** la salida de `asg-corpus Stories --json`; `stagecraft/tools/recovery.py` (docstring y
-  `--help`); METODOLOGIA.md §10.
-- **Haz:** agrupa las anomalías y propone una decisión por grupo: excluir con razón, recuperar con
-  `asg-recover` (deja rastro), o aceptar como limitación. Las de runs anteriores a Stagecraft 7
-  ya quedan fuera del ranking (P03.1): basta con anotarlas, no hace falta recuperarlas. Espera el
-  «ok». Después:
-  - aplica solo lo aprobado;
-  - escribe la tabla de exclusiones con fecha y alcance en METODOLOGIA.md §10;
-  - guarda la salida en `Evaluations/corpus/inventario-2026-MM-DD.json`.
-- **No hagas:** borrar runs, `.tmp` ni el `.html` (se excluyen, no se borran); editar
-  `metadata.json` a mano.
-- **Prueba:** relanzar `asg-corpus`: cada anomalía restante tiene su decisión en §10.
-- **Hecho cuando:** el inventario sale limpio o cada anomalía tiene una decisión escrita. Cierra
-  MED-6 (se borra de `fichas.md`).
 
 ### P04 · Validar el extractor
 

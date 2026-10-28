@@ -324,6 +324,25 @@ de la tesis.
   es un indicio, no una medida.
 - **La cuota.** La matriz completa son varios días de cuota gratuita (ver `matriz.csv`).
 
+### Exclusiones del corpus (inventario del 2026-10-28)
+
+Alcance: `asg-corpus Stories`, 331 runs, 116 elegibles. Salida en
+`Evaluations/corpus/inventario-2026-10-28.json` (local, `Evaluations/` está ignorado por Git).
+Excluidos: 135 por generador anterior a Stagecraft 7, 72 por run no completado y 8 por formato
+fuera del estudio en prosa. Nada se borró ni se editó a mano.
+
+| Grupo | Anomalías (recuento) | Decisión |
+|---|---|---|
+| Runs anteriores a Stagecraft 7 | `sin_version_de_pipeline`, `sin_generator_version`, `formato_inferido` y 2 `tmp_suelto` (`.story.mp3.*.tmp` en `Top-Down/20260901-020145` y `20260908-020751`) | Limitación aceptada: ya quedan fuera del ranking (P03.1); no se recuperan. |
+| Runs no completados de Top-Down | Las mismas tres anomalías de versión y formato | Excluidos con la razón «Run no completado». |
+| `Top-Down/20260911-173150-las-cenizas-del-juramento` | `failed_con_story` (PermissionError, pipeline 6.0) | Limitación aceptada: anterior a Stagecraft 7; no se recupera. |
+| Seis runs `running` de `Stories/Stagecraft` sin `story.md` (`20261002-150119`, `20261011-234543`, `20261013-125004`, `20261016-141948`, `20261022-142004`, `20261022-205605`) | `running_atascado` | Descartados con `asg-recover --discard` (`failed`, código `RUN_INTERRUPTED`); el `.pipeline_manifest.json.*.tmp` de `20261022-142004` no se borró. |
+| `Stagecraft/20261011-225020-la-carta-del-faro` (7.10) | `running_atascado` y `tmp_suelto` (`.story.mp3.*.tmp`) | Sin cerrar y excluido como «Run no completado»: lo dejó a medias el proceso. Limitación aceptada; `--close` queda como opción si se revisa su `story.md`. |
+| `Bottom-Up/Escape-Room/experiments` y `Top-Down/comparacion-densidad-borrador-final-v2.0.4.html` | `no_es_run` | Fuera del inventario de runs; no se borran. |
+
+Tras el descarte quedan 71 runs `failed` y 1 `running`; en `Stagecraft/` siguen anotadas tres
+anomalías: las dos de `la-carta-del-faro` y el `.tmp` de `20261022-142004`.
+
 ## 11. Pasos
 
 | Paso | Ficha | Cuota |

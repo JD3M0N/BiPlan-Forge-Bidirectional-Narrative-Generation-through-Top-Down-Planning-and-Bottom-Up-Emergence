@@ -8,34 +8,6 @@ lo que entra en una tarjeta se borra de aquí y lo que se aplaza pasa a
 
 Las cifras y fechas son las de su medición; no se han vuelto a comprobar.
 
-## P03 · Línea base y corpus
-
-### MED-6 · Inventario del corpus
-
-*Área:* medición · *Cuota:* sin cuota · *Depende de:* —
-
-- **Síntoma.**
-  - **Versiones.**
-    - 18 runs no tienen `pipeline_version` (16 a 18 de agosto) y 47 no tienen
-      `generator_version.json`, así que caen fuera de los informes por versión.
-    - La etiqueta de pipeline es gruesa: 6.2 cubre el generador de 6.6.0 a 6.9.0.
-    - `story_format` solo consta en los 9 runs más nuevos de Top-Down.
-  - **Estados y restos.**
-    - `Top-Down/20260911-173150-*` está `failed` (PermissionError) con `story.md` escrito.
-    - Quedan `.story.mp3.*.tmp` en los dos runs cerrados a mano (`20260901-020145`,
-      `20260908-020751`).
-  - **Archivos que no son runs.** Hay uno en `Stories/Top-Down/`
-    (`comparacion-densidad-borrador-final-v2.0.4.html`), y la cola `Stories/telegram_queue.sqlite3`.
-  - **Huecos sueltos.** `20260901-023045-the-cheesecake-trial` tiene historia y no
-    `evaluation.json`, y los warnings son texto libre, sin campo de código.
-- **Qué hacer.**
-  - Un informe de solo lectura en `evaluation` que liste esas anomalías, para que cada informe de
-    la tesis diga qué excluye y por qué.
-  - Nunca borrar datos. Lo que se corrija, con `asg-recover` y dejando rastro.
-- **Hecho cuando.** El inventario sale limpio, o cada anomalía tiene una decisión escrita.
-- **Al escribir P03 (2026-10-28).** Los códigos de warnings pasaron a idea-bank (MED-6b). «Sin
-  `evaluation.json`» ya no es anomalía: las métricas 1–10 se retiraron.
-
 ## P04 · Validar el extractor
 
 ### MED-9 · Extractor de rasgos con cita verificada
