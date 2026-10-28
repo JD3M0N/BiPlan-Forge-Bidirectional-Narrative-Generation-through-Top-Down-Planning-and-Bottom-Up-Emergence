@@ -16,6 +16,7 @@ COMMANDS = (
     ("asg-features", "extrae los rasgos con cita de las historias (gasta cuota)"),
     ("asg-audit-features", "revisa una extracción de rasgos o la compara con otra"),
     ("asg-report-features", "tabla de rasgos y análisis horizontal"),
+    ("asg-corpus", "inventario del corpus: qué runs entran al ranking y cuáles son anomalías"),
     ("asg-preferences", "preferencias humanas: Bradley-Terry y acuerdo"),
     ("asg-judge", "entrena el juez aprendido con los votos"),
     ("asg-rank", "ordena el corpus con el juez y prepara las diez mejores"),

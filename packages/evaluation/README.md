@@ -57,7 +57,13 @@ asg-features --study $db --dry-run   # cuántas llamadas costará
 asg-features --study $db             # consume cuota; reanudable
 asg-audit-features Evaluations/estudio/features/ID.json --output revision.json
 asg-report-features Stories --study $db --json tabla.json --csv tabla.csv --horizontal horizontal.json
+asg-corpus Stories --json inventario.json --csv inventario.csv   # qué runs entran al ranking
 ```
+
+- `asg-corpus` solo lee: lista cada run con formato, versiones, estado y veredicto
+  `elegible`/`excluido` con su razón (no completado, sin `story.md`, guion, generador anterior a
+  Stagecraft 7), y las anomalías (sin versión, formato inferido, `failed` con historia,
+  `running` de más de 24 h, `.tmp` sueltos, archivos que no son runs). No ordena nada.
 
 - Solo los 27 rasgos `núcleo` de las capas T, R y X entran al juez; T01 (palabras) controla la
   longitud. Los de proceso (P), coste (K) y configuración (C) van a los informes.
@@ -93,6 +99,7 @@ asg-rank juez.json Stories --study $db --output ranking.json
 | `feature_report.py`, `feature_cli.py`, `feature_audit.py` | tabla de rasgos, análisis horizontal y auditoría |
 | `preferences.py` | Bradley–Terry, acuerdo e intervalos |
 | `judge.py`, `learning_cli.py` | el juez aprendido y el ranking |
+| `corpus.py` | inventario de solo lectura del corpus y `asg-corpus` |
 | `catalog.py` | lee la planilla y fija su huella |
 | `pairing.py`, `simulation_report.py`, `artifacts.py` | lectores tolerantes de runs, también para StageCraft |
 

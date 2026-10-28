@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.1] - 2026-10-28
+
+- P03.2: new `asg-corpus <Stories> [--json] [--csv]` and `corpus.py`, a read-only inventory of
+  the stored runs: format (and whether it was inferred), versions, status, `story.md`, and an
+  `eligible`/`excluded` verdict with its reason, plus the MED-6 anomalies. `judge._ineligible`
+  now takes the status, format and generator reasons from `corpus.exclusion_reason`, so runs
+  before Stagecraft 7 are excluded from the ranking with "Generador anterior a Stagecraft 7".
+
 ## [2.1.0] - 2026-10-25
 
 - Extraction protocol 3 (`EXTRACTION_VERSION` 3; the prompt stays `evidence-2`). A batch is

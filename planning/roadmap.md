@@ -6,8 +6,8 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P03.2 (inventario del corpus, de solo lectura, modo `S+P`).
-- **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.0, evaluación 2.1.0,
+- **Siguiente:** P03.3 (líneas base de la matriz, modo `S`, 9 llamadas reales: enseña el coste y espera).
+- **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.1, evaluación 2.1.1,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
   - P00 · Arranque: `planning/`, skill `phase`, migración de `TODO.md` y graphify.
@@ -21,6 +21,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P02.4 · Predeterminados sin cambio (todos los brazos de 7.17 siguen apagados, `reported`); `OUT_OF_FICTION` general contra vocabulario de código (SIM-14); Stagecraft 7.22.
   - P02.5 · Validación real de 7.22 (narrativo, guion y simulado del prompt 03 cumplen; beats forzados 3 de 6 como limitación) y generador congelado, etiqueta `generator-frozen`; cierra P02.
   - P03.1 · Decidido (`decisions.md` §2): 3 líneas base por obra 01/03/04, catálogo en `planilla/prompts.md` (variante Esencial), `Evaluations/estudio` es piloto y el ranking cubre Stagecraft 7.x y las líneas base.
+  - P03.2 · `asg-corpus` (solo lectura): 322 runs con 107 elegibles; las diferencias con el recuento de P03 son los 6 runs de `Bottom-Up/Escape-Room`, que el inventario sí cuenta (todos excluidos por generador anterior); `judge._ineligible` reutiliza `exclusion_reason`.
 
 ## Cómo leer una tarjeta
 
@@ -112,32 +113,6 @@ pipeline, sin plan ni revisión. T9: el inventario dice qué ordenará el juez y
 el resto; no ordena nada. T10: el generador está congelado, así que nada aquí cambia prompts,
 `baseline.py` ni `PIPELINE_VERSION`. T2 y T5: aquí nadie juzga calidad; las líneas base se
 juzgan en P06.
-
-#### P03.2 · Inventario del corpus, de solo lectura
-- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation
-- **Lee:** P03.1 en `decisions.md`; `feature_report.read_features` y `process_features`;
-  `pairing.read_run_config`; `judge._ineligible`; `artifacts.py`; `asg_core/help.py`;
-  `packages/evaluation/README.md` §3.
-- **Haz:**
-  - Un módulo `asg_evaluation/corpus.py` y un comando `asg-corpus <Stories> [--json] [--csv]`
-    (registrado en `pyproject.toml` y `help.py`). Lista cada run con: carpeta, formato (y si se
-    infirió), versiones, estado, `story.md` y veredicto `elegible`/`excluido` con su razón, según
-    P03.1.
-  - Lista también las anomalías de MED-6: falta de versión o de `generator_version.json`,
-    `story_format` inferido, `failed` con `story.md`, `running` atascado, `.tmp` sueltos y
-    archivos que no son runs.
-  - Razones de exclusión según P03.1: run no completado, sin `story.md`, guion («Formato fuera
-    del estudio en prosa», como hoy) y «Generador anterior a Stagecraft 7» (Top-Down 4.x–6.x,
-    Bottom-Up y runs sin versión). Elegible: `narrative`, `simulated` y `baseline` de 7.x.
-  - `judge._ineligible` reutiliza la razón de corpus para lo que no depende de la extracción, y
-    conserva sus mensajes actuales.
-- **No hagas:** escribir en `Stories/` ni en `Evaluations/`; llamar a `asg-recover`; tocar
-  `rasgos.csv`; añadir códigos a los warnings (es del generador congelado: MED-6b en idea-bank).
-- **Prueba:** tests con runs ficticios en `tmp_path`, uno por anomalía (parametrizados) y uno
-  por razón de exclusión; un test de `asg-rank` sigue dando los mismos `excluded`;
-  `.\run-tests.ps1` y `.\quality.ps1`.
-- **Hecho cuando:** `asg-corpus Stories --json` sobre el corpus real da los recuentos de arriba
-  (o explica la diferencia), y `asg help` lo lista.
 
 #### P03.3 · Líneas base de la matriz
 - **Modo:** S · **Cuota:** 9 llamadas (obras 01, 03 y 04, tres cada una) · **Paquete:** —

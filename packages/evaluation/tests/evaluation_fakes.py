@@ -80,7 +80,7 @@ def synthetic_run(
             "status": "completed",
             "story_format": fmt,
             "model": "SYNTHETIC-NO-NETWORK",
-            "pipeline_version": "demo",
+            "pipeline_version": "7.22",
             "synthetic": True,
         },
     )

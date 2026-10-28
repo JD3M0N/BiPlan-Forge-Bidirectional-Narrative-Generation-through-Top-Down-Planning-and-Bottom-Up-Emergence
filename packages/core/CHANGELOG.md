@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.8.1] - 2026-10-28
+
+- `asg help` lists `asg-corpus`.
+
 ## [0.8.0] - 2026-10-24
 
 - Added `audit_timestamp`, the one UTC ISO timestamp every audit column is written with. The

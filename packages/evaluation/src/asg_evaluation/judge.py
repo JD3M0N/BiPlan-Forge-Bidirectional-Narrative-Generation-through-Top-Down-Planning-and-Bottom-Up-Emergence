@@ -13,6 +13,7 @@ from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LogisticRegression
 
 from .catalog import CRITERIA, catalog_snapshot, core_ids, digest
+from .corpus import exclusion_reason
 from .preferences import bradley_terry, decided_votes
 
 MODEL_VERSION = 2
@@ -277,10 +278,10 @@ def rank_features(judge: dict, rows: list[dict]) -> dict:
 
 def _ineligible(row: dict) -> str:
     """Exclude incompatible formats, failed runs and incomplete extractions explicitly."""
-    if row.get("status") != "completed":
-        return "Run no completado"
-    if row.get("format") not in {"baseline", "narrative", "simulated"}:
-        return "Formato fuera del estudio en prosa"
+    if reason := exclusion_reason(
+        row.get("status"), row.get("format"), row.get("pipeline_version")
+    ):
+        return reason
     if not row.get("extraction_compatible"):
         return "Extracción ausente u obsoleta"
     if any(

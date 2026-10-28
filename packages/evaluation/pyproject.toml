@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "asg-evaluation"
-version = "2.1.0"
+version = "2.1.1"
 description = "Pairwise human study, story features and learned judge for ASG stories"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -23,6 +23,7 @@ asg-preferences = "asg_evaluation.learning_cli:human_main"
 asg-judge = "asg_evaluation.learning_cli:train_main"
 asg-rank = "asg_evaluation.learning_cli:rank_main"
 asg-audit-features = "asg_evaluation.feature_audit:main"
+asg-corpus = "asg_evaluation.corpus:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/asg_evaluation"]
