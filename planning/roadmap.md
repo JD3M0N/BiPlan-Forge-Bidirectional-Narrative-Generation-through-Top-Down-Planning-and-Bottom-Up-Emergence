@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** escribir las tarjetas de P04 (`/clear`, `/model opus`, `/phase cards P04`).
+- **Siguiente:** P04.1 · cobertura rasgo a rasgo (`/phase`).
 - **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.1, evaluación 2.1.1,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
@@ -127,6 +127,166 @@ Origen: MED-9, MED-7. Contrato: METODOLOGIA.md §3.
 - Revisión humana de una muestra con `asg-audit-features`, test-retest (`--second`) y contraste
   con los logs (`validable_contra`, métricas de MED-7).
 - **H2:** enseñar al tutor la tablita de unas historias y la lista núcleo.
+
+**Reglas del tutor.** T2: el extractor cuenta y cita, nunca juzga calidad; P04.1 marca los
+núcleo que se lean como juicio. T3: cada ejemplo del audio y cada dimensión de la rúbrica tiene
+rasgo o razón escrita. T8: la lista núcleo queda entre 18 y 30. Los umbrales se fijan antes de
+medir (P04.3) y la lista se cierra al final (P04.9), antes de abrir la votación (P06). T10: nada
+aquí toca el generador. Entre P04.7 y P04.8, Josue rellena la hoja de revisión.
+
+#### P04.1 · Cobertura rasgo a rasgo
+- **Modo:** S · **Cuota:** sin cuota · **Paquete:** asg-evaluation (solo docs)
+- **Lee:** `packages/evaluation/planilla/rasgos.csv`; `METODOLOGIA.md` §1 y §3;
+  `docs/sanderson-craft.pdf` §3.8 (local, fuera de git);
+  `docs/audio_2026-10-03_14-09-35.transcripcion.md` [00:22–01:56].
+- **Haz:**
+  1. Escribe `packages/evaluation/planilla/cobertura.md` con dos tablas: cada ejemplo del audio
+     (consistencia, % de participación por personaje, escenas con conflicto, usos de objetos,
+     participación en diálogo y réplicas fuera de personalidad, personajes que mienten, cosas
+     complicadas, eventos aleatorios) y cada una de las 20 dimensiones de la rúbrica (el ítem 16
+     va como «fuera por ser de series») con su rasgo o una razón escrita para no tenerlo.
+  2. Marca cada uno de los 27 núcleo: si es un recuento con cita (T2), si se lee como juicio de
+     calidad y por qué, y si tiene `validable_contra`.
+  3. Termina con la lista de lagunas y de núcleo dudosos. No propongas el arreglo.
+- **No hagas:** editar `rasgos.csv`; proponer rasgos nuevos; leer extracciones ni historias.
+- **Prueba:** que cada ID citado exista en `rasgos.csv` (script de usar y tirar).
+- **Hecho cuando:** los 9 ejemplos y las 19 dimensiones aplicables figuran en `cobertura.md`,
+  cada uno con rasgo o razón escrita, y las lagunas están listadas.
+
+#### P04.2 · Qué hacer con las lagunas y los dudosos
+- **Modo:** O · **Cuota:** sin cuota · **Paquete:** asg-evaluation (decisión)
+- **Lee:** `planilla/cobertura.md`; `planning/decisions.md` §1–§2.
+- **Haz:**
+  1. Por cada laguna, 2–4 opciones: añadir un rasgo, ampliar uno existente, dejarlo secundario o
+     escribir la razón para no tenerlo. Lo mismo con cada núcleo dudoso: mantener, pasar a
+     secundario o reformular como recuento. Recomendación, y espera.
+  2. Con el «ok» de Josue, anota en `decisions.md` §2 «Lista núcleo provisional», con fecha: IDs,
+     tamaño (entre 18 y 30) y los cambios exactos que aplicará P04.4.
+- **No hagas:** editar `rasgos.csv`; cerrar la lista (es P04.9); añadir rasgos que sean un juicio
+  de calidad.
+- **Prueba:** que la lista resultante tenga entre 18 y 30 rasgos, con T01 dentro.
+- **Hecho cuando:** `decisions.md` tiene la lista provisional y los cambios para P04.4, o
+  «sin cambios» con su razón.
+
+#### P04.3 · Diseño de la validación
+- **Modo:** O · **Cuota:** sin cuota · **Paquete:** asg-evaluation (decisión)
+- **Lee:** `METODOLOGIA.md` §3 «El extractor» y §10; `decisions.md` §4;
+  `Evaluations/corpus/inventario-2026-10-28.json`.
+- **Haz:**
+  1. Opciones con recomendación para: la **muestra** (10–15 historias elegibles, estratificada
+     por formato: simulado con log, narrativo, línea base); el **modelo del extractor**
+     (`flash-lite` o `flash`; cambiarlo cambia la identidad de la extracción, y MED-9 midió 60
+     llamadas frente a 134 con el protocolo 2); el **subconjunto del test-retest**; y el tamaño de
+     la **revisión humana** según las horas de Josue (unas 2600 palabras por historia).
+  2. **Fija umbrales antes de medir** en `decisions.md` §2: precisión humana mínima,
+     estabilidad mínima del test-retest, tolerancia frente al log (el log es un techo) y la regla
+     de salida (un núcleo que no llega sale del juez o se reformula).
+  3. Enseña el coste en llamadas (~3 por texto y pasada) y espera.
+- **No hagas:** lanzar extracciones; elegir umbrales viendo cifras.
+- **Prueba:** que cada historia de la muestra sea elegible en el inventario y, si es simulada,
+  tenga `turns.jsonl`.
+- **Hecho cuando:** `decisions.md` §2 tiene muestra (runs), modelo, umbrales y regla de salida,
+  con fecha, antes de cualquier extracción.
+
+#### P04.4 · Aplicar los cambios al catálogo
+- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation
+- **Lee:** la decisión de P04.2 en `decisions.md` §2; `catalog.py`; `planilla/build_planilla.py`;
+  `docs/architecture/evaluation.md`.
+- **Haz:**
+  1. Aplica a `planilla/rasgos.csv`, exactamente, los cambios de P04.2. Con P04.9, es la única
+     tarjeta de P04 autorizada a editarlo.
+  2. Corrige el estado de P35 (`por_construir`), que ya calcula `feature_report._simulation_counts`.
+  3. Regenera la planilla con `python packages/evaluation/planilla/build_planilla.py`.
+  4. Si un rasgo nuevo exige tocar el extractor, `features.py` solo en lo mínimo.
+  5. Amplía el test de catálogo: núcleo T, R y X entre 18 y 30.
+- **No hagas:** cambios que P04.2 no listó; tocar el generador; extraer.
+- **Prueba:** `python -m pip install --no-deps -e packages/evaluation`; `.\run-tests.ps1`;
+  `.\quality.ps1`.
+- **Hecho cuando:** CSV, Excel y lista de `decisions.md` coinciden. Si P04.2 dijo «sin
+  cambios», se corrige solo P35 y se regenera la planilla.
+
+#### P04.5 · Contraste con los logs (MED-7 recortado)
+- **Modo:** S · **Cuota:** sin cuota · **Paquete:** asg-evaluation
+- **Lee:** `feature_audit.py`; `feature_report.py` (`_simulation_counts`); `simulation_report.py`;
+  `rasgos.csv` (`validable_contra`); `docs/architecture/evaluation.md`.
+- **Haz:**
+  1. Calcula P37 (mentiras en el log: turnos con táctica `lie` en `turns.jsonl`) y las réplicas
+     por actor para X08.
+  2. Añade `compare_with_logs` a `feature_audit.py`: por historia y rasgo, valor extraído, valor
+     del log y si el texto supera al log (techo). Pares: X02/X03↔P35, X08↔réplicas por actor,
+     X10↔P37, X13↔P36, X16↔P21, X17↔P39, X18↔P40. Exponla como `asg-audit-features --run DIR`.
+  3. Lo que el run no registró sale «no medido», nunca cero. Para cada par que no se pueda
+     comparar, deja la razón escrita.
+- **No hagas:** las demás métricas de MED-7 (están en el idea-bank); llamar al modelo.
+- **Prueba:** tests con un run simulado de fixture (techo violado, log ausente);
+  `.\run-tests.ps1`; `.\quality.ps1`.
+- **Hecho cuando:** `asg-audit-features X.json --run DIR --output o.json` da la comparación por
+  rasgo sobre un run simulado real de `Stories/Stagecraft`, sin llamadas al modelo.
+
+#### P04.6 · Hoja de revisión legible y resumen del test-retest
+- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation
+- **Lee:** `feature_audit.py` (`review_worksheet`, `compare_extractions`); `features.py`
+  (`Quote`, `locate`, `measurement`); la decisión de P04.3.
+- **Haz:**
+  1. Una hoja de revisión en Markdown o CSV que una persona rellene: por rasgo, valor, cita con
+     el párrafo que la contiene, y columnas `veredicto` (correcto / incorrecto / dudoso) y
+     `ocurrencias omitidas`. Incluye los núcleo con valor cero y todos los `not_applicable`,
+     donde se esconde lo omitido. Aplica el muestreo de ítems de P04.3.
+  2. Un resumen del test-retest por rasgo sobre varias historias: acuerdo exacto, diferencia
+     media relativa, correlación de rango y cambios de estado.
+  3. Un agregado de veredictos: precisión por rasgo.
+- **No hagas:** extraer; fijar umbrales (están en P04.3); editar el catálogo.
+- **Prueba:** tests con extracciones de fixture; `.\run-tests.ps1`; `.\quality.ps1`.
+- **Hecho cuando:** sobre una de las 15 extracciones actuales se genera la hoja y el resumen de
+  dos copias, y el agregado de una hoja de ejemplo da la precisión por rasgo.
+
+#### P04.7 · Extraer la muestra (primera y segunda pasada)
+- **Modo:** S · **Cuota:** ~3 llamadas por texto y pasada; con unas 12 historias y 6 en la segunda
+  pasada, ~54 (se fija en P04.3) · **Paquete:** asg-evaluation (sin código)
+- **Lee:** `packages/evaluation/README.md` §3;
+  `packages/stagecraft/src/asg_stagecraft/tools/extract_features.py`; la decisión de P04.3.
+- **Haz:**
+  1. Enseña `--dry-run` y el coste, y espera.
+  2. Extrae cada historia de la muestra (`--root <run>`) y copia `features/features.json` a
+     `features/primera.json`.
+  3. Repite con `--force` en el subconjunto del test-retest.
+  4. Con las herramientas de P04.5 y P04.6, genera el contraste con logs, la hoja de revisión y el
+     resumen del test-retest en `Evaluations/validacion-extractor/` (ignorado por Git).
+  5. Avisa a Josue de que le toca rellenar la hoja.
+- **No hagas:** `RUN_GEMINI_LIVE=1`; extraer fuera de la muestra; borrar nada de `Stories/`.
+- **Prueba:** extracciones `complete`; mismo `text_hash` en las dos pasadas.
+- **Hecho cuando:** muestra extraída, contraste y resumen generados, y hoja lista para Josue.
+
+#### P04.8 · Resultados de la validación
+- **Modo:** S · **Cuota:** sin cuota · **Paquete:** asg-evaluation (docs)
+- **Lee:** la hoja rellenada por Josue; los resúmenes de P04.7; `decisions.md` §2 (umbrales);
+  `METODOLOGIA.md` §3 y §10.
+- **Haz:**
+  1. Agrega los veredictos.
+  2. Escribe en `METODOLOGIA.md` la subsección «Validación del extractor», con fecha, muestra,
+     modelo y, por rasgo núcleo, precisión humana, test-retest y contraste con logs.
+  3. Marca qué rasgos cumplen los umbrales de P04.3, sin cambiar aún la lista, y anota los
+     omitidos y los `not_applicable` dudosos.
+- **No hagas:** cambiar umbrales ni la lista núcleo (es P04.9); extrapolar fuera de la muestra.
+- **Prueba:** las cifras del texto coinciden con las salidas de los scripts.
+- **Hecho cuando:** la subsección existe con la tabla «cumple / no cumple» por rasgo núcleo.
+
+#### P04.9 · Lista núcleo definitiva y material para H2
+- **Modo:** O · **Cuota:** sin cuota · **Paquete:** asg-evaluation
+- **Lee:** `METODOLOGIA.md` «Validación del extractor»; `decisions.md` §2; `feature_cli.py` y
+  `feature_report.horizontal_report`.
+- **Haz:**
+  1. Aplica la regla de salida de P04.3 a los que no cumplen: opciones por rasgo (sale del juez,
+     se reformula, se conserva con excepción justificada) y espera.
+  2. Si cambia el CSV, aplícalo aquí, regenera la planilla y sube la versión.
+  3. Anota en `decisions.md` §2 «Lista núcleo fijada», con fecha, y «no se toca tras abrir la
+     votación».
+  4. Prepara `planning/h2.md`: la tablita (`asg-report-features`) de 4–5 historias de la muestra,
+     una por formato, y la lista núcleo con su validación.
+- **No hagas:** abrir la votación; tocar el generador.
+- **Prueba:** `.\run-tests.ps1`; `.\quality.ps1`; núcleo entre 18 y 30.
+- **Hecho cuando:** la lista está fijada en `decisions.md` y `planning/h2.md` existe. Cierra P04
+  y **H2**: enseñar al tutor la tablita y la lista núcleo.
 
 ### P05 · Análisis horizontal
 

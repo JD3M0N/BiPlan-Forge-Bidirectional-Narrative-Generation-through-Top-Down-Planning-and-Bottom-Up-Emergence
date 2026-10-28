@@ -850,3 +850,21 @@ medición.
 
 «dame una receta para hacer chesscake» produjo una historia, y el prompt «G» produjo tres runs.
 El analista podría negarse con un mensaje claro, sobre todo en el bot.
+
+## Medición (aplazado en P04)
+
+### MED-7 (resto) · Métricas de actuación leídas del log
+
+P04.5 absorbió de MED-7 solo lo que contrasta al extractor con el log: P37 (mentiras) y las
+réplicas por actor. Queda lo que diagnostica al generador, ya congelado (T10); la ficha
+completa está en `git show planning-before-phase:TODO.md`.
+
+- A quién se dirige cada turno y si alguien le responde; notas repetidas al mismo actor dentro de
+  un beat.
+- Pensamientos que son un plan o que repiten la nota; entropía de tácticas por actor.
+- Memoria que recibe cada turno; distinción de voces entre personajes con una medida sin LLM
+  (R14, Šeļa et al. 2023).
+- Pensamientos narrados que contienen una compuerta antes de su evento (SIM-13); emociones
+  repetidas entre escenas y cesiones por acto (SIM-19).
+- Se calculan en `asg_evaluation.simulation_report`, y lo no registrado sale «no medido».
+  Son indicadores groseros, no una nota de calidad; ninguno viaja a un prompt.

@@ -8,64 +8,6 @@ lo que entra en una tarjeta se borra de aquí y lo que se aplaza pasa a
 
 Las cifras y fechas son las de su medición; no se han vuelto a comprobar.
 
-## P04 · Validar el extractor
-
-### MED-9 · Extractor de rasgos con cita verificada
-
-*Área:* medición · *Cuota:* revisión y test-retest con presupuesto por fijar · *Depende de:*
-versión definitiva del generador
-
-- **Síntoma.** El extractor (`packages/evaluation/src/asg_evaluation/features.py`, protocolo 3)
-  verifica que cada cita es literal, pero nadie ha comprobado todavía que sus interpretaciones
-  sean correctas ni que sean estables: la demo ficticia no valida su calidad.
-- **Qué hacer.**
-  - Revisar a mano una muestra con `asg-audit-features`, incluidas contradicciones, ceros
-    y fenómenos omitidos.
-  - Medir la estabilidad repitiendo la extracción (`--force`, `--second`) en un subconjunto.
-  - Contrastar con los logs de la función cuando describan lo mismo.
-- **Hecho cuando.** La revisión humana y el test-retest publican resultados sobre la muestra
-  acordada antes del estudio.
-- **Ojo.** Una cita literal no garantiza una interpretación correcta. El log no es un límite
-  numérico universal para la prosa.
-- **Medido el 2026-10-25** sobre las 15 historias de `Evaluations/estudio`. El protocolo 2 no
-  completó ninguna: unas 60 llamadas con `gemini-3.5-flash-lite` y 134 con `gemini-3.5-flash`.
-  - Un solo rasgo inválido tiraba los 12 del lote.
-  - Si X23 no aplicaba, X24 quedaba en `failed` para siempre.
-  - El protocolo 3 (evaluación 2.1.0) aísla los fallos por rasgo y resuelve el caso de X24.
-
-### MED-7 · Métricas de actuación leídas del log
-
-*Área:* medición · *Cuota:* sin cuota · *Depende de:* —
-
-- **Síntoma.** `simulation_metrics.json` no mide lo que más falla en la actuación, y las cifras de
-  `docs/resumen.md` salieron de scripts de un solo uso:
-  - a quién se dirige cada turno (1 de 80 con destinatario) y si alguien le responde;
-  - las notas que se repiten al mismo actor (5 de 54 turnos con nota);
-  - los pensamientos que son un plan (35 % y 62 %) o que repiten la nota;
-  - las mentiras (0 de 80) y la variedad de tácticas por actor;
-  - cuánta memoria recibe cada turno (medido a mano en el par de 7.2: mediana y máximo de 8);
-  - si las voces se distinguen;
-  - si el narrador cuenta un pensamiento con una compuerta antes de su evento (SIM-13);
-  - lo que salió a mano en la validación 7.8: ids y texto en inglés en el contexto del actor
-    (cerrado en 7.9, pero conviene vigilarlo), emociones repetidas entre escenas y cesiones
-    por acto (SIM-19).
-- **Qué hacer.** Calcularlas en `asg_evaluation.simulation_report` (capa P de
-  `asg-report-features`), que solo lee disco, desde `turns.jsonl`,
-  `contexts.jsonl`, `director.jsonl`, `cast_bible.json` y `story.md`:
-  - recuerdos y caracteres por contexto de actor;
-  - turnos con destinatario y turnos respondidos;
-  - notas repetidas dentro de un beat;
-  - pensamientos de plan y eco de la nota;
-  - mentiras y entropía de tácticas por actor;
-  - distinción de voces entre personajes, con una medida sin LLM como las de Šeļa et al. (2023);
-  - pensamientos narrados que contienen una compuerta antes de su evento.
-
-  Como en el resto de `evaluation`, lo que un run no registró sale como «no medido».
-- **Hecho cuando.** El informe da esas cifras para las cinco funciones de `Stories/Stagecraft/` y
-  reproduce las de `docs/resumen.md`.
-- **Ojo.** Son indicadores deterministas y groseros: sirven para comparar versiones sobre el mismo
-  plan, no como nota de calidad. Ninguno viaja a un prompt.
-
 ## P05 · Análisis horizontal
 
 ### MED-3 · Un runner de matrices con presupuesto
