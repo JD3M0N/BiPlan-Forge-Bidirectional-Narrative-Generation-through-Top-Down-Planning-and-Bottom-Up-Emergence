@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P04.1 · cobertura rasgo a rasgo (`/phase`).
+- **Siguiente:** P04.2 · qué hacer con las lagunas y los dudosos (`/phase`, modo `O`; mejor con Opus).
 - **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.1, evaluación 2.1.1,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
@@ -24,6 +24,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P03.2 · `asg-corpus` (solo lectura): 322 runs con 107 elegibles; las diferencias con el recuento de P03 son los 6 runs de `Bottom-Up/Escape-Room`, que el inventario sí cuenta (todos excluidos por generador anterior); `judge._ineligible` reutiliza `exclusion_reason`.
   - P03.3 · Catálogo restaurado en `planilla/prompts.md` y 9 líneas base (3 por obra 01, 03 y 04, Esencial, Flash-Lite, 7.22) en `Stories/Baseline/`: todas completas, `C01 = Baseline` y elegibles; 10 llamadas, una de ellas reintento de `04-…-3`. Cierra MED-8.
   - P03.4 · Decisión escrita por grupo de anomalías en `METODOLOGIA.md` §10 (inventario 2026-10-28: 331 runs, 116 elegibles); 6 runs `running` sin historia descartados con `asg-recover --discard`, `la-carta-del-faro` (7.10) queda sin cerrar y excluido. Cierra MED-6 y P03.
+  - P04.1 · `planilla/cobertura.md`: los 9 ejemplos del audio y las 19 dimensiones aplicables tienen rasgo; quedan 10 lagunas parciales y 4 núcleo de riesgo alto (R12, R15, R23, X09) para P04.2.
 
 ## Cómo leer una tarjeta
 
@@ -133,25 +134,6 @@ núcleo que se lean como juicio. T3: cada ejemplo del audio y cada dimensión de
 rasgo o razón escrita. T8: la lista núcleo queda entre 18 y 30. Los umbrales se fijan antes de
 medir (P04.3) y la lista se cierra al final (P04.9), antes de abrir la votación (P06). T10: nada
 aquí toca el generador. Entre P04.7 y P04.8, Josue rellena la hoja de revisión.
-
-#### P04.1 · Cobertura rasgo a rasgo
-- **Modo:** S · **Cuota:** sin cuota · **Paquete:** asg-evaluation (solo docs)
-- **Lee:** `packages/evaluation/planilla/rasgos.csv`; `METODOLOGIA.md` §1 y §3;
-  `docs/sanderson-craft.pdf` §3.8 (local, fuera de git);
-  `docs/audio_2026-10-03_14-09-35.transcripcion.md` [00:22–01:56].
-- **Haz:**
-  1. Escribe `packages/evaluation/planilla/cobertura.md` con dos tablas: cada ejemplo del audio
-     (consistencia, % de participación por personaje, escenas con conflicto, usos de objetos,
-     participación en diálogo y réplicas fuera de personalidad, personajes que mienten, cosas
-     complicadas, eventos aleatorios) y cada una de las 20 dimensiones de la rúbrica (el ítem 16
-     va como «fuera por ser de series») con su rasgo o una razón escrita para no tenerlo.
-  2. Marca cada uno de los 27 núcleo: si es un recuento con cita (T2), si se lee como juicio de
-     calidad y por qué, y si tiene `validable_contra`.
-  3. Termina con la lista de lagunas y de núcleo dudosos. No propongas el arreglo.
-- **No hagas:** editar `rasgos.csv`; proponer rasgos nuevos; leer extracciones ni historias.
-- **Prueba:** que cada ID citado exista en `rasgos.csv` (script de usar y tirar).
-- **Hecho cuando:** los 9 ejemplos y las 19 dimensiones aplicables figuran en `cobertura.md`,
-  cada uno con rasgo o razón escrita, y las lagunas están listadas.
 
 #### P04.2 · Qué hacer con las lagunas y los dudosos
 - **Modo:** O · **Cuota:** sin cuota · **Paquete:** asg-evaluation (decisión)
