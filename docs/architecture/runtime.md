@@ -32,7 +32,7 @@ A esa lista, el guion y el simulado añaden los suyos.
   Los rasgos T de `asg-evaluation` las recalculan desde `story.md`, así que también miden los
   runs anteriores a 6.5.0, que no las traen.
 
-`version.py` fija la versión del generador y `PIPELINE_VERSION` (7.21), y mantiene
+`version.py` fija la versión del generador y `PIPELINE_VERSION` (7.22), y mantiene
 `SUPPORTED_PIPELINE_VERSIONS` para leer los contratos anteriores desde 5.0. Los cambios de
 cada contrato se consultan en el [changelog](../../packages/stagecraft/CHANGELOG.md).
 `StoryRun` se niega a abrir un run incompleto o de una versión no soportada. Si cambias el

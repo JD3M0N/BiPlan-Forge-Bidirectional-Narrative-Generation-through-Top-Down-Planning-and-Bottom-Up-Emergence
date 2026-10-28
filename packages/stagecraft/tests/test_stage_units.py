@@ -363,6 +363,33 @@ def test_a_first_person_stage_direction_is_repaired_or_rejected(action, repaired
 
 
 @pytest.mark.parametrize(
+    "fields",
+    [
+        {
+            "speech": "I am checking the import paths for `Model` in the Superset models structure",
+            "action": "Examine the imports in `superset/models/core.py`",
+        },
+        {"action": "Abre el archivo src/models/core.py y lo lee"},
+        {"speech": "Revisa la variable import_paths antes de salir."},
+        {"speech": "Sigamos.", "thought": "Debo mirar main.py otra vez"},
+    ],
+    ids=["superset", "path", "snake-case", "thought-file"],
+)
+def test_a_turn_with_code_vocabulary_is_rejected(fields) -> None:
+    """SIM-14: a turn about a code task is refused with an ASCII reason for the retry."""
+    with pytest.raises(TurnIssue) as error:
+        validate_turn(act(**fields), previous_speech=[], language="Spanish")
+    assert error.value.code == "OUT_OF_FICTION"
+    assert str(error.value).isascii()
+
+
+def test_a_short_line_with_a_foreign_name_is_not_out_of_fiction() -> None:
+    """SIM-14: a hyphenated name or a lone slash is not code."""
+    turn = act(speech="Hable, Mr. O'Brien-Smith, o / lo hara el capitan.")
+    validate_turn(turn, previous_speech=[], language="Spanish")
+
+
+@pytest.mark.parametrize(
     ("fields", "rejected"),
     [
         ({"speech": "No.", "thought": "she is sharp, but she needs my route to the ship"}, True),

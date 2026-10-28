@@ -6,8 +6,8 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P02.4 · Aplicar las decisiones y rechazar turnos fuera de la ficción (`S+P`, sin cuota).
-- **Versiones** (2026-10-27): Stagecraft 7.21.5 (pipeline 7.21), core 0.8.0, evaluación 2.1.0,
+- **Siguiente:** P02.5 · Validación real, congelación y H1 (SIM-21).
+- **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.0, evaluación 2.1.0,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
   - P00 · Arranque: `planning/`, skill `phase`, migración de `TODO.md` y graphify.
@@ -18,6 +18,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P02.1 · Narración simulada, 5 pares a ciegas: empate 2–2–1 (B `selected` + editor + ejemplos corrige las actas pero no gana); se mantiene `reported`, sin editor ni ejemplos (en `docs/resumen.md`).
   - P02.2 · Brazos Top-Down, 8 borradores sobre 2 planes: TD-8 y TD-3 cumplen; a ciegas A 3, B 1, así que `scene_cards`, `anchored_critic`, `line_editor` y `style_examples` siguen apagados (en `docs/resumen.md`).
   - P02.3 · Plan del brief de las islas y guion de la médica: TD-9 no cumple (sin división de la tripulación ni coste final), TD-2 cumple (en `docs/resumen.md`).
+  - P02.4 · Predeterminados sin cambio (todos los brazos de 7.17 siguen apagados, `reported`); `OUT_OF_FICTION` general contra vocabulario de código (SIM-14); Stagecraft 7.22.
 
 ## Cómo leer una tarjeta
 
@@ -88,39 +89,6 @@ mínimo.
 esta fase deciden predeterminados del generador; no son el estudio de la tesis (T5–T7, en P06).
 Ningún juez LLM cuenta como medida (`decisions.md` §4). Los brazos no adoptados se conservan
 como opciones para el análisis horizontal (T4, P05).
-
-#### P02.4 · Aplicar las decisiones y rechazar turnos fuera de la ficción (SIM-14) → 7.22
-- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-stagecraft (y asg-studio si cambia
-  `catalog.py`)
-- **Lee:** SIM-14 en [fichas.md](fichas.md); la lista de abajo; `GenerationOptions` en
-  `options.py`; `stage/validation.py`; `writing/language.py`; `test_generation_options.py` y los
-  tests de validación de turnos.
-- **Decisiones** (las rellenan P02.1–P02.3):
-  - `narration_method`: `reported` (empate en P02.1; sin cambio)
-  - `line_editor`: apagado (P02.1)
-  - `style_examples`: apagado (P02.1)
-  - `scene_cards`: apagado (P02.2: A 3, B 1 a ciegas)
-  - `anchored_critic`: apagado (P02.2)
-  - `typed_clauses`: apagado, sin medir (SIM-26 en idea-bank; nivel de P05).
-  - TD-3: cumple · TD-8: cumple (P02.2) · TD-9: no cumple (falta la división de la tripulación y el
-    coste del final; el crítico no lo nota) · TD-2: cumple (P02.3)
-- **Haz:**
-  - Cambiar los predeterminados en `GenerationOptions` y en los kwargs de `StoryGenerator`. Si
-    un brazo gana en un formato y pierde en otro, queda apagado y se avisa: un predeterminado
-    por formato sería otra decisión.
-  - SIM-14: un rechazo determinista con código en inglés ASCII para los turnos con vocabulario
-    de código (rutas con `/` y extensión, identificadores con guion bajo, comillas invertidas) o
-    en un idioma que no es el de la ficción, con la reinyección de siempre.
-  - Subir a 7.22.0 y `PIPELINE_VERSION` a 7.22: `SUPPORTED_PIPELINE_VERSIONS`, el comentario de
-    `version.py`, `CHANGELOG.md`, `generation.md` y `simulation.md`. Reinstalar el editable.
-  - Borrar de `fichas.md` las fichas absorbidas (SIM-25, SIM-24, TD-10, TD-8, TD-3, TD-9, TD-2,
-    SIM-14).
-- **No hagas:** borrar caminos ni brazos (P05 los usa); cambiar prompts; tocar `evaluation`.
-- **Prueba:** `.\run-tests.ps1` y `.\quality.ps1`; un test con el turno «Superset» de SIM-14
-  que se rechaza y se reintenta; uno de falso positivo: una réplica corta con un nombre propio
-  extranjero pasa; `asg-generate --help` muestra los predeterminados nuevos.
-- **Hecho cuando:** los predeterminados son los decididos, SIM-14 tiene sus dos tests, la
-  puerta está verde y la versión es 7.22.
 
 #### P02.5 · Validación real, congelación y H1 (SIM-21)
 - **Modo:** S+P · **Cuota:** ~30 llamadas del modelo principal y ~110 del de la función ·

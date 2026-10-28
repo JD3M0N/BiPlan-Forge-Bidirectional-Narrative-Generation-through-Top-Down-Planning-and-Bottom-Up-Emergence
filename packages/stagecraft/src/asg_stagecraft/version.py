@@ -1,9 +1,10 @@
 """Version identifiers persisted with every generated story."""
 
 GENERATOR_NAME = "asg-stagecraft"
-__version__ = "7.21.5"
+__version__ = "7.22.0"
 GENERATOR_VERSION = __version__
-PIPELINE_VERSION = "7.21"
+PIPELINE_VERSION = "7.22"
+# 7.22 rejects any turn that speaks of code (paths, snake_case, backticks) as OUT_OF_FICTION.
 # 7.21 adds cited reader context, bounded orientation repairs and spatial action review.
 # Runs written as Top-Down 5.x and 6.x stay readable: renaming the package and adding the
 # hybrid stages is additive, so every earlier contract still opens as a StoryRun. 7.1 changed
@@ -82,6 +83,7 @@ SUPPORTED_PIPELINE_VERSIONS = frozenset(
         "7.18",
         "7.19",
         "7.20",
+        "7.21",
         PIPELINE_VERSION,
     }
 )

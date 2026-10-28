@@ -1,5 +1,13 @@
 # Historial de cambios
 
+## 7.22.0
+
+- P02.4 (SIM-14): `OUT_OF_FICTION` deja de depender de la frase del caso original. Rechaza, en
+  habla, acción y pensamiento, las comillas invertidas, las rutas con extensión, los
+  identificadores `snake_case` y «as an AI»; un `/` suelto o un nombre con guion pasan.
+  Pipeline 7.22 (se siguen leyendo los runs de 7.21). Los predeterminados de los brazos de 7.17
+  no cambian: las lecturas a ciegas de P02.1–P02.3 los dejaron apagados.
+
 ## 7.21.5
 
 - P01.3: reescribe 39 docstrings plantilla («Represent X data and behavior», «Handle the X

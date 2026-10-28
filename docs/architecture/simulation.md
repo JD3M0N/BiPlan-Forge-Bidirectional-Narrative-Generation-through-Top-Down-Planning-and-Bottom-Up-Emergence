@@ -119,6 +119,11 @@ que saber antes de tocar `stage/`:
   - Si los últimos cuatro turnos son de solo dos personajes, habla el que lleva más tiempo
     callado de los demás, aunque le hayan hablado a otro.
   - En 7.15.2 hubo 12 parejas personaje-escena sin un turno.
+- **Un turno fuera de la ficción se rechaza** (7.22, SIM-14). `stage/validation.py` rechaza con
+  `OUT_OF_FICTION` el habla, la acción o el pensamiento con vocabulario de código (comillas
+  invertidas, rutas con extensión, identificadores `snake_case`, «as an AI») y con `WRONG_LANGUAGE`
+  el que no está en el idioma de la ficción; ambos en inglés ASCII y con la reinyección de siempre.
+  Un `/` suelto o un nombre con guion no cuentan.
 - **El inventario es opcional y el código es el árbitro** (7.6). `inventory=True` añade la etapa
   `props` entre casting y performance.
   - El actor propone un `item_action` (verbo y **nombre** del objeto) y `stage/inventory.py`

@@ -312,6 +312,31 @@ def test_a_line_repeated_in_a_later_scene_is_rejected() -> None:
     assert {item.scene_id for item in rejections} == {"chapter-1-scene-2"}
 
 
+def test_a_turn_about_code_is_rejected_and_the_actor_retries() -> None:
+    """SIM-14: a turn about a code task never reaches the log; the actor is asked again."""
+    rejections = []
+    stage = Stage(lambda mode, context: shown(context))
+    broken = ActorTurnDraft(
+        speech="I am checking the import paths for `Model`",
+        action="Examine the imports in `superset/models/core.py`",
+        tactic="test",
+    )
+
+    def take_turn(system: str, context: str, feedback: str) -> ActorTurnDraft:
+        stage.moves.append((system, context))
+        if system == "bruno" and not feedback:
+            return broken
+        number = len(stage.moves)
+        return ActorTurnDraft(speech=f"pista{number} nueva{number} dato{number}", tactic="test")
+
+    engine = stage.engine()
+    engine.take_turn = take_turn
+    engine.on_rejection = rejections.append
+    performed = engine.perform_scene(scene())
+    assert "OUT_OF_FICTION" in {item.code for item in rejections}
+    assert all("`" not in turn.speech + turn.action for turn in performed.turns)
+
+
 @pytest.mark.parametrize(
     ("parts", "missing"),
     [

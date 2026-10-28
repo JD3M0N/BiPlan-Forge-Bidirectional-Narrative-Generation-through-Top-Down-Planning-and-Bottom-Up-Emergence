@@ -36,7 +36,9 @@ En la raíz quedan la fachada y el contrato: `__init__`, `version`, `formats`, `
   su variable `ASG_*` y su flag de `asg-generate`: `style_examples`, `line_editor`,
   `scene_cards`, `anchored_critic`, `narration_method` (`reported` o `selected`) y
   `typed_clauses`. Apagados, el comportamiento es el de 7.16 más los arreglos siempre activos. El
-  predeterminado cambia solo por lectura humana a ciegas (SIM-25, TD-10 y SIM-26).
+  predeterminado cambia solo por lectura humana a ciegas. Tras las lecturas de P02.1–P02.3
+  (2026-10) siguen todos apagados y `narration_method` en `reported`; ningún brazo ganó en
+  ambos formatos.
 - **Dos replays para comparar sobre la misma entrada.**
   - `asg-generate --narrate-from <run>` narra otra vez una función guardada sin representarla:
     unas 12 llamadas frente a 130. Registra las opciones de la función de origen.

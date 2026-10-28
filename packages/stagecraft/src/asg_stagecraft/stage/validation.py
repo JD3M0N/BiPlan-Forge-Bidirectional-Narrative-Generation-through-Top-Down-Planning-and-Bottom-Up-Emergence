@@ -206,6 +206,19 @@ _GERUND_CLAUSE = re.compile(
 )
 
 
+# SIM-14: vocabulary of a code task that never belongs to a fiction - a backtick, a file path
+# with an extension, a snake_case identifier or an assistant's own voice. A bare slash or a
+# hyphenated word is left alone, so a foreign proper name never trips it.
+_CODE_VOCABULARY = re.compile(
+    r"`"
+    r"|\b[\w.-]+(?:/[\w.-]+)+\.[a-z]{1,5}\b"
+    r"|\b\w+\.(?:py|js|ts|json|md|ya?ml|toml|cfg|txt)\b"
+    r"|\b[a-z]+(?:_[a-z]+)+\b"
+    r"|\bas an ai\b",
+    re.IGNORECASE,
+)
+
+
 class TurnIssue(ValueError):
     """A rejected turn, carrying the code the audit files it under.
 
@@ -388,11 +401,7 @@ def validate_turn(
     """
     if turn.visibility == "whisper" and not turn.addressed_to:
         raise TurnIssue("INVALID_WHISPER", "a whisper needs one unambiguous addressee on stage")
-    if re.search(
-        r"`|\b(?:as an ai|i am checking the import paths|superset/models)\b|\b\w+\.py\b",
-        f"{turn.speech} {turn.action}",
-        re.IGNORECASE,
-    ):
+    if _CODE_VOCABULARY.search(f"{turn.speech} {turn.action} {turn.thought}"):
         raise TurnIssue(
             "OUT_OF_FICTION", "the turn refers to code or an assistant task outside the fiction"
         )
