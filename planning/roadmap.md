@@ -6,8 +6,8 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P04.5 · contraste con los logs (`/phase`).
-- **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.1, evaluación 2.1.2,
+- **Siguiente:** P04.6 · hoja de revisión legible y resumen del test-retest (`/phase`).
+- **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.1, evaluación 2.1.3,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
   - P00 · Arranque: `planning/`, skill `phase`, migración de `TODO.md` y graphify.
@@ -28,6 +28,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P04.2 · Lista núcleo provisional de 28 en `decisions.md` §2: R12 pasa a secundario; entran R18 y X29 (reparto del diálogo, calculado con código); se reformulan R15, R23 (en positivo), X09 y X24 (recuento). P04.4 aplica esos cambios.
   - P04.3 · Diseño de la validación en `decisions.md` §2: 12 runs (5 simulados con log, 4 narrativos, 3 líneas base), `flash-lite`, test-retest de 6 (~54 llamadas), revisión de ~7 h y umbrales fijados antes de medir (precisión 0,80, cobertura 0,70, retest 0,25, techo del log) con su regla de salida.
   - P04.4 · `rasgos.csv` con los cambios de P04.2: núcleo de 28 (R12 sale; entran R18 y X29, entropía de X08 por código); R15, R23 («Escenas con cambio», proporción sobre X05), X09 y X24 (recuento) reformulados; P35 pasa a `existe`; planilla regenerada.
+  - P04.5 · `asg-audit-features X.json --run DIR` contrasta los recuentos con el log (`compare_with_logs`; techo del log con margen 10 % o +1; «no medido» con su razón); P37 (turnos con táctica `lie`) calculado en el informe de rasgos.
 
 ## Cómo leer una tarjeta
 
@@ -137,24 +138,6 @@ núcleo que se lean como juicio. T3: cada ejemplo del audio y cada dimensión de
 rasgo o razón escrita. T8: la lista núcleo queda entre 18 y 30. Los umbrales se fijan antes de
 medir (P04.3) y la lista se cierra al final (P04.9), antes de abrir la votación (P06). T10: nada
 aquí toca el generador. Entre P04.7 y P04.8, Josue rellena la hoja de revisión.
-
-#### P04.5 · Contraste con los logs (MED-7 recortado)
-- **Modo:** S · **Cuota:** sin cuota · **Paquete:** asg-evaluation
-- **Lee:** `feature_audit.py`; `feature_report.py` (`_simulation_counts`); `simulation_report.py`;
-  `rasgos.csv` (`validable_contra`); `docs/architecture/evaluation.md`.
-- **Haz:**
-  1. Calcula P37 (mentiras en el log: turnos con táctica `lie` en `turns.jsonl`) y las réplicas
-     por actor para X08.
-  2. Añade `compare_with_logs` a `feature_audit.py`: por historia y rasgo, valor extraído, valor
-     del log y si el texto supera al log (techo). Pares: X02/X03↔P35, X08 y X29↔réplicas por actor,
-     X10↔P37, X13↔P36, X16↔P21, X17↔P39, X18↔P40. Exponla como `asg-audit-features --run DIR`.
-  3. Lo que el run no registró sale «no medido», nunca cero. Para cada par que no se pueda
-     comparar, deja la razón escrita.
-- **No hagas:** las demás métricas de MED-7 (están en el idea-bank); llamar al modelo.
-- **Prueba:** tests con un run simulado de fixture (techo violado, log ausente);
-  `.\run-tests.ps1`; `.\quality.ps1`.
-- **Hecho cuando:** `asg-audit-features X.json --run DIR --output o.json` da la comparación por
-  rasgo sobre un run simulado real de `Stories/Stagecraft`, sin llamadas al modelo.
 
 #### P04.6 · Hoja de revisión legible y resumen del test-retest
 - **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation

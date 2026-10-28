@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.1.3] - 2026-10-28
+
+- P04.5: `asg-audit-features X.json --run DIR` adds `compare_with_logs`, which contrasts the
+  extracted counts with the run's own log, by story and feature, without model calls: X02/X03
+  against scene presence, X08 and X29 against the replicas per actor (X08 also by actor), X10
+  against P37, X13 against P36, X16 against P21, X17 against P39 and X18 against P40. Each row
+  gives the text value, the log value and, where the log is a ceiling, whether the text rises
+  above it (more than 10 % or +1). What the run did not record is "not_measured" with its
+  reason, never zero; an extraction of another text is refused. P37 (turns with the `lie`
+  tactic) is now computed in the feature report; it stays `por_construir` in the catalog.
+
 ## [2.1.2] - 2026-10-28
 
 - P04.4: catalog changes decided in P04.2. R12 becomes secondary; R18 and the new X29

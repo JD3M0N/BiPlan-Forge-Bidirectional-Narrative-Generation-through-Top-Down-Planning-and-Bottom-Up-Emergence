@@ -73,7 +73,8 @@ asg-corpus Stories --json inventario.json --csv inventario.csv   # qué runs ent
   como cero, sin tirar los demás del lote. Volver a lanzar `asg-features` reintenta solo los
   fallidos. X24 (preguntas respondidas) no aplica si X23 no abrió ninguna.
 - `asg-audit-features --second OTRA.json` compara dos extracciones del mismo texto
-  (test-retest). `asg-features --root RUTA` mide un corpus fuera del estudio.
+  (test-retest); `--run DIR` contrasta los recuentos con el log del run simulado (techo del
+  log; lo que el run no registró sale «no medido»). `asg-features --root RUTA` mide un corpus fuera del estudio.
 
 ### 4. Preferencias, juez y ranking
 

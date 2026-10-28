@@ -195,6 +195,24 @@ def _observed_logs(run_dir: Path) -> dict[str, float | None]:
     }
 
 
+def logged_actor_turns(run_dir: Path) -> list[dict]:
+    """Return the actor turns of every scene log, empty when the run recorded none."""
+    return [
+        item
+        for path in sorted(Path(run_dir).glob("stage/*/turns.jsonl"))
+        for item in _lines(path)
+        if item.get("kind", "actor") == "actor"
+    ]
+
+
+def lie_turns(run_dir: Path) -> int | None:
+    """Count actor turns played with the lie tactic, or None when no tactic was logged."""
+    turns = logged_actor_turns(run_dir)
+    if not any("tactic" in item for item in turns):
+        return None
+    return sum(item.get("tactic") == "lie" for item in turns)
+
+
 def aggregate_calls(items: Iterable[dict], keys: tuple[str, ...]) -> list[dict]:
     """Sum logical calls, attempts, tokens and latency per combination of keys.
 

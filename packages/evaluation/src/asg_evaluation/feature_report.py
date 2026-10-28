@@ -12,7 +12,7 @@ from .artifacts import load_json_object
 from .catalog import catalog, catalog_snapshot, digest
 from .features import deterministic_features, entropy, measurement
 from .pairing import read_run_config
-from .simulation_report import _agent_costs, read_simulation
+from .simulation_report import _agent_costs, lie_turns, read_simulation
 from .study import StudyRepository
 
 DIRECT = {
@@ -160,6 +160,7 @@ def _simulation_counts(documents: dict, directory: Path) -> dict:
         if turns is not None and addressed is not None:
             values["P32"] = _ratio(addressed, turns)
         values["K06"] = simulation.costs or None
+        values["P37"] = lie_turns(directory)
     scenes = _list(documents["performance"], "scenes")
     if scenes is not None:
         counts = Counter(
