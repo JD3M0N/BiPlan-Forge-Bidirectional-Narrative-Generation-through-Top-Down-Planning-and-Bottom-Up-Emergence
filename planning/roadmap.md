@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P04.3 · diseño de la validación (`/phase`, modo `O`; mejor con Opus).
+- **Siguiente:** P04.4 · aplicar los cambios al catálogo (`/phase`, modo `S+P`).
 - **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.1, evaluación 2.1.1,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
@@ -26,6 +26,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P03.4 · Decisión escrita por grupo de anomalías en `METODOLOGIA.md` §10 (inventario 2026-10-28: 331 runs, 116 elegibles); 6 runs `running` sin historia descartados con `asg-recover --discard`, `la-carta-del-faro` (7.10) queda sin cerrar y excluido. Cierra MED-6 y P03.
   - P04.1 · `planilla/cobertura.md`: los 9 ejemplos del audio y las 19 dimensiones aplicables tienen rasgo; quedan 10 lagunas parciales y 4 núcleo de riesgo alto (R12, R15, R23, X09) para P04.2.
   - P04.2 · Lista núcleo provisional de 28 en `decisions.md` §2: R12 pasa a secundario; entran R18 y X29 (reparto del diálogo, calculado con código); se reformulan R15, R23 (en positivo), X09 y X24 (recuento). P04.4 aplica esos cambios.
+  - P04.3 · Diseño de la validación en `decisions.md` §2: 12 runs (5 simulados con log, 4 narrativos, 3 líneas base), `flash-lite`, test-retest de 6 (~54 llamadas), revisión de ~7 h y umbrales fijados antes de medir (precisión 0,80, cobertura 0,70, retest 0,25, techo del log) con su regla de salida.
 
 ## Cómo leer una tarjeta
 
@@ -135,26 +136,6 @@ núcleo que se lean como juicio. T3: cada ejemplo del audio y cada dimensión de
 rasgo o razón escrita. T8: la lista núcleo queda entre 18 y 30. Los umbrales se fijan antes de
 medir (P04.3) y la lista se cierra al final (P04.9), antes de abrir la votación (P06). T10: nada
 aquí toca el generador. Entre P04.7 y P04.8, Josue rellena la hoja de revisión.
-
-#### P04.3 · Diseño de la validación
-- **Modo:** O · **Cuota:** sin cuota · **Paquete:** asg-evaluation (decisión)
-- **Lee:** `METODOLOGIA.md` §3 «El extractor» y §10; `decisions.md` §4;
-  `Evaluations/corpus/inventario-2026-10-28.json`.
-- **Haz:**
-  1. Opciones con recomendación para: la **muestra** (10–15 historias elegibles, estratificada
-     por formato: simulado con log, narrativo, línea base); el **modelo del extractor**
-     (`flash-lite` o `flash`; cambiarlo cambia la identidad de la extracción, y MED-9 midió 60
-     llamadas frente a 134 con el protocolo 2); el **subconjunto del test-retest**; y el tamaño de
-     la **revisión humana** según las horas de Josue (unas 2600 palabras por historia).
-  2. **Fija umbrales antes de medir** en `decisions.md` §2: precisión humana mínima,
-     estabilidad mínima del test-retest, tolerancia frente al log (el log es un techo) y la regla
-     de salida (un núcleo que no llega sale del juez o se reformula).
-  3. Enseña el coste en llamadas (~3 por texto y pasada) y espera.
-- **No hagas:** lanzar extracciones; elegir umbrales viendo cifras.
-- **Prueba:** que cada historia de la muestra sea elegible en el inventario y, si es simulada,
-  tenga `turns.jsonl`.
-- **Hecho cuando:** `decisions.md` §2 tiene muestra (runs), modelo, umbrales y regla de salida,
-  con fecha, antes de cualquier extracción.
 
 #### P04.4 · Aplicar los cambios al catálogo
 - **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation

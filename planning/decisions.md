@@ -93,6 +93,42 @@ rasgos, juez, análisis o tesis se contrasta con esta lista antes de empezar.
   - P04.3 da más peso en la muestra de la revisión humana a los núcleo sin `validable_contra`.
   - P04.5 añade el par X29 ↔ réplicas por actor.
   - P04.9 lleva a H2 la pregunta de qué entiende el tutor por «cosas complicadas» (X14, X15).
+- **2026-10-28 · Diseño de la validación del extractor (P04.3).** Fijado antes de cualquier
+  extracción y sin ver cifras. Los umbrales no se cambian después de medir.
+  - **Muestra (12 runs elegibles del inventario 2026-10-28, estratificada por formato y
+    versión, premisas distintas):**
+    - Simulados con `turns.jsonl` propio: `Stagecraft/20261028-192554-el-misterio-del-faro`
+      (7.22), `20261022-125649-el-ultimo-tren` (7.21), `20261020-213446-el-pacto-roto` (7.20),
+      `20261015-132526-las-islas-del-cielo` (7.15), `20261009-203308-el-legado-de-la-casa` (7.9).
+      Los simulados `--narrate-from` de P02.1 no tienen log propio y quedan fuera.
+    - Narrativos: `Stagecraft/20261028-192554-el-faro-de-la-habitacion-cerrada` (7.22),
+      `20261027-220405-la-regencia-de-las-escamas` (7.21),
+      `20261019-022533-el-precio-de-las-manecillas` (7.19), `20261009-150449-el-dato-ausente`
+      (7.8).
+    - Líneas base (7.22): `Baseline/01-fantasia-canonica-1`, `03-ultima-luz-del-faro-1`,
+      `04-cine-de-los-domingos-1`.
+    - En total, 21.471 palabras.
+  - **Modelo:** `gemini-3.5-flash-lite`, el del piloto y el que extraerá el corpus en P08. En el
+    piloto completó 14 de 31 extracciones frente a 1 de 25 de `gemini-3.5-flash`.
+  - **Test-retest (6):** el faro 7.22 y las islas 7.15 (simulados), la regencia y el dato ausente
+    (narrativos), y las líneas base 03-1 y 04-1. Coste: ~54 llamadas (12 × 3 + 6 × 3).
+  - **Revisión humana (~7 h de Josue):** las 6 del test-retest, completas. En las otras 6, solo
+    los núcleo sin `validable_contra` (R02, R04, R05, R09, R15, R16, R17, R18, R24, X06, X09,
+    X14, X15, X20), además de X05, X23 y todo rasgo con valor cero o `not_applicable`. Los
+    rasgos calculados con código (capa T, X03 y X29) no se revisan a mano.
+  - **Umbrales por rasgo núcleo extraído:**
+    1. Precisión humana ≥ 0,80: citas `correcto` sobre citas juzgadas, sin las `dudoso`, sumadas
+       las historias.
+    2. Cobertura ≥ 0,70: correctas / (correctas + ocurrencias omitidas que anote Josue).
+    3. Test-retest: diferencia relativa media ≤ 0,25, con |a−b| / max(a, b, 1), y como mucho
+       1 cambio de estado de 6.
+    4. Techo del log: el texto no supera al log en más de un 10 % o +1, y esto ocurre en 1 de los
+       5 simulados como mucho. Quedar por debajo del log no cuenta como fallo.
+    5. Con menos de 5 citas juzgadas, el rasgo queda «sin evidencia suficiente»: sigue marcado y
+       no cuenta como «no cumple».
+  - **Regla de salida (P04.9):** un núcleo que falla un umbral se reformula si sus errores son
+    de definición, del mismo tipo y con citas que lo muestren. Si no, pasa a `secundario`. Si la
+    lista baja de 18, no se relajan los umbrales: se lleva al tutor en H2.
 
 ## 3. Decisiones de proyecto
 
