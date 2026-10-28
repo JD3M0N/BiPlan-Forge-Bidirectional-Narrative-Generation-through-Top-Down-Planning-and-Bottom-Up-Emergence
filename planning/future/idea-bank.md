@@ -12,6 +12,16 @@ con ID conservan el del antiguo `TODO.md`.
 
 ## Ingeniería aplazada
 
+### MED-6b · Códigos propios en los warnings de los runs
+
+*Área:* medición · *Cuota:* sin cuota · *Depende de:* una decisión que descongele el generador
+
+- **Síntoma.** Los warnings de `metadata.json` son texto libre, sin campo de código: un
+  inventario no puede agruparlos sin leer frases.
+- **Qué hacer.** Darles código propio en la próxima subida de `PIPELINE_VERSION`.
+- **Por qué está aquí.** Salió de MED-6 al escribir las tarjetas de P03 (2026-10-28): exige subir
+  `PIPELINE_VERSION`, y el generador está congelado en 7.22 (`decisions.md` §3).
+
 ### ING-3 · Dividir `pipeline.py`
 
 *Área:* ingeniería · *Cuota:* sin cuota · *Depende de:* —

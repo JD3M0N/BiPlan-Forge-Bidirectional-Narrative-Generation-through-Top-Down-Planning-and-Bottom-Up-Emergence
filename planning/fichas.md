@@ -50,8 +50,9 @@ el diagnóstico inicial. Queda pendiente la ejecución con corpus definitivo y l
   - Un informe de solo lectura en `evaluation` que liste esas anomalías, para que cada informe de
     la tesis diga qué excluye y por qué.
   - Nunca borrar datos. Lo que se corrija, con `asg-recover` y dejando rastro.
-  - Poner código propio a los warnings de los runs nuevos, en la próxima subida de `PIPELINE_VERSION`.
 - **Hecho cuando.** El inventario sale limpio, o cada anomalía tiene una decisión escrita.
+- **Al escribir P03 (2026-10-28).** Los códigos de warnings pasaron a idea-bank (MED-6b). «Sin
+  `evaluation.json`» ya no es anomalía: las métricas 1–10 se retiraron.
 
 ## P04 · Validar el extractor
 
