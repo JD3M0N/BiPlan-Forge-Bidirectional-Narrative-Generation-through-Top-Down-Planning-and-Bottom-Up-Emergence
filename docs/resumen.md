@@ -253,6 +253,16 @@ escenas. Es la misma proporción que ya se midió en 7.12 (5 de 10) y no es un d
 
 Un run por formato no distingue ruido de efecto.
 
+## Líneas base de la matriz (2026-10-28)
+
+Nueve líneas base de un solo prompt, sin plan ni revisión, con la variante Esencial literal del
+[catálogo de prompts](../packages/evaluation/planilla/prompts.md) y Flash-Lite (Stagecraft 7.22,
+`Stories/Baseline/`): tres por cada una de las obras 01 (`fantasia-canonica`), 03
+(`ultima-luz-del-faro`) y 04 (`cine-de-los-domingos`). Todas `completed`, `C01 = Baseline` y
+elegibles en `asg-corpus`. Extensión: 834–978 palabras la obra 01, 1149–1725 la 03 y 1097–1722 la
+04. Cada run gastó una llamada, salvo `04-cine-de-los-domingos-3`, que reintentó una vez tras un
+fallo del proveedor (2 llamadas). Aún no se juzgan: la comparación humana es de P06.
+
 ## Amenazas a la validez
 
 Los jueces LLM prefieren sus propias generaciones (Gemini juzga a Gemini) y puntúan mal escritura

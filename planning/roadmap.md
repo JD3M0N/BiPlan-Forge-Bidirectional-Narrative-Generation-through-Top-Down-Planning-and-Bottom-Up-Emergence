@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P03.3 (líneas base de la matriz, modo `S`, 9 llamadas reales: enseña el coste y espera).
+- **Siguiente:** P03.4 (una decisión escrita por cada anomalía, modo `S+P`, sin cuota).
 - **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.1, evaluación 2.1.1,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
@@ -22,6 +22,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P02.5 · Validación real de 7.22 (narrativo, guion y simulado del prompt 03 cumplen; beats forzados 3 de 6 como limitación) y generador congelado, etiqueta `generator-frozen`; cierra P02.
   - P03.1 · Decidido (`decisions.md` §2): 3 líneas base por obra 01/03/04, catálogo en `planilla/prompts.md` (variante Esencial), `Evaluations/estudio` es piloto y el ranking cubre Stagecraft 7.x y las líneas base.
   - P03.2 · `asg-corpus` (solo lectura): 322 runs con 107 elegibles; las diferencias con el recuento de P03 son los 6 runs de `Bottom-Up/Escape-Room`, que el inventario sí cuenta (todos excluidos por generador anterior); `judge._ineligible` reutiliza `exclusion_reason`.
+  - P03.3 · Catálogo restaurado en `planilla/prompts.md` y 9 líneas base (3 por obra 01, 03 y 04, Esencial, Flash-Lite, 7.22) en `Stories/Baseline/`: todas completas, `C01 = Baseline` y elegibles; 10 llamadas, una de ellas reintento de `04-…-3`. Cierra MED-8.
 
 ## Cómo leer una tarjeta
 
@@ -113,25 +114,6 @@ pipeline, sin plan ni revisión. T9: el inventario dice qué ordenará el juez y
 el resto; no ordena nada. T10: el generador está congelado, así que nada aquí cambia prompts,
 `baseline.py` ni `PIPELINE_VERSION`. T2 y T5: aquí nadie juzga calidad; las líneas base se
 juzgan en P06.
-
-#### P03.3 · Líneas base de la matriz
-- **Modo:** S · **Cuota:** 9 llamadas (obras 01, 03 y 04, tres cada una) · **Paquete:** —
-- **Lee:** P03.1 en `decisions.md`; `packages/evaluation/README.md` §1.
-- **Haz:**
-  - Restaura el catálogo: `git show baa016f^:docs/prompts_top_down.md` a
-    `packages/evaluation/planilla/prompts.md`, con sus marcadores, quitando solo la nota del test
-    live (hoy tiene su propia copia). Enlázalo desde `docs/resumen.md`.
-  - Enseña la lista de comandos y el número de llamadas, y espera. Después, `asg-baseline` con
-    el texto exacto de la variante Esencial (`PROMPT_0N_ESSENTIAL`) hacia
-    `Stories/Baseline/<obra>-<slug>-<n>/` (n = 1–3), con `GEMINI_MODEL` en el modelo de la
-    matriz. Comprueba `status: completed`, `pipeline_version` 7.22 y `llm_usage.json` con
-    1 llamada.
-- **No hagas:** cambiar `baseline.py` ni su instrucción; inscribirlas en un estudio (eso es P06);
-  más llamadas que las aprobadas; `RUN_GEMINI_LIVE=1`.
-- **Prueba:** `asg-report-features Stories/Baseline --json` da `C01 = Baseline` en todas, y
-  `asg-corpus` las da por elegibles.
-- **Hecho cuando:** `planilla/prompts.md` está versionado y hay tres líneas base por obra de M02,
-  anotadas con fecha en `docs/resumen.md`. Cierra MED-8 (se borra de `fichas.md`).
 
 #### P03.4 · Una decisión escrita por cada anomalía
 - **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** — (o parche de asg-evaluation si hay que

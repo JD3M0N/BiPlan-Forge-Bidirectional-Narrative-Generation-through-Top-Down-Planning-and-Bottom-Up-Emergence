@@ -10,24 +10,6 @@ Las cifras y fechas son las de su medición; no se han vuelto a comprobar.
 
 ## P03 · Línea base y corpus
 
-### MED-8 · Línea base de un solo prompt
-
-**Actualización 2026-10-04:** infraestructura implementada y demostrable sin red; consultar
-[README de evaluación](../packages/evaluation/README.md). La descripción siguiente conserva
-el diagnóstico inicial. Queda pendiente la ejecución con corpus definitivo y lectores reales.
-
-*Área:* medición · *Cuota:* ~1 llamada por historia · *Depende de:* nada
-
-- **Síntoma.** El tutor pide comparar con historias generadas «directamente por un prompt»
-  (audio, [03:02]), igual que la versión monolítica de la tesis de Roger. No existe ese
-  generador.
-- **Qué hacer.** Un comando que pida a `GEMINI_MODEL` una historia con el mismo
-  `original_prompt` en una sola llamada, sin pipeline, y escriba `Stories/Baseline/<run>/` con
-  `request.json`, `story.md`, `metadata.json` (`story_format: baseline`) y `llm_usage.json`. El
-  enfoque se infiere de la carpeta: «Baseline».
-- **Hecho cuando.** Hay una línea base por obra de la matriz, y los informes de `evaluation` la
-  leen como un enfoque más.
-
 ### MED-6 · Inventario del corpus
 
 *Área:* medición · *Cuota:* sin cuota · *Depende de:* —
