@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P03.1 (qué es la línea base y qué corpus es elegible, modo `O`).
+- **Siguiente:** P03.2 (inventario del corpus, de solo lectura, modo `S+P`).
 - **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.0, evaluación 2.1.0,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
@@ -20,6 +20,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P02.3 · Plan del brief de las islas y guion de la médica: TD-9 no cumple (sin división de la tripulación ni coste final), TD-2 cumple (en `docs/resumen.md`).
   - P02.4 · Predeterminados sin cambio (todos los brazos de 7.17 siguen apagados, `reported`); `OUT_OF_FICTION` general contra vocabulario de código (SIM-14); Stagecraft 7.22.
   - P02.5 · Validación real de 7.22 (narrativo, guion y simulado del prompt 03 cumplen; beats forzados 3 de 6 como limitación) y generador congelado, etiqueta `generator-frozen`; cierra P02.
+  - P03.1 · Decidido (`decisions.md` §2): 3 líneas base por obra 01/03/04, catálogo en `planilla/prompts.md` (variante Esencial), `Evaluations/estudio` es piloto y el ranking cubre Stagecraft 7.x y las líneas base.
 
 ## Cómo leer una tarjeta
 
@@ -112,31 +113,6 @@ el resto; no ordena nada. T10: el generador está congelado, así que nada aquí
 `baseline.py` ni `PIPELINE_VERSION`. T2 y T5: aquí nadie juzga calidad; las líneas base se
 juzgan en P06.
 
-#### P03.1 · Qué es la línea base y qué corpus es elegible
-- **Modo:** O · **Cuota:** sin cuota · **Paquete:** — (solo planning)
-- **Lee:** `decisions.md` §1–§4; `packages/evaluation/planilla/matriz.csv` (celda M02);
-  `judge._ineligible` y `pairing.read_run_config`; `git show baa016f^:docs/prompts_top_down.md`;
-  `asg-study --db Evaluations/estudio/study.sqlite3 status`.
-- **Haz:** opciones con recomendación, y espera, para:
-  1. **Premisas con línea base:** las obras 01, 03 y 04 de la matriz, cada una con n
-     repeticiones (1 llamada cada una), y las del estudio de P06 tras la recogida (ya en EXP-4).
-  2. **Catálogo de prompts:** restaurar `docs/prompts_top_down.md` desde `baa016f^`, moverlo a
-     la planilla, o copiar el texto de un `request.json`. Y qué variante de perfil recibe la
-     línea base.
-  3. **`Evaluations/estudio` y sus 3 líneas base de 7.21:** ¿piloto (datos que se conservan,
-     fuera del estudio de la tesis) o estudio principal? Si es piloto, actualizar el síntoma de
-     EXP-4 en `fichas.md`.
-  4. **Corpus elegible para el ranking (T9):** a) todo lo completo en prosa, marcando la versión
-     (lo que hace hoy `_ineligible`); b) solo Stagecraft 7.x y las líneas base; c) solo lo
-     congelado (7.22) y las líneas base. Con el coste de extraer los rasgos de cada opción en P08
-     (unas 2–3 llamadas por historia). Y qué hacer con los Top-Down sin `story_format` y con los
-     guiones.
-- **No hagas:** código, ni generar historias. Ninguna entrada en `decisions.md` sin el «sí» de
-  Josue.
-- **Prueba:** ninguna (solo docs).
-- **Hecho cuando:** las cuatro decisiones están en `decisions.md` §2, con fecha, y las tarjetas
-  P03.2–P03.4 ya las usan.
-
 #### P03.2 · Inventario del corpus, de solo lectura
 - **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation
 - **Lee:** P03.1 en `decisions.md`; `feature_report.read_features` y `process_features`;
@@ -150,6 +126,9 @@ juzgan en P06.
   - Lista también las anomalías de MED-6: falta de versión o de `generator_version.json`,
     `story_format` inferido, `failed` con `story.md`, `running` atascado, `.tmp` sueltos y
     archivos que no son runs.
+  - Razones de exclusión según P03.1: run no completado, sin `story.md`, guion («Formato fuera
+    del estudio en prosa», como hoy) y «Generador anterior a Stagecraft 7» (Top-Down 4.x–6.x,
+    Bottom-Up y runs sin versión). Elegible: `narrative`, `simulated` y `baseline` de 7.x.
   - `judge._ineligible` reutiliza la razón de corpus para lo que no depende de la extracción, y
     conserva sus mensajes actuales.
 - **No hagas:** escribir en `Stories/` ni en `Evaluations/`; llamar a `asg-recover`; tocar
@@ -161,19 +140,23 @@ juzgan en P06.
   (o explica la diferencia), y `asg help` lo lista.
 
 #### P03.3 · Líneas base de la matriz
-- **Modo:** S · **Cuota:** ~1 llamada por historia (total según P03.1, unas 9) · **Paquete:** —
-- **Lee:** P03.1 en `decisions.md`; `packages/evaluation/README.md` §1; el catálogo elegido en
-  P03.1.
-- **Haz:** enseña la lista de comandos y el número de llamadas, y espera. Después, `asg-baseline`
-  con el texto exacto del catálogo hacia `Stories/Baseline/<obra>-<slug>-<n>/`, con
-  `GEMINI_MODEL` en el modelo de la matriz. Comprueba `status: completed`, `pipeline_version`
-  7.22 y `llm_usage.json` con 1 llamada.
+- **Modo:** S · **Cuota:** 9 llamadas (obras 01, 03 y 04, tres cada una) · **Paquete:** —
+- **Lee:** P03.1 en `decisions.md`; `packages/evaluation/README.md` §1.
+- **Haz:**
+  - Restaura el catálogo: `git show baa016f^:docs/prompts_top_down.md` a
+    `packages/evaluation/planilla/prompts.md`, con sus marcadores, quitando solo la nota del test
+    live (hoy tiene su propia copia). Enlázalo desde `docs/resumen.md`.
+  - Enseña la lista de comandos y el número de llamadas, y espera. Después, `asg-baseline` con
+    el texto exacto de la variante Esencial (`PROMPT_0N_ESSENTIAL`) hacia
+    `Stories/Baseline/<obra>-<slug>-<n>/` (n = 1–3), con `GEMINI_MODEL` en el modelo de la
+    matriz. Comprueba `status: completed`, `pipeline_version` 7.22 y `llm_usage.json` con
+    1 llamada.
 - **No hagas:** cambiar `baseline.py` ni su instrucción; inscribirlas en un estudio (eso es P06);
   más llamadas que las aprobadas; `RUN_GEMINI_LIVE=1`.
 - **Prueba:** `asg-report-features Stories/Baseline --json` da `C01 = Baseline` en todas, y
   `asg-corpus` las da por elegibles.
-- **Hecho cuando:** hay una línea base por obra y repetición de M02, anotada con fecha en
-  `docs/resumen.md`. Cierra MED-8 (se borra de `fichas.md`).
+- **Hecho cuando:** `planilla/prompts.md` está versionado y hay tres líneas base por obra de M02,
+  anotadas con fecha en `docs/resumen.md`. Cierra MED-8 (se borra de `fichas.md`).
 
 #### P03.4 · Una decisión escrita por cada anomalía
 - **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** — (o parche de asg-evaluation si hay que
@@ -181,7 +164,9 @@ juzgan en P06.
 - **Lee:** la salida de `asg-corpus Stories --json`; `stagecraft/tools/recovery.py` (docstring y
   `--help`); METODOLOGIA.md §10.
 - **Haz:** agrupa las anomalías y propone una decisión por grupo: excluir con razón, recuperar con
-  `asg-recover` (deja rastro), o aceptar como limitación. Espera el «ok». Después:
+  `asg-recover` (deja rastro), o aceptar como limitación. Las de runs anteriores a Stagecraft 7
+  ya quedan fuera del ranking (P03.1): basta con anotarlas, no hace falta recuperarlas. Espera el
+  «ok». Después:
   - aplica solo lo aprobado;
   - escribe la tabla de exclusiones con fecha y alcance en METODOLOGIA.md §10;
   - guarda la salida en `Evaluations/corpus/inventario-2026-MM-DD.json`.

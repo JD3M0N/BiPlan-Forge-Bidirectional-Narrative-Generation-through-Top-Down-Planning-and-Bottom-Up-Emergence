@@ -35,6 +35,22 @@ rasgos, juez, análisis o tesis se contrasta con esta lista antes de empezar.
   horizontal, explicar las mejores y validar al extractor; no entran al juez
   (METODOLOGIA.md §3).
 - **2026-10-27 · Un juez que no generaliza es un resultado válido**, y se presenta como tal.
+- **2026-10-28 · Líneas base de la matriz (T6).** Las obras 01, 03 y 04 de M02 tienen tres
+  líneas base cada una (9 llamadas), para medir el ruido de la propia línea base. Las premisas
+  del estudio de P06 reciben la suya tras la recogida (EXP-4).
+- **2026-10-28 · Catálogo de prompts en `packages/evaluation/planilla/prompts.md`**, restaurado
+  de `baa016f^:docs/prompts_top_down.md` con sus marcadores `PROMPT_0N_*` (`docs/` no se
+  versiona). La línea base recibe, literal, la variante Esencial, la de la celda base M01: el
+  mismo prompt que el pipeline.
+- **2026-10-28 · `Evaluations/estudio` es un piloto.** Sus 75 votos de 7 lectores sobre 15
+  historias de 7.21 (3 líneas base) se conservan y se informan como piloto, fuera del estudio de
+  la tesis: son anteriores a la congelación y cubren el piloto de P06. Si se usan en P07 como
+  comprobación externa, se declara antes de entrenar.
+- **2026-10-28 · Corpus elegible para el ranking (T9): Stagecraft 7.x y las líneas base**, en
+  prosa (`narrative`, `simulated`, `baseline`), con la versión marcada en cada historia. Se
+  excluye, con razón escrita: lo anterior a Stagecraft 7 (Top-Down 4.x–6.x y Bottom-Up, incluidos
+  los Top-Down sin `story_format`) y los guiones. Hoy son 107 runs (unas 215–320 llamadas de
+  extracción en P08), más lo que generen P03.3, P05 y P06.
 
 ## 3. Decisiones de proyecto
 

@@ -301,8 +301,10 @@ MED-8 y la revisión de MED-9
 
 - **Síntoma.** El instrumento está listo (2026-10-12): el bot `asg-telegram` 5.0.0 recoge
   historias de los participantes (Top-Down o híbrido, libre o guiada, con audio) y, cuando el
-  investigador abre la votación, presenta pares a ciegas con una pregunta cada vez. Todavía no
-  hay ni una historia ni un voto reales.
+  investigador abre la votación, presenta pares a ciegas con una pregunta cada vez. Hay un
+  piloto (`Evaluations/estudio`, 2026-10-28): 75 votos de 7 lectores sobre 15 historias de 7.21,
+  3 de ellas líneas base. Es anterior a la congelación, así que se conserva fuera del estudio de
+  la tesis (`decisions.md` §2, P03.1). Falta el estudio real sobre 7.22.
 - **Qué hacer.**
   - Arrancar el bot en la PC del investigador (`asg-telegram`) y pedir a los participantes
     que creen historias, una por una.
