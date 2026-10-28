@@ -200,6 +200,28 @@ legibilidad no predicen la preferencia. Decisión del bloque: `scene_cards`, `an
 como opción para el análisis horizontal (T4, P05). Cuatro pares y un solo lector no distinguen una
 preferencia pequeña. `name_choices.json` salió en los dos planes y no se evaluó aparte.
 
+## El plan cumple el brief y la ficción va en español (2026-10-28)
+
+Dos runs en Stagecraft 7.21 con los predeterminados, sin arreglar nada (~46 llamadas, 29 y 17):
+un narrativo Expansivo con el `brief.json` de `20261019-141038-las-islas-del-cielo`
+(`Stories/Stagecraft/20261028-123459-las-islas-del-cielo`) y un guion nativo del prompt 03, la
+médica del faro (`Stories/Stagecraft/20261028-123833-el-secreto-del-faro`).
+
+**TD-9, no cumple.** El plan (10 eventos, 5 capítulos) trae el ascenso (evento 2) y los seis
+lugares (Nidos, Mercado, Jardines, Archivo, Hondonada, Raíz). La tripulación **no** se divide
+entre quedarse, volver y sacar provecho: solo aparece el que saca provecho (Gaspar, eventos 6 y
+9); quedarse o volver aparece al final, como decisión de los zefaríes. La decisión final (evento
+10) es «bajar o quedarse», pero su coste queda en un «cargamento de verdades y pérdidas» sin decir
+quién paga qué. `plan_review.json` lo aprobó con `notes` vacías, así que el crítico no comprueba
+cada giro de la trama. Un run no distingue ruido de efecto (la ficha ya avisa: 1/6 a 4/6 de
+beats entre versiones).
+
+**TD-2, cumple.** Slug `el-secreto-del-faro`; nombres, roles, títulos de acto y descripciones del
+reparto en español; la médica es «Sabela Carballo, Médica de la isla», «la médica» en el texto, y
+ninguna vez «doctor». Cero palabras en inglés en `story.md`. El plan interno sigue en inglés,
+como manda la frontera de idioma. Falta el mismo control en un guion con el objetivo de escena
+visible al lector, que aquí no se imprime.
+
 ## Amenazas a la validez
 
 Los jueces LLM prefieren sus propias generaciones (Gemini juzga a Gemini) y puntúan mal escritura

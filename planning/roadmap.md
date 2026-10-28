@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P02.3 · El plan cumple el brief y la ficción va en español (`S`, ~45 llamadas).
+- **Siguiente:** P02.4 · Aplicar las decisiones y rechazar turnos fuera de la ficción (`S+P`, sin cuota).
 - **Versiones** (2026-10-27): Stagecraft 7.21.5 (pipeline 7.21), core 0.8.0, evaluación 2.1.0,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
@@ -17,6 +17,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P01.4 · Docs cotejados con el código (comandos, rutas, enlaces, versiones, constantes): corregidos 3 desajustes (rango de pipeline en el README de stagecraft, `asg-recompute`, salida de `asg-rank`); cierra H0.
   - P02.1 · Narración simulada, 5 pares a ciegas: empate 2–2–1 (B `selected` + editor + ejemplos corrige las actas pero no gana); se mantiene `reported`, sin editor ni ejemplos (en `docs/resumen.md`).
   - P02.2 · Brazos Top-Down, 8 borradores sobre 2 planes: TD-8 y TD-3 cumplen; a ciegas A 3, B 1, así que `scene_cards`, `anchored_critic`, `line_editor` y `style_examples` siguen apagados (en `docs/resumen.md`).
+  - P02.3 · Plan del brief de las islas y guion de la médica: TD-9 no cumple (sin división de la tripulación ni coste final), TD-2 cumple (en `docs/resumen.md`).
 
 ## Cómo leer una tarjeta
 
@@ -88,22 +89,6 @@ esta fase deciden predeterminados del generador; no son el estudio de la tesis (
 Ningún juez LLM cuenta como medida (`decisions.md` §4). Los brazos no adoptados se conservan
 como opciones para el análisis horizontal (T4, P05).
 
-#### P02.3 · El plan cumple el brief y la ficción va en español (TD-9, TD-2)
-- **Modo:** S · **Cuota:** ~45 llamadas (un narrativo Expansivo con brief y un guion nativo) ·
-  **Paquete:** ninguno
-- **Lee:** TD-9 y TD-2 en [fichas.md](fichas.md); «Idioma de la ficción» y el párrafo de
-  `StoryBrief` en [generation.md](../docs/architecture/generation.md).
-- **Haz:**
-  - Enseñar el coste y esperar el «ok».
-  - Un narrativo con `--brief` del `brief.json` de `20261019-141038-las-islas-del-cielo`.
-  - Un guion nativo del prompt 03 del catálogo de `docs/resumen.md` (la médica del faro).
-  - Comprobar: el plan trae el ascenso, la tripulación dividida y una decisión final con
-    pérdida; slug, nombres y roles en español; el género coincide con la petición.
-  - Escribir el resultado en `docs/resumen.md`, y cumple o no cumple en la lista de P02.4.
-- **No hagas:** arreglar lo que falle: se anota.
-- **Prueba:** `.\quality.ps1` verde.
-- **Hecho cuando:** TD-9 y TD-2 tienen resultado escrito con las rutas de los runs.
-
 #### P02.4 · Aplicar las decisiones y rechazar turnos fuera de la ficción (SIM-14) → 7.22
 - **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-stagecraft (y asg-studio si cambia
   `catalog.py`)
@@ -117,7 +102,8 @@ como opciones para el análisis horizontal (T4, P05).
   - `scene_cards`: apagado (P02.2: A 3, B 1 a ciegas)
   - `anchored_critic`: apagado (P02.2)
   - `typed_clauses`: apagado, sin medir (SIM-26 en idea-bank; nivel de P05).
-  - TD-3: cumple · TD-8: cumple (P02.2) · TD-9, TD-2: —
+  - TD-3: cumple · TD-8: cumple (P02.2) · TD-9: no cumple (falta la división de la tripulación y el
+    coste del final; el crítico no lo nota) · TD-2: cumple (P02.3)
 - **Haz:**
   - Cambiar los predeterminados en `GenerationOptions` y en los kwargs de `StoryGenerator`. Si
     un brazo gana en un formato y pierde en otro, queda apagado y se avisa: un predeterminado
