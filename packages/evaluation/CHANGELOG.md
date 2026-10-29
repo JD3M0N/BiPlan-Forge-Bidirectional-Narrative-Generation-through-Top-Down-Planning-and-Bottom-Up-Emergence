@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.1.4] - 2026-10-28
+
+- P04.6: `asg-audit-features` writes a human review sheet (`--hoja`, `--texto`, `--alcance`),
+  summarizes test-retest over several stories (`--pares`) and aggregates filled sheets
+  (`--veredictos`), without model calls. The sheet is a CSV with one row per extracted
+  occurrence (quote and containing paragraph) and one row for each feature with none (zero,
+  `not_applicable`, `failed`), where omissions are noted; features computed by code are left
+  out and the partial scope keeps the P04.3 sample. The summary gives exact agreement, mean
+  relative difference, Spearman rank correlation and state changes per feature, and says
+  whether it meets the P04.3 threshold. The verdict aggregate gives precision, coverage and
+  "insufficient evidence" (fewer than 5 judged). `review_worksheet` is unchanged.
+
 ## [2.1.3] - 2026-10-28
 
 - P04.5: `asg-audit-features X.json --run DIR` adds `compare_with_logs`, which contrasts the

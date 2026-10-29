@@ -6,8 +6,8 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P04.6 · hoja de revisión legible y resumen del test-retest (`/phase`).
-- **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.1, evaluación 2.1.3,
+- **Siguiente:** P04.7 · extraer la muestra, primera y segunda pasada (`/phase`; ~54 llamadas).
+- **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.1, evaluación 2.1.4,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
   - P00 · Arranque: `planning/`, skill `phase`, migración de `TODO.md` y graphify.
@@ -29,6 +29,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P04.3 · Diseño de la validación en `decisions.md` §2: 12 runs (5 simulados con log, 4 narrativos, 3 líneas base), `flash-lite`, test-retest de 6 (~54 llamadas), revisión de ~7 h y umbrales fijados antes de medir (precisión 0,80, cobertura 0,70, retest 0,25, techo del log) con su regla de salida.
   - P04.4 · `rasgos.csv` con los cambios de P04.2: núcleo de 28 (R12 sale; entran R18 y X29, entropía de X08 por código); R15, R23 («Escenas con cambio», proporción sobre X05), X09 y X24 (recuento) reformulados; P35 pasa a `existe`; planilla regenerada.
   - P04.5 · `asg-audit-features X.json --run DIR` contrasta los recuentos con el log (`compare_with_logs`; techo del log con margen 10 % o +1; «no medido» con su razón); P37 (turnos con táctica `lie`) calculado en el informe de rasgos.
+  - P04.6 · `asg-audit-features` escribe la hoja de revisión en CSV (`--hoja`, una fila por ocurrencia con cita y párrafo, y una por rasgo sin ocurrencias; alcance parcial = muestra de P04.3), resume el test-retest por rasgo (`--pares`) y agrega veredictos en precisión y cobertura (`--veredictos`).
 
 ## Cómo leer una tarjeta
 
@@ -138,23 +139,6 @@ núcleo que se lean como juicio. T3: cada ejemplo del audio y cada dimensión de
 rasgo o razón escrita. T8: la lista núcleo queda entre 18 y 30. Los umbrales se fijan antes de
 medir (P04.3) y la lista se cierra al final (P04.9), antes de abrir la votación (P06). T10: nada
 aquí toca el generador. Entre P04.7 y P04.8, Josue rellena la hoja de revisión.
-
-#### P04.6 · Hoja de revisión legible y resumen del test-retest
-- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation
-- **Lee:** `feature_audit.py` (`review_worksheet`, `compare_extractions`); `features.py`
-  (`Quote`, `locate`, `measurement`); la decisión de P04.3.
-- **Haz:**
-  1. Una hoja de revisión en Markdown o CSV que una persona rellene: por rasgo, valor, cita con
-     el párrafo que la contiene, y columnas `veredicto` (correcto / incorrecto / dudoso) y
-     `ocurrencias omitidas`. Incluye los núcleo con valor cero y todos los `not_applicable`,
-     donde se esconde lo omitido. Aplica el muestreo de ítems de P04.3.
-  2. Un resumen del test-retest por rasgo sobre varias historias: acuerdo exacto, diferencia
-     media relativa, correlación de rango y cambios de estado.
-  3. Un agregado de veredictos: precisión por rasgo.
-- **No hagas:** extraer; fijar umbrales (están en P04.3); editar el catálogo.
-- **Prueba:** tests con extracciones de fixture; `.\run-tests.ps1`; `.\quality.ps1`.
-- **Hecho cuando:** sobre una de las 15 extracciones actuales se genera la hoja y el resumen de
-  dos copias, y el agregado de una hoja de ejemplo da la precisión por rasgo.
 
 #### P04.7 · Extraer la muestra (primera y segunda pasada)
 - **Modo:** S · **Cuota:** ~3 llamadas por texto y pasada; con unas 12 historias y 6 en la segunda

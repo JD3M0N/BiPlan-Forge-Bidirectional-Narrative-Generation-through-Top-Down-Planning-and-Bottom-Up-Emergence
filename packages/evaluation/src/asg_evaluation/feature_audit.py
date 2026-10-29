@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 from collections import Counter
 from pathlib import Path
@@ -10,8 +11,8 @@ from pathlib import Path
 from asg_core import atomic_write_json, use_utf8_output
 
 from .artifacts import load_json_object
-from .catalog import digest
-from .features import entropy
+from .catalog import catalog, core_ids, digest
+from .features import DERIVED, entropy, paragraphs
 from .simulation_report import lie_turns, logged_actor_turns
 
 # The text may stay under the log (the narrator cuts) but not rise above it by more than this.
@@ -19,6 +20,23 @@ CEILING_RELATIVE = 1.10
 CEILING_ABSOLUTE = 1
 NO_LOG = "El run no guardó el log de turnos (stage/*/turns.jsonl)."
 NO_INVENTORY = "El run no llevó inventario (anterior a 7.6 o apagado)."
+# Thresholds fixed in decisions.md section 2 (P04.3) before any measurement.
+MIN_JUDGED = 5
+RETEST_MAX_DIFFERENCE = 0.25
+RETEST_MAX_STATE_CHANGES = 1
+SHEET_COLUMNS = (
+    "rasgo",
+    "nombre",
+    "estado",
+    "valor",
+    "ocurrencia",
+    "cita",
+    "parrafo",
+    "veredicto",
+    "ocurrencias_omitidas",
+    "notas",
+)
+VERDICTS = {"correcto": "correct", "incorrecto": "incorrect", "dudoso": "doubtful"}
 NO_CEILING = "El log no es un techo para este rasgo: es una distribución, no un recuento."
 
 # text feature, log figure, whether the log is a ceiling, and what the log figure is
@@ -198,21 +216,215 @@ def review_worksheet(report: dict) -> list[dict]:
     return result
 
 
+def _sheet_keys(extraction: dict, scope: str) -> list[str]:
+    """Pick the features a person reviews: all, or the P04.3 sample for the partial scope."""
+    rows = catalog()
+    unlogged = {k for k in core_ids() if not rows[k]["validable_contra"]} | {"X05", "X23"}
+    keys = []
+    for key, row in rows.items():
+        feature = extraction["features"].get(key)
+        if feature is None or row["capa"] not in {"R", "X"} or key in DERIVED:
+            continue
+        hollow = feature["status"] != "measured" or feature["value"] == 0
+        if scope == "completa" or key in unlogged or hollow:
+            keys.append(key)
+    return keys
+
+
+def _quotes(occurrence: dict, blocks: list[dict]) -> tuple[str, str]:
+    """Render an occurrence's quotes and the paragraphs that contain them."""
+    quotes, containing = [], []
+    for quote in occurrence["evidence"]:
+        number = quote["paragraph"]
+        if number >= len(blocks) or quote["text"] not in blocks[number]["text"]:
+            raise ValueError(f"La cita del párrafo {number} no está en el texto.")
+        quotes.append(f"[¶{number}] {quote['text']}")
+        containing.append(f"[¶{number}] {blocks[number]['text']}")
+    return "\n".join(quotes), "\n\n".join(containing)
+
+
+def review_sheet(extraction: dict, text: str, scope: str = "completa") -> list[dict]:
+    """Build one row per extracted occurrence, plus one per feature with none (zero, n/a, failed).
+
+    Rows without occurrences are where omissions hide, so the reviewer notes them there.
+    """
+    if scope not in {"completa", "parcial"}:
+        raise ValueError("El alcance es «completa» o «parcial».")
+    if digest(text) != extraction["identity"]["text_hash"]:
+        raise ValueError("La extracción no corresponde a este texto.")
+    blocks = paragraphs(text)
+    names = catalog()
+    rows = []
+    for key in _sheet_keys(extraction, scope):
+        feature = extraction["features"][key]
+        base = {
+            "rasgo": key,
+            "nombre": names[key]["nombre"],
+            "estado": feature["status"],
+            "valor": "" if feature["value"] is None else feature["value"],
+            "veredicto": "",
+            "ocurrencias_omitidas": "",
+            "notas": "",
+        }
+        for number, occurrence in enumerate(feature["evidence"], 1):
+            cited, context = _quotes(occurrence, blocks)
+            label = ": ".join(x for x in (occurrence.get("label"), occurrence["explanation"]) if x)
+            rows.append(
+                {**base, "ocurrencia": f"{number}. {label}", "cita": cited, "parrafo": context}
+            )
+        if not feature["evidence"]:
+            rows.append(
+                {**base, "ocurrencia": "", "cita": "", "parrafo": "", "notas": feature["reason"]}
+            )
+    return rows
+
+
+def write_sheet(rows: list[dict], path: str | Path) -> None:
+    """Write the review sheet as CSV that Excel opens with accents intact."""
+    with open(path, "w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=SHEET_COLUMNS, extrasaction="raise")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def verdict_summary(sheets: list[str | Path]) -> dict:
+    """Aggregate filled sheets into per-feature precision and coverage (thresholds in P04.3)."""
+    counts: dict[str, Counter] = {}
+    for path in sheets:
+        with open(path, encoding="utf-8-sig", newline="") as handle:
+            for row in csv.DictReader(handle):
+                tally = counts.setdefault(row["rasgo"], Counter())
+                omitted = (row.get("ocurrencias_omitidas") or "").strip()
+                if omitted:
+                    if not omitted.isdigit():
+                        raise ValueError(f"{row['rasgo']}: omitidas debe ser un entero: {omitted}")
+                    tally["omitted"] += int(omitted)
+                verdict = (row.get("veredicto") or "").strip().casefold()
+                if not verdict or not row["ocurrencia"]:
+                    continue
+                if verdict not in VERDICTS:
+                    raise ValueError(f"{row['rasgo']}: veredicto desconocido «{verdict}».")
+                tally[VERDICTS[verdict]] += 1
+    result = {}
+    for key, tally in sorted(counts.items()):
+        judged = tally["correct"] + tally["incorrect"]
+        found = tally["correct"] + tally["omitted"]
+        result[key] = {
+            "correct": tally["correct"],
+            "incorrect": tally["incorrect"],
+            "doubtful": tally["doubtful"],
+            "omitted": tally["omitted"],
+            "judged": judged,
+            "precision": tally["correct"] / judged if judged else None,
+            "coverage": tally["correct"] / found if found else None,
+            "insufficient_evidence": judged < MIN_JUDGED,
+        }
+    return result
+
+
+def _ranks(values: list[float]) -> list[float]:
+    """Rank values from 1, giving tied values the average of their positions."""
+    ordered = sorted(range(len(values)), key=values.__getitem__)
+    ranks = [0.0] * len(values)
+    start = 0
+    while start < len(ordered):
+        end = start
+        while end + 1 < len(ordered) and values[ordered[end + 1]] == values[ordered[start]]:
+            end += 1
+        for index in ordered[start : end + 1]:
+            ranks[index] = (start + end) / 2 + 1
+        start = end + 1
+    return ranks
+
+
+def spearman(left: list[float], right: list[float]) -> float | None:
+    """Rank correlation of two series; None when fewer than 3 points or a series is constant."""
+    if len(left) < 3:
+        return None
+    a, b = _ranks(left), _ranks(right)
+    mean_a, mean_b = sum(a) / len(a), sum(b) / len(b)
+    cov = sum((x - mean_a) * (y - mean_b) for x, y in zip(a, b, strict=True))
+    spread = (sum((x - mean_a) ** 2 for x in a) * sum((y - mean_b) ** 2 for y in b)) ** 0.5
+    return cov / spread if spread else None
+
+
+def retest_summary(pairs: list[tuple[dict, dict]]) -> dict:
+    """Summarize repeated extractions per feature over several stories (agreement and drift)."""
+    series: dict[str, dict] = {}
+    for first, second in pairs:
+        comparison = compare_extractions(first, second)["features"]
+        for key, row in comparison.items():
+            entry = series.setdefault(key, {"a": [], "b": [], "state_changes": 0, "stories": 0})
+            entry["stories"] += 1
+            entry["state_changes"] += row["first_status"] != row["second_status"]
+            a = first["features"].get(key, {}).get("value")
+            b = second["features"].get(key, {}).get("value")
+            numeric = isinstance(a, int | float) and isinstance(b, int | float)
+            if row["equal"] is not None and numeric:
+                entry["a"].append(a)
+                entry["b"].append(b)
+    core = set(core_ids())
+    result = {}
+    for key, entry in sorted(series.items()):
+        a, b = entry["a"], entry["b"]
+        diffs = [abs(x - y) / max(abs(x), abs(y), 1) for x, y in zip(a, b, strict=True)]
+        mean_difference = sum(diffs) / len(diffs) if diffs else None
+        result[key] = {
+            "core": key in core,
+            "stories": entry["stories"],
+            "measured_in_both": len(a),
+            "exact_agreement": sum(x == y for x, y in zip(a, b, strict=True)) / len(a)
+            if a
+            else None,
+            "mean_relative_difference": mean_difference,
+            "rank_correlation": spearman(a, b),
+            "state_changes": entry["state_changes"],
+            "meets_threshold": mean_difference is not None
+            and mean_difference <= RETEST_MAX_DIFFERENCE
+            and entry["state_changes"] <= RETEST_MAX_STATE_CHANGES,
+        }
+    return result
+
+
 def main(argv: list[str] | None = None) -> int:
-    """Write review worksheets, test-retest differences and log comparisons without calls."""
+    """Write review sheets, test-retest summaries and verdict totals without calls."""
     parser = argparse.ArgumentParser(description="Auditar estabilidad y evidencias del extractor")
-    parser.add_argument("first", type=Path)
+    parser.add_argument("first", type=Path, nargs="?")
     parser.add_argument("--second", type=Path)
     parser.add_argument("--run", type=Path, help="Run simulado cuyo log se contrasta")
+    parser.add_argument("--hoja", type=Path, help="CSV de revisión humana que se escribe")
+    parser.add_argument("--texto", type=Path, help="story.md de la extracción, para --hoja")
+    parser.add_argument("--alcance", choices=("completa", "parcial"), default="completa")
+    parser.add_argument(
+        "--pares", type=Path, nargs="+", help="Pares PRIMERA SEGUNDA de varias historias"
+    )
+    parser.add_argument("--veredictos", type=Path, nargs="+", help="Hojas rellenadas")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     use_utf8_output()
-    first = load_json_object(args.first)
-    report = {"identity": first["identity"], "review": review_worksheet(first)}
-    if args.second:
-        report["test_retest"] = compare_extractions(first, load_json_object(args.second))
-    if args.run:
-        report["log_comparison"] = compare_with_logs(first, args.run)
+    report: dict = {}
+    if args.first:
+        first = load_json_object(args.first)
+        report = {"identity": first["identity"], "review": review_worksheet(first)}
+        if args.second:
+            report["test_retest"] = compare_extractions(first, load_json_object(args.second))
+        if args.run:
+            report["log_comparison"] = compare_with_logs(first, args.run)
+        if args.hoja:
+            if not args.texto:
+                parser.error("--hoja requiere --texto")
+            text = args.texto.read_text(encoding="utf-8")
+            write_sheet(review_sheet(first, text, args.alcance), args.hoja)
+    if args.pares:
+        if len(args.pares) % 2:
+            parser.error("--pares requiere un número par de archivos")
+        loaded = [load_json_object(path) for path in args.pares]
+        pairs = list(zip(loaded[::2], loaded[1::2], strict=True))
+        report["retest_summary"] = retest_summary(pairs)
+    if args.veredictos:
+        report["verdicts"] = verdict_summary(args.veredictos)
+    if not report:
+        parser.error("indica una extracción, --pares o --veredictos")
     atomic_write_json(args.output, report)
     print(json.dumps({"output": str(args.output)}, ensure_ascii=False))
     return 0

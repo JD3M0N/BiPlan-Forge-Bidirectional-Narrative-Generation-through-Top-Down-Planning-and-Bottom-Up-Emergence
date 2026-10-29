@@ -72,6 +72,11 @@ asg-corpus Stories --json inventario.json --csv inventario.csv   # qué runs ent
   está en el texto hace repetir solo ese rasgo, una vez, y si sigue mal queda como fallo, nunca
   como cero, sin tirar los demás del lote. Volver a lanzar `asg-features` reintenta solo los
   fallidos. X24 (preguntas respondidas) no aplica si X23 no abrió ninguna.
+- `asg-audit-features X.json --texto story.md --hoja hoja.csv [--alcance parcial]` escribe la
+  hoja de revisión humana (una fila por ocurrencia con su cita y párrafo, y una por rasgo sin
+  ocurrencias, donde se anotan las omitidas; `veredicto` = correcto / incorrecto / dudoso).
+  `--pares A1 B1 A2 B2 …` resume el test-retest por rasgo sobre varias historias y
+  `--veredictos hoja1.csv …` da la precisión y la cobertura por rasgo (umbrales en `decisions.md` §2).
 - `asg-audit-features --second OTRA.json` compara dos extracciones del mismo texto
   (test-retest); `--run DIR` contrasta los recuentos con el log del run simulado (techo del
   log; lo que el run no registró sale «no medido»). `asg-features --root RUTA` mide un corpus fuera del estudio.
