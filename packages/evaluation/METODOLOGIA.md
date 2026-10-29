@@ -177,6 +177,82 @@ Usa el proveedor configurado, mediante el adaptador de Stagecraft (ficha MED-9).
 - **Coste:** de 2 a 3 llamadas por historia. Las 157 historias actuales, con una mediana de 2591
   palabras, son unas 400 llamadas: uno o dos días de cuota gratuita.
 
+#### Validación del extractor (2026-10-29)
+
+Diseño y umbrales: `planning/decisions.md` §2 (P04.3), fijados antes de medir. Este apartado
+solo informa; no cambia la lista núcleo (eso es P04.9). Los datos viven en
+`Evaluations/validacion-extractor/` (local, ignorado por Git).
+
+- **Muestra:** 12 runs elegibles (21.471 palabras): 5 simulados con log, 4 narrativos y 3 líneas
+  base. Modelo `gemini-3.5-flash-lite`. Test-retest en 6 de ellos.
+- **Extracciones incompletas:** 6 de 12 quedaron `incompleta` (`dato-ausente`, 31 fallos, sin
+  ningún rasgo; `03-ultima-luz` 14; `04-cine` 11; `islas` 2; `misterio-del-faro` 1) y cuentan como
+  fallos del extractor. Buena parte de los cambios de estado del test-retest vienen de ahí.
+- **Quién revisó, y un cambio respecto al diseño:** P04.3 preveía unas 7 h de revisión manual de
+  Josue. Los veredictos los dio Claude leyendo solo la ocurrencia, la cita y su párrafo (no las
+  historias enteras), y Josue los aceptó el 2026-10-29. Es una revisión más débil que la
+  prevista: no puede detectar nada que el extractor no citara.
+- **Cobertura: no medida.** Nadie anotó `ocurrencias_omitidas`, así que el umbral 2 (≥ 0,70) no
+  se evalúa en ningún rasgo. Ningún «cumple» de abajo es definitivo. Pendiente: leer las
+  historias y anotar las omitidas, al menos en los 6 del test-retest.
+- **Precisión:** `correcto` / (`correcto` + `incorrecto`), sin las `dudoso`, como fija P04.3. Con
+  tantas dudosas, la precisión sale casi siempre 1,00, así que se da también la cota inferior
+  que las cuenta como error. Por debajo de 5 citas juzgadas, «sin evidencia suficiente».
+
+| Rasgo | Precisión (correctas / juzgadas) | Si «dudosa» cuenta como error | Test-retest (dif. media; cambios de estado) | Techo del log | Resultado |
+|---|---|---|---|---|---|
+| R01 | 5/5 | 1,00 | 0,00; 0/6 | no aplica | cumple, sin cobertura |
+| R02 | 15/15 (+3 dudosa/s) | 0,83 | 0,00; 0/6 | no aplica | cumple, sin cobertura |
+| R03 | 1/1 | 1,00 | 0,00; 3/6 | no aplica | no cumple (test-retest); precisión sin evidencia |
+| R04 | 5/5 (+2 dudosa/s) | 0,71 | 0,00; 1/6 | no aplica | cumple, sin cobertura |
+| R05 | 5/5 | 1,00 | 0,25; 1/6 | no aplica | cumple, sin cobertura |
+| R09 | 10/10 (+6 dudosa/s) | 0,62 | 0,19; 0/6 | no aplica | cumple, sin cobertura |
+| R15 | 4/4 | 1,00 | —; 3/6 (sin pares medidos) | no aplica | no cumple (test-retest); precisión sin evidencia |
+| R16 | 5/5 (+1 dudosa) | 0,83 | 0,00; 2/6 | no aplica | no cumple (test-retest) |
+| R17 | 0/0 | — | 0,00; 1/6 | no aplica | sin evidencia suficiente |
+| R18 | 6/6 (+7 dudosa/s) | 0,46 | 0,12; 1/6 | no aplica | cumple, sin cobertura |
+| R23 | 7/7 (+1 dudosa) | 0,88 | 0,00; 2/6 | no aplica | no cumple (test-retest) |
+| R24 | 8/8 | 1,00 | 0,00; 2/6 | no aplica | no cumple (test-retest) |
+| X06 | 28/28 (+6 dudosa/s) | 0,82 | 0,00; 2/6 | no aplica | no cumple (test-retest) |
+| X09 | 0/0 | — | —; 1/6 (sin pares medidos) | no aplica | no cumple (test-retest); precisión sin evidencia |
+| X10 | 0/0 (+1 dudosa) | 0,00 | 0,00; 2/6 | 0/2 comparados | no cumple (test-retest); precisión sin evidencia |
+| X13 | 3/3 (+1 dudosa) | 0,75 | 0,00; 2/6 | 0/4 comparados | no cumple (test-retest); precisión sin evidencia |
+| X14 | 21/21 (+1 dudosa) | 0,95 | 0,00; 1/6 | no aplica | cumple, sin cobertura |
+| X15 | 9/9 | 1,00 | 0,17; 1/6 | no aplica | cumple, sin cobertura |
+| X16 | 6/6 | 1,00 | 0,18; 0/6 | 0/4 comparados | cumple, sin cobertura |
+| X17 | 21/21 (+3 dudosa/s) | 0,88 | 0,22; 1/6 | 0/1 comparados | cumple, sin cobertura |
+| X20 | 1/1 (+1 dudosa) | 0,50 | 0,00; 2/6 | no aplica | no cumple (test-retest); precisión sin evidencia |
+| X24 | 0/0 | — | —; 2/6 (sin pares medidos) | no aplica | no cumple (test-retest); precisión sin evidencia |
+| X02 | no se revisa (código) | no se revisa (código) | 0,04; 0/6 | no aplica | cumple (test-retest) |
+| X03 | no se revisa (código) | no se revisa (código) | 0,01; 0/6 | no aplica | cumple (test-retest) |
+| X29 | no se revisa (código) | no se revisa (código) | 0,01; 2/6 | no aplica | no cumple (test-retest) |
+
+**Lectura** (cifras de las salidas de `asg-audit-features --veredictos`, `--pares` y
+`--run`):
+
+- **Cumplen lo medible, falta la cobertura (10):** R01, R02, R04, R05, R09, R18, X14, X15, X16 y
+  X17. Con «dudosa» como error, R18 (0,46) y R09 (0,62) bajarían de 0,80, y R04 (0,71) también:
+  son los más frágiles. Los dudosos de R18 son restricciones de trama (un plazo, una salida
+  bloqueada) tomadas por reglas del mundo: un error de definición.
+- **No cumplen el test-retest (12):** R03, R15, R16, R23, R24, X06, X09, X10, X13, X20, X24 y X29.
+  Probablemente es por extracciones fallidas en una de las dos pasadas, no por inestabilidad del
+  valor: R03, R15, R23, R24, X09 y X24 apenas tienen pares medidos en ambas.
+- **Sin evidencia suficiente en precisión (< 5 citas):** R03, R15, X09, X10, X13, X20 y X24, y R17
+  sin ninguna. R17, X09 y X24 no tuvieron ocurrencias citadas en toda la muestra.
+- **Techo del log:** ningún rasgo con log (X10, X13, X16, X17) lo supera en ninguno de los runs
+  comparados; X17 solo se pudo comparar en 1 de 5 y X10 en 2.
+- **Calculados con código:** X02 y X03 cumplen el test-retest (0,04 y 0,01). X29 hereda las
+  fallas del extractor de X08 (2 cambios de estado).
+- **Medidos sin citas (inconsistencia a revisar):** R17 y X23 en `el-pacto-roto`, R24 en
+  `la-regencia-de-las-escamas`, R17 y X23 en `el-misterio-del-faro` tienen estado `measured` sin
+  ocurrencias citadas.
+- **`not_applicable` dudosos:** al no haber leído las historias enteras solo consta uno:
+  `04-cine-de-los-domingos-1` marca X20 como `not_applicable` mientras X13 describe versiones
+  previas desmentidas. El resto de los `not_applicable` no se ha contrastado con el texto.
+- **Fuera del núcleo:** X23 (preguntas abiertas) tiene 0 correctas, 1 incorrecta y 1 dudosa: el
+  extractor confunde plazos con preguntas.
+- **Límite:** son 12 historias; no se extrapola fuera de la muestra.
+
 ## 4. Análisis horizontal
 
 El estudio principal compara las aportaciones de los participantes, con prompts libres y los dos

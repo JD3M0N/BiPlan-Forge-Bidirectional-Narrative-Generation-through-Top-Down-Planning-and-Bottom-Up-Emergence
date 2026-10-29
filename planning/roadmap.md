@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P04.8 · resultados de la validación (`/phase`), cuando Josue haya rellenado las hojas de `Evaluations/validacion-extractor/hojas/`.
+- **Siguiente:** P04.9 · lista núcleo definitiva y material para H2 (`/phase`, modo `O`; mejor con `/model opus`).
 - **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.1, evaluación 2.1.4,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
@@ -31,6 +31,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P04.5 · `asg-audit-features X.json --run DIR` contrasta los recuentos con el log (`compare_with_logs`; techo del log con margen 10 % o +1; «no medido» con su razón); P37 (turnos con táctica `lie`) calculado en el informe de rasgos.
   - P04.6 · `asg-audit-features` escribe la hoja de revisión en CSV (`--hoja`, una fila por ocurrencia con cita y párrafo, y una por rasgo sin ocurrencias; alcance parcial = muestra de P04.3), resume el test-retest por rasgo (`--pares`) y agrega veredictos en precisión y cobertura (`--veredictos`).
   - P04.7 · Muestra de 12 extraída con `flash-lite` (`primera.json` y `features.json` por run; segunda pasada `--force` en los 6 del test-retest, mismo `text_hash`); contraste con logs, 12 hojas CSV (6 completas, 6 parciales) y resumen del test-retest en `Evaluations/validacion-extractor/`. 6 de 12 quedan `incompleta` (`dato-ausente` sin segmentar, 31 fallos; `03-ultima-luz` 14; `04-cine` 11; `islas` 2; `misterio-del-faro` 1) y cuentan como fallos del extractor en P04.8.
+  - P04.8 · Subsección «Validación del extractor» en `METODOLOGIA.md` §3 con la tabla por rasgo núcleo: 10 cumplen lo medible, 12 no cumplen el test-retest, varios sin evidencia en precisión; **cobertura sin medir** y veredictos dados por Claude (cita y párrafo) y aceptados por Josue, no revisión manual completa.
 
 ## Cómo leer una tarjeta
 
@@ -140,20 +141,6 @@ núcleo que se lean como juicio. T3: cada ejemplo del audio y cada dimensión de
 rasgo o razón escrita. T8: la lista núcleo queda entre 18 y 30. Los umbrales se fijan antes de
 medir (P04.3) y la lista se cierra al final (P04.9), antes de abrir la votación (P06). T10: nada
 aquí toca el generador. Entre P04.7 y P04.8, Josue rellena la hoja de revisión.
-
-#### P04.8 · Resultados de la validación
-- **Modo:** S · **Cuota:** sin cuota · **Paquete:** asg-evaluation (docs)
-- **Lee:** la hoja rellenada por Josue; los resúmenes de P04.7; `decisions.md` §2 (umbrales);
-  `METODOLOGIA.md` §3 y §10.
-- **Haz:**
-  1. Agrega los veredictos.
-  2. Escribe en `METODOLOGIA.md` la subsección «Validación del extractor», con fecha, muestra,
-     modelo y, por rasgo núcleo, precisión humana, test-retest y contraste con logs.
-  3. Marca qué rasgos cumplen los umbrales de P04.3, sin cambiar aún la lista, y anota los
-     omitidos y los `not_applicable` dudosos.
-- **No hagas:** cambiar umbrales ni la lista núcleo (es P04.9); extrapolar fuera de la muestra.
-- **Prueba:** las cifras del texto coinciden con las salidas de los scripts.
-- **Hecho cuando:** la subsección existe con la tabla «cumple / no cumple» por rasgo núcleo.
 
 #### P04.9 · Lista núcleo definitiva y material para H2
 - **Modo:** O · **Cuota:** sin cuota · **Paquete:** asg-evaluation
