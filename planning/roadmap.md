@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P04.7 · extraer la muestra, primera y segunda pasada (`/phase`; ~54 llamadas).
+- **Siguiente:** P04.8 · resultados de la validación (`/phase`), cuando Josue haya rellenado las hojas de `Evaluations/validacion-extractor/hojas/`.
 - **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.1, evaluación 2.1.4,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
@@ -30,6 +30,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P04.4 · `rasgos.csv` con los cambios de P04.2: núcleo de 28 (R12 sale; entran R18 y X29, entropía de X08 por código); R15, R23 («Escenas con cambio», proporción sobre X05), X09 y X24 (recuento) reformulados; P35 pasa a `existe`; planilla regenerada.
   - P04.5 · `asg-audit-features X.json --run DIR` contrasta los recuentos con el log (`compare_with_logs`; techo del log con margen 10 % o +1; «no medido» con su razón); P37 (turnos con táctica `lie`) calculado en el informe de rasgos.
   - P04.6 · `asg-audit-features` escribe la hoja de revisión en CSV (`--hoja`, una fila por ocurrencia con cita y párrafo, y una por rasgo sin ocurrencias; alcance parcial = muestra de P04.3), resume el test-retest por rasgo (`--pares`) y agrega veredictos en precisión y cobertura (`--veredictos`).
+  - P04.7 · Muestra de 12 extraída con `flash-lite` (`primera.json` y `features.json` por run; segunda pasada `--force` en los 6 del test-retest, mismo `text_hash`); contraste con logs, 12 hojas CSV (6 completas, 6 parciales) y resumen del test-retest en `Evaluations/validacion-extractor/`. 6 de 12 quedan `incompleta` (`dato-ausente` sin segmentar, 31 fallos; `03-ultima-luz` 14; `04-cine` 11; `islas` 2; `misterio-del-faro` 1) y cuentan como fallos del extractor en P04.8.
 
 ## Cómo leer una tarjeta
 
@@ -139,23 +140,6 @@ núcleo que se lean como juicio. T3: cada ejemplo del audio y cada dimensión de
 rasgo o razón escrita. T8: la lista núcleo queda entre 18 y 30. Los umbrales se fijan antes de
 medir (P04.3) y la lista se cierra al final (P04.9), antes de abrir la votación (P06). T10: nada
 aquí toca el generador. Entre P04.7 y P04.8, Josue rellena la hoja de revisión.
-
-#### P04.7 · Extraer la muestra (primera y segunda pasada)
-- **Modo:** S · **Cuota:** ~3 llamadas por texto y pasada; con unas 12 historias y 6 en la segunda
-  pasada, ~54 (se fija en P04.3) · **Paquete:** asg-evaluation (sin código)
-- **Lee:** `packages/evaluation/README.md` §3;
-  `packages/stagecraft/src/asg_stagecraft/tools/extract_features.py`; la decisión de P04.3.
-- **Haz:**
-  1. Enseña `--dry-run` y el coste, y espera.
-  2. Extrae cada historia de la muestra (`--root <run>`) y copia `features/features.json` a
-     `features/primera.json`.
-  3. Repite con `--force` en el subconjunto del test-retest.
-  4. Con las herramientas de P04.5 y P04.6, genera el contraste con logs, la hoja de revisión y el
-     resumen del test-retest en `Evaluations/validacion-extractor/` (ignorado por Git).
-  5. Avisa a Josue de que le toca rellenar la hoja.
-- **No hagas:** `RUN_GEMINI_LIVE=1`; extraer fuera de la muestra; borrar nada de `Stories/`.
-- **Prueba:** extracciones `complete`; mismo `text_hash` en las dos pasadas.
-- **Hecho cuando:** muestra extraída, contraste y resumen generados, y hoja lista para Josue.
 
 #### P04.8 · Resultados de la validación
 - **Modo:** S · **Cuota:** sin cuota · **Paquete:** asg-evaluation (docs)
