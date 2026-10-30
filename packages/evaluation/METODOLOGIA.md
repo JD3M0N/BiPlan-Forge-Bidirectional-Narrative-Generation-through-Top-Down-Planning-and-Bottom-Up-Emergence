@@ -264,9 +264,14 @@ El estudio principal compara las aportaciones de los participantes, con prompts 
 enfoques, y las líneas base. Se describen asociaciones entre configuración, rasgos y costes,
 separando versiones. No se atribuyen causalmente las diferencias a un parámetro.
 
-La matriz de [planilla/matriz.csv](planilla/matriz.csv) queda como diseño posible posterior,
-sujeto a presupuesto y generador definitivo. No se genera en esta implementación. Para una
-comparación controlada futura se usarán las reglas de emparejamiento de `pairing.py`.
+La matriz de [planilla/matriz.csv](planilla/matriz.csv) se genera con el generador congelado
+(Stagecraft 7.22) y se compara **emparejada por plan fuente**. Cada base (M01: simulado con los
+predeterminados, obras 01, 03 y 04, dos repeticiones) es el plan fuente de sus derivadas:
+narrativo con `--plan-from` (EXP-1) y tono y visión con `--narrate-from`, que solo cambia la
+narración. Se lee la diferencia de cada rasgo entre cada derivada y su base (C18,
+`source_run.json`), y las líneas base (M02) entran como celda propia (T6). Decisión, coste y regla
+de ruido: `planning/decisions.md` §2 («Matriz del análisis horizontal»). Una diferencia por debajo
+de esa regla no se interpreta.
 
 ## 5. Evaluación humana
 

@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P05.1 · elegir la matriz (modo `O`, mejor con `/model opus`). Antes, **H2**: enseñar al tutor `planning/h2.md`.
+- **Siguiente:** P05.2 · `asg-matrix` (modo `S+P`). **H2** (enseñar al tutor `planning/h2.md`) sigue pendiente y debe cerrarse antes de P05.7.
 - **Versiones** (2026-10-30): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.1, evaluación 2.1.5,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
@@ -33,6 +33,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P04.7 · Muestra de 12 extraída con `flash-lite` (`primera.json` y `features.json` por run; segunda pasada `--force` en los 6 del test-retest, mismo `text_hash`); contraste con logs, 12 hojas CSV (6 completas, 6 parciales) y resumen del test-retest en `Evaluations/validacion-extractor/`. 6 de 12 quedan `incompleta` (`dato-ausente` sin segmentar, 31 fallos; `03-ultima-luz` 14; `04-cine` 11; `islas` 2; `misterio-del-faro` 1) y cuentan como fallos del extractor en P04.8.
   - P04.8 · Subsección «Validación del extractor» en `METODOLOGIA.md` §3 con la tabla por rasgo núcleo: 10 cumplen lo medible, 12 no cumplen el test-retest, varios sin evidencia en precisión; **cobertura sin medir** y veredictos dados por Claude (cita y párrafo) y aceptados por Josue, no revisión manual completa.
   - P04.9 · Lista núcleo fijada en `decisions.md` §2 (2026-10-30): 24 rasgos; R15, R17, X09 y X24 pasan a secundario, los otros 8 que fallan el test-retest se conservan con excepción escrita; `planning/h2.md` con la tablita de 5 historias y 4 preguntas para el tutor; cierra P04.
+  - P05.1 · Matriz A en `decisions.md` §2 y `matriz.csv` (M01 simulado con predeterminados congelados, 3 obras × 2 rep.; M03 narrativo `--plan-from`; M04–M07 tono y visión con `--narrate-from`): 35 unidades, ~1.540 principales y ~515 de función; la base 03-r1 es el run 7.22 del faro; regla de ruido fijada; EXP-2 y EXP-6 a idea-bank.
 
 ## Cómo leer una tarjeta
 
@@ -145,16 +146,16 @@ aquí toca el generador. Entre P04.7 y P04.8, Josue rellena la hoja de revisión
 
 ### P05 · Análisis horizontal
 
-La tablita por historia comparada entre parametrizaciones (T4). Origen: MED-3, MED-5, EXP-1,
-EXP-2, EXP-6 (EXP-3 y EXP-5 pasaron a [idea-bank](future/idea-bank.md)). Contrato:
+La tablita por historia comparada entre parametrizaciones (T4). Origen: MED-3, MED-5, EXP-1
+(EXP-2, EXP-3, EXP-5 y EXP-6 pasaron a [idea-bank](future/idea-bank.md)). Contrato:
 METODOLOGIA.md §4 y [evaluation.md](../docs/architecture/evaluation.md).
 
 Lo que ya hay (2026-10-30): `--plan-from` narrativo acepta un run simulado como fuente y escribe
 `source_run.json` (C18), así que MED-5 está casi cerrado; `--narrate-from` cambia solo la
 narración (voz, tono, método) sin repetir la función; las 9 líneas base de la matriz (M02) están
 hechas; `horizontal_report` agrupa por un eje C y por versión, pero no empareja por plan fuente.
-No existe runner de matrices. `planilla/matriz.csv` es un diseño viejo (anterior a
-`--narrate-from` y a la congelación: da el inventario como encendido, y en 7.22 está apagado).
+No existe runner de matrices. La matriz elegida (P05.1, matriz A) está en `planilla/matriz.csv` y
+en `decisions.md` §2, con su regla de ruido.
 
 **Coste medido** (`llm_calls.jsonl`, sin `count_tokens`), que sustituye a las medianas del
 protocolo para P05:
@@ -179,54 +180,11 @@ P08. T10 y `decisions.md` §3: el runner y el informe no cambian prompts, esquem
 ni `PIPELINE_VERSION`. T11: la fase describe asociaciones; no elige «la mejor configuración» ni
 genera N para quedarse una. Se describe, no se atribuyen causas (protocolo §4).
 
-#### P05.1 · Elegir la matriz que cabe en la cuota
-- **Modo:** O · **Cuota:** sin cuota · **Paquete:** — (planning y planilla)
-- **Lee:** este bloque; `decisions.md` §2 (líneas base, corpus elegible, lista núcleo fijada),
-  §3 (generador congelado) y §4; `packages/evaluation/planilla/matriz.csv` y `configuracion.csv`;
-  `METODOLOGIA.md` §4 y §10; `docs/resumen.md` «Validación real de 7.22» y «Líneas base de la
-  matriz»; en `fichas.md`, EXP-1, EXP-2 y EXP-6; las respuestas del tutor en H2, si ya las hay.
-- **Haz:**
-  1. Comprueba en `request.json` y `generation_options.json` si los dos runs 7.22 del prompt 03
-     (`20261028-192554-el-misterio-del-faro` y `-el-faro-de-la-habitacion-cerrada`) usaron
-     literalmente `PROMPT_03_ESSENTIAL` y `essential`. Si es así, son la celda base de la obra 03
-     sin coste.
-  2. Enseña de 2 a 4 matrices con sus celdas, obras, repeticiones, llamadas por modelo (con los
-     costes de este bloque), días de cuota y qué EXP responde cada una. Punto de partida:
-     - **A · Narración y formato.** Base simulada (M01) en las obras 01, 03 y 04 con 2
-       repeticiones; desde ella, `--plan-from` narrativo (EXP-1), tono sombrío y humorístico, y
-       visión `limited` y `first_person` con `--narrate-from`. Unas 1.500 llamadas principales y
-       520 de función: unos 3 días.
-     - **B · A más la función.** Añade memoria `shared` (EXP-2, leída con el proxy determinista
-       P27 `unknown_mentions`, sin juez) e inventario encendido (EXP-6, P39–P42), con
-       `--plan-from` simulado frente a una réplica de control del mismo plan. Entre 1.000 y 2.000
-       llamadas principales más, según repeticiones.
-     - **C · A con una repetición.** La mitad de coste, sin medir el ruido de la base.
-     - En todas: los runs 7.21 de P02.1 (narración `selected` con editor y ejemplos) y P02.2
-       (brazos Top-Down) entran como datos sin coste, separados por versión.
-  3. Decide con Josue qué es «con todas las cosas activadas» (T4): los predeterminados congelados
-     (brazos de 7.17 e inventario apagados) o todos los brazos encendidos. Si H2 no lo respondió,
-     recomienda los congelados y déjalo como pregunta para H4.
-  4. Fija, antes de generar, la regla de ruido para leer: por ejemplo, una diferencia emparejada
-     menor que la que separa las dos repeticiones de la base en esa obra no se interpreta.
-  5. Con el «ok»: entrada fechada en `decisions.md` §2 (matriz, regla de ruido, qué EXP se
-     responden); reescribe `matriz.csv` con columnas que pueda leer el runner (celda, obras por
-     marcador `PROMPT_0N_ESSENTIAL`, formato, flags de `asg-generate`, `desde` como
-     `M01:plan` o `M01:narrate`, repeticiones, llamadas por modelo, nota) y regenera la planilla;
-     reescribe `METODOLOGIA.md` §4 (la matriz se genera, emparejada por plan fuente); reparte las
-     celdas por días y reescribe P05.5 y P05.6 con las de cada día (añade P05.6b… si hacen falta
-     más); pasa a idea-bank las EXP no elegidas y borra de `fichas.md` las absorbidas.
-- **No hagas:** generar nada; tocar `rasgos.csv` o la lista núcleo; contar una lectura a ciegas
-  como medida (eso es P06); añadir perfiles Desarrollada o Expansiva desde cero sin poner su coste;
-  decidir si las historias de la matriz entran al estudio humano (lo decide P06).
-- **Prueba:** `python packages/evaluation/planilla/build_planilla.py` sin errores; el total de
-  `matriz.csv` cuadra con los costes de este bloque.
-- **Hecho cuando:** `decisions.md` §2 tiene la matriz con fecha y regla de ruido, `matriz.csv` la
-  refleja con columnas legibles por código, y P05.5–P05.6 nombran celdas concretas.
-
 #### P05.2 · `asg-matrix`: runner de matrices con presupuesto (MED-3)
 - **Modo:** S+P · **Cuota:** sin cuota (tests con proveedor falso) · **Paquete:** asg-stagecraft
   (parche; `PIPELINE_VERSION` no cambia)
-- **Lee:** MED-3 y MED-5 en `fichas.md`; `matriz.csv` (el formato que fijó P05.1);
+- **Lee:** MED-3 y MED-5 en `fichas.md`; `matriz.csv` (columnas `obras` por marcador, `flags`,
+  `desde` como `M01:plan` o `M01:narrate`, `repeticiones`);
   `tools/generate.py` (`parser`, `build_options`, `request_problem`, `main`); `tools/budget.py`
   (`preflight`, `average_story`, `slot_spending`); `tools/baseline.py` (`generate_baseline`);
   `pipeline.py` (`execute_from_plan`, `execute_from_performance`, `_save_frozen`);
@@ -247,6 +205,10 @@ genera N para quedarse una. Se describe, no se atribuyen causas (protocolo §4).
     `Evaluations/horizontal/`): unidad, celda, obra, repetición, run, estado, opciones y unidad
     fuente. Al relanzar salta las `completed`; una fallida se repite en un run nuevo y la
     fallida se conserva.
+  - Una unidad puede apuntar a un run ya hecho: la base M01 03-r1 es
+    `Stories/Stagecraft/20261028-192554-el-misterio-del-faro`. El runner comprueba que su
+    `request.json` y su `generation_options.json` coinciden con la celda y la marca `completed`
+    sin llamar (columna o archivo de semillas, a elegir en el plan).
   - Los runs van a la raíz de siempre (`Stories/Stagecraft`, `Stories/Baseline`): `C01` se
     infiere de la carpeta padre, y una carpeta `Stories/Matriz` cambiaría el enfoque.
   - Registra el comando en `pyproject.toml`, `asg_core/help.py` y el README de stagecraft;
@@ -286,13 +248,14 @@ genera N para quedarse una. Se describe, no se atribuyen causas (protocolo §4).
   grupo de pipeline 7.22, y el `--axis` de siempre devuelve lo mismo que antes.
 
 #### P05.4 · Piloto de la matriz en una obra
-- **Modo:** S+P · **Cuota:** ~150 llamadas principales y 0 de función si P05.1 reutiliza la base
-  de la obra 03 (el `--dry-run` da la cifra) · **Paquete:** — (un arreglo pequeño del runner o del
+- **Modo:** S+P · **Cuota:** ~146 llamadas principales y 0 de función: las 5 derivadas (M03–M07)
+  de la base 03-r1, que ya existe (el `--dry-run` da la cifra) · **Paquete:** — (un arreglo pequeño del runner o del
   informe entra aquí con su parche; uno grande, para y propone tarjeta)
 - **Lee:** la entrada de la matriz en `decisions.md` §2; `matriz.csv`; el README de stagecraft
   (`asg-matrix`).
 - **Haz:** `asg-matrix packages/evaluation/planilla/matriz.csv --obras 03 --dry-run`, enseña el
-  coste y espera; lanza una repetición de las celdas baratas de la obra 03 (sin simulados nuevos);
+  coste y espera; lanza `--celdas M03,M04,M05,M06,M07 --obras 03` solo sobre la repetición 1 (sin simulados
+nuevos);
   relánzalo y comprueba que no gasta nada; `asg-features --root <run>` en cada run del piloto;
   `asg-report-features` con el manifiesto. Anota en este bloque el coste real por tipo de unidad.
 - **No hagas:** lanzar otras obras; `--force`; tocar el generador.
@@ -302,18 +265,32 @@ genera N para quedarse una. Se describe, no se atribuyen causas (protocolo §4).
   obra 03.
 
 #### P05.5 · Generar la matriz, día 1
-- **Modo:** S · **Cuota:** la del día 1 que fije P05.1 (≤ ~450 principales y ≤ ~450 de función)
-  · **Paquete:** —
+- **Modo:** S · **Cuota:** ~400 principales y ~310 de función · **Paquete:** —
 - **Lee:** la entrada de la matriz en `decisions.md` §2 y este bloque.
-- **Haz:** `asg-budget`; `asg-matrix … --celdas <las del día 1> --dry-run`, enseña el coste y
-  espera; lánzalo; al acabar, `asg-budget` y el `--dry-run` de lo pendiente. P05.1 reescribe esta
-  tarjeta con las celdas concretas.
-- **No hagas:** `--force`; lanzar celdas de otro día; repetir una unidad a mano fuera del runner.
-- **Hecho cuando:** las unidades del día 1 están `completed` en el manifiesto, o anotadas aquí con
-  su fallo.
+- **Haz:** `asg-budget`; `asg-matrix packages/evaluation/planilla/matriz.csv --celdas M01 --dry-run`
+  y comprueba que las unidades pendientes son 01-r1, 04-r1 y 03-r2 (si el runner no filtra por
+  repetición, para y anótalo); enseña el coste y espera; lánzalo; al acabar, `asg-budget` y el
+  `--dry-run` de lo pendiente.
+- **No hagas:** `--force`; lanzar las bases 01-r2 o 04-r2 (son del día 2); repetir una unidad a
+  mano fuera del runner.
+- **Hecho cuando:** las bases 01-r1, 04-r1 y 03-r2 están `completed` en el manifiesto, o anotadas
+  aquí con su fallo.
 
 #### P05.6 · Generar la matriz, día 2
-- Igual que P05.5, con las celdas del día 2. P05.1 añade P05.6b, P05.6c… si hacen falta más días.
+- **Modo:** S · **Cuota:** ~410 principales y ~205 de función · **Paquete:** —
+- Igual que P05.5, con las bases 01-r2 y 04-r2 (M01) y las derivadas M03–M07 de 01-r1.
+- **Hecho cuando:** esas 7 unidades están `completed` o anotadas con su fallo.
+
+#### P05.6b · Generar la matriz, día 3
+- **Modo:** S · **Cuota:** ~440 principales y 0 de función · **Paquete:** —
+- Igual que P05.5, con las derivadas M03–M07 de 04-r1, 03-r2 y 01-r2 (15 unidades).
+- **Hecho cuando:** esas 15 unidades están `completed` o anotadas con su fallo.
+
+#### P05.6c · Generar la matriz, día 4
+- **Modo:** S · **Cuota:** ~146 principales y 0 de función · **Paquete:** —
+- Igual que P05.5, con las derivadas M03–M07 de 04-r2 (5 unidades). Si sobra cuota en un día
+  anterior, puede adelantarse ahí sin pasar de ~450 principales.
+- **Hecho cuando:** el manifiesto tiene las 35 unidades nuevas `completed`, o anotadas con su fallo.
 
 #### P05.7 · Extraer los rasgos de la matriz
 - **Modo:** S · **Cuota:** 2–3 llamadas por historia (las de la matriz más las 9 líneas base,

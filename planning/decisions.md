@@ -153,6 +153,32 @@ rasgos, juez, análisis o tesis se contrasta con esta lista antes de empezar.
   - **Para H2:** qué entiende el tutor por «cosas complicadas» (X14, X15).
   - Cambia la huella del catálogo (evaluación 2.1.5): las extracciones de la muestra se hicieron
     con la huella anterior y habría que repetirlas para leerlas con el catálogo vigente.
+- **2026-10-30 · Matriz del análisis horizontal (P05.1): matriz A.** En
+  `packages/evaluation/planilla/matriz.csv`. Obras 01, 03 y 04 con su variante Esencial,
+  `gemini-3.5-flash-lite` y `gemini-3.1-flash-lite` en la función, sin audio.
+  - **Base (M01):** simulado desde cero con los predeterminados del generador congelado (brazos
+    de 7.17 e inventario apagados, `reported`, `own`, `fixed`, 8 turnos), 2 repeticiones por obra.
+    Es la lectura recomendada de «con todas las cosas activadas» (T4); la pregunta 5 de H2 sigue
+    abierta y se confirma con el tutor en H4. La repetición 1 de la obra 03 es
+    `Stagecraft/20261028-192554-el-misterio-del-faro`, que usó literalmente `PROMPT_03_ESSENTIAL`
+    con esos predeterminados.
+  - **Celdas derivadas de cada base, emparejadas por plan fuente:** narrativo con `--plan-from`
+    (M03, EXP-1); tono sombrío y humorístico (M04, M05) y visión `limited` y `first_person`
+    (M06, M07) con `--narrate-from`, que solo cambia la narración. Sin `--narrator`: narra el
+    protagonista. Las 9 líneas base (M02) ya existen.
+  - **Coste:** 35 unidades nuevas, ~1.540 llamadas principales y ~515 de función (topes de los
+    rangos medidos): piloto y 4 días de cuota.
+  - **Responde:** T4 (tono y visión) y EXP-1. EXP-2 (memoria) y EXP-6 (inventario) pasan a
+    idea-bank como ampliación si queda cuota tras P05.8. Los runs 7.21 de P02.1 y P02.2 entran como
+    datos sin coste, separados por versión.
+  - **Regla de ruido, fijada antes de generar:** para cada rasgo y obra, ruido = |M01 r1 − M01 r2|.
+    Una celda se interpreta para un rasgo solo si el valor absoluto de la mediana de sus
+    diferencias emparejadas (derivada − su base) supera el mayor ruido de ese rasgo en las tres
+    obras **y** el signo coincide en al menos 5 de los 6 pares. Si no, se escribe «dentro del
+    ruido». Un rasgo `no medido` en un miembro del par deja el par fuera y baja el n. Es
+    conservadora para las celdas `--narrate-from`, porque el ruido entre bases mezcla plan, función
+    y narración. M02 se compara con su propio ruido (rango de sus 3 repeticiones), no con esta
+    regla.
 
 ## 3. Decisiones de proyecto
 

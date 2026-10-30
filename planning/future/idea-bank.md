@@ -858,6 +858,13 @@ congelado en 7.22 (`decisions.md` §3): EXP-3 termina borrando un método de gui
 no entran al corpus elegible (T9); EXP-5 vuelve a correr versiones anteriores desde git, que el
 análisis horizontal no mezcla.
 
+EXP-2 y EXP-6 salieron al elegir la matriz (P05.1, 2026-10-30): necesitan `--plan-from`
+simulado, que repite la función y no se ha medido nunca, más una réplica de control del mismo
+plan. Con una repetición por obra suman unas 1.080 llamadas del modelo principal y 900 del de la
+función (de 6 a 7 días de cuota con la matriz A). Son la ampliación natural si queda cuota tras
+P05.8, leídas con proxies deterministas (P27 para la memoria, P39–P42 para el inventario) y sin
+juez LLM.
+
 ### EXP-3 · Medir guion nativo frente a adaptado y quedarse con uno
 
 *Área:* experimento · *Cuota:* ~300 llamadas para 9 runs por método · *Depende de:* TD-2, MED-3;
@@ -903,6 +910,66 @@ gratuita · *Depende de:* MED-5, MED-7
 - **Ojo.** En el prompt 03 el brazo base pueden ser los propios runs 7.1: con `--plan-from` sobre
   `070539` y `072847`, las versiones nuevas representan exactamente su plan. En los otros dos
   prompts, 7.1.1 solo se puede volver a correr desde git: decidir antes el checkout etiquetado.
+
+### EXP-2 · Medir la ablación de memoria propia contra memoria compartida
+
+*Área:* experimento · *Cuota:* ~2.000 llamadas para dos brazos de 9 runs, más la auditoría ·
+*Depende de:* SIM-1, MED-3
+
+- **Síntoma.** `--actor-memory shared` existe como brazo de control y nadie lo ha corrido. Es la
+  medición que sostiene la afirmación central de la tesis: que dar a cada personaje solo lo que
+  presenció produce mejores escenas que darles todo lo público.
+  - El proxy determinista es `unknown_mentions`; el juez `audit-stage-run` se retiró en 7.11
+    (git `714f13e`) porque aprobaba casi todo.
+  - Pero el juez por defecto (`gemini-3.5-flash-lite`) todavía no es fiable:
+    - marcó como fuga un hecho que estaba literalmente en la memoria inicial del personaje
+      (reauditoría de `023354`);
+    - movió 7 puntos una cifra que no había cambiado (91,67 → 85,0);
+    - no ve ni un cambio de género ni una réplica sin atribuir.
+- **Qué hacer.**
+  - Primero, calibrar el juez: reauditar los runs existentes con un modelo más fuerte (`--model`)
+    y ver qué fugas se sostienen.
+  - Después, dos matrices idénticas salvo en `--actor-memory`.
+- **Hecho cuando.** Hay una cifra de fuga de frontera de conocimiento para cada brazo, medida con
+  un juez calibrado, y una comparación a ciegas de las historias de cada uno.
+- **Ojo.**
+  - Las funciones 7.0 y 7.1 recuperaban la memoria entera: cada actor leía todo lo que había
+    presenciado. La ablación corre ya sobre 7.2, que aplica el tope; no mezclar sus runs con los
+    anteriores.
+  - El respaldo de la hipótesis, y lo que ya dice la literatura sobre filtrar lo que un personaje
+    sabe, está en `docs/resumen.md` §7.
+
+### EXP-6 · Medir qué aporta el inventario de objetos
+
+*Área:* experimento · *Cuota:* ~200 llamadas por par de funciones rejugadas desde un plan ·
+*Depende de:* MED-5
+
+- **Síntoma.** El inventario existe desde 7.6 con su brazo de control (`--no-inventory`) y solo
+  hay un par de funciones con él. Sin medición, la afirmación de que arbitrar los objetos mejora
+  la coherencia física es una opinión.
+  - En `Stories/Stagecraft/20260930-153026-la-sombra-del-volcan`, sin inventario, el Sello Real
+    Quebrado aparece como pergamino en manos de Elara en el capítulo 1 y en la túnica de Aldren
+    en el capítulo 3, sin que nadie lo haya entregado. Eso es lo que hay que contar en los dos
+    brazos.
+- **Qué hacer.**
+  - Dos brazos de n≥3 desde planes congelados (`--plan-from`), idénticos salvo `--inventory`.
+  - Contar en los dos, con los nombres de `world.json`: menciones de un objeto en la acción de
+    quien no lo lleva, y objetos que cambian de manos sin que haya un traspaso.
+  - Leer `props_used_ratio` para saber si los objetos fueron decorado, y `item_witness_share`
+    para saber si el tráfico fue privado.
+  - Comparar además una narración limitada de la misma función: lo que el lector sabe de quién
+    tiene qué debería diferir de la omnisciente.
+- **Hecho cuando.** Hay una cifra de incoherencia física por brazo, con n≥3, y una comparación a
+  ciegas de las historias.
+- **Ojo.**
+  - `--no-inventory` deja los prompts idénticos a 7.5, así que la ablación es limpia; pero el
+    brazo con inventario gasta una llamada más (el utilero) y sus actores reciben un esquema
+    con un campo extra. No mezclar sus runs con los de 7.5 en una misma media sin decirlo.
+  - **Dos huecos que el árbitro no cierra, vistos en el par de 7.6.** El `stage_event` del
+    director es texto libre y no se arbitra: uno dijo que el sello resbalaba de las manos de
+    Aldren cuando lo tenía Elara. Y un actor puede mencionar un objeto en su acción sin
+    declarar un movimiento (10 de 21 menciones). Contar las dos cosas en la medición, y
+    decidir si se arbitran o se aceptan.
 
 ## Medición (aplazado en P04)
 

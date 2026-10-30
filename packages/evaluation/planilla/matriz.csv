@@ -1,20 +1,9 @@
-celda,obras,formato,factor,nivel,como_se_genera,historias,llamadas_principal_por_historia,llamadas_funcion_por_historia,llamadas_principal_total,llamadas_funcion_total,nota
-M01,01 fantasía; 03 misterio; 04 drama,simulated,base: todo activado,—,desde cero; es el plan fuente de las réplicas,3,20,100,60,300,
-M02,01 fantasía; 03 misterio; 04 drama,baseline,formato,baseline,un solo prompt con el original_prompt,3,1,0,3,0,
-M03,01 fantasía; 03 misterio; 04 drama,narrative,formato,narrative,desde cero (MED-5 aún no reutiliza el plan fuera del simulado),3,16,0,48,0,
-M04,01 fantasía; 03 misterio; 04 drama,script,formato,script nativo,desde cero,3,15,0,45,0,
-M05,01 fantasía; 03 misterio; 04 drama,script,método del guion,adapted,desde cero,3,20,0,60,0,
-M06,01 fantasía; 03 misterio; 04 drama,simulated,visión,limited,--plan-from M01,3,5,95,15,285,"Visión y tono solo cambian la narración, pero --plan-from repite la función: la diferencia mezcla función y narración."
-M07,01 fantasía; 03 misterio; 04 drama,simulated,visión,first_person,--plan-from M01,3,5,95,15,285,"Visión y tono solo cambian la narración, pero --plan-from repite la función: la diferencia mezcla función y narración."
-M08,01 fantasía; 03 misterio; 04 drama,simulated,tono,sombrío,--plan-from M01,3,5,95,15,285,"Visión y tono solo cambian la narración, pero --plan-from repite la función: la diferencia mezcla función y narración."
-M09,01 fantasía; 03 misterio; 04 drama,simulated,tono,humorístico,--plan-from M01,3,5,95,15,285,"Visión y tono solo cambian la narración, pero --plan-from repite la función: la diferencia mezcla función y narración."
-M10,01 fantasía; 03 misterio; 04 drama,simulated,memoria,shared,--plan-from M01,3,5,95,15,285,
-M11,01 fantasía; 03 misterio; 04 drama,simulated,inventario,false,--plan-from M01,3,5,95,15,285,
-M12,01 fantasía; 03 misterio; 04 drama,simulated,modo,adaptive,--plan-from M01,3,5,95,15,285,
-M13,01 fantasía; 03 misterio; 04 drama,simulated,turnos por beat,4,--plan-from M01,3,5,70,15,210,
-M14,01 fantasía; 03 misterio; 04 drama,simulated,turnos por beat,12,--plan-from M01,3,5,120,15,360,
-M15,01 fantasía; 03 misterio; 04 drama,simulated,ledger,false,desde cero,3,20,100,60,300,
-M16,01 fantasía; 03 misterio; 04 drama,simulated,guía de esqueletos,false,desde cero,3,20,100,60,300,
-M17,01 fantasía; 03 misterio; 04 drama,simulated,perfil,developed,desde cero,3,22,130,66,390,
-M18,01 fantasía; 03 misterio; 04 drama,simulated,perfil,expansive,desde cero,3,25,160,75,480,
-TOTAL,,,,,,54,,,612,4335,"Con ~500 peticiones diarias por modelo (cifra inferida): unos 9 días del modelo de la función y 1 del principal, sin repeticiones."
+celda,eje,nivel,formato,obras,flags,desde,repeticiones,unidades,unidades_nuevas,llamadas_principal_unidad,llamadas_funcion_unidad,llamadas_principal_total,llamadas_funcion_total,exp,nota
+M01,base,predeterminados congelados (7.22),simulated,PROMPT_01_ESSENTIAL;PROMPT_03_ESSENTIAL;PROMPT_04_ESSENTIAL,--format simulated --profile essential --no-audio,,2,6,5,133,103,665,515,T4,Plan fuente de las demás celdas. La repetición 1 de la obra 03 ya existe: Stories/Stagecraft/20261028-192554-el-misterio-del-faro.
+M02,formato,baseline,baseline,PROMPT_01_ESSENTIAL;PROMPT_03_ESSENTIAL;PROMPT_04_ESSENTIAL,asg-baseline,,3,9,0,1,0,0,0,T6,"Hechas en P03.3 (Stories/Baseline/0N-*-1..3). Su ruido es el de la línea base, no el de M01."
+M03,formato,narrative,narrative,PROMPT_01_ESSENTIAL;PROMPT_03_ESSENTIAL;PROMPT_04_ESSENTIAL,--format narrative --profile essential --no-audio,M01:plan,2,6,6,26,0,156,0,EXP-1,"Mismo plan que su base (C18, source_run.json). Coste: tope del rango medido en P02.2 (16-26)."
+M04,tono,sombrío,simulated,PROMPT_01_ESSENTIAL;PROMPT_03_ESSENTIAL;PROMPT_04_ESSENTIAL,--format simulated --profile essential --tone sombrío --no-audio,M01:narrate,2,6,6,30,0,180,0,T4,Solo cambia la narración; la función es la de su base. Coste: tope del rango de P02.1 (17-30).
+M05,tono,humorístico,simulated,PROMPT_01_ESSENTIAL;PROMPT_03_ESSENTIAL;PROMPT_04_ESSENTIAL,--format simulated --profile essential --tone humorístico --no-audio,M01:narrate,2,6,6,30,0,180,0,T4,Solo cambia la narración; la función es la de su base.
+M06,visión,limited,simulated,PROMPT_01_ESSENTIAL;PROMPT_03_ESSENTIAL;PROMPT_04_ESSENTIAL,--format simulated --profile essential --voice limited --no-audio,M01:narrate,2,6,6,30,0,180,0,T4,Sin --narrator: narra el protagonista de la base y el run lo avisa.
+M07,visión,first_person,simulated,PROMPT_01_ESSENTIAL;PROMPT_03_ESSENTIAL;PROMPT_04_ESSENTIAL,--format simulated --profile essential --voice first_person --no-audio,M01:narrate,2,6,6,30,0,180,0,T4,Sin --narrator: narra el protagonista de la base y el run lo avisa.
+TOTAL,,,,,,,,45,35,,,1541,515,,"Matriz A (P05.1, 2026-10-30). Unas 500 peticiones diarias por modelo (cifra inferida): el cuello es el modelo principal; piloto y 4 días a ≤ ~450."
