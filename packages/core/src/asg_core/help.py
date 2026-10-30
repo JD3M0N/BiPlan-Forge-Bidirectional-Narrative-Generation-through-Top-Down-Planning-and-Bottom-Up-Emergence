@@ -21,6 +21,7 @@ COMMANDS = (
     ("asg-judge", "entrena el juez aprendido con los votos"),
     ("asg-rank", "ordena el corpus con el juez y prepara las diez mejores"),
     ("asg-budget", "cuota gastada y cuántas historias caben hoy"),
+    ("asg-matrix", "lanza una matriz de experimentos en serie con cuota y manifiesto"),
     ("asg-recover", "cierra o descarta runs atascados"),
     ("asg-recompute", "recalcula las métricas de un run simulado"),
 )

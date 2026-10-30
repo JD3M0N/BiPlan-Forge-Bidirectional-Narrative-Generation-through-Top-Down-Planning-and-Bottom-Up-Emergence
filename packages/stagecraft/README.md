@@ -73,6 +73,27 @@ El resto de opciones de la fachada (`narrative_profile`, `promise_ledger`, `audi
 `script_method`, `narrative_voice`, `actor_memory`, `turns_per_beat`) tienen su opción en
 `asg-generate` o su variable `ASG_*` en `.env.example`; ver `asg help`.
 
+## Matrices de experimentos
+
+`asg-matrix MATRIZ.csv` lanza en serie las celdas de una matriz (p. ej.
+`packages/evaluation/planilla/matriz.csv`, con `prompts.md` y `semillas.json` a su lado):
+
+```powershell
+asg-matrix packages/evaluation/planilla/matriz.csv --dry-run
+asg-matrix packages/evaluation/planilla/matriz.csv --celdas M03,M04 --obras 03 --repeticiones 1
+```
+
+- `--dry-run` cuenta las llamadas pendientes por modelo frente a lo que queda hoy y no gasta cuota.
+- Antes de cada unidad comprueba la cuota (`preflight`); si no cabe, para con el manifiesto al día.
+- El manifiesto (`Evaluations/horizontal/manifiesto-<matriz>.json`, o `--manifest`) guarda, por
+  unidad, la celda, la obra, la repetición, el run, el estado, las opciones y la unidad fuente. Al
+  relanzar salta las completas; una fallida se repite en un run nuevo y la anterior queda en
+  `fallidos`. Nunca borra runs.
+- Una unidad con `desde` (`M01:plan` o `M01:narrate`) usa el run de su fuente (misma obra y
+  repetición) con `--plan-from` o `--narrate-from`; si la fuente no está completa, queda bloqueada.
+- `semillas.json` asigna a una unidad un run que ya existe (`{"M02/03/r1": "Stories/Baseline/…"}`);
+  se comprueba que su prompt y sus opciones son los de la celda antes de darlo por completo.
+
 ## Plan y garantías
 
 El usuario expresa la profundidad con un perfil, Esencial, Desarrollada o Expansiva, que es un

@@ -10,25 +10,6 @@ Las cifras y fechas son las de su medición; no se han vuelto a comprobar.
 
 ## P05 · Análisis horizontal
 
-### MED-3 · Un runner de matrices con presupuesto
-
-*Área:* medición · *Cuota:* sin cuota (la gasta quien lo lance) · *Depende de:* —
-
-- **Síntoma.**
-  - Toda ficha `EXP` necesita una matriz, y hoy se lanzan a mano, run a run.
-  - Así murió el par `054422`/`060405`: el segundo se lanzó sin saber que la cuota se había
-    agotado.
-  - Nada registra qué celdas de una matriz faltan ni con qué configuración corrió cada una.
-- **Qué hacer.** Un comando que:
-  - lea una matriz: prompts del catálogo por marcador, formatos, perfiles, brazos como
-    `--actor-memory` o `--script-method`, y repeticiones;
-  - estime su coste con `tools/budget.preflight` y corra en serie;
-  - se pueda interrumpir y reanudar saltando las celdas completadas;
-  - escriba un manifiesto con cada celda, su run y su configuración.
-- **Hecho cuando.**
-  - Una matriz interrumpida a mitad se completa al relanzarla, sin repetir runs.
-  - Su manifiesto basta para pasar los runs a StageCraft y a `asg-report-features` por celda.
-
 ### MED-5 · Comparar formatos y métodos desde un mismo plan congelado
 
 *Área:* medición · *Cuota:* sin cuota · *Depende de:* —

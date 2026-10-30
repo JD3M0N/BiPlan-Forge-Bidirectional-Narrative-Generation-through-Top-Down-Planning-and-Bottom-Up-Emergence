@@ -1,5 +1,16 @@
 # Historial de cambios
 
+## 7.22.1
+
+- P05.2 (MED-3): `asg-matrix MATRIZ.csv` lanza una matriz de experimentos en serie: expande
+  cada celda en unidades (celda × obra × repetición), resuelve los prompts del catálogo
+  `prompts.md` hermano del CSV, comprueba la cuota con `preflight` antes de cada unidad y
+  escribe un manifiesto JSON (`Evaluations/horizontal/manifiesto-<matriz>.json`) tras cada una.
+  Al relanzar salta las completas; una fallida se repite en un run nuevo y la fallida queda en
+  `fallidos`. `--dry-run` cuenta las llamadas pendientes sin gastar cuota. Los runs que ya existen
+  se declaran en `semillas.json` junto al CSV y se comprueban contra la celda. Filtros
+  `--celdas`, `--obras` y `--repeticiones`. Sin cambios en el pipeline: sigue en 7.22.
+
 ## 7.22.0
 
 - P02.4 (SIM-14): `OUT_OF_FICTION` deja de depender de la frase del caso original. Rechaza, en

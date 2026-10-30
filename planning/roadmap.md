@@ -6,8 +6,8 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P05.2 · `asg-matrix` (modo `S+P`). **H2** (enseñar al tutor `planning/h2.md`) sigue pendiente y debe cerrarse antes de P05.7.
-- **Versiones** (2026-10-30): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.1, evaluación 2.1.5,
+- **Siguiente:** P05.3 · informe horizontal emparejado por plan fuente (modo `S+P`). **H2** (enseñar al tutor `planning/h2.md`) sigue pendiente y debe cerrarse antes de P05.7.
+- **Versiones** (2026-10-30): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.1, evaluación 2.1.5,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
   - P00 · Arranque: `planning/`, skill `phase`, migración de `TODO.md` y graphify.
@@ -34,6 +34,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P04.8 · Subsección «Validación del extractor» en `METODOLOGIA.md` §3 con la tabla por rasgo núcleo: 10 cumplen lo medible, 12 no cumplen el test-retest, varios sin evidencia en precisión; **cobertura sin medir** y veredictos dados por Claude (cita y párrafo) y aceptados por Josue, no revisión manual completa.
   - P04.9 · Lista núcleo fijada en `decisions.md` §2 (2026-10-30): 24 rasgos; R15, R17, X09 y X24 pasan a secundario, los otros 8 que fallan el test-retest se conservan con excepción escrita; `planning/h2.md` con la tablita de 5 historias y 4 preguntas para el tutor; cierra P04.
   - P05.1 · Matriz A en `decisions.md` §2 y `matriz.csv` (M01 simulado con predeterminados congelados, 3 obras × 2 rep.; M03 narrativo `--plan-from`; M04–M07 tono y visión con `--narrate-from`): 35 unidades, ~1.540 principales y ~515 de función; la base 03-r1 es el run 7.22 del faro; regla de ruido fijada; EXP-2 y EXP-6 a idea-bank.
+  - P05.2 · `asg-matrix MATRIZ.csv [--dry-run --celdas --obras --repeticiones --manifest]` (`tools/matrix.py`): corre en serie con `preflight`, manifiesto atómico en `Evaluations/horizontal/`, reanuda sin repetir llamadas y adopta runs ya hechos por `planilla/semillas.json` (M01 03-r1 y las 9 líneas base); Stagecraft 7.22.1.
 
 ## Cómo leer una tarjeta
 
@@ -179,50 +180,6 @@ aquí toca `rasgos.csv`. T9: los runs de la matriz son prosa 7.22 y entran al co
 P08. T10 y `decisions.md` §3: el runner y el informe no cambian prompts, esquemas, predeterminados
 ni `PIPELINE_VERSION`. T11: la fase describe asociaciones; no elige «la mejor configuración» ni
 genera N para quedarse una. Se describe, no se atribuyen causas (protocolo §4).
-
-#### P05.2 · `asg-matrix`: runner de matrices con presupuesto (MED-3)
-- **Modo:** S+P · **Cuota:** sin cuota (tests con proveedor falso) · **Paquete:** asg-stagecraft
-  (parche; `PIPELINE_VERSION` no cambia)
-- **Lee:** MED-3 y MED-5 en `fichas.md`; `matriz.csv` (columnas `obras` por marcador, `flags`,
-  `desde` como `M01:plan` o `M01:narrate`, `repeticiones`);
-  `tools/generate.py` (`parser`, `build_options`, `request_problem`, `main`); `tools/budget.py`
-  (`preflight`, `average_story`, `slot_spending`); `tools/baseline.py` (`generate_baseline`);
-  `pipeline.py` (`execute_from_plan`, `execute_from_performance`, `_save_frozen`);
-  `asg_core/help.py`; `FakeProvider` en `packages/stagecraft/tests/test_generator_v5.py`.
-- **Haz:**
-  - `asg-matrix MATRIZ.csv [--dry-run] [--celdas M01,M03] [--obras 03] [--manifest RUTA]` en
-    `asg_stagecraft/tools/matrix.py`. Lee el catálogo de prompts como hermano del CSV
-    (`prompts.md`; la planilla no va en el wheel) y resuelve cada marcador.
-  - Expande a unidades (celda × obra × repetición). Una unidad con `desde` usa el run de la unidad
-    fuente de la misma obra y repetición, y espera a que esté `completed`.
-  - `--dry-run`: llamadas por modelo (principal y función) frente a lo que queda hoy
-    (`slot_spending`), con el coste por tipo de unidad de `average_story` cuando hay runs y, si
-    no, del bloque P05.
-  - Corre en serie y en proceso, reutilizando `build_options`, `request_problem` y `preflight`;
-    la línea base con `generate_baseline`. `--no-audio` siempre. Para en cuanto `preflight`
-    rechace una unidad, con el manifiesto al día.
-  - Manifiesto JSON (escritura atómica tras cada unidad; por defecto en
-    `Evaluations/horizontal/`): unidad, celda, obra, repetición, run, estado, opciones y unidad
-    fuente. Al relanzar salta las `completed`; una fallida se repite en un run nuevo y la
-    fallida se conserva.
-  - Una unidad puede apuntar a un run ya hecho: la base M01 03-r1 es
-    `Stories/Stagecraft/20261028-192554-el-misterio-del-faro`. El runner comprueba que su
-    `request.json` y su `generation_options.json` coinciden con la celda y la marca `completed`
-    sin llamar (columna o archivo de semillas, a elegir en el plan).
-  - Los runs van a la raíz de siempre (`Stories/Stagecraft`, `Stories/Baseline`): `C01` se
-    infiere de la carpeta padre, y una carpeta `Stories/Matriz` cambiaría el enfoque.
-  - Registra el comando en `pyproject.toml`, `asg_core/help.py` y el README de stagecraft;
-    `CHANGELOG.md` con la ID.
-- **No hagas:** cambiar prompts, esquemas, predeterminados ni `PIPELINE_VERSION`; paralelizar;
-  extraer rasgos (es `asg-features`); `--force` implícito; borrar runs fallidos.
-- **Prueba:** test con proveedor falso que muere a mitad de una matriz pequeña (narrativo desde
-  cero, `--plan-from` narrativo y línea base): al relanzar completa sin repetir llamadas ya
-  hechas; dos unidades de formatos distintos con el mismo plan fuente tienen `story_plan.json`
-  idéntico byte a byte (MED-5); `--dry-run` no llama al proveedor. `.\run-tests.ps1` y
-  `.\quality.ps1`.
-- **Hecho cuando:** los tests pasan, `asg help` lista `asg-matrix` y
-  `asg-matrix packages/evaluation/planilla/matriz.csv --dry-run` imprime el coste de la matriz de
-  P05.1 sin gastar cuota.
 
 #### P05.3 · Informe horizontal emparejado por plan fuente (cierra MED-5)
 - **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation (parche)
