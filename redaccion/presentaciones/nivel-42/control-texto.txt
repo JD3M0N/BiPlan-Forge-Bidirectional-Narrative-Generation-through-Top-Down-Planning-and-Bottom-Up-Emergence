@@ -1,0 +1,14 @@
+Control automático de texto explícito (no sustituye inspección de renderizado).
+Guion oral: 1050 palabras.
+Resumen: 91 palabras.
+Diapositiva 1: 4 líneas; máximo 6 palabras por línea.
+Diapositiva 2: 5 líneas; máximo 6 palabras por línea.
+Diapositiva 3: 3 líneas; máximo 5 palabras por línea.
+Diapositiva 4: 5 líneas; máximo 5 palabras por línea.
+Diapositiva 5: 6 líneas; máximo 6 palabras por línea.
+Diapositiva 6: 5 líneas; máximo 5 palabras por línea.
+Diapositiva 7: 5 líneas; máximo 6 palabras por línea.
+Diapositiva 8: 7 líneas; máximo 6 palabras por línea.
+Diapositiva 9: 3 líneas; máximo 6 palabras por línea.
+Diapositiva 10: 6 líneas; máximo 7 palabras por línea.
+Diapositiva 11: 7 líneas; máximo 6 palabras por línea.
