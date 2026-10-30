@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P05.4 · piloto de la matriz en una obra (modo `S+P`). **H2** (enseñar al tutor `planning/h2.md`) sigue pendiente y debe cerrarse antes de P05.7.
+- **Siguiente:** P05.5 · generar la matriz, día 1 (modo `S`). **H2** (enseñar al tutor `planning/h2.md`) sigue pendiente y debe cerrarse antes de P05.7.
 - **Versiones** (2026-10-30): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.1, evaluación 2.1.6,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
@@ -36,6 +36,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P05.1 · Matriz A en `decisions.md` §2 y `matriz.csv` (M01 simulado con predeterminados congelados, 3 obras × 2 rep.; M03 narrativo `--plan-from`; M04–M07 tono y visión con `--narrate-from`): 35 unidades, ~1.540 principales y ~515 de función; la base 03-r1 es el run 7.22 del faro; regla de ruido fijada; EXP-2 y EXP-6 a idea-bank.
   - P05.2 · `asg-matrix MATRIZ.csv [--dry-run --celdas --obras --repeticiones --manifest]` (`tools/matrix.py`): corre en serie con `preflight`, manifiesto atómico en `Evaluations/horizontal/`, reanuda sin repetir llamadas y adopta runs ya hechos por `planilla/semillas.json` (M01 03-r1 y las 9 líneas base); Stagecraft 7.22.1.
   - P05.3 · `asg-report-features RAÍZ --horizontal OUT --manifest M` da las diferencias derivada − fuente por celda (C18 comprobado), un solo grupo por pipeline, núcleo primero, `no medido` y lectura «dentro del ruido» según la regla; JSON y CSV; evaluación 2.1.6. Cierra MED-5.
+  - P05.4 · Piloto de la obra 03 (M03–M07, repetición 1, sobre la base 03-r1): 5 unidades completas y relanzar gasta 0; coste real 78 llamadas principales (narrativo 14, simulado derivado 16 cada uno; el tope de la tarjeta era 146) y 21 de extracción de rasgos (núcleo, `flash-lite`); extracción `incompleta` en 3 de 5 (M03, M05, M06), como en P04.7; informe con un solo grupo 7.22 y 5 pares (C18 correcto), todos «n insuficiente» con n = 1. Salida en `Evaluations/horizontal/piloto-03/`.
 
 ## Cómo leer una tarjeta
 
@@ -181,23 +182,6 @@ aquí toca `rasgos.csv`. T9: los runs de la matriz son prosa 7.22 y entran al co
 P08. T10 y `decisions.md` §3: el runner y el informe no cambian prompts, esquemas, predeterminados
 ni `PIPELINE_VERSION`. T11: la fase describe asociaciones; no elige «la mejor configuración» ni
 genera N para quedarse una. Se describe, no se atribuyen causas (protocolo §4).
-
-#### P05.4 · Piloto de la matriz en una obra
-- **Modo:** S+P · **Cuota:** ~146 llamadas principales y 0 de función: las 5 derivadas (M03–M07)
-  de la base 03-r1, que ya existe (el `--dry-run` da la cifra) · **Paquete:** — (un arreglo pequeño del runner o del
-  informe entra aquí con su parche; uno grande, para y propone tarjeta)
-- **Lee:** la entrada de la matriz en `decisions.md` §2; `matriz.csv`; el README de stagecraft
-  (`asg-matrix`).
-- **Haz:** `asg-matrix packages/evaluation/planilla/matriz.csv --obras 03 --dry-run`, enseña el
-  coste y espera; lanza `--celdas M03,M04,M05,M06,M07 --obras 03` solo sobre la repetición 1 (sin simulados
-nuevos);
-  relánzalo y comprueba que no gasta nada; `asg-features --root <run>` en cada run del piloto;
-  `asg-report-features` con el manifiesto. Anota en este bloque el coste real por tipo de unidad.
-- **No hagas:** lanzar otras obras; `--force`; tocar el generador.
-- **Prueba:** manifiesto completo; relanzar = 0 llamadas; `C18` correcto en cada derivado; el
-  informe da un solo grupo 7.22.
-- **Hecho cuando:** el piloto está completo y extraído, y su informe sale con los pares de la
-  obra 03.
 
 #### P05.5 · Generar la matriz, día 1
 - **Modo:** S · **Cuota:** ~400 principales y ~310 de función · **Paquete:** —
