@@ -187,6 +187,7 @@ genera N para quedarse una. Se describe, no se atribuyen causas (protocolo §4).
 #### P05.6 · Generar la matriz, día 2
 - **Modo:** S · **Cuota:** ~410 principales y ~205 de función · **Paquete:** —
 - Igual que P05.5, con las bases 01-r2 y 04-r2 (M01) y las derivadas M03–M07 de 01-r1.
+- **Avance (2026-10-30):** las 5 derivadas M03–M07 de 01-r1 están `completed` (cuota principal de hoy casi agotada). Faltan las bases 01-r2 y 04-r2 (M01): `asg-matrix planilla/matriz.csv --celdas M01 --obras 01,04 --repeticiones 2` tras el reinicio de cuota.
 - **Hecho cuando:** esas 7 unidades están `completed` o anotadas con su fallo.
 
 #### P05.6b · Generar la matriz, día 3
