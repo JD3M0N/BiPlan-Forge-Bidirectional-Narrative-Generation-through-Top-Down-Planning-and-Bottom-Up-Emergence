@@ -110,52 +110,6 @@ cuota gratuita · *Depende de:* SIM-1, SIM-2, SIM-14, MED-3; mejor con MED-5
   - El respaldo de la hipótesis, y lo que ya dice la literatura sobre filtrar lo que un personaje
     sabe, está en `docs/resumen.md` §7.
 
-### EXP-3 · Medir guion nativo frente a adaptado y quedarse con uno
-
-*Área:* experimento · *Cuota:* ~300 llamadas para 9 runs por método · *Depende de:* TD-2, MED-3;
-mejor con MED-5
-
-- **Síntoma.** Hay 6 runs de guion, 3 por método (`Top-Down/20260925-16*`, pipeline 6.2), y nadie
-  los ha comparado. Lo que ya se ve:
-  - **Ningún intento de acto rechazado**, en ninguno de los seis.
-  - **El nativo sale escaso.** Hace siempre 2 escenas por acto y 1 evento por escena; el acto I
-    de `160449-la-sombra-del-faro` tiene 2 réplicas en 8 líneas.
-  - **El adaptado es otra cosa.**
-    - Es unas 1,5 veces más largo y cuesta 20 llamadas frente a 15.
-    - Copia de su `prose.md` entre el 45 y el 49 % de sus secuencias de 6 palabras.
-    - Sus acotaciones son de novela: estados interiores en 10 de 133, frente a 1 de 78 en el
-      nativo («la verdad que aplasta el alma de la aldea»).
-  - **Los títulos en inglés sesgan la lectura** del nativo (TD-2).
-- **Qué hacer.**
-  - Una matriz con los dos métodos sobre los mismos prompts, mejor desde el mismo plan (MED-5).
-  - Leer `script_metrics.json`, los intentos rechazados, los avisos, la tasa de copia desde la
-    prosa y el coste, y comparar a ciegas.
-- **Hecho cuando.** Hay una decisión escrita, con cifras, en `docs/resumen.md`, y se ha
-  borrado el método que pierda: su agente, sus prompts, sus tests y `ASG_SCRIPT_METHOD`.
-
-### EXP-5 · Medir qué aporta cada mejora de la función
-
-*Área:* experimento · *Cuota:* ~900 llamadas (3 prompts × 3 versiones), varios días de cuota
-gratuita · *Depende de:* MED-5, MED-7
-
-- **Síntoma.**
-  - **No se sabe qué aporta cada cambio.** Cada ficha SIM se valida con un par de runs sobre un plan
-    distinto, así que no se sabe qué aportó cada cambio ni si alguno empeoró otra cosa.
-  - **Todo se ha medido con misterios.** Las cinco funciones son del prompt 03.
-  - **El criterio existe.** WSE-bench concluye que más arquitectura no es más control: cada
-    componente debe ganarse su complejidad.
-- **Qué hacer.**
-  - Con `--plan-from` (MED-5), representar el mismo plan en tres versiones: 7.1.1, 7.2.0 (que
-    cerró SIM-9 y SIM-10), y la que cierre SIM-6 y SIM-11.
-  - Usar tres prompts de géneros distintos: 03 (misterio), 04 (drama) y 01 (fantasía).
-  - Añadir como brazo el presupuesto de pensamiento del actor (SIM-4).
-  - Leer MED-7, `asg-report-features` (capas P y K) y la comparación a ciegas.
-- **Hecho cuando.** Hay una tabla por versión en `docs/resumen.md` y una decisión
-  escrita sobre qué mecanismo se queda.
-- **Ojo.** En el prompt 03 el brazo base pueden ser los propios runs 7.1: con `--plan-from` sobre
-  `070539` y `072847`, las versiones nuevas representan exactamente su plan. En los otros dos
-  prompts, 7.1.1 solo se puede volver a correr desde git: decidir antes el checkout etiquetado.
-
 ### EXP-6 · Medir qué aporta el inventario de objetos
 
 *Área:* experimento · *Cuota:* ~200 llamadas por par de funciones rejugadas desde un plan ·
