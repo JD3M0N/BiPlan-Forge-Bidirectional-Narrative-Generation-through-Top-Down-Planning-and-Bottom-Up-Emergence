@@ -273,6 +273,11 @@ narración. Se lee la diferencia de cada rasgo entre cada derivada y su base (C1
 de ruido: `planning/decisions.md` §2 («Matriz del análisis horizontal»). Una diferencia por debajo
 de esa regla no se interpreta.
 
+`asg-report-features RAÍZ --horizontal SALIDA.json --manifest MANIFIESTO` produce esa lectura: por
+celda, mediana, mínimo, máximo y n de las diferencias emparejadas, con los 24 núcleo primero y
+después P y K, y escribe un CSV junto al JSON. Lo no medido sale `no medido`, nunca cero; la
+etiqueta «dentro del ruido» o «interpretable» aplica la regla anterior.
+
 ## 5. Evaluación humana
 
 El protocolo tiene tres fases, y el investigador decide cuándo pasar de una a otra:

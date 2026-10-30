@@ -6,8 +6,8 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P05.3 · informe horizontal emparejado por plan fuente (modo `S+P`). **H2** (enseñar al tutor `planning/h2.md`) sigue pendiente y debe cerrarse antes de P05.7.
-- **Versiones** (2026-10-30): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.1, evaluación 2.1.5,
+- **Siguiente:** P05.4 · piloto de la matriz en una obra (modo `S+P`). **H2** (enseñar al tutor `planning/h2.md`) sigue pendiente y debe cerrarse antes de P05.7.
+- **Versiones** (2026-10-30): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.1, evaluación 2.1.6,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
   - P00 · Arranque: `planning/`, skill `phase`, migración de `TODO.md` y graphify.
@@ -35,6 +35,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P04.9 · Lista núcleo fijada en `decisions.md` §2 (2026-10-30): 24 rasgos; R15, R17, X09 y X24 pasan a secundario, los otros 8 que fallan el test-retest se conservan con excepción escrita; `planning/h2.md` con la tablita de 5 historias y 4 preguntas para el tutor; cierra P04.
   - P05.1 · Matriz A en `decisions.md` §2 y `matriz.csv` (M01 simulado con predeterminados congelados, 3 obras × 2 rep.; M03 narrativo `--plan-from`; M04–M07 tono y visión con `--narrate-from`): 35 unidades, ~1.540 principales y ~515 de función; la base 03-r1 es el run 7.22 del faro; regla de ruido fijada; EXP-2 y EXP-6 a idea-bank.
   - P05.2 · `asg-matrix MATRIZ.csv [--dry-run --celdas --obras --repeticiones --manifest]` (`tools/matrix.py`): corre en serie con `preflight`, manifiesto atómico en `Evaluations/horizontal/`, reanuda sin repetir llamadas y adopta runs ya hechos por `planilla/semillas.json` (M01 03-r1 y las 9 líneas base); Stagecraft 7.22.1.
+  - P05.3 · `asg-report-features RAÍZ --horizontal OUT --manifest M` da las diferencias derivada − fuente por celda (C18 comprobado), un solo grupo por pipeline, núcleo primero, `no medido` y lectura «dentro del ruido» según la regla; JSON y CSV; evaluación 2.1.6. Cierra MED-5.
 
 ## Cómo leer una tarjeta
 
@@ -180,29 +181,6 @@ aquí toca `rasgos.csv`. T9: los runs de la matriz son prosa 7.22 y entran al co
 P08. T10 y `decisions.md` §3: el runner y el informe no cambian prompts, esquemas, predeterminados
 ni `PIPELINE_VERSION`. T11: la fase describe asociaciones; no elige «la mejor configuración» ni
 genera N para quedarse una. Se describe, no se atribuyen causas (protocolo §4).
-
-#### P05.3 · Informe horizontal emparejado por plan fuente (cierra MED-5)
-- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation (parche)
-- **Lee:** MED-5 en `fichas.md`; `feature_report.py` (`read_features`, `process_features`,
-  `horizontal_report`, `CONFIG`); `feature_cli.py`; `pairing.py` (`read_run_config`); los tests de
-  `horizontal_report` (`rg horizontal_report packages/evaluation/tests`); `METODOLOGIA.md` §4.
-- **Haz:**
-  - `asg-report-features ROOT --horizontal OUT --manifest MANIFIESTO`: por celda y nivel, la
-    diferencia de cada rasgo entre cada unidad derivada y su fuente (C18, `source_run.json`) o su
-    control, emparejada por obra; mediana, mínimo y máximo de las diferencias y n de pares.
-  - Agrupa por `pipeline_version` y da `generator_version` como dato: el parche de P05.2 (7.22.x)
-    no parte un grupo.
-  - Los 24 núcleo primero, después P y K; lo no medido sale `no medido`, nunca cero; conserva la
-    frase de interpretación (asociaciones, n por celda).
-  - Salida en JSON y en una tabla CSV legible para la tesis (P09 la regenerará).
-  - Sin `--manifest`, `--horizontal` y `--axis` se comportan igual que hoy.
-- **No hagas:** importar stagecraft (el manifiesto se lee como JSON del disco); tocar `rasgos.csv`;
-  p-valores o pruebas de hipótesis; ponderar rasgos (es el juez, P07).
-- **Prueba:** amplía los tests de `horizontal_report` con runs de fixture: una fuente, dos
-  derivados con `source_run.json` y versiones 7.22.0 y 7.22.1, y un rasgo sin medir.
-  `.\run-tests.ps1` y `.\quality.ps1`.
-- **Hecho cuando:** con ese fixture el informe da las diferencias emparejadas por celda en un solo
-  grupo de pipeline 7.22, y el `--axis` de siempre devuelve lo mismo que antes.
 
 #### P05.4 · Piloto de la matriz en una obra
 - **Modo:** S+P · **Cuota:** ~146 llamadas principales y 0 de función: las 5 derivadas (M03–M07)

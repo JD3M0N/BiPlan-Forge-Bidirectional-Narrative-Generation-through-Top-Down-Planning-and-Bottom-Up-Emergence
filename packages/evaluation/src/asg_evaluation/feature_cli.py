@@ -9,8 +9,9 @@ from pathlib import Path
 
 from asg_core import atomic_write_csv, atomic_write_json, use_utf8_output
 
-from .catalog import catalog
+from .catalog import catalog, resource_text
 from .feature_report import horizontal_report, read_features, study_extractions
+from .horizontal_paired import COLUMNS, cell_labels, paired_report, paired_rows
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -22,6 +23,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--csv", type=Path)
     parser.add_argument("--horizontal", type=Path)
     parser.add_argument("--axis", default="C02")
+    parser.add_argument(
+        "--manifest", type=Path, help="Manifiesto de asg-matrix: informe emparejado por plan fuente"
+    )
+    parser.add_argument("--matrix", type=Path, help="CSV de la matriz (eje y nivel por celda)")
     parser.add_argument(
         "--study", type=Path, help="Reutilizar las extracciones de un estudio congelado"
     )
@@ -60,10 +65,30 @@ def main(argv: list[str] | None = None) -> int:
                 for row in rows
             ],
         )
-    if args.horizontal:
+    if args.horizontal and args.manifest:
+        try:
+            manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+            matrix = _matrix_text(args.matrix)
+            report = paired_report(rows, manifest, cell_labels(matrix))
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            print(f"Manifiesto ilegible: {type(exc).__name__}", file=sys.stderr)
+            return 1
+        atomic_write_json(args.horizontal, report)
+        atomic_write_csv(args.horizontal.with_suffix(".csv"), list(COLUMNS), paired_rows(report))
+    elif args.horizontal:
         atomic_write_json(args.horizontal, horizontal_report(rows, args.axis))
     print(json.dumps({"stories": len(rows), "errors": errors}, ensure_ascii=False))
     return int(bool(errors))
+
+
+def _matrix_text(path: Path | None) -> str | None:
+    """Read the given matrix CSV, or the packaged one when it exists."""
+    if path:
+        return path.read_text(encoding="utf-8")
+    try:
+        return resource_text("matriz.csv")
+    except OSError:
+        return None
 
 
 def _csv_value(value):

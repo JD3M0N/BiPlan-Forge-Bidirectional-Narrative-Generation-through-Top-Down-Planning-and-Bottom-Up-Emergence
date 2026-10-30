@@ -10,32 +10,6 @@ Las cifras y fechas son las de su medición; no se han vuelto a comprobar.
 
 ## P05 · Análisis horizontal
 
-### MED-5 · Comparar formatos y métodos desde un mismo plan congelado
-
-*Área:* medición · *Cuota:* sin cuota · *Depende de:* —
-
-- **Síntoma.**
-  - Cada run genera su propio plan. Al comparar narrativa con simulada, o guion nativo con
-    adaptado, la varianza de planificación se mezcla con la de escritura.
-  - Los cuatro runs 7.x del prompt 03 que terminaron resuelven el mismo misterio de cuatro formas
-    distintas.
-  - Era una idea solo para los métodos de guion. Es lo que hace interpretables EXP-1 y EXP-3 con
-    n pequeño.
-- **Qué hacer.**
-  - Un `--plan-from <run>` que reutilice `request.json`, `world.json`, `characters.json`,
-    `story_plan.json` y el ledger de un run terminado, y arranque en la primera etapa de escritura
-    del formato pedido.
-  - El run nuevo registra de qué run salió su plan.
-- **Hecho cuando.**
-  - Dos runs de formatos distintos con el mismo `--plan-from` tienen un `story_plan.json`
-    idéntico byte a byte.
-  - Los informes pueden agrupar por plan de origen.
-- **Ojo.** El run de origen tiene que ser de una versión que el código aún lea
-  (`SUPPORTED_PIPELINE_VERSIONS`).
-
-
-**Avance 7.5:** `--plan-from` ya empareja funciones simuladas con el mismo plan, guion y casting; queda extenderlo a formatos distintos y agrupar por origen en los informes.
-
 ### EXP-1 · Medir la historia simulada contra la narrativa
 
 *Área:* experimento · *Cuota:* ~1.150 llamadas para 3 prompts × 3 repeticiones, varios días de

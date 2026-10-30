@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.1.6] - 2026-10-30
+
+- P05.3 (MED-5): `asg-report-features ROOT --horizontal OUT --manifest MANIFEST [--matrix CSV]`
+  writes a report paired by source plan (`horizontal_paired.py`, no model calls). For each
+  matrix cell it gives the median, minimum, maximum and pair count of derived minus source
+  (checked against C18), grouped by `pipeline_version` with `generator_version` as data, core
+  features first, then P and K; unmeasured features read `no medido`, never zero. Bases and
+  baselines get their own cells with raw values. A noise reading applies the rule of
+  `decisions.md` section 2 (spread between repetitions of the bases; six pairs, five equal
+  signs). Output is JSON plus a CSV next to it. Without `--manifest`, `--horizontal` and
+  `--axis` are unchanged.
+
 ## [2.1.5] - 2026-10-30
 
 - P04.9: the core list is fixed at 24 features. R15, R17, X09 and X24 become secondary after
