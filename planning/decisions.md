@@ -129,6 +129,30 @@ rasgos, juez, análisis o tesis se contrasta con esta lista antes de empezar.
   - **Regla de salida (P04.9):** un núcleo que falla un umbral se reformula si sus errores son
     de definición, del mismo tipo y con citas que lo muestren. Si no, pasa a `secundario`. Si la
     lista baja de 18, no se relajan los umbrales: se lleva al tutor en H2.
+- **2026-10-30 · Lista núcleo fijada (P04.9).** No se toca tras abrir la votación (P06).
+  **24 rasgos:** T01, T06, T08, R01, R02, R03, R04, R05, R09, R16, R18, R23, R24, X02, X03, X06,
+  X10, X13, X14, X15, X16, X17, X20, X29 (personajes 7, trama 13, creatividad 3, T01 sin
+  criterio). Dentro de la horquilla 18–30 (T8). Aplica la regla de salida a los 12 que no
+  cumplieron el test-retest en la validación de P04.8:
+  - **Salen a `secundario` (4):** R15, X09 y X24, sin ningún par medido en ambas pasadas y sin
+    citas que muestren si el extractor los detecta (X09 y X24, ninguna en toda la muestra); y
+    R17, sin citas juzgadas y con un cambio de estado. No es un error de definición con citas
+    que lo muestren, así que no se reformulan. Siguen en el catálogo y se extraen solo con
+    `--selection all`; la extracción por defecto (`core`) ya no los pide.
+  - **Se conservan con excepción justificada (8 de los 12):** R03, R16, R23, R24, X06, X10, X13
+    y X20. Donde hay pares medidos en ambas pasadas, el valor es idéntico (diferencia media
+    0,00); lo que falla son cambios de estado (`measured` frente a `failed` o `not_applicable`),
+    y 6 de las 12 extracciones de la muestra quedaron `incompleta`. Es evidencia indirecta, de
+    1 a 3 pares por rasgo.
+  - **X29 se queda:** se calcula por código desde X08; sus 2 cambios de estado vienen del
+    extractor de X08, no de X29.
+  - **La validación es provisional y así se declara:** la cobertura no se midió en ningún
+    rasgo, los veredictos los dio Claude y Josue los aceptó, y 6 de 12 extracciones están
+    incompletas. Ningún «cumple» es definitivo. Repetir la extracción de las incompletas y
+    anotar omisiones queda fuera de la tesis por ahora (`planning/h2.md`, pregunta 3).
+  - **Para H2:** qué entiende el tutor por «cosas complicadas» (X14, X15).
+  - Cambia la huella del catálogo (evaluación 2.1.5): las extracciones de la muestra se hicieron
+    con la huella anterior y habría que repetirlas para leerlas con el catálogo vigente.
 
 ## 3. Decisiones de proyecto
 

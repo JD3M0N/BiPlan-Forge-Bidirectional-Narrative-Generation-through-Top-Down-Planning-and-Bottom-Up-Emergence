@@ -19,7 +19,7 @@ EXTRACTION_VERSION = 3
 PROMPT_VERSION = "evidence-2"
 PHRASES = ("un escalofrío recorrió", "el peso de")
 DERIVED = {"X01", "X02", "X03", "X04", "X05", "X29"}
-# Per-speaker dialogue and distinct liars, published beside the 28 judge inputs.
+# Per-speaker dialogue and distinct liars, published beside the 24 judge inputs.
 AUXILIARY = {"X08", "X11"}
 TWO_QUOTES = {"X09", "X20", "R03", "R16", "R22", "X18"}
 SYSTEM = (

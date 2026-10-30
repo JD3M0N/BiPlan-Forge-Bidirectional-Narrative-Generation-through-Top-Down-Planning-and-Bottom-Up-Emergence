@@ -6,8 +6,8 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P04.9 · lista núcleo definitiva y material para H2 (`/phase`, modo `O`; mejor con `/model opus`).
-- **Versiones** (2026-10-28): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.1, evaluación 2.1.4,
+- **Siguiente:** P05 · escribir las tarjetas (`/phase cards P05`, con `/model opus`). Antes, **H2**: enseñar al tutor `planning/h2.md`.
+- **Versiones** (2026-10-30): Stagecraft 7.22.0 (pipeline 7.22), core 0.8.1, evaluación 2.1.5,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
   - P00 · Arranque: `planning/`, skill `phase`, migración de `TODO.md` y graphify.
@@ -32,6 +32,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P04.6 · `asg-audit-features` escribe la hoja de revisión en CSV (`--hoja`, una fila por ocurrencia con cita y párrafo, y una por rasgo sin ocurrencias; alcance parcial = muestra de P04.3), resume el test-retest por rasgo (`--pares`) y agrega veredictos en precisión y cobertura (`--veredictos`).
   - P04.7 · Muestra de 12 extraída con `flash-lite` (`primera.json` y `features.json` por run; segunda pasada `--force` en los 6 del test-retest, mismo `text_hash`); contraste con logs, 12 hojas CSV (6 completas, 6 parciales) y resumen del test-retest en `Evaluations/validacion-extractor/`. 6 de 12 quedan `incompleta` (`dato-ausente` sin segmentar, 31 fallos; `03-ultima-luz` 14; `04-cine` 11; `islas` 2; `misterio-del-faro` 1) y cuentan como fallos del extractor en P04.8.
   - P04.8 · Subsección «Validación del extractor» en `METODOLOGIA.md` §3 con la tabla por rasgo núcleo: 10 cumplen lo medible, 12 no cumplen el test-retest, varios sin evidencia en precisión; **cobertura sin medir** y veredictos dados por Claude (cita y párrafo) y aceptados por Josue, no revisión manual completa.
+  - P04.9 · Lista núcleo fijada en `decisions.md` §2 (2026-10-30): 24 rasgos; R15, R17, X09 y X24 pasan a secundario, los otros 8 que fallan el test-retest se conservan con excepción escrita; `planning/h2.md` con la tablita de 5 historias y 4 preguntas para el tutor; cierra P04.
 
 ## Cómo leer una tarjeta
 
@@ -141,23 +142,6 @@ núcleo que se lean como juicio. T3: cada ejemplo del audio y cada dimensión de
 rasgo o razón escrita. T8: la lista núcleo queda entre 18 y 30. Los umbrales se fijan antes de
 medir (P04.3) y la lista se cierra al final (P04.9), antes de abrir la votación (P06). T10: nada
 aquí toca el generador. Entre P04.7 y P04.8, Josue rellena la hoja de revisión.
-
-#### P04.9 · Lista núcleo definitiva y material para H2
-- **Modo:** O · **Cuota:** sin cuota · **Paquete:** asg-evaluation
-- **Lee:** `METODOLOGIA.md` «Validación del extractor»; `decisions.md` §2; `feature_cli.py` y
-  `feature_report.horizontal_report`.
-- **Haz:**
-  1. Aplica la regla de salida de P04.3 a los que no cumplen: opciones por rasgo (sale del juez,
-     se reformula, se conserva con excepción justificada) y espera.
-  2. Si cambia el CSV, aplícalo aquí, regenera la planilla y sube la versión.
-  3. Anota en `decisions.md` §2 «Lista núcleo fijada», con fecha, y «no se toca tras abrir la
-     votación».
-  4. Prepara `planning/h2.md`: la tablita (`asg-report-features`) de 4–5 historias de la muestra,
-     una por formato, y la lista núcleo con su validación.
-- **No hagas:** abrir la votación; tocar el generador.
-- **Prueba:** `.\run-tests.ps1`; `.\quality.ps1`; núcleo entre 18 y 30.
-- **Hecho cuando:** la lista está fijada en `decisions.md` y `planning/h2.md` existe. Cierra P04
-  y **H2**: enseñar al tutor la tablita y la lista núcleo.
 
 ### P05 · Análisis horizontal
 

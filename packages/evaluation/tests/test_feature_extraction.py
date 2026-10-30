@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from asg_evaluation import features
 from asg_evaluation.catalog import catalog, core_ids
 from asg_evaluation.feature_audit import compare_extractions
 from asg_evaluation.feature_report import read_features
@@ -133,10 +134,10 @@ def test_extraction_resumes_reuses_cache_and_invalidates_changed_text(tmp_path):
     assert "segmentation" in checkpoint and not checkpoint["complete"]
     provider = SyntheticProvider()
     report = extract_features(text, provider, model="fake", output=output)
-    assert provider.calls == 2  # only the two batches after the checkpoint
+    assert provider.calls == 1  # only the batch after the checkpoint
     assert report["complete"] and set(core_ids()) | {"X08", "X11"} <= set(report["features"])
     assert extract_features(text, provider, model="fake", output=output) == report
-    assert provider.calls == 2
+    assert provider.calls == 1
     table = read_features(run)
     assert table["features"]["P01"]["value"] is None
     assert table["extraction_compatible"]
@@ -148,8 +149,14 @@ def test_extraction_resumes_reuses_cache_and_invalidates_changed_text(tmp_path):
     )
 
 
+@pytest.fixture
+def with_payoffs(monkeypatch):
+    """Select X24 as well: it is secondary now, but its dependency on X23 is still code."""
+    monkeypatch.setattr(features, "core_ids", lambda: [*core_ids(), "X24"])
+
+
 @pytest.mark.parametrize("defect", ["fabricated quote", "omitted feature"])
-def test_invalid_quotes_get_one_repair_then_remain_failed(tmp_path, defect):
+def test_invalid_quotes_get_one_repair_then_remain_failed(tmp_path, defect, with_payoffs):
     run = synthetic_run(tmp_path / "run", 1)
     text = (run / "story.md").read_text(encoding="utf-8")
     prompts = []
@@ -191,7 +198,7 @@ def test_invalid_quotes_get_one_repair_then_remain_failed(tmp_path, defect):
     assert retry.calls == 1 and report["complete"]
 
 
-def test_payoff_is_inapplicable_when_no_question_was_opened(tmp_path):
+def test_payoff_is_inapplicable_when_no_question_was_opened(tmp_path, with_payoffs):
     run = synthetic_run(tmp_path / "run", 1)
     text = (run / "story.md").read_text(encoding="utf-8")
     prompts = []

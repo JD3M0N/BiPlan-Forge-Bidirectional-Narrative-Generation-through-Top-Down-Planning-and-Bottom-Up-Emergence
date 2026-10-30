@@ -65,7 +65,7 @@ asg-corpus Stories --json inventario.json --csv inventario.csv   # qué runs ent
   Stagecraft 7), y las anomalías (sin versión, formato inferido, `failed` con historia,
   `running` de más de 24 h, `.tmp` sueltos, archivos que no son runs). No ordena nada.
 
-- Solo los 28 rasgos `núcleo` de las capas T, R y X entran al juez; T01 (palabras) controla la
+- Solo los 24 rasgos `núcleo` de las capas T, R y X entran al juez; T01 (palabras) controla la
   longitud. Los de proceso (P), coste (K) y configuración (C) van a los informes.
 - Cada medida guarda valor, unidad, evidencias y estado: `measured` (incluido cero),
   `not_applicable`, `missing` o `failed`. Cada rasgo se valida por separado: una cita que no

@@ -150,7 +150,7 @@ Los JSON del proceso (P) tienen tres usos:
 
 ### Rasgos núcleo
 
-Solo entran al juez los rasgos marcados `núcleo`: 28, dentro de la horquilla del tutor («18, 20,
+Solo entran al juez los rasgos marcados `núcleo`: 24, dentro de la horquilla del tutor («18, 20,
 30 números»).
 
 - Los demás son `secundario`: se miden y se publican, pero no se ajustan, porque con pocas
@@ -252,6 +252,11 @@ solo informa; no cambia la lista núcleo (eso es P04.9). Los datos viven en
 - **Fuera del núcleo:** X23 (preguntas abiertas) tiene 0 correctas, 1 incorrecta y 1 dudosa: el
   extractor confunde plazos con preguntas.
 - **Límite:** son 12 historias; no se extrapola fuera de la muestra.
+- **Matiz sobre X09:** figura como «no cumple» con 1 cambio de estado, que el umbral admite;
+  falla porque no tiene ningún par medido en ambas pasadas.
+- **Decisión (P04.9, 2026-10-30):** R15, R17, X09 y X24 pasan a `secundario`; los otros ocho
+  que fallan el test-retest se conservan con la excepción escrita en `planning/decisions.md`
+  §2. El núcleo queda en 24 y esta validación sigue siendo provisional.
 
 ## 4. Análisis horizontal
 
@@ -310,7 +315,7 @@ Por cada criterio se ajusta una regresión logística por pares (ficha EXP-7):
 
 **Cómo se valida.** El criterio del tutor es que el juez «recupere el ranking» humano.
 
-- Con 10 historias y 28 rasgos, recuperarlo **dentro de la muestra** es trivial: cualquier modelo
+- Con 10 historias y 24 rasgos, recuperarlo **dentro de la muestra** es trivial: cualquier modelo
   lo memoriza.
 - Por eso se mide **fuera de la muestra**, dejando una historia fuera: el modelo se ajusta sin
   ella, predice sus pares y se informan:

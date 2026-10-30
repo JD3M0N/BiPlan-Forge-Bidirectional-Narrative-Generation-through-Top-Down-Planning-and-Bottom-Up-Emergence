@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.5] - 2026-10-30
+
+- P04.9: the core list is fixed at 24 features. R15, R17, X09 and X24 become secondary after
+  the extractor validation (no measured test-retest pairs or no judged quotes); they are still
+  measured and published. The catalog hash changes, so earlier cached extractions are archived.
+  Counts in the judge error message and comments follow the new total.
+
 ## [2.1.4] - 2026-10-28
 
 - P04.6: `asg-audit-features` writes a human review sheet (`--hoja`, `--texto`, `--alcance`),
