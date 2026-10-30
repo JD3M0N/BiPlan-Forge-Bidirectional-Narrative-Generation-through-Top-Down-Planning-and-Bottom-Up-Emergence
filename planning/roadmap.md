@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P05.5 · generar la matriz, día 1 (modo `S`). **H2** (enseñar al tutor `planning/h2.md`) sigue pendiente y debe cerrarse antes de P05.7.
+- **Siguiente:** P05.6 · generar la matriz, día 2 (modo `S`). **H2** (enseñar al tutor `planning/h2.md`) sigue pendiente y debe cerrarse antes de P05.7.
 - **Versiones** (2026-10-30): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.1, evaluación 2.1.6,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
@@ -37,6 +37,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P05.2 · `asg-matrix MATRIZ.csv [--dry-run --celdas --obras --repeticiones --manifest]` (`tools/matrix.py`): corre en serie con `preflight`, manifiesto atómico en `Evaluations/horizontal/`, reanuda sin repetir llamadas y adopta runs ya hechos por `planilla/semillas.json` (M01 03-r1 y las 9 líneas base); Stagecraft 7.22.1.
   - P05.3 · `asg-report-features RAÍZ --horizontal OUT --manifest M` da las diferencias derivada − fuente por celda (C18 comprobado), un solo grupo por pipeline, núcleo primero, `no medido` y lectura «dentro del ruido» según la regla; JSON y CSV; evaluación 2.1.6. Cierra MED-5.
   - P05.4 · Piloto de la obra 03 (M03–M07, repetición 1, sobre la base 03-r1): 5 unidades completas y relanzar gasta 0; coste real 78 llamadas principales (narrativo 14, simulado derivado 16 cada uno; el tope de la tarjeta era 146) y 21 de extracción de rasgos (núcleo, `flash-lite`); extracción `incompleta` en 3 de 5 (M03, M05, M06), como en P04.7; informe con un solo grupo 7.22 y 5 pares (C18 correcto), todos «n insuficiente» con n = 1. Salida en `Evaluations/horizontal/piloto-03/`.
+  - P05.5 · Bases M01 01-r1 (`la-sombra-del-volcan`), 04-r1 (`la-ultima-funcion`) y 03-r2 (`el-misterio-del-faro`) `completed` en el manifiesto, sin fallos; en dos invocaciones del runner (`--obras 01,04 --repeticiones 1` y `--obras 03 --repeticiones 2`, porque el filtro no admite uniones); coste real 287 principales y 186 de función (el tope era ~400 y ~310). Quedan 27 unidades (996 principales y 206 de función por `--dry-run`, estimación que sobreestima).
 
 ## Cómo leer una tarjeta
 
@@ -182,18 +183,6 @@ aquí toca `rasgos.csv`. T9: los runs de la matriz son prosa 7.22 y entran al co
 P08. T10 y `decisions.md` §3: el runner y el informe no cambian prompts, esquemas, predeterminados
 ni `PIPELINE_VERSION`. T11: la fase describe asociaciones; no elige «la mejor configuración» ni
 genera N para quedarse una. Se describe, no se atribuyen causas (protocolo §4).
-
-#### P05.5 · Generar la matriz, día 1
-- **Modo:** S · **Cuota:** ~400 principales y ~310 de función · **Paquete:** —
-- **Lee:** la entrada de la matriz en `decisions.md` §2 y este bloque.
-- **Haz:** `asg-budget`; `asg-matrix packages/evaluation/planilla/matriz.csv --celdas M01 --dry-run`
-  y comprueba que las unidades pendientes son 01-r1, 04-r1 y 03-r2 (si el runner no filtra por
-  repetición, para y anótalo); enseña el coste y espera; lánzalo; al acabar, `asg-budget` y el
-  `--dry-run` de lo pendiente.
-- **No hagas:** `--force`; lanzar las bases 01-r2 o 04-r2 (son del día 2); repetir una unidad a
-  mano fuera del runner.
-- **Hecho cuando:** las bases 01-r1, 04-r1 y 03-r2 están `completed` en el manifiesto, o anotadas
-  aquí con su fallo.
 
 #### P05.6 · Generar la matriz, día 2
 - **Modo:** S · **Cuota:** ~410 principales y ~205 de función · **Paquete:** —
