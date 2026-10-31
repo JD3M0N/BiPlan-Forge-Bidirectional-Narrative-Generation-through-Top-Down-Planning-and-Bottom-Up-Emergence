@@ -17,6 +17,7 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Mess
 
 from .config import TelegramConfigurationError, load_settings
 from .generator import GeneratorUnavailable, StagecraftGenerator
+from .guide import study_is_open
 from .handlers import StoryBot
 from .jobs import JobQueue, StoryWorker
 from .pairs import OwnPairs
@@ -24,14 +25,25 @@ from .review import OwnReview
 from .voting import Voting
 
 LOGGER = logging.getLogger(__name__)
-# /estudio, the blind study across participants, works but is not listed: it waits for enough
-# stories and for the researcher to open the vote (asg-study open).
+# /estudio, the blind study across participants, is listed only while the vote is open
+# (asg-study open); then /evaluar, which compares one's own stories, leaves the list.
 COMMANDS = [
     ("crear", "Crear una historia"),
     ("evaluar", "Comparar tus dos historias"),
     ("cancelar", "Cancelar lo que estés haciendo"),
     ("start", "Ver qué hace el bot"),
 ]
+STUDY_COMMANDS = [
+    ("crear", "Crear una historia"),
+    ("estudio", "Votar entre historias, a ciegas"),
+    ("cancelar", "Cancelar lo que estés haciendo"),
+    ("start", "Ver qué hace el bot"),
+]
+
+
+def commands(study) -> list[tuple[str, str]]:
+    """Return the command list for the study's current phase."""
+    return STUDY_COMMANDS if study_is_open(study) else COMMANDS
 
 
 def build_application(token: str, queue: JobQueue, generator, study, pairs) -> Application:
@@ -39,12 +51,12 @@ def build_application(token: str, queue: JobQueue, generator, study, pairs) -> A
     review = OwnReview(queue, pairs)
     voting = Voting(study) if study is not None else None
     worker = StoryWorker(None, queue, generator, study, pairs)
-    bot = StoryBot(queue, worker, review, pairs)
+    bot = StoryBot(queue, worker, review, pairs, study)
 
     async def post_init(app: Application) -> None:
         """Publish the command list and launch the single generation worker."""
         try:
-            await app.bot.set_my_commands(COMMANDS)
+            await app.bot.set_my_commands(commands(study))
         except TelegramError as exc:
             LOGGER.warning("No se pudieron publicar los comandos: %s", exc)
         app.bot_data["worker"] = asyncio.create_task(worker.run())

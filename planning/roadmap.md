@@ -6,9 +6,9 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P06.2 · preparar el bot para el estudio (modo `S+P`, sin cuota). **H2** (enseñar al tutor `planning/h2.md`) debe cerrarse antes de abrir la votación (P06.6). P05 quedó cerrada sin terminar (ver su bloque).
+- **Siguiente:** P06.4 · piloto con 2 o 3 lectores (modo `S+P`, sin cuota). **H2** (enseñar al tutor `planning/h2.md`) debe cerrarse antes de abrir la votación (P06.6). P05 quedó cerrada sin terminar (ver su bloque).
 - **Versiones** (2026-10-30): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.1, evaluación 2.1.6,
-  Telegram 6.0.2, Studio 0.2.2.
+  Telegram 6.0.3, Studio 0.2.2.
 - **Hechas:**
   - P00 · Arranque: `planning/`, skill `phase`, migración de `TODO.md` y graphify.
   - P01.1 · Inventario de código muerto: 4 candidatos aprobados por Josue (ver P01.2); sin comandos ni módulos huérfanos.
@@ -42,6 +42,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P05.6b · Sin generar: las 15 derivadas M03–M07 de 04-r1, 03-r2 y 01-r2 no cupieron (2026-10-30, el preflight de `asg-matrix` dejó 1 llamada principal frente a ~19 por historia y no escribió el manifiesto); Josue aceptó el fallo y pasan a P05.6c.
   - P05 · Cerrada por decisión de Josue el 2026-10-30 sin ejecutar P05.6c, P05.7 ni P05.8: 14 de las 35 unidades de la matriz están hechas (bases y derivadas de P05.4–P05.6) y 21 sin generar por cuota; no hay extracción de rasgos de la matriz ni sección «Análisis horizontal» en `docs/resumen.md`.
   - P06.1 · Diseño del estudio en `decisions.md` §2: 15 historias 7.22 (5 premisas × narrativo, simulado y línea base; 3 de la matriz y 2 de participantes), ≥ 12 lectores sin el autor, parada con ≥ 6 decididas por historia y criterio, grafo conexo o 21 días; sin encabezados ni audio (P06.3 retirada, OPS-3 a idea-bank); `Evaluations/estudio-tesis/` como `DEFAULT_STUDY`; la base de `Evaluations/estudio` corregida como sintética.
+  - P06.2 · `/estudio` sin encabezados ni audio (`neutral_story`, `send_story(plain=True)`) y con aviso de seudónimo; con el estudio en `evaluation`, comandos y `/start` ofrecen `/estudio` en vez de `/evaluar` (la lista se publica al arrancar: reiniciar el bot tras `open`); `DEFAULT_STUDY` = `Evaluations/estudio-tesis/`; el `.env` coincide con los predeterminados congelados (solo difieren formato, perfil y audio, que fija la petición o el bot); Telegram 6.0.3.
 
 ## Cómo leer una tarjeta
 
@@ -230,36 +231,6 @@ preguntas ni «¿por qué?» al estudio. T2 y `decisions.md` §4: ningún voto d
 lista núcleo queda congelada al abrir (P06.6 no abre sin H2 cerrado). T10: el bot genera con el
 generador congelado, sin tocar prompts ni `PIPELINE_VERSION`. T11: nada aquí elige ni filtra
 historias por un juez. **H3:** votación cerrada y exportada (P06.7).
-
-#### P06.2 · Preparar el bot para el estudio
-- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-telegram
-- **Lee:** «Diseño del estudio humano (P06.1)» en `decisions.md` §2; `apps/telegram/README.md`;
-  `voting.py`, `delivery.py` (`send_story`), `app.py` (`COMMANDS`, `open_study`), `config.py`;
-  `tests/test_bot.py` (la parte del estudio a ciegas); METODOLOGIA.md §5.
-- **Haz:**
-  - Presentación homogénea en `/estudio`: sin el `# Título` inicial ni ningún otro encabezado
-    markdown (también los de capítulo), sustituidos por `* * *`, en el archivo y en el texto; sin
-    audio para ninguna historia. La entrega de `/crear` no cambia.
-  - `/estudio` aparece en la lista de comandos cuando el estudio está en `evaluation`, con el aviso
-    de P06.1 al entrar (seudónimo y votos, ningún texto personal, se puede dejar).
-  - `/evaluar` sale del recorrido recomendado (ayuda y lista de comandos) mientras el estudio está
-    en `evaluation`; el comando sigue funcionando.
-  - `config.DEFAULT_STUDY` pasa a `Evaluations/estudio-tesis/study.sqlite3`.
-  - Comprueba que `GenerationOptions.from_settings` con el `.env` da los predeterminados congelados
-    (compáralos con `generation_options.json` de `Stagecraft/20261028-192554-el-misterio-del-faro`
-    y del narrativo `…-el-faro-de-la-habitacion-cerrada`). Si el `.env` difiere, dilo a Josue con
-    la línea exacta que cambiar: el `.env` es suyo.
-  - Docs: METODOLOGIA.md §5 (`/estudio`, no `/evaluar`; solo texto, sin audio); en el README del bot, la sección «El
-    estudio a ciegas» pasa a ser la guía del operador (piloto, recogida, apertura, cierre).
-- **No hagas:** cambiar preguntas, criterios, asignación o esquema de la base; tocar Stagecraft o
-  sus predeterminados; borrar `Evaluations/estudio`.
-- **Prueba:** tests del estudio a ciegas en `tests/test_bot.py` ampliados: un par línea base
-  contra run del sistema con capítulos llega sin ningún encabezado y sin audio en los dos;
-  `/estudio` en la lista solo en `evaluation` y `/evaluar` fuera de ella entonces. Suite completa
-  y `quality.ps1`.
-- **Hecho cuando:** en los tests, ninguna diferencia de presentación entre una línea base y un run
-  del sistema salvo el texto; las opciones efectivas del bot coinciden con las congeladas o Josue
-  tiene la línea del `.env` que cambiar.
 
 #### P06.4 · Piloto con 2 o 3 lectores
 - **Modo:** S+P · **Cuota:** sin cuota (historias 7.22 ya generadas) · **Paquete:** —

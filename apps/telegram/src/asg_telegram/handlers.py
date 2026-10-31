@@ -7,7 +7,16 @@ from telegram.ext import ContextTypes
 
 from . import wizard
 from .generator import BRIEF_LIMITS, METHODS, StoryOutline
-from .guide import CHOOSE, CREATE, MODES, WELCOME, next_step, option_label, other_format
+from .guide import (
+    CHOOSE,
+    CREATE,
+    MODES,
+    next_step,
+    option_label,
+    other_format,
+    study_is_open,
+    welcome,
+)
 
 INACTIVE = "Este botón ya no está activo. Empieza con /crear."
 
@@ -15,18 +24,21 @@ INACTIVE = "Este botón ya no está activo. Empieza con /crear."
 class StoryBot:
     """Collect one story request per participant and hand it to the worker."""
 
-    def __init__(self, queue, worker, review, pairs) -> None:
+    def __init__(self, queue, worker, review, pairs, study=None) -> None:
         """Wire the conversation to the queue, the worker and the comparison of own stories."""
         self.queue = queue
         self.worker = worker
         self.review = review
         self.pairs = pairs
+        self.study = study
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Explain what the bot does and recommend the participant's next step."""
         context.user_data.clear()
         _, markup = next_step(self.queue, self.pairs, update.effective_user.id)
-        await update.effective_message.reply_text(WELCOME, reply_markup=markup)
+        await update.effective_message.reply_text(
+            welcome(study_is_open(self.study)), reply_markup=markup
+        )
 
     async def create(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Offer the four ways to create a story."""
@@ -81,7 +93,7 @@ class StoryBot:
             await self._submit(update, context, prompt)
         else:
             _, markup = next_step(self.queue, self.pairs, update.effective_user.id)
-            await message.reply_text(WELCOME, reply_markup=markup)
+            await message.reply_text(welcome(study_is_open(self.study)), reply_markup=markup)
 
     async def _choose(self, query, context, story_format: str, mode: str) -> None:
         """Start the chosen way: ask for the free idea or open the wizard."""

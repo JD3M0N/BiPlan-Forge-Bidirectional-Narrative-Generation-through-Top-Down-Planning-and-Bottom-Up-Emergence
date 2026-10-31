@@ -12,7 +12,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from .generator import METHODS
 
 MODES = {"free": ("✍️", "Libre"), "guided": ("🧭", "Guiada")}
-WELCOME = (
+_INTRO = (
     "Hola. Este bot escribe historias con los dos modelos de una tesis y te pide que las "
     "compares.\n\n"
     "Te recomendamos crear dos historias con la misma idea: primero con Top-Down y después "
@@ -23,9 +23,24 @@ WELCOME = (
     "• Libre: escribes tu idea en un mensaje.\n"
     "• Guiada: título, género, ambientación, trama y personajes, paso a paso.\n\n"
     "/crear: nueva historia\n"
-    "/evaluar: comparar tus dos historias\n"
-    "/cancelar: cancelar lo que estés haciendo"
 )
+_COMPARE = "/evaluar: comparar tus dos historias\n"
+_STUDY = "/estudio: votar entre historias de otras personas, a ciegas\n"
+_CANCEL = "/cancelar: cancelar lo que estés haciendo"
+WELCOME = _INTRO + _COMPARE + _CANCEL
+STUDY_WELCOME = _INTRO + _STUDY + _CANCEL
+
+
+def study_is_open(study) -> bool:
+    """Tell whether the blind study is in its voting phase."""
+    return study is not None and study.info()["state"] == "evaluation"
+
+
+def welcome(study_open: bool) -> str:
+    """Return the greeting; while the blind vote runs it offers /estudio, not /evaluar."""
+    return STUDY_WELCOME if study_open else WELCOME
+
+
 CHOOSE = (
     "¿Cómo la creamos? Si es tu primera historia, empieza por Top-Down: después te propondré "
     "la misma idea con el Híbrido."

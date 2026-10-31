@@ -4,11 +4,16 @@ one's own two stories, the queue and the blind study."""
 import asyncio
 import json
 import random
+from types import SimpleNamespace
 
 import pytest
 from asg_evaluation.study import StudyRepository
+from asg_stagecraft import GenerationOptions
+from asg_telegram.app import COMMANDS, STUDY_COMMANDS, commands
+from asg_telegram.config import DEFAULT_STUDY
 from asg_telegram.delivery import AUDIO_WARNING, send_story
 from asg_telegram.generator import GenerationFailure, StoryOutline
+from asg_telegram.guide import STUDY_WELCOME, WELCOME, welcome
 from asg_telegram.handlers import StoryBot
 from asg_telegram.jobs import JobQueue, StoryWorker
 from asg_telegram.pairs import OwnPairs
@@ -200,7 +205,7 @@ def test_the_blind_study_still_reads_both_stories_then_votes(tmp_path):
         study.open()
         await voting.command(chat.message("/evaluar"), chat.context)
         assert [d["document"].filename for d in bot.documents] == ["Historia A.md", "Historia B.md"]
-        assert len(bot.audios) == 2
+        assert bot.audios == []
         question = study.next_question(study.participant("9"))
         await voting.callback(chat.press(f"v:a:{question['id']}:A"), chat.context)
         assert "toast:Confirma primero la lectura de ambas historias." in bot.edits
@@ -215,6 +220,92 @@ def test_the_blind_study_still_reads_both_stories_then_votes(tmp_path):
     assert [(v["criterion"], v["choice"]) for v in votes] == [("H01", "A")]
     # The next question reuses the stories already read, so it is asked straight away.
     assert bot.buttons()[0].startswith("v:a:") and len(bot.documents) == 2
+
+
+def test_the_study_presents_a_baseline_and_a_system_run_alike(tmp_path):
+    """T5: apart from the text itself, nothing tells a single-prompt baseline from a run."""
+    bot, _, study, *_, voting, _, _ = setup(tmp_path)
+    system = fake_run(tmp_path / "runs", "sistema")
+    (system / "story.md").write_text(
+        "# Titulo\n\n## Capitulo 1\n\nAda abre la puerta.\n\n## Capitulo 2\n\nAda cierra.",
+        encoding="utf-8",
+    )
+    baseline = fake_run(tmp_path / "runs", "base")
+    (baseline / "story.md").write_text("Ada abre la puerta.\n\nAda cierra.", encoding="utf-8")
+    (baseline / "story.mp3").unlink()
+
+    for run, name in ((system, "sistema"), (baseline, "base")):
+        assert asyncio.run(send_story(bot, 7, run, name=name, plain=True))
+
+    files = {
+        d["document"].filename: d["document"].input_file_content.decode() for d in bot.documents
+    }
+    # The title and the first chapter heading vanish; the second becomes one separator.
+    assert files["sistema.md"] == "Ada abre la puerta.\n\n* * *\n\nAda cierra."
+    assert files["base.md"] == "Ada abre la puerta.\n\nAda cierra."
+    assert bot.audios == [] and AUDIO_WARNING not in bot.texts()
+    assert not any("<b>" in text or "#" in text for text in bot.texts())
+
+    # Through /estudio, whichever pair is drawn arrives as plain text with the privacy notice.
+    study.add_story(system)
+    study.add_story(baseline)
+    study.add_story(fake_run(tmp_path / "runs", "otra"))
+    study.open()
+    chat = Chat(bot, user_id=9)
+    before = len(bot.documents)
+    asyncio.run(voting.command(chat.message("/estudio"), chat.context))
+    assert [d["document"].filename for d in bot.documents[before:]] == [
+        "Historia A.md",
+        "Historia B.md",
+    ]
+    assert bot.audios == []
+    assert any(text.startswith("Antes de empezar") for text in bot.texts())
+
+
+def test_commands_and_greeting_follow_the_study_phase(tmp_path):
+    study = StudyRepository(tmp_path / "estudio" / "study.sqlite3")
+    assert commands(study) == commands(None) == COMMANDS
+    assert welcome(False) == WELCOME and "/evaluar" in WELCOME and "/estudio" not in WELCOME
+    for name in "abc":
+        study.add_story(fake_run(tmp_path / "runs", name))
+    study.open()
+    assert commands(study) == STUDY_COMMANDS
+    assert "evaluar" not in dict(STUDY_COMMANDS) and "estudio" in dict(STUDY_COMMANDS)
+    assert "/evaluar" not in STUDY_WELCOME and "/estudio" in welcome(True)
+    assert DEFAULT_STUDY == "Evaluations/estudio-tesis/study.sqlite3"
+
+
+def test_the_bot_generates_with_the_frozen_defaults_and_only_adds_audio():
+    """T10: the options of the frozen 7.22 runs, plus the narration audio the bot always asks."""
+    frozen = {
+        "script_method": "native",
+        "narrative_guidance": True,
+        "guidance_strategy": "hybrid_v1",
+        "promise_ledger": True,
+        "narrative_voice": "omniscient",
+        "actor_memory": "own",
+        "simulation_mode": "fixed",
+        "inventory": False,
+        "turns_per_beat": 8,
+        "style_examples": False,
+        "line_editor": False,
+        "scene_cards": False,
+        "anchored_critic": False,
+        "narration_method": "reported",
+        "typed_clauses": False,
+    }
+    env = SimpleNamespace(
+        narrative_guidance=True,
+        promise_ledger=True,
+        narrative_voice="omniscient",
+        actor_memory="own",
+        turns_per_beat=8,
+        script_method="native",
+    )
+    options = GenerationOptions.from_settings(env).with_changes(audio=True)
+    dumped = options.model_dump(mode="json")
+    assert {name: dumped[name] for name in frozen} == frozen
+    assert dumped["audio"] is True
 
 
 def test_the_adapter_asks_stagecraft_for_prose_with_audio_and_translates_failures(

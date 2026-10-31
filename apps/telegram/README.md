@@ -14,8 +14,9 @@ El bot del estudio humano de la tesis. Hace dos cosas:
    La historia llega como `historia.md`, con su narración en `historia.mp3` y el texto en el
    chat.
 
-2. **Compararlas** (`/evaluar`). Es la primera evaluación, antes del estudio a ciegas entre
-   personas. Cada persona compara sus propias dos historias, una de cada modelo.
+2. **Compararlas** (`/evaluar`). Es la primera evaluación, aparte del estudio a ciegas entre
+   personas (`/estudio`). Cada persona compara sus propias dos historias, una de cada modelo.
+   Lo que se vota ahí no entra en el análisis del estudio.
 
 ## Lo que el bot recomienda
 
@@ -105,24 +106,39 @@ cuando se monte el sistema por pares.
 
 - `/start`: qué hace el bot y qué te toca hacer.
 - `/crear`: las cuatro opciones.
-- `/evaluar`: comparar tus dos historias.
+- `/evaluar`: comparar tus dos historias (sale de la lista mientras el estudio está en votación).
+- `/estudio`: votar pares a ciegas de otras personas (en la lista solo con el estudio en votación).
 - `/cancelar`: cancela la solicitud o la conversación en curso.
 
-## El estudio a ciegas entre personas (para más adelante)
+## El estudio a ciegas: guía del operador
 
-Sigue en el bot, pero oculto: `/estudio` no sale en la lista de comandos. Presenta pares de
-historias de otras personas, nunca la propia, y responde a las mismas tres preguntas. Mientras
-el estudio está en recogida, cada historia nueva se inscribe sola. Se opera desde la raíz:
+Diseño en `planning/decisions.md` §2 («Diseño del estudio humano (P06.1)»). `/estudio` presenta
+pares de historias de otras personas, nunca la propia, y responde a las tres preguntas de
+`planilla/criterios_humanos.csv`. La presentación es idéntica para todas las historias: solo el
+texto, sin título ni encabezados (se cambian por `* * *`) y sin audio. Al entrar, el bot avisa
+de que guarda un seudónimo y los votos, ningún texto personal, y de que se puede dejar.
+
+Mientras el estudio está en recogida, cada historia nueva del bot se inscribe sola. Todo se
+opera desde la raíz, y la base la elige `ASG_EVALUATION_STUDY` (vacía = la del estudio real,
+`Evaluations/estudio-tesis/study.sqlite3`):
 
 ```powershell
-$db = "Evaluations/estudio/study.sqlite3"
-asg-study --db $db status                 # fase, historias, votos
+$db = "Evaluations/estudio-tesis/study.sqlite3"
+asg-study --db $db status                 # fase, historias, votos (solo recuentos)
 asg-baseline "PREMISA" --output Stories/Baseline/01   # línea base de un solo prompt
 asg-study --db $db add Stories/Baseline/01          # inscribirla
 asg-study --db $db exclude ID             # sacar una historia antes de abrir
 asg-study --db $db open                   # congela el conjunto y abre la votación
 asg-study --db $db close                  # cierra la votación
 ```
+
+1. **Piloto** (2 o 3 lectores): `ASG_EVALUATION_STUDY=Evaluations/estudio-piloto-722/study.sqlite3`
+   en el `.env`, y se vacía al terminar.
+2. **Recogida y apertura:** historias y líneas base inscritas, `open`. La lista de comandos de
+   Telegram se publica al arrancar: **reinicia el bot después de `open`** para que muestre
+   `/estudio` y retire `/evaluar` (el comando antiguo sigue funcionando).
+3. **Durante la votación** solo se mira `status`; las preferencias no se leen hasta cerrar.
+4. **Cierre:** `close` y la exportación seudónima.
 
 El análisis sigue en [packages/evaluation](../../packages/evaluation/README.md).
 

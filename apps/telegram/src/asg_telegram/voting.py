@@ -13,6 +13,10 @@ from .guide import keyboard
 
 SIDES = {"L": ("left", "A"), "R": ("right", "B")}
 CHOICES = {"A": "A", "B": "B", "X": "abstain"}
+NOTICE = (
+    "Antes de empezar: el estudio guarda un seudónimo y tus votos, ningún texto personal, y "
+    "puedes dejarlo cuando quieras."
+)
 FINISHED = "¡Gracias! Ya respondiste todas tus comparaciones. Tus votos están guardados."
 
 
@@ -46,6 +50,8 @@ class Voting:
             await self._ask(bot, chat_id, question)
             return
         if len(unread) == 2:
+            if question["position"] == 1:
+                await bot.send_message(chat_id=chat_id, text=NOTICE)
             await bot.send_message(
                 chat_id=chat_id,
                 text=f"Comparación {question['position']} de {question['total']}. "
@@ -59,6 +65,7 @@ class Voting:
                 question[side]["run_path"],
                 name=f"Historia {label}",
                 heading=f"Historia {label}",
+                plain=True,
                 keyboard=keyboard(
                     [
                         [("✅ Ya la leí", f"v:r:{question['id']}:{key}")],

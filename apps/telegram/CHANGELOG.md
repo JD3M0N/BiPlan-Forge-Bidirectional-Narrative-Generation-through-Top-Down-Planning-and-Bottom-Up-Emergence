@@ -1,5 +1,15 @@
 # Historial de cambios
 
+## 6.0.3
+
+- P06.2, `/estudio` listo para el estudio de la tesis: texto sin ningún encabezado markdown
+  (`neutral_story`: título y encabezados de capítulo sustituidos por `* * *`, uno al inicio se
+  descarta) y sin audio ni aviso de audio (`send_story(plain=True)`); aviso de seudónimo y votos
+  al entrar.
+- Con el estudio en `evaluation`, la lista de comandos y `/start` ofrecen `/estudio` en lugar de
+  `/evaluar` (el comando sigue funcionando); la lista se publica al arrancar el bot.
+- `DEFAULT_STUDY` pasa a `Evaluations/estudio-tesis/study.sqlite3`. `/crear` no cambia.
+
 ## 6.0.2
 
 - La cola de trabajos y el almacén de pares escriben sus marcas de tiempo con

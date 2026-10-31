@@ -16,6 +16,7 @@ LOGGER = logging.getLogger(__name__)
 RETRY_DELAYS = (1, 2, 4)
 CHUNK_LIMIT = 3900
 HEADING = re.compile(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$")
+SEPARATOR = "* * *"
 AUDIO_WARNING = "⚠️ La historia está lista, pero no se pudo crear o enviar su audio."
 
 
@@ -38,6 +39,24 @@ async def send_retrying(send, what: str) -> bool:
             break
     LOGGER.warning("No se pudo enviar %s", what, exc_info=True)
     return False
+
+
+def neutral_story(markdown: str) -> str:
+    """Replace every Markdown heading by a plain separator, as baselines have no headings.
+
+    A heading at the very start is dropped and runs of separators collapse into one, so no
+    story begins or breaks differently from a single-prompt baseline.
+    """
+    blocks: list[str] = []
+    for block in re.split(r"\n\s*\n", markdown.strip()):
+        if HEADING.match(block.strip()):
+            if blocks and blocks[-1] != SEPARATOR:
+                blocks.append(SEPARATOR)
+        else:
+            blocks.append(block.strip())
+    if blocks and blocks[-1] == SEPARATOR:
+        blocks.pop()
+    return "\n\n".join(blocks)
 
 
 def story_chunks(markdown: str, limit: int = CHUNK_LIMIT) -> list[str]:
@@ -74,13 +93,17 @@ async def send_story(
     name: str = "historia",
     heading: str = "",
     keyboard: InlineKeyboardMarkup | None = None,
+    plain: bool = False,
 ) -> bool:
     """Send story.md, story.mp3 when present, and the text; the keyboard goes last.
 
-    The text matters most, so a missing or failed narration never blocks it.
+    The text matters most, so a missing or failed narration never blocks it. With plain, the
+    blind study's presentation: no headings and no audio, whatever the run holds.
     """
     story = Path(run_dir) / "story.md"
     text = story.read_text(encoding="utf-8")
+    if plain:
+        text = neutral_story(text)
     sent = await send_retrying(
         lambda: bot.send_document(
             chat_id=chat_id,
@@ -89,9 +112,9 @@ async def send_story(
         ),
         f"el archivo de {name}",
     )
-    audio_sent = False
+    audio_sent = plain
     audio = story.with_name("story.mp3")
-    if audio.is_file():
+    if audio.is_file() and not plain:
         audio_sent = await send_retrying(
             lambda: bot.send_audio(
                 chat_id=chat_id,

@@ -9,8 +9,8 @@ from pathlib import Path
 from asg_core import find_project_root
 from dotenv import load_dotenv
 
-DEFAULT_STUDY = "Evaluations/estudio/study.sqlite3"
-# Each participant's comparison of their own two stories, next to the blind study.
+DEFAULT_STUDY = "Evaluations/estudio-tesis/study.sqlite3"
+# Each participant's comparison of their own two stories; not part of the blind study.
 DEFAULT_PAIRS = "Evaluations/estudio/pares_propios.sqlite3"
 
 
