@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P06.5 · cerrar el piloto y arreglar lo que falló (modo `S+P`, sin cuota; antes, Josue pasa el piloto a 2 o 3 lectores). **H2** (enseñar al tutor `planning/h2.md`) debe cerrarse antes de abrir la votación (P06.6). P05 quedó cerrada sin terminar (ver su bloque).
+- **Siguiente:** P07 · escribir sus tarjetas (`/phase cards P07`, conviene `/model opus`). P07 no tiene votos humanos: P06 quedó cerrada sin terminar (ver su bloque), igual que P05. **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** no se alcanzó.
 - **Versiones** (2026-10-30): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.1, evaluación 2.1.6,
   Telegram 6.0.3, Studio 0.2.2.
 - **Hechas:**
@@ -44,6 +44,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P06.1 · Diseño del estudio en `decisions.md` §2: 15 historias 7.22 (5 premisas × narrativo, simulado y línea base; 3 de la matriz y 2 de participantes), ≥ 12 lectores sin el autor, parada con ≥ 6 decididas por historia y criterio, grafo conexo o 21 días; sin encabezados ni audio (P06.3 retirada, OPS-3 a idea-bank); `Evaluations/estudio-tesis/` como `DEFAULT_STUDY`; la base de `Evaluations/estudio` corregida como sintética.
   - P06.2 · `/estudio` sin encabezados ni audio (`neutral_story`, `send_story(plain=True)`) y con aviso de seudónimo; con el estudio en `evaluation`, comandos y `/start` ofrecen `/estudio` en vez de `/evaluar` (la lista se publica al arrancar: reiniciar el bot tras `open`); `DEFAULT_STUDY` = `Evaluations/estudio-tesis/`; el `.env` coincide con los predeterminados congelados (solo difieren formato, perfil y audio, que fija la petición o el bot); Telegram 6.0.3.
   - P06.4 · Base sintética `Evaluations/estudio` cerrada y exportada (`export-sintetico-2026-10-31.json`); piloto abierto en `Evaluations/estudio-piloto-722/study.sqlite3` con 6 historias 7.22 fuera del estudio (3 simuladas, 1 narrativa, 2 líneas base `-2`), huella `077eefd52b6810c342b0ad6c9e060ceeabd202b951f575d325ff323de250220c`; falta marcar al autor (`asg-study author ID`) y que Josue invite a los lectores.
+  - P06 · Cerrada por decisión de Josue el 2026-10-31 sin ejecutar P06.5, P06.6 ni P06.7: piloto con 0 votos guardados y 5 lectores con notas (9 fallos anotados en el bloque de P06, sin arreglar); sin estudio real, sin votos humanos y sin **H3**.
 
 
 ## Cómo leer una tarjeta
@@ -234,57 +235,27 @@ lista núcleo queda congelada al abrir (P06.6 no abre sin H2 cerrado). T10: el b
 generador congelado, sin tocar prompts ni `PIPELINE_VERSION`. T11: nada aquí elige ni filtra
 historias por un juez. **H3:** votación cerrada y exportada (P06.7).
 
-#### P06.5 · Cerrar el piloto y arreglar lo que falló
-- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-telegram si hay arreglos
-- **Lee:** las notas de Josue y de los lectores; `asg-study status` del piloto.
-- **Haz:** `close`, `export` y `asg-preferences` del piloto (solo para ver que el circuito
-  funciona; las cifras no se interpretan). Lista de lo que falló (lectura, botones,
-  tiempos, textos), arréglalo si es pequeño y, si no cabe en la sesión, propone partir la tarjeta.
-- **No hagas:** cambiar criterios, preguntas ni la regla de parada; mezclar los votos del piloto
-  con los del estudio.
-- **Prueba:** cada arreglo con su test en `tests/test_bot.py`; suite completa y `quality.ps1`.
-- **Hecho cuando:** el piloto está `closed` y exportado, y cada fallo anotado está arreglado o
-  aceptado por escrito aquí.
+**Cerrada por decisión de Josue (2026-10-31), sin terminar.** No se ejecutaron P06.5, P06.6 ni P06.7: no
+hay votos humanos. El piloto (`Evaluations/estudio-piloto-722/study.sqlite3`) sigue en `evaluation` con 6
+historias, 0 participantes y 0 votos; el estudio real (`Evaluations/estudio-tesis/`) no existe y no se
+generaron las historias de participantes ni el M03 de la obra 04. Las tarjetas están en el historial de Git
+(commit `6af9fd8`). Mientras no se retome, T5, T6 y T7 no tienen estudio, **H3** no se alcanza y P07 no tiene
+votos reales con los que entrenar ni validar el juez.
 
-#### P06.6 · Recogida, líneas base y apertura
-- **Modo:** S+P · **Cuota:** ~340 principales y ~205 de función (ver «Cuota» del bloque): la
-  recogida la generan los participantes por el bot, y aquí se gastan ~20 del M03 de la obra 04 y
-  2 de las líneas base · **Paquete:** —
-- **Lee:** «Diseño del estudio humano (P06.1)» en `decisions.md` §2; la guía del operador;
-  `asg-baseline --help`; `asg-matrix --help`.
-- **Haz:**
-  - Base nueva del estudio real en `Evaluations/estudio-tesis/study.sqlite3` (el
-    `DEFAULT_STUDY`); Josue arranca el bot y 2 participantes crean, cada uno sobre su premisa, un
-    Top-Down narrativo y un híbrido (fuera de la sesión).
-  - El M03 de la obra 04 sobre la base 04-r1 (`asg-matrix … --celdas M03 --obras 04
-    --repeticiones 1`, con `--dry-run` antes).
-  - Con la recogida hecha: una línea base por premisa nueva (`asg-baseline` con el
-    `original_prompt` del run, `asg-study add`); inscribe M01 r1, M03 y la línea base `-1` de las
-    obras 01, 03 y 04; `exclude` con razón de lo que no deba entrar (incompletas, duplicadas, de
-    prueba, premisas de más).
-  - Comprueba el conjunto contra P06.1 (15 historias, 5 premisas × narrativo, simulado y línea
-    base) y que H2 está cerrado; entonces `author` y `open`. Anota aquí la fecha de apertura (el
-    plazo de 21 días corre desde ella), la huella `sha256` y el conjunto.
-- **No hagas:** abrir con H2 abierto (la lista núcleo se congela al abrir); tocar `rasgos.csv`;
-  inscribir runs anteriores a 7.22.
-- **Prueba:** `asg-study status`: fase `evaluation`, 15 historias y formatos como en P06.1.
-- **Hecho cuando:** el estudio está abierto con el conjunto de P06.1 y la huella anotada.
+Notas del piloto (`Evaluations/estudio-piloto-722/notas-piloto.md`, 5 lectores; sus elecciones no se
+guardaron en ninguna base de este equipo y no se transcriben votos sin ellas). Fallos anotados, sin arreglar:
 
-#### P06.7 · Cerrar y leer el estudio
-- **Modo:** S · **Cuota:** sin cuota · **Paquete:** — (docs)
-- **Lee:** la regla de parada de P06.1; METODOLOGIA.md §5 y §10; README de evaluación
-  (`asg-preferences`).
-- **Haz:** cuando se cumpla la regla de parada, `close`, `export
-  Evaluations/<estudio>/export-<fecha>.json` y `asg-preferences --output …`. En METODOLOGIA.md §5,
-  una subsección fechada «Estudio humano (resultados)» con lectores, votos decididos y abstenciones
-  por criterio, cobertura y componentes del grafo, acuerdo con y sin el autor, y el orden
-  Bradley–Terry solo donde el grafo es conexo. Borra EXP-4 de `fichas.md`.
-- **No hagas:** inventar un ranking si el grafo está desconectado; leer causas o «la mejor
-  configuración» (T11); extraer rasgos (P07).
-- **Prueba:** cada cifra sale del export o del informe de `asg-preferences`; la tabla lleva fecha
-  y alcance.
-- **Hecho cuando:** la base está `closed`, el export y el informe existen y METODOLOGIA.md §5 tiene
-  los resultados con sus limitaciones. Cierra P06 y **H3**.
+| Fallo | Lectores | Arreglo propuesto |
+|---|---|---|
+| No se sabe cuánto dura ni qué pasa si se deja a medias; si un voto se corrige | L1, L2, L4, L5 | Aviso inicial: 15 comparaciones, ~1 h, se sigue con `/estudio`, un voto no se cambia |
+| La abstención no se entiende o parece dejar la tarea incompleta | L1, L3, L5 | «"No puedo decidir" es una respuesta válida», sin definir cuándo (METODOLOGIA §5) |
+| No se ve si el voto quedó guardado | L2, L4 | Mensaje visible «✅ Guardado: Historia A (comparación n de 15)» |
+| Doble toque: `vote()` devuelve `False` y el bot dice «Respuesta guardada» y reenvía la siguiente | L2 | Avisar «Ya habías respondido» y no avanzar |
+| Historias ya leídas reaparecen sin explicación | L5 | «Ya leíste estas dos historias; ahora la pregunta es otra» |
+| «Lee (o escucha)» con el audio retirado | — | «Lee» |
+| Creatividad ambigua (idea o forma de contarla) | L1 | Aceptado: tocaría `que_mirar` de `criterios_humanos.csv` (T7) |
+| Navegar entre historias largas en Telegram | L1, L2, L4, L5 | Aceptado: cambio de diseño, no arreglo pequeño |
+| Los votos del piloto no se guardaron (`ASG_EVALUATION_STUDY` vacío en el `.env`) | todos | Sin investigar, por decisión de Josue |
 
 ### P07 · Juez aprendido
 
