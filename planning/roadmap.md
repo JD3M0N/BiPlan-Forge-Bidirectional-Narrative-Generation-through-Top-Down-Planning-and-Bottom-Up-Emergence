@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P05.6 · generar la matriz, día 2 (modo `S`). **H2** (enseñar al tutor `planning/h2.md`) sigue pendiente y debe cerrarse antes de P05.7.
+- **Siguiente:** P05.6b · generar la matriz, día 3 (modo `S`). **H2** (enseñar al tutor `planning/h2.md`) debe cerrarse antes de P05.7.
 - **Versiones** (2026-10-30): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.1, evaluación 2.1.6,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
@@ -38,6 +38,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P05.3 · `asg-report-features RAÍZ --horizontal OUT --manifest M` da las diferencias derivada − fuente por celda (C18 comprobado), un solo grupo por pipeline, núcleo primero, `no medido` y lectura «dentro del ruido» según la regla; JSON y CSV; evaluación 2.1.6. Cierra MED-5.
   - P05.4 · Piloto de la obra 03 (M03–M07, repetición 1, sobre la base 03-r1): 5 unidades completas y relanzar gasta 0; coste real 78 llamadas principales (narrativo 14, simulado derivado 16 cada uno; el tope de la tarjeta era 146) y 21 de extracción de rasgos (núcleo, `flash-lite`); extracción `incompleta` en 3 de 5 (M03, M05, M06), como en P04.7; informe con un solo grupo 7.22 y 5 pares (C18 correcto), todos «n insuficiente» con n = 1. Salida en `Evaluations/horizontal/piloto-03/`.
   - P05.5 · Bases M01 01-r1 (`la-sombra-del-volcan`), 04-r1 (`la-ultima-funcion`) y 03-r2 (`el-misterio-del-faro`) `completed` en el manifiesto, sin fallos; en dos invocaciones del runner (`--obras 01,04 --repeticiones 1` y `--obras 03 --repeticiones 2`, porque el filtro no admite uniones); coste real 287 principales y 186 de función (el tope era ~400 y ~310). Quedan 27 unidades (996 principales y 206 de función por `--dry-run`, estimación que sobreestima).
+  - P05.6 · Derivadas M03–M07 de 01-r1 y base M01 01-r2 (`la-promesa-del-volcan`) `completed`; la base M01 04-r2 queda anotada como fallo (`cuota agotada en M01/04/r2`, 2026-10-30, sin generar) y pasa a P05.6c junto a sus derivadas. En PowerShell, una lista de obras va entre comillas (`--obras '01,04'`); desde la raíz hay que pasar `packages/evaluation/planilla/matriz.csv`.
 
 ## Cómo leer una tarjeta
 
@@ -184,20 +185,14 @@ P08. T10 y `decisions.md` §3: el runner y el informe no cambian prompts, esquem
 ni `PIPELINE_VERSION`. T11: la fase describe asociaciones; no elige «la mejor configuración» ni
 genera N para quedarse una. Se describe, no se atribuyen causas (protocolo §4).
 
-#### P05.6 · Generar la matriz, día 2
-- **Modo:** S · **Cuota:** ~410 principales y ~205 de función · **Paquete:** —
-- Igual que P05.5, con las bases 01-r2 y 04-r2 (M01) y las derivadas M03–M07 de 01-r1.
-- **Avance (2026-10-30):** las 5 derivadas M03–M07 de 01-r1 y la base M01 01-r2 (`la-promesa-del-volcan`) están `completed`. Falta la base 04-r2 (M01): `asg-matrix packages/evaluation/planilla/matriz.csv --celdas M01 --obras 04 --repeticiones 2` tras el reinicio de cuota (desde la raíz, con la ruta `planilla/matriz.csv` falla: busca `planilla\prompts.md`). En PowerShell, una lista de obras va entre comillas (`--obras '01,04'`): sin ellas llegan `1` y `4` y el filtro no coincide con `01` ni `04` (0 unidades, sin error). `--dry-run` del 2026-10-30: 266 principales y 206 de función para las dos bases; quedaban 49 principales.
-- **Hecho cuando:** esas 7 unidades están `completed` o anotadas con su fallo (6 de 7 hechas).
-
 #### P05.6b · Generar la matriz, día 3
 - **Modo:** S · **Cuota:** ~440 principales y 0 de función · **Paquete:** —
 - Igual que P05.5, con las derivadas M03–M07 de 04-r1, 03-r2 y 01-r2 (15 unidades).
 - **Hecho cuando:** esas 15 unidades están `completed` o anotadas con su fallo.
 
 #### P05.6c · Generar la matriz, día 4
-- **Modo:** S · **Cuota:** ~146 principales y 0 de función · **Paquete:** —
-- Igual que P05.5, con las derivadas M03–M07 de 04-r2 (5 unidades). Si sobra cuota en un día
+- **Modo:** S · **Cuota:** ~280 principales y ~103 de función · **Paquete:** —
+- Igual que P05.5, con la base M01 04-r2 (pendiente de P05.6: `asg-matrix packages/evaluation/planilla/matriz.csv --celdas M01 --obras 04 --repeticiones 2`, ~133 principales y ~103 de función) y las derivadas M03–M07 de 04-r2 (6 unidades, las derivadas dependen de la base). Si sobra cuota en un día
   anterior, puede adelantarse ahí sin pasar de ~450 principales.
 - **Hecho cuando:** el manifiesto tiene las 35 unidades nuevas `completed`, o anotadas con su fallo.
 
