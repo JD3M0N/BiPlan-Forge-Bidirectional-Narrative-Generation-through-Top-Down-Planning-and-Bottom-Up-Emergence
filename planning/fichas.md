@@ -46,10 +46,10 @@ MED-8 y la revisión de MED-9
 
 - **Síntoma.** El instrumento está listo (2026-10-12): el bot `asg-telegram` 5.0.0 recoge
   historias de los participantes (Top-Down o híbrido, libre o guiada, con audio) y, cuando el
-  investigador abre la votación, presenta pares a ciegas con una pregunta cada vez. Hay un
-  piloto (`Evaluations/estudio`, 2026-10-28): 75 votos de 7 lectores sobre 15 historias de 7.21,
-  3 de ellas líneas base. Es anterior a la congelación, así que se conserva fuera del estudio de
-  la tesis (`decisions.md` §2, P03.1). Falta el estudio real sobre 7.22.
+  investigador abre la votación, presenta pares a ciegas con una pregunta cada vez. La base de
+  `Evaluations/estudio` (75 votos sobre 15 historias de 7.21) es sintética: votaron 5 agentes
+  Claude Opus, no lectores, y no cuenta (`decisions.md` §2). Falta el estudio real sobre 7.22,
+  diseñado en P06.1.
 - **Qué hacer.**
   - Arrancar el bot en la PC del investigador (`asg-telegram`) y pedir a los participantes
     que creen historias, una por una.
@@ -64,18 +64,6 @@ MED-8 y la revisión de MED-9
 - **Ojo.** Prompts y enfoques libres permiten asociaciones, no aislar causalmente un parámetro.
   Las bases de los estudios anteriores (`Evaluations/pack-prueba`, `Evaluations/telegram-rolling`)
   quedan como datos y el estudio nuevo no las abre.
-
-### OPS-3 · El audio da 403 en las dos máquinas
-
-*Área:* despliegue · *Cuota:* sin cuota · *Depende de:* —
-
-- **Síntoma.** 9 de 9 historias de los amigos sin audio: `WSServerHandshakeError: 403` de
-  `speech.platform.bing.com` en edge-tts 7.2.8, la última publicada. Pasa igual en esta PC, y
-  probando versiones de Chromium más nuevas en sus constantes también: no es el pin.
-- **Qué hacer.** Probar desde otra red o con VPN para separar un bloqueo por región de un cambio
-  del servicio; si es el servicio, esperar una versión nueva de edge-tts o cambiar de motor de voz
-  en `asg_core/audio.py`.
-- **Hecho cuando.** Un `asg-generate` con audio deja `story.mp3` en las dos máquinas.
 
 ## P07 · Juez aprendido
 

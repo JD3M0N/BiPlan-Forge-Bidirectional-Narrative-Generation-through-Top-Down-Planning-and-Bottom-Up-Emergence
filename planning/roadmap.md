@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P06.1 · diseñar el estudio humano (modo `O`, sin cuota; conviene `/model opus`). **H2** (enseñar al tutor `planning/h2.md`) debe cerrarse antes de abrir la votación (P06.6). P05 quedó cerrada sin terminar (ver su bloque).
+- **Siguiente:** P06.2 · preparar el bot para el estudio (modo `S+P`, sin cuota). **H2** (enseñar al tutor `planning/h2.md`) debe cerrarse antes de abrir la votación (P06.6). P05 quedó cerrada sin terminar (ver su bloque).
 - **Versiones** (2026-10-30): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.1, evaluación 2.1.6,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
@@ -41,6 +41,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P05.6 · Derivadas M03–M07 de 01-r1 y base M01 01-r2 (`la-promesa-del-volcan`) `completed`; la base M01 04-r2 queda anotada como fallo (`cuota agotada en M01/04/r2`, 2026-10-30, sin generar) y pasa a P05.6c junto a sus derivadas. En PowerShell, una lista de obras va entre comillas (`--obras '01,04'`); desde la raíz hay que pasar `packages/evaluation/planilla/matriz.csv`.
   - P05.6b · Sin generar: las 15 derivadas M03–M07 de 04-r1, 03-r2 y 01-r2 no cupieron (2026-10-30, el preflight de `asg-matrix` dejó 1 llamada principal frente a ~19 por historia y no escribió el manifiesto); Josue aceptó el fallo y pasan a P05.6c.
   - P05 · Cerrada por decisión de Josue el 2026-10-30 sin ejecutar P05.6c, P05.7 ni P05.8: 14 de las 35 unidades de la matriz están hechas (bases y derivadas de P05.4–P05.6) y 21 sin generar por cuota; no hay extracción de rasgos de la matriz ni sección «Análisis horizontal» en `docs/resumen.md`.
+  - P06.1 · Diseño del estudio en `decisions.md` §2: 15 historias 7.22 (5 premisas × narrativo, simulado y línea base; 3 de la matriz y 2 de participantes), ≥ 12 lectores sin el autor, parada con ≥ 6 decididas por historia y criterio, grafo conexo o 21 días; sin encabezados ni audio (P06.3 retirada, OPS-3 a idea-bank); `Evaluations/estudio-tesis/` como `DEFAULT_STUDY`; la base de `Evaluations/estudio` corregida como sintética.
 
 ## Cómo leer una tarjeta
 
@@ -195,8 +196,8 @@ tabla horizontal completa.
 
 ### P06 · Estudio humano
 
-Pares a ciegas con tres criterios (T5, T7) y la línea base dentro (T6). Origen: EXP-4, OPS-3.
-Guía: [apps/telegram/README.md](../apps/telegram/README.md). Contrato: METODOLOGIA.md §5 y
+Pares a ciegas con tres criterios (T5, T7) y la línea base dentro (T6). Origen: EXP-4.
+Diseño fijado en `decisions.md` §2, «Diseño del estudio humano (P06.1)». Guía: [apps/telegram/README.md](../apps/telegram/README.md). Contrato: METODOLOGIA.md §5 y
 [evaluation.md](../docs/architecture/evaluation.md).
 
 Lo que hay (2026-10-30): `study.py` (esquema 10) con recogida, votación y cierre; asignación
@@ -205,8 +206,8 @@ bot se inscriben solos mientras el estudio recoge; `asg-preferences` da Bradley�
 acuerdo con y sin el autor e intervalos por bootstrap de lectores. Hallazgos al preparar la fase:
 
 - **Los 75 votos de `Evaluations/estudio` son sintéticos:** 5 agentes Claude Opus con perfiles de
-  lector (`simulacion/INFORME.md`, 2026-10-25), no 7 lectores humanos como dice `decisions.md` §2.
-  Son un juez LLM con otro nombre (`decisions.md` §4): no cuentan como votos ni como comprobación
+  lector (`simulacion/INFORME.md`, 2026-10-25), no 7 lectores humanos (corregido en
+  `decisions.md` §2 por P06.1). Son un juez LLM con otro nombre (`decisions.md` §4): no cuentan como votos ni como comprobación
   externa en P07. Esa base sigue en `evaluation` y es la ruta por defecto del bot
   (`config.DEFAULT_STUDY`; `ASG_EVALUATION_STUDY` está vacío en el `.env`).
 - **El ciego tiene fugas de presentación:** los runs del sistema empiezan con `# Título` y las
@@ -218,10 +219,9 @@ acuerdo con y sin el autor e intervalos por bootstrap de lectores. Hallazgos al 
 - METODOLOGIA.md §5 dice que la votación va por `/evaluar`; en el bot es `/estudio`. `/evaluar`
   compara las dos historias propias y el autor sabe cuál pidió primero: no es un par a ciegas.
 
-**Cuota.** Votar no gasta. Generar sí: lo que creen los participantes (~24 principales por
-Top-Down, ~133 principales y ~103 de función por híbrido) y una línea base por premisa. Con
-~500 diarias por modelo, caben unas 3 historias híbridas al día, compartidas con lo que quede de
-P05.
+**Cuota.** Votar no gasta. Generar sí (P06.6): las 2 premisas de participantes, cada una con un
+Top-Down (~24 principales) y un híbrido (~133 principales y ~103 de función), sus 2 líneas base y
+el M03 de la obra 04 (~20): ~340 principales y ~205 de función, un día de cuota.
 
 **Reglas del tutor.** T5: pares a ciegas, A/B o abstención, sin escala; nada en la presentación
 delata el mecanismo (P06.2). T6: cada premisa del estudio tiene su línea base de un solo prompt
@@ -231,83 +231,35 @@ lista núcleo queda congelada al abrir (P06.6 no abre sin H2 cerrado). T10: el b
 generador congelado, sin tocar prompts ni `PIPELINE_VERSION`. T11: nada aquí elige ni filtra
 historias por un juez. **H3:** votación cerrada y exportada (P06.7).
 
-#### P06.1 · Diseñar el estudio
-- **Modo:** O · **Cuota:** sin cuota · **Paquete:** — (docs)
-- **Lee:** este bloque; METODOLOGIA.md §5 y §6; `decisions.md` §2 (piloto, líneas base, lista
-  núcleo) y §4; `Evaluations/estudio/simulacion/INFORME.md` (solo la cabecera); `study.py`
-  (`_assign`, `QUESTIONS_PER_READER`, `MIN_POOL`); `judge.py` (`family_validation`).
-- **Haz:** opciones con pros, contras y recomendación, y espera a Josue, sobre:
-  1. **Conjunto.** (a) Historias de los participantes por el bot, como dice EXP-4 (muchas
-     premisas, cuesta cuota); (b) solo la matriz de P05 y sus líneas base (sin cuota ni
-     extracción nueva, pero 3 premisas: la validación por familias de P07 queda en 3 grupos y el
-     lector relee la misma premisa); (c) una mezcla. Cuántas historias, cuántas por formato
-     (narrativo, simulado, línea base) y si entran los runs 7.21 (no: el conjunto es 7.22).
-  2. **Tamaño y regla de parada, fijados antes de abrir:** lectores mínimos (sin contar al
-     autor), comparaciones decididas por historia y criterio, grafo conexo; cuándo se cierra.
-     Cuenta: con S historias y 15 preguntas por lector, cada lector da 5 votos por criterio.
-  3. **Presentación homogénea (T5):** quitar el `# Título` inicial en `/estudio`; audio para
-     todas (y entonces OPS-3, P06.3) o para ninguna; qué pasa con los títulos de capítulo.
-  4. **El piloto sintético:** corregir la entrada de `decisions.md` §2 (votos de agentes, no de
-     lectores); cerrar y exportar esa base sin borrarla; ruta nueva del estudio real (p. ej.
-     `Evaluations/estudio-tesis/study.sqlite3`) y si cambia `DEFAULT_STUDY`.
-  5. **Lectores:** quién (amigos, compañeros), si el autor vota (se informa con y sin él, ya está
-     en `asg-preferences`), y un aviso breve de qué se guarda (seudónimos) al entrar a `/estudio`.
-  6. **`/evaluar` (pares propios):** dato auxiliar fuera del estudio, o se retira del recorrido
-     recomendado mientras dure la recogida.
-  Con el «ok», escribe la decisión fechada en `decisions.md` §2 y ajusta las tarjetas P06.2–P06.7
-  si la decisión las cambia (p. ej. P06.3 sobra si no hay audio).
-- **No hagas:** cambiar criterios, preguntas ni `QUESTIONS_PER_READER` sin decirlo como decisión;
-  un piloto con votos de LLM; tocar código.
-- **Prueba:** la decisión cita las reglas T5–T8 que cubre y da cifras de tamaño y parada.
-- **Hecho cuando:** `decisions.md` §2 tiene la entrada «Diseño del estudio humano (P06.1)» con
-  conjunto, tamaño, regla de parada, presentación, ruta y lectores, aprobada por Josue, y la
-  entrada del piloto corregida.
-
 #### P06.2 · Preparar el bot para el estudio
-- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-telegram (y asg-evaluation si P06.1
-  cambia algo del estudio)
-- **Lee:** la decisión de P06.1; `apps/telegram/README.md`; `voting.py`, `delivery.py`
-  (`send_story`), `app.py` (`COMMANDS`, `open_study`), `config.py`; `tests/test_bot.py` (la parte
-  del estudio a ciegas); METODOLOGIA.md §5.
+- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-telegram
+- **Lee:** «Diseño del estudio humano (P06.1)» en `decisions.md` §2; `apps/telegram/README.md`;
+  `voting.py`, `delivery.py` (`send_story`), `app.py` (`COMMANDS`, `open_study`), `config.py`;
+  `tests/test_bot.py` (la parte del estudio a ciegas); METODOLOGIA.md §5.
 - **Haz:**
-  - Presentación homogénea en `/estudio` según P06.1: sin el `# Título` inicial en el archivo y en
-    el texto, y el audio según lo decidido (todas o ninguna). La entrega de `/crear` no cambia.
+  - Presentación homogénea en `/estudio`: sin el `# Título` inicial ni ningún otro encabezado
+    markdown (también los de capítulo), sustituidos por `* * *`, en el archivo y en el texto; sin
+    audio para ninguna historia. La entrega de `/crear` no cambia.
   - `/estudio` aparece en la lista de comandos cuando el estudio está en `evaluation`, con el aviso
-    de P06.1 al entrar.
-  - La ruta por defecto del estudio, si P06.1 la cambia.
+    de P06.1 al entrar (seudónimo y votos, ningún texto personal, se puede dejar).
+  - `/evaluar` sale del recorrido recomendado (ayuda y lista de comandos) mientras el estudio está
+    en `evaluation`; el comando sigue funcionando.
+  - `config.DEFAULT_STUDY` pasa a `Evaluations/estudio-tesis/study.sqlite3`.
   - Comprueba que `GenerationOptions.from_settings` con el `.env` da los predeterminados congelados
     (compáralos con `generation_options.json` de `Stagecraft/20261028-192554-el-misterio-del-faro`
     y del narrativo `…-el-faro-de-la-habitacion-cerrada`). Si el `.env` difiere, dilo a Josue con
     la línea exacta que cambiar: el `.env` es suyo.
-  - Docs: METODOLOGIA.md §5 (`/estudio`, no `/evaluar`); en el README del bot, la sección «El
+  - Docs: METODOLOGIA.md §5 (`/estudio`, no `/evaluar`; solo texto, sin audio); en el README del bot, la sección «El
     estudio a ciegas» pasa a ser la guía del operador (piloto, recogida, apertura, cierre).
 - **No hagas:** cambiar preguntas, criterios, asignación o esquema de la base; tocar Stagecraft o
   sus predeterminados; borrar `Evaluations/estudio`.
 - **Prueba:** tests del estudio a ciegas en `tests/test_bot.py` ampliados: un par línea base
-  contra run del sistema llega sin título y con el mismo tratamiento de audio; `/estudio` en la
-  lista solo en `evaluation`. Suite completa y `quality.ps1`.
+  contra run del sistema con capítulos llega sin ningún encabezado y sin audio en los dos;
+  `/estudio` en la lista solo en `evaluation` y `/evaluar` fuera de ella entonces. Suite completa
+  y `quality.ps1`.
 - **Hecho cuando:** en los tests, ninguna diferencia de presentación entre una línea base y un run
   del sistema salvo el texto; las opciones efectivas del bot coinciden con las congeladas o Josue
   tiene la línea del `.env` que cambiar.
-
-#### P06.3 · Audio del estudio (OPS-3)
-- **Modo:** S+P · **Cuota:** sin cuota de Gemini (edge-tts no la gasta) · **Paquete:** asg-core
-  si cambia el motor
-- Solo si P06.1 decide audio para todas; si no, OPS-3 pasa a idea-bank en P06.1 y esta tarjeta se
-  borra.
-- **Lee:** `fichas.md` OPS-3; `asg_core/audio.py` (`create_story_audio_sync`,
-  `_synthesize_with_retries`).
-- **Haz:** prueba `create_story_audio_sync` sobre una copia de un `story.md` en el temporal (no
-  en `Stories/`). Si da 403, Josue prueba desde otra red o VPN; si sigue, enseña 2–3 motores
-  alternativos con pros y contras y espera. Con audio funcionando, un comando o paso documentado
-  que genere `story.mp3` para cada run del conjunto (líneas base y matriz incluidas), sin tocar
-  `story.md` ni su `text_hash`.
-- **No hagas:** `asg-generate` con audio para probar (gasta cuota); cambiar la voz por historia
-  (una voz distinta delataría el origen).
-- **Prueba:** el audio de una línea base y el de un run del sistema salen con la misma voz y
-  velocidad. Suite completa si cambió código. Borra OPS-3 de `fichas.md`.
-- **Hecho cuando:** hay `story.mp3` reproducible para una línea base en esta PC (Josue confirma la
-  otra), o una decisión escrita de ir sin audio.
 
 #### P06.4 · Piloto con 2 o 3 lectores
 - **Modo:** S+P · **Cuota:** sin cuota (historias 7.22 ya generadas) · **Paquete:** —
@@ -316,8 +268,9 @@ historias por un juez. **H3:** votación cerrada y exportada (P06.7).
   - Cierra y exporta la base sintética: `asg-study --db Evaluations/estudio/study.sqlite3 close`
     y `export Evaluations/estudio/export-sintetico-<fecha>.json`. No la borres.
   - Base del piloto aparte (`Evaluations/estudio-piloto-722/study.sqlite3`): inscribe con
-    `asg-study add` unas 6 historias 7.22 ya hechas (matriz de P05 y líneas base, al menos una de
-    cada formato), marca al autor (`author`), `open`.
+    `asg-study add` unas 6 historias 7.22 ya hechas que **no** estén en el conjunto del estudio
+    (M01 r2, celdas M04–M07 y líneas base `-2`/`-3`, al menos una de cada formato), para que los
+    lectores del piloto puedan votar después en el estudio real; marca al autor (`author`), `open`.
   - Dile a Josue qué poner en `ASG_EVALUATION_STUDY` para el piloto y cómo invitar a los
     lectores; la votación ocurre fuera de la sesión.
 - **No hagas:** usar la base del estudio real; generar historias; votar con agentes.
@@ -330,7 +283,7 @@ historias por un juez. **H3:** votación cerrada y exportada (P06.7).
 - **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-telegram si hay arreglos
 - **Lee:** las notas de Josue y de los lectores; `asg-study status` del piloto.
 - **Haz:** `close`, `export` y `asg-preferences` del piloto (solo para ver que el circuito
-  funciona; las cifras no se interpretan). Lista de lo que falló (lectura, botones, audio,
+  funciona; las cifras no se interpretan). Lista de lo que falló (lectura, botones,
   tiempos, textos), arréglalo si es pequeño y, si no cabe en la sesión, propone partir la tarjeta.
 - **No hagas:** cambiar criterios, preguntas ni la regla de parada; mezclar los votos del piloto
   con los del estudio.
@@ -339,20 +292,27 @@ historias por un juez. **H3:** votación cerrada y exportada (P06.7).
   aceptado por escrito aquí.
 
 #### P06.6 · Recogida, líneas base y apertura
-- **Modo:** S+P · **Cuota:** la de P06.1 para la recogida (la generan los participantes por el
-  bot) y ~1 llamada por premisa para las líneas base · **Paquete:** —
-- **Lee:** la decisión de P06.1; la guía del operador; `asg-baseline --help`.
+- **Modo:** S+P · **Cuota:** ~340 principales y ~205 de función (ver «Cuota» del bloque): la
+  recogida la generan los participantes por el bot, y aquí se gastan ~20 del M03 de la obra 04 y
+  2 de las líneas base · **Paquete:** —
+- **Lee:** «Diseño del estudio humano (P06.1)» en `decisions.md` §2; la guía del operador;
+  `asg-baseline --help`; `asg-matrix --help`.
 - **Haz:**
-  - Base nueva del estudio real en la ruta de P06.1; Josue apunta `ASG_EVALUATION_STUDY` y arranca
-    el bot; los participantes crean historias (fuera de la sesión, días).
-  - Con la recogida hecha: una línea base por premisa (`asg-baseline` con el `original_prompt`
-    del run, `asg-study add`); si P06.1 lo pide, las historias de la matriz; audio uniforme
-    (P06.3); `exclude` con razón de lo que no deba entrar (incompletas, duplicadas, de prueba).
-  - Comprueba el conjunto contra P06.1 (cuántas, formatos, una línea base por premisa) y que H2
-    está cerrado; entonces `author` y `open`. Anota aquí la huella `sha256` y el conjunto.
+  - Base nueva del estudio real en `Evaluations/estudio-tesis/study.sqlite3` (el
+    `DEFAULT_STUDY`); Josue arranca el bot y 2 participantes crean, cada uno sobre su premisa, un
+    Top-Down narrativo y un híbrido (fuera de la sesión).
+  - El M03 de la obra 04 sobre la base 04-r1 (`asg-matrix … --celdas M03 --obras 04
+    --repeticiones 1`, con `--dry-run` antes).
+  - Con la recogida hecha: una línea base por premisa nueva (`asg-baseline` con el
+    `original_prompt` del run, `asg-study add`); inscribe M01 r1, M03 y la línea base `-1` de las
+    obras 01, 03 y 04; `exclude` con razón de lo que no deba entrar (incompletas, duplicadas, de
+    prueba, premisas de más).
+  - Comprueba el conjunto contra P06.1 (15 historias, 5 premisas × narrativo, simulado y línea
+    base) y que H2 está cerrado; entonces `author` y `open`. Anota aquí la fecha de apertura (el
+    plazo de 21 días corre desde ella), la huella `sha256` y el conjunto.
 - **No hagas:** abrir con H2 abierto (la lista núcleo se congela al abrir); tocar `rasgos.csv`;
   inscribir runs anteriores a 7.22.
-- **Prueba:** `asg-study status`: fase `evaluation`, conjunto y formatos como en P06.1.
+- **Prueba:** `asg-study status`: fase `evaluation`, 15 historias y formatos como en P06.1.
 - **Hecho cuando:** el estudio está abierto con el conjunto de P06.1 y la huella anotada.
 
 #### P06.7 · Cerrar y leer el estudio

@@ -770,6 +770,20 @@ toca el generador congelado: necesita una decisión nueva en `decisions.md`. SIM
   - Donde el prompt sea de verdad el contrato, concentrarlo en pocos tests declarados como tales.
 - **Hecho cuando.** Reescribir un prompt de sistema solo rompe los tests que verifican ese prompt.
 
+### OPS-3 · El audio da 403 en las dos máquinas
+
+*Área:* despliegue · *Cuota:* sin cuota · *Depende de:* —
+
+- **Síntoma.** 9 de 9 historias de los amigos sin audio: `WSServerHandshakeError: 403` de
+  `speech.platform.bing.com` en edge-tts 7.2.8, la última publicada. Pasa igual en esta PC, y
+  probando versiones de Chromium más nuevas en sus constantes también: no es el pin.
+- **Qué hacer.** Probar desde otra red o con VPN para separar un bloqueo por región de un cambio
+  del servicio; si es el servicio, esperar una versión nueva de edge-tts o cambiar de motor de voz
+  en `asg_core/audio.py`.
+- **Hecho cuando.** Un `asg-generate` con audio deja `story.mp3` en las dos máquinas.
+- **Por qué está aquí.** P06.1 (2026-10-30) decidió un estudio sin audio para ninguna
+  historia, así que deja de bloquear la tesis.
+
 ## Ideas sin decidir
 
 

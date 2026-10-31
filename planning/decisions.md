@@ -42,10 +42,11 @@ rasgos, juez, análisis o tesis se contrasta con esta lista antes de empezar.
   de `baa016f^:docs/prompts_top_down.md` con sus marcadores `PROMPT_0N_*` (`docs/` no se
   versiona). La línea base recibe, literal, la variante Esencial, la de la celda base M01: el
   mismo prompt que el pipeline.
-- **2026-10-28 · `Evaluations/estudio` es un piloto.** Sus 75 votos de 7 lectores sobre 15
-  historias de 7.21 (3 líneas base) se conservan y se informan como piloto, fuera del estudio de
-  la tesis: son anteriores a la congelación y cubren el piloto de P06. Si se usan en P07 como
-  comprobación externa, se declara antes de entrenar.
+- **2026-10-28 · `Evaluations/estudio` es una base sintética** (corregida el 2026-10-30, P06.1).
+  Sus 75 votos sobre 15 historias de 7.21 (3 líneas base) no son de lectores: los dieron 5 agentes
+  Claude Opus con perfiles de lector (`simulacion/INFORME.md`, 2026-10-25). Son un juez LLM con
+  otro nombre (§4): no cuentan como votos, ni como piloto de P06, ni como comprobación externa en
+  P07. La base se cierra y se exporta sin borrarla (P06.4).
 - **2026-10-28 · Corpus elegible para el ranking (T9): Stagecraft 7.x y las líneas base**, en
   prosa (`narrative`, `simulated`, `baseline`), con la versión marcada en cada historia. Se
   excluye, con razón escrita: lo anterior a Stagecraft 7 (Top-Down 4.x–6.x y Bottom-Up, incluidos
@@ -179,6 +180,46 @@ rasgos, juez, análisis o tesis se contrasta con esta lista antes de empezar.
     conservadora para las celdas `--narrate-from`, porque el ruido entre bases mezcla plan, función
     y narración. M02 se compara con su propio ruido (rango de sus 3 repeticiones), no con esta
     regla.
+
+- **2026-10-30 · Diseño del estudio humano (P06.1).** Fijado antes de abrir y sin ver votos.
+  Cubre T5 (pares a ciegas, A/B o abstención, presentación homogénea), T6 (una línea base por
+  premisa), T7 (las tres preguntas de `planilla/criterios_humanos.csv`; `QUESTIONS_PER_READER`
+  sigue en 15), T8 (la lista núcleo se congela al abrir; 5 familias para validar fuera de
+  muestra) y T2 con §4 (ningún voto de un LLM).
+  - **Conjunto: 15 historias 7.22, 5 premisas × 3 formatos** (narrativo, simulado, línea base),
+    para que cada premisa dé el triángulo de mecanismos sobre la misma entrada.
+    - Obras 01 y 03: M01 r1 (simulado), su M03 (narrativo `--plan-from`) y la línea base `-1`,
+      ya generados.
+    - Obra 04: M01 r1 y la línea base `-1`, ya generados; falta su M03 (~20 llamadas
+      principales, en P06.6).
+    - 2 premisas nuevas de participantes por el bot, cada una con un Top-Down narrativo, un
+      híbrido y su línea base: ~315 llamadas principales y ~205 de función, un día de cuota.
+    - No entran las celdas de tono y visión (M04–M07) ni M01 r2 (repetirían trama y harían del
+      estudio un análisis horizontal; van al ranking en P08), ni nada anterior a 7.22.
+  - **Tamaño.** Cada lector vota 5 pares × 3 criterios y lee unas 6 historias. Con S = 15 y R
+    lectores, cada historia aparece 10R/S veces por criterio. Mínimo: **12 lectores sin contar al
+    autor**, con sus 15 preguntas.
+  - **Regla de parada.** Se cierra cuando se cumplen a la vez: ≥ 12 lectores completos sin el
+    autor, cada historia con ≥ 6 comparaciones decididas por criterio y el grafo de cada criterio
+    conexo. Plazo máximo: 21 días desde `open`; al vencer se cierra igualmente y se informa lo que
+    haya. Hasta el cierre solo se mira `asg-study status` (recuentos), nunca las preferencias.
+  - **Presentación (T5).** En `/estudio` se quitan el `# Título` y todos los encabezados markdown,
+    también los de capítulo (las líneas base no los tienen), y se sustituyen por un separador
+    neutro (`* * *`). **Sin audio** para ninguna historia: P06.3 se retira y OPS-3 pasa a
+    idea-bank. La longitud no se iguala ni se recorta: las líneas base son más cortas, se declara
+    como amenaza y P07 compara el juez con la longitud sola.
+  - **Rutas.** Estudio real en `Evaluations/estudio-tesis/study.sqlite3`, que pasa a ser
+    `DEFAULT_STUDY`; piloto humano en `Evaluations/estudio-piloto-722/study.sqlite3`, elegido con
+    `ASG_EVALUATION_STUDY`. La base sintética de `Evaluations/estudio` se conserva cerrada.
+  - **Lectores.** Amigos y compañeros hispanohablantes, mayores de edad, que no conozcan el
+    sistema por dentro. Josue puede votar marcado como `author`, pero no cuenta para el mínimo y
+    el resultado principal es sin autor (se informa también con él). Al entrar a `/estudio`, un
+    aviso breve: se guarda un seudónimo y los votos, ningún texto personal, y se puede dejar en
+    cualquier momento.
+  - **`/evaluar`** (las dos historias propias) sale del recorrido recomendado mientras dure el
+    estudio: no es un par a ciegas. Lo que vote ahí no se analiza.
+  - **Riesgo para P07:** `train_judge` exige los 24 rasgos `measured` o `not_applicable` en cada
+    historia, y en P04.7 la mitad de las extracciones quedaron `incompleta`.
 
 ## 3. Decisiones de proyecto
 
