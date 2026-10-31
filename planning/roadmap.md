@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P06.4 · piloto con 2 o 3 lectores (modo `S+P`, sin cuota). **H2** (enseñar al tutor `planning/h2.md`) debe cerrarse antes de abrir la votación (P06.6). P05 quedó cerrada sin terminar (ver su bloque).
+- **Siguiente:** P06.5 · cerrar el piloto y arreglar lo que falló (modo `S+P`, sin cuota; antes, Josue pasa el piloto a 2 o 3 lectores). **H2** (enseñar al tutor `planning/h2.md`) debe cerrarse antes de abrir la votación (P06.6). P05 quedó cerrada sin terminar (ver su bloque).
 - **Versiones** (2026-10-30): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.1, evaluación 2.1.6,
   Telegram 6.0.3, Studio 0.2.2.
 - **Hechas:**
@@ -43,6 +43,8 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P05 · Cerrada por decisión de Josue el 2026-10-30 sin ejecutar P05.6c, P05.7 ni P05.8: 14 de las 35 unidades de la matriz están hechas (bases y derivadas de P05.4–P05.6) y 21 sin generar por cuota; no hay extracción de rasgos de la matriz ni sección «Análisis horizontal» en `docs/resumen.md`.
   - P06.1 · Diseño del estudio en `decisions.md` §2: 15 historias 7.22 (5 premisas × narrativo, simulado y línea base; 3 de la matriz y 2 de participantes), ≥ 12 lectores sin el autor, parada con ≥ 6 decididas por historia y criterio, grafo conexo o 21 días; sin encabezados ni audio (P06.3 retirada, OPS-3 a idea-bank); `Evaluations/estudio-tesis/` como `DEFAULT_STUDY`; la base de `Evaluations/estudio` corregida como sintética.
   - P06.2 · `/estudio` sin encabezados ni audio (`neutral_story`, `send_story(plain=True)`) y con aviso de seudónimo; con el estudio en `evaluation`, comandos y `/start` ofrecen `/estudio` en vez de `/evaluar` (la lista se publica al arrancar: reiniciar el bot tras `open`); `DEFAULT_STUDY` = `Evaluations/estudio-tesis/`; el `.env` coincide con los predeterminados congelados (solo difieren formato, perfil y audio, que fija la petición o el bot); Telegram 6.0.3.
+  - P06.4 · Base sintética `Evaluations/estudio` cerrada y exportada (`export-sintetico-2026-10-31.json`); piloto abierto en `Evaluations/estudio-piloto-722/study.sqlite3` con 6 historias 7.22 fuera del estudio (3 simuladas, 1 narrativa, 2 líneas base `-2`), huella `077eefd52b6810c342b0ad6c9e060ceeabd202b951f575d325ff323de250220c`; falta marcar al autor (`asg-study author ID`) y que Josue invite a los lectores.
+
 
 ## Cómo leer una tarjeta
 
@@ -231,24 +233,6 @@ preguntas ni «¿por qué?» al estudio. T2 y `decisions.md` §4: ningún voto d
 lista núcleo queda congelada al abrir (P06.6 no abre sin H2 cerrado). T10: el bot genera con el
 generador congelado, sin tocar prompts ni `PIPELINE_VERSION`. T11: nada aquí elige ni filtra
 historias por un juez. **H3:** votación cerrada y exportada (P06.7).
-
-#### P06.4 · Piloto con 2 o 3 lectores
-- **Modo:** S+P · **Cuota:** sin cuota (historias 7.22 ya generadas) · **Paquete:** —
-- **Lee:** la decisión de P06.1; la guía del operador del README del bot; `study_cli.py`.
-- **Haz:**
-  - Cierra y exporta la base sintética: `asg-study --db Evaluations/estudio/study.sqlite3 close`
-    y `export Evaluations/estudio/export-sintetico-<fecha>.json`. No la borres.
-  - Base del piloto aparte (`Evaluations/estudio-piloto-722/study.sqlite3`): inscribe con
-    `asg-study add` unas 6 historias 7.22 ya hechas que **no** estén en el conjunto del estudio
-    (M01 r2, celdas M04–M07 y líneas base `-2`/`-3`, al menos una de cada formato), para que los
-    lectores del piloto puedan votar después en el estudio real; marca al autor (`author`), `open`.
-  - Dile a Josue qué poner en `ASG_EVALUATION_STUDY` para el piloto y cómo invitar a los
-    lectores; la votación ocurre fuera de la sesión.
-- **No hagas:** usar la base del estudio real; generar historias; votar con agentes.
-- **Prueba:** `asg-study status` en `evaluation` con el conjunto esperado; `/estudio` en local
-  (o los tests) entrega el primer par sin título.
-- **Hecho cuando:** la base sintética está `closed` y exportada, y el piloto está abierto con su
-  huella anotada aquí.
 
 #### P06.5 · Cerrar el piloto y arreglar lo que falló
 - **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-telegram si hay arreglos
