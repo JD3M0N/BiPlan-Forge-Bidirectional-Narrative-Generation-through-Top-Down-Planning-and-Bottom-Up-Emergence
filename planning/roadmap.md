@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P07 · escribir sus tarjetas (`/phase cards P07`, conviene `/model opus`). P07 no tiene votos humanos: P06 quedó cerrada sin terminar (ver su bloque), igual que P05. **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** no se alcanzó.
+- **Siguiente:** P07.1 · qué votos entrenan al juez y cómo entran (modo `O`, conviene `/model opus`). Los 5 lectores del piloto votaron (~69 votos) y Josue los anotó a mano; la base del piloto tiene 0. **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** no se alcanzó (P07.5 daría un H3 reducido, si Josue lo acepta).
 - **Versiones** (2026-10-30): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.1, evaluación 2.1.6,
   Telegram 6.0.3, Studio 0.2.2.
 - **Hechas:**
@@ -259,10 +259,148 @@ guardaron en ninguna base de este equipo y no se transcriben votos sin ellas). F
 
 ### P07 · Juez aprendido
 
-Regresión de los rasgos núcleo a tres números, validada fuera de muestra (T8). Origen: EXP-7.
+Regresión de los rasgos núcleo a tres números, validada fuera de muestra (T8). Origen: EXP-7
+(absorbida en P07.7). Contrato: METODOLOGIA.md §6 y [evaluation.md](../docs/architecture/evaluation.md).
 
-- Entrenar con los votos reales; validar dejando fuera historias y familias de premisa, frente
-  al azar y a la longitud sola; perturbaciones; publicar pesos.
+Lo que hay (2026-10-31): `train_judge` (`judge.py`, `MODEL_VERSION` 2) ajusta una logística L2 sin
+intercepto por criterio, valida dejando fuera historias y familias, compara con la longitud sola
+(solo por historias) y acepta perturbaciones **ya extraídas** (`asg-judge --perturbations`); no
+informa la colinealidad que prometió P04.2 ni genera perturbaciones. Exige los 24 núcleo `measured`
+o `not_applicable` en cada historia. Los únicos votos humanos son los del piloto
+(`Evaluations/estudio-piloto-722/`): 6 historias 7.22 de 2 familias (obra 01: 2 simuladas y la
+línea base `-2`; obra 03: 1 simulada, 1 narrativa y la línea base `-2`), 5 lectores, ~69 votos
+(L2 hizo 9), anotados a mano por Josue porque la base no guardó ninguno. La asignación del bot es
+perezosa y no se puede repetir: los votos se importan. El esquema 10 admite `seconds` nulo. Los
+75 votos sintéticos de `Evaluations/estudio` no entran (`decisions.md` §2 y §4).
+
+**Reglas del tutor.** T1: el juez es la evaluación intermedia. T2 y `decisions.md` §4: solo votos
+humanos; las perturbaciones se hacen por código y el extractor solo cuenta. T5: votos de un piloto
+ciego (A/B/abstención); sus fugas se declaran. T6: las 2 líneas base están dentro. T7: los tres
+criterios, ni uno más. T8: 24 rasgos, regresión L2 de scikit-learn, validación fuera de muestra
+por historia y por familia, frente al azar y a la longitud sola. T10: nada toca el generador. T11:
+el juez no elige qué generar. P07.1 cambia la decisión de P06.1 de dejar el piloto fuera del
+estudio: necesita el «ok» de Josue.
+
+#### P07.1 · Qué votos entrenan al juez y cómo entran
+- **Modo:** O · **Cuota:** sin cuota · **Paquete:** —
+- **Lee:** el archivo de votos de Josue (pídele la ruta); `decisions.md` §2 «Diseño del estudio
+  humano (P06.1)» y §4; METODOLOGIA.md §5–§6; `judge.py` (`train_judge`); `study.py` (`vote`,
+  `export`, `_SCHEMA`); las notas del piloto en el bloque de P06.
+- **Haz:**
+  1. Comprobar que cada voto del archivo da lector (L1–L5), criterio, las **dos historias
+     identificables** entre las 6 del piloto (no basta «A» y «B») y la elección. Si falta la
+     identidad de las historias, parar y avisar.
+  2. Dar opciones con recomendación sobre: (a) si los votos del piloto entrenan al juez de la
+     tesis; (b) cómo entran: subcomando `asg-study import-votes CSV` con `seconds` nulo como marca
+     de transcripción y sin cambiar el esquema, frente a un esquema 11 con columna de origen o un
+     JSON aparte que lea `train_judge`; (c) extracciones `incompleta`: repetir hasta completar
+     (lo que exige hoy `train_judge`) o aceptar `failed` como faltante con la mediana de
+     entrenamiento (`MODEL_VERSION` 3), y con qué tope de reintentos; (d) cómo se presenta la
+     validación por familias con solo 2 familias.
+  3. Con el «ok» de Josue, escribir la decisión fechada en `decisions.md` §2, con las columnas del
+     CSV de transcripción.
+- **No hagas:** código; tocar el bot; usar los votos sintéticos de `Evaluations/estudio`;
+  reconstruir un voto que el archivo no dé.
+- **Prueba:** —
+- **Hecho cuando:** `decisions.md` §2 tiene «Datos del juez (P07.1)» con (a)–(d) aprobados y el
+  formato del CSV.
+
+#### P07.2 · Importar votos transcritos
+- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation
+- **Lee:** la decisión de P07.1; `study.py` (`StudyRepository`); `study_cli.py`;
+  `packages/evaluation/tests/test_study.py`; README de evaluación §2.
+- **Haz:**
+  - Lo que fije P07.1. Si es el subcomando: `StudyRepository.import_votes(rows)` en una sola
+    transacción, todo o nada. Valida estudio en `evaluation`, historias del conjunto congelado,
+    criterio en `CRITERIA`, elección A/B/abstención, sin repetir lector, par y criterio, y como
+    mucho `QUESTIONS_PER_READER` por lector. Crea participantes, lecturas y asignaciones con el
+    orden A/B transcrito, y deja la huella SHA-256 del CSV en un JSON junto a la base.
+  - Si P07.1 elige imputar los fallidos: ese cambio en `judge.py`, con sus tests.
+  - README y CHANGELOG.
+- **No hagas:** cambiar `next_question` ni la asignación del bot; ejecutarlo sobre la base real
+  (es P07.5).
+- **Prueba:** `.\run-tests.ps1` y `.\quality.ps1`. Tests nuevos: una importación válida sale en
+  `export()` con `seconds` nulo; un CSV con una fila mala no escribe nada; un repetido se rechaza.
+- **Hecho cuando:** suite verde y evaluación 2.1.7.
+
+#### P07.3 · Colinealidad, longitud por familias y cobertura en el informe del juez
+- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation
+- **Lee:** `judge.py`; `packages/evaluation/tests/test_preference_learning.py`; METODOLOGIA.md §6;
+  `decisions.md` §2 (P04.2: «P07 usa regularización e informa la colinealidad»).
+- **Haz:** por criterio, en `train_judge`: `length_baseline` también por familias;
+  `collinearity` (pares con |r| ≥ 0,8 sobre las historias de entrenamiento, número de condición y
+  rasgos constantes); cobertura de predicciones (votos probados / votos) en las tres validaciones.
+  Poner al día METODOLOGIA.md §6 y README §4.
+- **No hagas:** cambiar `C`, el estimador, el preprocesado ni la validación (fijados antes de ver
+  votos); elegir rasgos mirando votos.
+- **Prueba:** suite y calidad. Tests: dos rasgos idénticos salen con |r| = 1; una constante sale
+  listada; la longitud por familias deja juntas las historias de cada familia.
+- **Hecho cuando:** suite verde y parche de evaluación.
+
+#### P07.4 · Perturbaciones por código
+- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation
+- **Lee:** `judge.py` (`perturbation_report`); `learning_cli.py` (`train_main`,
+  `--perturbations`); README de evaluación §3 (`asg-features --root`); METODOLOGIA.md §6.
+- **Haz:**
+  - `asg-perturb DB --out DIR` (en `asg_core/help.py` y `pyproject.toml`): sobre el texto
+    congelado de cada historia del estudio escribe `DIR/<id>-<tipo>/story.md` y
+    `perturbation.json` (origen, tipo, semilla y huellas).
+  - Dos tipos deterministas: **escenas barajadas** (por capítulos; en las líneas base, por tercios
+    de párrafos) y **sin desenlace**.
+  - Una función que arme el JSON de casos de `--perturbations` desde las extracciones.
+- **No hagas:** el cambio de visión (necesitaría que un LLM reescriba); exigir que las
+  perturbaciones empeoren los criterios.
+- **Prueba:** suite y calidad. Tests: misma semilla, mismo texto; «sin desenlace» es un prefijo
+  más corto; «barajado» conserva los párrafos.
+- **Hecho cuando:** suite verde, el comando sale en `asg help` y sube el parche.
+
+#### P07.5 · Votos del piloto en la base, cerrada y exportada
+- **Modo:** S · **Cuota:** sin cuota · **Paquete:** — (datos)
+- **Lee:** la decisión de P07.1; README de evaluación §2 y §4; el archivo de votos de Josue.
+- **Haz:**
+  - Pasar el archivo a `Evaluations/estudio-piloto-722/votos-transcritos.csv`; **Josue lo coteja
+    fila a fila** antes de importar.
+  - Copia `study.antes-votos.sqlite3`; `asg-study import-votes`; `status`; `close`; `export`;
+    `asg-preferences --bootstrap 1000`.
+  - Subsección «Piloto 7.22 (votos transcritos)» en METODOLOGIA.md §5: votos efectivos y
+    abstenciones por criterio, cobertura, grafo, acuerdo. Amenazas: transcripción a mano, fallos
+    del piloto (tabla del bloque P06), sospecha de L4 por el diálogo, creatividad ambigua.
+- **No hagas:** reconstruir votos; editar la base a mano; borrar nada.
+- **Prueba:** los votos de `export` coinciden con las filas del CSV, todos con `seconds` nulo;
+  base `closed`.
+- **Hecho cuando:** base cerrada, exportación, preferencias y subsección escritas. Es un **H3**
+  reducido si Josue lo acepta.
+
+#### P07.6 · Rasgos del piloto y de sus perturbaciones
+- **Modo:** S · **Cuota:** ~36–54 llamadas (6 originales y 12 perturbadas, 2–3 por texto) más
+  reintentos · **Paquete:** —
+- **Lee:** README de evaluación §3; la decisión de P07.1 (c); METODOLOGIA.md §3 «El extractor».
+- **Haz:**
+  - `--dry-run`, enseñar el coste y esperar.
+  - `asg-perturb` (P07.4); extraer con `gemini-3.5-flash-lite` los 18 textos con el mismo
+    protocolo; relanzar solo los fallidos hasta el tope de P07.1.
+  - El JSON de casos y la tablita de las 6 con `asg-report-features`.
+- **No hagas:** `--selection all`; cambiar de modelo; tocar `rasgos.csv`.
+- **Prueba:** huella de catálogo vigente y `text_hash` del estudio en cada extracción; los 24
+  núcleo como exija P07.1.
+- **Hecho cuando:** 18 extracciones compatibles con `train_judge` y llamadas reales anotadas.
+
+#### P07.7 · Entrenar, validar y publicar el juez
+- **Modo:** S · **Cuota:** sin cuota · **Paquete:** —
+- **Lee:** METODOLOGIA.md §6; `decisions.md` §2 (P07.1 y «Un juez que no generaliza es un
+  resultado válido»).
+- **Haz:**
+  - `asg-judge Evaluations/estudio-piloto-722/study.sqlite3 --output juez.json --perturbations
+    casos.json`.
+  - «Resultado del juez (piloto 7.22)» en METODOLOGIA.md §6, por criterio: acierto fuera de
+    muestra por historia y por familia frente a 0,5 y a la longitud sola, τ de Kendall,
+    cobertura, pesos (24 × 3), colinealidad, perturbaciones (sin exigir que todas empeoren los
+    tres criterios) y limitaciones. Un buen ajuste dentro de muestra no acredita calidad.
+  - Línea «Juez para P08» en `decisions.md` §2 con su `data_hash`.
+- **No hagas:** reajustar, quitar rasgos o reentrenar tras ver resultados (salvo un error de
+  código, anotado); usarlo para elegir qué generar (T11); llamar «calidad» al número.
+- **Hecho cuando:** `juez.json` escrito (`fitted` o `insufficient`, ambos válidos), sección
+  publicada y decisión con huella. Cierra P07.
 
 ### P08 · Ranking y diez mejores
 

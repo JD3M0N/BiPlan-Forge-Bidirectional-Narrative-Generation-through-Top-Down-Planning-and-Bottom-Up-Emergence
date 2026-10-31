@@ -65,27 +65,6 @@ MED-8 y la revisión de MED-9
   Las bases de los estudios anteriores (`Evaluations/pack-prueba`, `Evaluations/telegram-rolling`)
   quedan como datos y el estudio nuevo no las abre.
 
-## P07 · Juez aprendido
-
-### EXP-7 · El juez aprendido de los pares humanos
-
-*Área:* experimento · *Cuota:* entrenamiento sin cuota · *Depende de:* EXP-4
-
-- **Síntoma.** `train_judge` (`packages/evaluation/src/asg_evaluation/judge.py`) ya exige un
-  protocolo de extracción homogéneo y valida fuera de muestra, pero los tres jueces solo se han
-  entrenado con votos ficticios: no demuestran generalización.
-- **Qué hacer.**
-  - Entrenar con los votos reales, manteniendo las 27 entradas textuales, L2 sin intercepto,
-    preprocesamiento ajustado solo con historias de entrenamiento y validación por historias y
-    por familias de premisa.
-  - Publicar frente a azar y a longitud sola: pesos, versiones, cobertura de predicciones,
-    acierto y concordancia fuera de muestra.
-  - Informar perturbaciones sin exigir que todas empeoren los tres criterios.
-- **Hecho cuando.** El informe experimental publica generalización y limitaciones con datos
-  reales.
-- **Ojo.** Un buen ajuste dentro de muestra no acredita calidad. Si el juez no generaliza, sigue
-  siendo un resultado experimental válido y debe presentarse como tal.
-
 ## P08 · Ranking y diez mejores
 
 ### EXP-8 · Ranking del corpus y análisis de las diez mejores
