@@ -187,8 +187,8 @@ genera N para quedarse una. Se describe, no se atribuyen causas (protocolo §4).
 #### P05.6 · Generar la matriz, día 2
 - **Modo:** S · **Cuota:** ~410 principales y ~205 de función · **Paquete:** —
 - Igual que P05.5, con las bases 01-r2 y 04-r2 (M01) y las derivadas M03–M07 de 01-r1.
-- **Avance (2026-10-30):** las 5 derivadas M03–M07 de 01-r1 están `completed` (cuota principal de hoy casi agotada). Faltan las bases 01-r2 y 04-r2 (M01): `asg-matrix planilla/matriz.csv --celdas M01 --obras 01,04 --repeticiones 2` tras el reinicio de cuota.
-- **Hecho cuando:** esas 7 unidades están `completed` o anotadas con su fallo.
+- **Avance (2026-10-30):** las 5 derivadas M03–M07 de 01-r1 y la base M01 01-r2 (`la-promesa-del-volcan`) están `completed`. Falta la base 04-r2 (M01): `asg-matrix packages/evaluation/planilla/matriz.csv --celdas M01 --obras 04 --repeticiones 2` tras el reinicio de cuota (desde la raíz, con la ruta `planilla/matriz.csv` falla: busca `planilla\prompts.md`). En PowerShell, una lista de obras va entre comillas (`--obras '01,04'`): sin ellas llegan `1` y `4` y el filtro no coincide con `01` ni `04` (0 unidades, sin error). `--dry-run` del 2026-10-30: 266 principales y 206 de función para las dos bases; quedaban 49 principales.
+- **Hecho cuando:** esas 7 unidades están `completed` o anotadas con su fallo (6 de 7 hechas).
 
 #### P05.6b · Generar la matriz, día 3
 - **Modo:** S · **Cuota:** ~440 principales y 0 de función · **Paquete:** —
