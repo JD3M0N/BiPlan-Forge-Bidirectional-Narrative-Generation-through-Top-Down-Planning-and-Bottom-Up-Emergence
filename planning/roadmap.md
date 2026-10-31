@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P05.6c · generar lo pendiente de la matriz (modo `S`; necesita cuota, reinicia a las 03:00). **H2** (enseñar al tutor `planning/h2.md`) debe cerrarse antes de P05.7. Tras P05.8, P06.1 (tarjetas de P06 escritas).
+- **Siguiente:** P06.1 · diseñar el estudio humano (modo `O`, sin cuota; conviene `/model opus`). **H2** (enseñar al tutor `planning/h2.md`) debe cerrarse antes de abrir la votación (P06.6). P05 quedó cerrada sin terminar (ver su bloque).
 - **Versiones** (2026-10-30): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.1, evaluación 2.1.6,
   Telegram 6.0.2, Studio 0.2.2.
 - **Hechas:**
@@ -40,6 +40,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P05.5 · Bases M01 01-r1 (`la-sombra-del-volcan`), 04-r1 (`la-ultima-funcion`) y 03-r2 (`el-misterio-del-faro`) `completed` en el manifiesto, sin fallos; en dos invocaciones del runner (`--obras 01,04 --repeticiones 1` y `--obras 03 --repeticiones 2`, porque el filtro no admite uniones); coste real 287 principales y 186 de función (el tope era ~400 y ~310). Quedan 27 unidades (996 principales y 206 de función por `--dry-run`, estimación que sobreestima).
   - P05.6 · Derivadas M03–M07 de 01-r1 y base M01 01-r2 (`la-promesa-del-volcan`) `completed`; la base M01 04-r2 queda anotada como fallo (`cuota agotada en M01/04/r2`, 2026-10-30, sin generar) y pasa a P05.6c junto a sus derivadas. En PowerShell, una lista de obras va entre comillas (`--obras '01,04'`); desde la raíz hay que pasar `packages/evaluation/planilla/matriz.csv`.
   - P05.6b · Sin generar: las 15 derivadas M03–M07 de 04-r1, 03-r2 y 01-r2 no cupieron (2026-10-30, el preflight de `asg-matrix` dejó 1 llamada principal frente a ~19 por historia y no escribió el manifiesto); Josue aceptó el fallo y pasan a P05.6c.
+  - P05 · Cerrada por decisión de Josue el 2026-10-30 sin ejecutar P05.6c, P05.7 ni P05.8: 14 de las 35 unidades de la matriz están hechas (bases y derivadas de P05.4–P05.6) y 21 sin generar por cuota; no hay extracción de rasgos de la matriz ni sección «Análisis horizontal» en `docs/resumen.md`.
 
 ## Cómo leer una tarjeta
 
@@ -186,50 +187,11 @@ P08. T10 y `decisions.md` §3: el runner y el informe no cambian prompts, esquem
 ni `PIPELINE_VERSION`. T11: la fase describe asociaciones; no elige «la mejor configuración» ni
 genera N para quedarse una. Se describe, no se atribuyen causas (protocolo §4).
 
-#### P05.6c · Generar la matriz, lo pendiente
-- **Modo:** S · **Cuota:** ~720 principales y ~103 de función por `--dry-run` (unas 450 reales
-  según el piloto de P05.4); puede ocupar dos días · **Paquete:** —
-- Igual que P05.5, con las 21 unidades pendientes, en este orden:
-  1. Las derivadas M03–M07 de 04-r1, 03-r2 y 01-r2 (15 unidades, pendientes de P05.6b), una
-     invocación por base: `--celdas M03,M04,M05,M06,M07` con `--obras 04 --repeticiones 1`,
-     `--obras 03 --repeticiones 2` y `--obras 01 --repeticiones 2`.
-  2. La base M01 04-r2 (pendiente de P05.6: `--celdas M01 --obras 04 --repeticiones 2`, ~133
-     principales y ~103 de función) y después sus derivadas M03–M07 (5 unidades).
-  Sin `--force`: si el preflight dice que no cabe, se para y se sigue otro día.
-- **Hecho cuando:** el manifiesto tiene las 35 unidades nuevas `completed`, o anotadas con su fallo.
-
-#### P05.7 · Extraer los rasgos de la matriz
-- **Modo:** S · **Cuota:** 2–3 llamadas por historia (las de la matriz más las 9 líneas base,
-  cuya extracción anterior es de la huella vieja) · **Paquete:** —
-- **Lee:** `decisions.md` §2 («Lista núcleo fijada»); el manifiesto; el README de evaluación
-  (`asg-features`).
-- **Haz:** solo después de H2: si el tutor reabrió la lista núcleo, se cierra antes de extraer.
-  `asg-features --root <run> --dry-run` sobre cada run del manifiesto y las líneas base
-  `Stories/Baseline/0{1,3,4}-*-{1,2,3}`; enseña el coste y espera; extrae con la selección por
-  defecto (`core`). Una extracción incompleta se repite una vez; si vuelve a fallar, queda
-  `incompleta` y sus rasgos, `no medido`. Anota aquí cuántas quedan incompletas.
-- **No hagas:** `--selection all` salvo que P05.1 lo pida; cambiar de modelo de extracción
-  (`gemini-3.5-flash-lite`, `decisions.md` §2).
-- **Hecho cuando:** cada historia de la matriz y las 9 líneas base tienen `features.json`
-  compatible con la huella vigente, o están anotadas como incompletas.
-
-#### P05.8 · Leer el análisis horizontal
-- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** — (docs)
-- **Lee:** la entrada de la matriz y la regla de ruido en `decisions.md` §2; §4 «Ruido»;
-  `METODOLOGIA.md` §4 y §10; las EXP elegidas en `fichas.md`.
-- **Haz:** `asg-report-features Stories --manifest … --horizontal
-  Evaluations/horizontal/horizontal-<fecha>.json` y su CSV. En `docs/resumen.md`, una sección
-  fechada «Análisis horizontal» con la tablita comparada por eje (núcleo y los P y K que
-  correspondan: P27 para la memoria, P39–P42 para el inventario, P33–P34 para la visión, K01–K02
-  para el coste), n por celda y la lectura de cada EXP elegida. En `METODOLOGIA.md` §4, el resumen
-  y el enlace. Borra de `fichas.md` las EXP cerradas.
-- **No hagas:** frases causales; interpretar diferencias por debajo de la regla de ruido; contar un
-  juez LLM o una lectura a ciegas como medida; recomendar una configuración «mejor» (T11) o
-  cambiar predeterminados del generador.
-- **Prueba:** cada cifra de la sección sale del JSON del informe; las tablas llevan fecha y
-  alcance.
-- **Hecho cuando:** `docs/resumen.md` tiene la tabla por eje con fecha, alcance y n, cada EXP
-  elegida tiene su párrafo y ninguna frase atribuye causas. Cierra P05.
+**Cerrada por decisión de Josue (2026-10-30), sin terminar.** Quedan sin ejecutar P05.6c (21 unidades de
+la matriz sin generar, por cuota), P05.7 (extracción de rasgos de la matriz) y P05.8 (la sección «Análisis
+horizontal» de `docs/resumen.md`). El manifiesto de `Evaluations/horizontal/` conserva lo hecho y lo anotado como
+fallo; las tarjetas están en el historial de Git (commit `6c52bb6`). Mientras no se retome, T4 no tiene su
+tabla horizontal completa.
 
 ### P06 · Estudio humano
 
