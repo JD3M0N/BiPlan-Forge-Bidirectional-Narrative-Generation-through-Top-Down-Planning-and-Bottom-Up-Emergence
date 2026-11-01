@@ -11,8 +11,8 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
 
 ## Estado
 
-- **Siguiente:** R02 · Introducción.
-- **Extensión acumulada:** 8 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
+- **Siguiente:** R03 · Capítulo 2: Generador híbrido de historias.
+- **Extensión acumulada:** 12 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
 - **Hechas:**
   - R00 · portada sin marcadores: título provisional «Generación narrativa bidireccional:
     planificación *Top-Down* y emergencia *Bottom-Up*» (traducción del nombre del repo), Josue
@@ -24,6 +24,12 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
     posición del autor); `Bibliography.bib` con las 51 entradas citadas (37 de la planilla, 14
     verificadas en la web el 2026-11-01); `uhthesis.cls` sin las redefiniciones autor-año de
     `\cite`, que quitaban los corchetes. 8 págs. (2–9), 0 \todo
+  - R02 · introducción sin secciones: contexto, antecedentes (Fuentes Rodríguez), problemática
+    en tres viñetas con cita, actualidad, novedad (generador + metodología, T10), importancia,
+    problema como pregunta, objeto, campo, Objetivo General, cinco Objetivos Específicos (uno
+    por capítulo) e hipótesis H1–H3, con las correspondencias en comentarios LaTeX; sin
+    referencias nuevas. La sigla LLMs pasa a definirse aquí y el Cap. 1 pierde su definición y
+    el «con los mismos tutores» (Roger tuvo dos; esta tesis, uno). 4 págs. (1–4), 0 \todo
 
 ## Reglas comunes
 
@@ -148,6 +154,12 @@ Josue o el tutor digan otra cosa.
   (`yun2026`), memoria propia sin almacén común (`park2023`), director que sugiere
   (`theune2003`), personajes limitados a lo que creen (`ware2021`), narrador separado de los
   agentes (`chen2026a`) y «cada mecanismo se gana su complejidad» (`chen2026b`, WSE-bench).
+- **Nota de R02:** la introducción presenta en negrita la **función** (los personajes
+  representan el plan escena a escena, como en el teatro); aquí se precisa sin volver a
+  resaltarla. H3 quedó así: «más mecanismos no implican una historia mejor: que un mecanismo
+  mejore medidas de la prosa no basta para que los lectores prefieran a ciegas las historias que
+  lo usan». Los mecanismos apagados en el predeterminado congelado (brazos de 7.17, inventario,
+  narración por selección) se presentan como aplicación de H3, no como parte del predeterminado.
 
 ### R04 · Capítulo 3: Metodología de evaluación
 
@@ -202,6 +214,10 @@ Josue o el tutor digan otra cosa.
 - **Depende de:** R04.
 - **Hecho cuando:** cada tabla lleva n, fecha y alcance; los resultados nulos o incompletos se
   dicen como tales.
+- **Nota de R02:** aquí se contrastan H1 (celdas M03 frente a su base M01, 14 de 35 unidades) y
+  H3 (P02.1, empate 2–2–1 en 5 pares, y P02.2, A 3 – B 1 en 4 pares, con un solo lector: evidencia
+  exploratoria). La auditoría de 62 contextos de 7.5 es evidencia indirecta de H2: muestra el
+  aislamiento, no que mejore las escenas. Correspondencias en comentarios de `Introduction.tex`.
 
 ### R07 · Capítulo 5 (b): Estudio humano, juez y ranking
 
@@ -216,6 +232,10 @@ Josue o el tutor digan otra cosa.
   para.
 - **Hecho cuando:** cada hipótesis tiene una respuesta (confirmada, refutada o sin datos
   suficientes) con su evidencia.
+- **Nota de R02:** H2 (memoria propia frente a compartida) no tiene experimento: EXP-2 pasó a
+  idea-bank el 2026-10-30. Josue decidió el 2026-11-01 mantenerla en la introducción y
+  responderla aquí «sin datos suficientes», como limitación declarada. H1 se completa con los
+  pares narrativo–simulado del piloto, si los hay.
 
 ### R08 · Conclusiones
 
@@ -228,6 +248,9 @@ Josue o el tutor digan otra cosa.
 - **Extensión:** 2 págs.
 - **Depende de:** R07.
 - **Hecho cuando:** ninguna conclusión afirma algo que no esté demostrado en el cuerpo.
+- **Nota de R02:** los cinco objetivos específicos, en orden: analizar el estado del arte;
+  diseñar el generador híbrido; diseñar la metodología de evaluación; implementar el generador y
+  las herramientas de evaluación; evaluar experimentalmente el generador.
 
 ### R09 · Recomendaciones
 

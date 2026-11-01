@@ -1,3 +1,158 @@
 \begin{introduction}\label{chapter:introduction}
-% R02 en ../write_thesis_roadmap.md
+% R02 en ../write_thesis_roadmap.md. Sin referencias nuevas: todas las claves están en
+% Bibliography.bib desde R01. Hipótesis H1-H3 de docs/resumen.md; la forma de H2 y H3 la
+% decidió Josue el 2026-11-01 (H2 se mantiene sin experimento; H3 como lectura de WSE-bench).
+
+Generar historias de forma automática es uno de los problemas más antiguos de la inteligencia
+artificial. TALE-SPIN~\cite{meehan1977}, a finales de los años setenta, ya producía fábulas
+razonando cómo cada personaje resolvía sus objetivos. Durante décadas, los generadores dependieron
+de mundos descritos a mano en lenguajes formales, que garantizaban la causalidad de los eventos a
+costa de acotar las historias posibles~\cite{riedl2010}. Los \textit{Large Language Models}
+(LLMs), modelos de lenguaje de gran tamaño capaces de seguir instrucciones en lenguaje natural,
+cambiaron ese límite: producen prosa fluida a partir de una petición, sin un modelo del dominio
+programado de antemano. Lo que no garantizan es que esa prosa sea una buena historia, y tampoco
+ofrecen una forma fiable de saber si lo es. Esta tesis trata de esos dos problemas: generar
+historias con LLMs y evaluarlas.
+
+La literatura ordena los generadores según quién decide la trama. En la generación dirigida por la
+trama (\textit{Top-Down}), un componente con visión de autor decide los eventos y los personajes
+los ejecutan; con LLMs, eso se traduce en planificar la historia antes de
+escribirla~\cite{yang2023,huot2025}. En la generación por simulación de personajes
+(\textit{Bottom-Up}), la trama no existe de antemano: emerge de lo que hacen unos agentes con
+objetivos y memoria propios~\cite{aylett1999,park2023}. Entre ambas hay una tradición de sistemas
+híbridos, como Façade~\cite{mateas2005} o The Virtual Storyteller~\cite{theune2003}, que combinan
+un componente de autor con personajes autónomos y que los LLMs han reabierto~\cite{chen2026a}. El
+Capítulo~\ref{chapter:state-of-the-art} precisa estos términos y recorre las tres familias.
+
+El antecedente directo de este trabajo es la tesis de Fuentes Rodríguez~\cite{fuentes2025},
+presentada en esta facultad en 2025 y cotutorada por el mismo tutor. Su sistema generaba
+historias mediante la simulación de agentes conversacionales y lo comparaba con un modelo guiado
+por un solo \textit{prompt} (la instrucción en lenguaje natural que recibe el modelo). Doce
+voluntarios puntuaron ambas salidas de 1 a 10, y los perfiles resultantes apenas se distinguieron.
+De ese trabajo se conservan la línea base de un solo \textit{prompt} y el interés por la coherencia
+de las historias largas; se cambia la forma de evaluar.
+
+Los problemas que motivan esta tesis se agrupan en tres:
+
+\begin{itemize}
+  \item \textbf{La paradoja narrativa:} la simulación de personajes da comportamientos creíbles,
+  pero nadie vela por la estructura que convierte una serie de eventos en una historia; la
+  planificación vela por esa estructura, pero tiende a reducir a los personajes a ejecutores del
+  plan~\cite{louchart2003,riedl2010}. Un generador que use solo una de las dos renuncia a lo que
+  aporta la otra.
+  \item \textbf{La pérdida de compromisos y de riqueza:} aun con el contexto necesario delante, los
+  LLMs dejan sin pagar muchas de las prefiguraciones que introducen~\cite{yun2026}, se contradicen a
+  lo largo de una historia larga~\cite{li2026} y hacen que un personaje revele lo que en ese momento
+  no podía saber~\cite{ahn2024}. Razonar quién sabe qué en una conversación les resulta mucho más
+  difícil que a las personas~\cite{kim2023}, y sus historias superan menos pruebas de creatividad
+  que las de escritores profesionales~\cite{chakrabarty2024}.
+  \item \textbf{La evaluación poco fiable:} las escalas de valoración absolutas son las más usadas y
+  las más criticadas~\cite{amidei2019}, y con ellas incluso evaluadores expertos coinciden
+  poco~\cite{chiang2023}. Los LLMs usados como jueces favorecen sus propias generaciones y las
+  historias escritas por IA~\cite{zheng2023,panickssery2024,tutone2026}. Sin una evaluación fiable
+  no se puede saber si un mecanismo nuevo mejora la historia o solo la cambia.
+\end{itemize}
+
+El tema es actual. Los sistemas más cercanos a este, que combinan agentes simulados con un
+narrador, son de los últimos años: StoryBox~\cite{chen2026a} y WSE-bench~\cite{chen2026b}, este
+último todavía un preprint. También son recientes el trabajo de Yun et al.~\cite{yun2026} sobre los
+compromisos sin pagar y los resultados que cuestionan a los jueces LLM en escritura creativa o que
+proponen aprenderlos de preferencias humanas~\cite{tutone2026,fein2026}. Además, las historias de
+esta tesis están en español, una lengua en la que la brecha entre un LLM y un autor profesional es
+mayor que en inglés~\cite{marco2024}.
+
+La \textbf{novedad científica} del trabajo está en dos aportaciones. La primera es un generador
+híbrido que separa tres decisiones. Un plan validado decide qué pasa; unos personajes simulados que
+solo saben lo que presenciaron deciden cómo pasa, al representar el plan escena a escena en lo que
+llamamos una \textbf{función}, como en el teatro; y un narrador que cura el registro de esa función,
+sin inventar, decide cómo se cuenta. En la literatura revisada no encontramos un generador con LLMs
+que reúna las tres piezas (Sección~\ref{sec:posicion}). La segunda es una metodología de evaluación
+en la que el LLM no juzga: cuenta rasgos de la historia y cita el pasaje de cada recuento, que el
+código verifica literalmente. La calidad la deciden lectores que comparan pares de historias a
+ciegas, y un juez aprendido de esas comparaciones traduce los recuentos al orden humano.
+
+La importancia teórica del trabajo es doble. Como el plan, la función y la narración son etapas
+separadas, el generador sirve de banco de pruebas de la paradoja narrativa: se puede cambiar una
+etapa y conservar las demás, por ejemplo escribir la historia directamente desde el mismo plan o
+narrar la misma función desde otro punto de vista, y medir qué aporta cada una. La metodología, por
+su parte, muestra cómo evaluar historias sin pedir a un modelo un juicio de calidad, una cuestión
+abierta en el área (Sección~\ref{sec:evaluacion-historias}). En la práctica, el generador y las
+herramientas de evaluación forman un sistema reproducible, con un bot de Telegram para pedir
+historias y una interfaz local para leerlas a ciegas, y el juez lee solo el texto de la historia,
+de modo que la metodología se puede aplicar a las de otro generador.
+
+A partir de lo anterior se plantea el siguiente \textbf{problema}: ¿cómo generar historias con LLMs
+que conserven los compromisos de su trama sin reducir a los personajes a ejecutores del plan, y cómo
+evaluarlas de forma fiable sin pedir a un modelo que juzgue su calidad? El \textbf{objeto de
+estudio} es la generación automática de historias con modelos de lenguaje, y el \textbf{campo de
+acción}, la generación híbrida de historias en español, que combina la planificación de la trama
+con la simulación de personajes, junto con su evaluación mediante rasgos contables y comparaciones
+humanas por pares.
+
+Para resolver el problema se plantea como \textbf{Objetivo General} desarrollar un generador
+híbrido de historias con LLMs que combine un plan validado con la simulación de personajes con
+memoria propia, junto con una metodología para evaluarlo basada en recuentos verificables y
+comparaciones humanas por pares a ciegas. Para lograrlo se plantean los siguientes
+\textbf{Objetivos Específicos}:
+
+% Correspondencia objetivo -> capítulo: 1 -> Cap. 1 (Background.tex), 2 -> Cap. 2
+% (Generator.tex), 3 -> Cap. 3 (Evaluation.tex), 4 -> Cap. 4 (Implementation.tex),
+% 5 -> Cap. 5 (Experiments.tex). R08 escribe una conclusión por objetivo, en este orden.
+\begin{itemize}
+  \item \textbf{Analizar el estado del arte} de la generación de historias dirigida por la trama,
+  por simulación de personajes e híbrida, y de su evaluación, para identificar qué adoptar y qué
+  hueco queda. % -> Capítulo 1
+  \item \textbf{Diseñar un generador híbrido} en el que un plan validado decida qué pasa, una
+  función con personajes de memoria propia decida cómo pasa y un narrador decida cómo se
+  cuenta. % -> Capítulo 2
+  \item \textbf{Diseñar una metodología de evaluación} que combine rasgos contables con cita
+  verificada, comparaciones humanas por pares a ciegas que incluyan una línea base de un solo
+  \textit{prompt}, y un juez aprendido de esas comparaciones y validado fuera de
+  muestra. % -> Capítulo 3
+  \item \textbf{Implementar el generador y las herramientas de evaluación} en un sistema
+  reproducible, con una interfaz para la lectura a ciegas. % -> Capítulo 4
+  \item \textbf{Evaluar experimentalmente el generador}: validarlo antes de fijar su configuración,
+  validar la extracción de rasgos, comparar parametrizaciones, recoger las preferencias de los
+  lectores y ordenar el corpus de historias. % -> Capítulo 5
+\end{itemize}
+
+Las \textbf{hipótesis} de trabajo son tres. Las dos primeras comparan la configuración del
+generador con una alternativa sobre la misma entrada; la tercera, cada mecanismo opcional con su
+ausencia. Todas se contrastan con recuentos de rasgos y con la preferencia de los lectores en
+comparaciones a ciegas, según los tres criterios de la evaluación: creatividad, desarrollo de los
+personajes e interés de la trama.
+
+% Correspondencia hipótesis -> experimentos (R06 y R07 en ../write_thesis_roadmap.md):
+% H1 -> R06: celdas M03 (narrativo --plan-from) frente a su base M01 en la matriz A (EXP-1),
+%       parcial: 14 de 35 unidades (P05 cerrada el 2026-10-30). R07: pares narrativo-simulado
+%       del estudio humano (solo el piloto; P06 cerrada el 2026-10-31 sin estudio real).
+% H2 -> R07: EXP-2 (--actor-memory own frente a shared) no se corrió (idea-bank desde P05.1,
+%       2026-10-30); respuesta prevista: sin datos suficientes. Evidencia indirecta en R06: la
+%       auditoría de 62 contextos de actor de la validación 7.5 (aislamiento, no mejora).
+% H3 -> R06: validaciones antes de congelar el generador, P02.1 (narración, empate 2-2-1 en 5
+%       pares) y P02.2 (brazos Top-Down, A 3 - B 1 en 4 pares), con un solo lector; R07, si el
+%       juez o el piloto añaden algo.
+\begin{itemize}
+  \item \textbf{H1:} con un mismo plan, la historia narrada a partir de una función difiere de la
+  escrita directamente desde el plan en rasgos contables de personajes y de trama, más allá del
+  ruido entre repeticiones, y los lectores la prefieren a ciegas en al menos uno de los tres
+  criterios.
+  \item \textbf{H2:} dar a cada personaje solo la memoria de lo que presenció, en lugar de la de
+  todo lo ocurrido en público, produce escenas con menos menciones a hechos que el personaje no
+  podía conocer, y que los lectores prefieren a ciegas.
+  \item \textbf{H3:} más mecanismos no implican una historia mejor: que un mecanismo mejore medidas
+  de la prosa no basta para que los lectores prefieran a ciegas las historias que lo usan frente a
+  las que no. Es la conclusión de WSE-bench~\cite{chen2026b} aplicada a este generador, y obliga a
+  que cada mecanismo se gane su complejidad.
+\end{itemize}
+
+El documento se organiza en cinco capítulos. El Capítulo~\ref{chapter:state-of-the-art} revisa el
+estado del arte de la generación y la evaluación de historias y fija la posición del trabajo. El
+Capítulo~\ref{chapter:generator} describe el generador híbrido: el plan, la función, el narrador y
+los mecanismos opcionales. El Capítulo~\ref{chapter:evaluation} expone la metodología de
+evaluación, y el Capítulo~\ref{chapter:implementation}, la implementación del sistema y sus
+herramientas. El Capítulo~\ref{chapter:experiments} presenta los experimentos, con su alcance y sus
+resultados incompletos, y responde a las hipótesis con lo que los datos permiten. Por último, las
+Conclusiones recogen lo alcanzado en cada objetivo, las aportaciones y las limitaciones, y las
+Recomendaciones, las líneas de trabajo futuro.
 \end{introduction}
