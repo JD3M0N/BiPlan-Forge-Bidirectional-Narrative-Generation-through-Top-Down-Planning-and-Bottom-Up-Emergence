@@ -1,2 +1,271 @@
 \chapter{Implementación}\label{chapter:implementation}
-% R05 en ../write_thesis_roadmap.md
+% R05 en ../write_thesis_roadmap.md. Fuentes: AGENTS.md, docs/architecture/runtime.md e
+% interfaces.md, los README de packages/* y apps/*, y el código el 2026-11-01: versiones de los
+% pyproject.toml y de version.py (Studio es 0.3.0 desde el 2026-10-27; el «Estado actual» de
+% planning/roadmap.md decía 0.2.2 y se corrigió), comandos de asg_core/help.py, temperaturas y
+% reintentos de runtime/provider.py, constantes de features.py, study.py y judge.py. Líneas de
+% código: líneas de los .py versionados bajo src/ de cada paquete (git ls-files), con blancos y
+% comentarios, el 2026-11-01. Pruebas: .\run-tests.ps1 el 2026-11-01, 907 pasan y 2 se omiten
+% (las de test_gemini_live.py). La cifra de los 503 es de docs/architecture/runtime.md.
+% Referencias nuevas, verificadas en la web el 2026-11-01: pydantic2026, google2026,
+% virtanen2020, pedregosa2011, ptb2026, fastapi2026. \codigo está definido en Thesis.tex.
+
+Este capítulo describe cómo se implementaron el generador del Capítulo~\ref{chapter:generator} y
+las herramientas de evaluación del Capítulo~\ref{chapter:evaluation}. A diferencia de esos
+capítulos, aquí se nombran los paquetes, los módulos y los comandos del código. La descripción
+corresponde al estado del repositorio el 1 de noviembre de 2026. Primero se presenta la
+\textbf{Organización del código} en cinco paquetes (Sección~\ref{sec:monorepo}). Después se
+describen los \textbf{Proveedores de modelos y la cuota} (Sección~\ref{sec:proveedores}), los
+\textbf{Artefactos y contratos versionados} (Sección~\ref{sec:artefactos}), las \textbf{Herramientas
+de evaluación} (Sección~\ref{sec:herramientas}) y las \textbf{Interfaces}, un bot de Telegram y una
+aplicación web local (Sección~\ref{sec:interfaces}). El capítulo cierra con las \textbf{Pruebas y la
+reproducibilidad} (Sección~\ref{sec:pruebas}).
+
+\section{Organización del código}\label{sec:monorepo}
+
+El sistema está escrito en Python, a partir de la versión 3.12, y se organiza como un
+monorepositorio: un solo repositorio con cinco paquetes que se instalan por separado y que un script
+de preparación instala juntos en modo editable. La Tabla~\ref{tab:paquetes} los resume. El generador
+es el paquete \texttt{asg-stagecraft}, y la interfaz gráfica, llamada StageCraft, el paquete
+\texttt{asg-studio}. Las dependencias van en un solo sentido: \texttt{asg-core} no depende de
+ningún otro, \texttt{asg-evaluation} depende solo de él, el generador depende de ambos y las dos
+aplicaciones, de los tres.
+
+\begin{table}[htb]
+  \centering
+  \caption{Paquetes del repositorio el 1 de noviembre de 2026}
+  \label{tab:paquetes}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.0cm}>{\raggedright\arraybackslash}p{1.3cm}%
+      >{\raggedright\arraybackslash}p{7.2cm}r@{}}
+    \toprule
+    Paquete & Versión & Responsabilidad & Líneas \\
+    \midrule
+    \texttt{asg-core} & 0.8.1 & escritura atómica, medidas de la prosa, narración en audio,
+      ayuda de los comandos & 1.065 \\
+    \texttt{asg-evaluation} & 2.1.6 & rasgos con cita, estudio por pares, Bradley-Terry, juez y
+      ranking & 3.467 \\
+    \texttt{asg-stagecraft} & 7.22.1 & el generador: agentes, validadores, función, narrador,
+      proveedores y cuota & 23.036 \\
+    \texttt{asg-telegram} & 6.0.3 & bot para crear historias y para el estudio a ciegas & 1.540 \\
+    \texttt{asg-studio} & 0.3.0 & StageCraft, interfaz web local y lectura ciega & 1.483 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+La restricción más importante es que \texttt{asg-evaluation} nunca importa el generador: lee del
+disco los artefactos que este deja, en JSON, Markdown y SQLite. Así la evaluación mide del mismo
+modo las historias de la versión congelada, las de versiones anteriores y las líneas base, que no
+pasan por el generador, y ningún cambio en él puede alterar en silencio cómo se le evalúa. De ahí
+dos consecuencias. Las medidas de la prosa que necesitan los dos lados, como la proporción de
+párrafos con diálogo, viven en \texttt{asg-core}. Y el extractor de rasgos, que pertenece a la
+evaluación pero necesita un LLM, recibe el modelo desde fuera: el comando \texttt{asg-features} es
+del generador, construye el proveedor y se lo entrega a la función de extracción, que solo conoce su
+interfaz.
+
+Dentro del generador, los agentes del Capítulo~\ref{chapter:generator} están en \texttt{agents/},
+cada uno con su \textit{prompt} y el esquema de su respuesta, y cada validación determinista vive
+aparte, en un módulo puro que no llama al modelo: el grafo del plan en \codigo{planning/graph.py},
+el contrato de promesas en \codigo{planning/promises.py}, cada acto del guion en
+\codigo{script/validation.py}, el reparto y sus compuertas en \codigo{stage/casting.py} y cada turno
+propuesto en \codigo{stage/validation.py}. También son puras la percepción
+(\codigo{stage/perception.py}), la memoria y su recuperación (\codigo{stage/memory.py}), la decisión
+de quién habla y cuándo se consulta al director (\codigo{stage/policy.py}), las visiones del narrador
+(\codigo{stage/voices.py}) y el árbitro del inventario (\codigo{stage/inventory.py}). Esa separación
+es la forma concreta de «el modelo propone y el código decide» (Sección~\ref{sec:arquitectura}): lo
+que decide el código se puede probar sin un modelo. Las opciones de una ejecución se validan en un
+solo lugar, \texttt{options.py}, en el que confluyen la línea de comandos, las variables de entorno y
+las dos interfaces.
+
+Todo el sistema se maneja desde la línea de comandos. \texttt{asg help} enumera los dieciséis
+comandos, todos con el prefijo \texttt{asg-}, y la Tabla~\ref{tab:comandos} los agrupa por tarea.
+
+\begin{table}[htb]
+  \centering
+  \caption{Comandos del sistema, agrupados por tarea}
+  \label{tab:comandos}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.2cm}>{\raggedright\arraybackslash}p{4.4cm}%
+      >{\raggedright\arraybackslash}p{7.2cm}@{}}
+    \toprule
+    Tarea & Comandos & Qué hacen \\
+    \midrule
+    Generar & \texttt{asg-generate}, \texttt{asg-baseline}, \texttt{asg-matrix} & una historia,
+      una línea base de un solo \textit{prompt} o una matriz de experimentos en serie \\
+    Operar & \texttt{asg-budget}, \texttt{asg-recover}, \texttt{asg-recompute} & cuota restante,
+      ejecuciones atascadas y medidas recalculadas de una función \\
+    Medir & \texttt{asg-features}, \texttt{asg-audit-features}, \texttt{asg-report-features},
+      \texttt{asg-corpus} & extracción y auditoría de rasgos, tabla de rasgos y análisis
+      horizontal, inventario del corpus elegible \\
+    Preferir y juzgar & \texttt{asg-study}, \texttt{asg-preferences}, \texttt{asg-judge},
+      \texttt{asg-rank} & estudio por pares, Bradley-Terry, juez aprendido y ranking con las
+      diez mejores \\
+    Interfaces & \texttt{asg-telegram}, \texttt{asg-studio} & el bot y StageCraft \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Proveedores de modelos y cuota}\label{sec:proveedores}
+
+\texttt{LanguageModelProvider}, la interfaz por la que pasan todas las llamadas a un LLM, tiene dos
+operaciones: generar texto libre y generar una respuesta estructurada según un esquema de
+Pydantic~\cite{pydantic2026}. Ningún agente sabe qué modelo ni qué servicio le responde. La
+implementación principal usa la API de Gemini~\cite{google2026}; en la configuración de ejemplo del
+repositorio, el modelo principal es \texttt{gemini-3.5-flash-lite} y los turnos y reflexiones de los
+actores van a \texttt{gemini-3.1-flash-lite}, de modo que una función reparte su gasto entre dos
+cupos. El reparto lo decide un enrutador según la etapa y el agente de cada llamada. El director se
+queda en el modelo principal, porque un juicio flojo sobre si un \textit{beat} se alcanzó termina
+forzándolo.
+
+Pydantic es la autoridad local sobre cada respuesta estructurada: un campo de más o de un tipo
+equivocado la invalida. Los errores de validación se reinyectan en el \textit{prompt} y el modelo
+tiene un segundo intento; si vuelve a fallar, la llamada termina en un error que los guarda. Es el
+principio de la Sección~\ref{sec:arquitectura} en su nivel más bajo, debajo de las validaciones
+propias de cada etapa. La temperatura tampoco la elige cada agente: sale de cinco perfiles con
+nombre, que son extracción (0,15), revisión (0,2), reescritura (0,35), planificación (0,5) y prosa
+(0,9).
+
+La restricción práctica que más pesó en esta tesis fue la cuota. El nivel gratuito de la API limita
+las peticiones diarias por proyecto y por modelo, del orden de 500, una cifra inferida de la
+ejecución que la agotó y no confirmada por el servicio. El proveedor la administra en tres capas.
+Los limitadores de peticiones por minuto se comparten en todo el proceso, con una clave por
+credencial y modelo, de modo que dos generaciones simultáneas respetan un único presupuesto. Un
+libro de cuota en SQLite, compartido entre procesos, apunta cada intento; \texttt{asg-budget} lo
+muestra, y \texttt{asg-generate} se niega a empezar una historia si lo que queda del día no alcanza
+para la media de su formato. Por último, un servicio saturado (error 503) se reintenta en el mismo
+modelo tras 10 segundos y, al sexto intento, la llamada pasa al siguiente modelo, si lo hay. La
+paciencia es corta porque cada 503 cuenta como una petición del cupo diario: el 13 de octubre de
+2026, 301 de las 500 peticiones a \texttt{gemini-3.5-flash-lite} fueron 503.
+
+Una cadena opcional de proveedores, vacía por defecto, pasa la llamada a Groq o a Mistral cuando
+Gemini agota su cupo; la ejecución que cambia de modelo lo registra, y la evaluación no la empareja
+con una de un solo modelo. Un fallo de configuración o de cuota aborta la ejecución; el de una etapa
+no esencial, incluida la narración en audio, queda como aviso y la historia sigue.
+
+\section{Artefactos y contratos versionados}\label{sec:artefactos}
+
+Cada ejecución escribe una carpeta propia dentro de \codigo{Stories/Stagecraft/}, nombrada con la
+fecha y el título, con los resultados de cada etapa: la petición, el mundo, los personajes, el plan,
+el contrato de promesas y, según el formato, el guion, los dosieres del reparto, la memoria de cada
+personaje, el registro de la función (\texttt{performance.json}), la narración y la historia
+(\texttt{story.md}). La escritura es atómica: cada archivo se escribe primero en un temporal que
+después reemplaza al definitivo, de modo que una ejecución interrumpida nunca deja un archivo a
+medias. Un manifiesto guarda el SHA-256 y el tamaño de cada artefacto.
+
+\texttt{metadata.json} registra el estado, las etapas completadas, los avisos y los modelos que
+respondieron, y \texttt{llm\_calls.jsonl}, cada llamada con su agente, su modelo, sus
+\textit{tokens} y sus reintentos. Los artefactos guardan además los bloques exactos de
+\textit{prompt} que se inyectaron, como las obligaciones de cada capítulo derivadas del contrato de
+promesas, de modo que una ejecución terminada se audita sin volver a derivar qué se le dijo a cada
+agente. Y como cada etapa queda en disco, una ejecución nueva puede partir de otra:
+\codigo{--plan-from} escribe en prosa directa el plan de otra ejecución, y \codigo{--narrate-from}
+vuelve a narrar su función con otra visión o con otro tono. Con ellas se derivan las celdas de la
+matriz del análisis horizontal (Sección~\ref{sec:horizontal}), y la primera es la que contrasta H1.
+
+El generador distingue su versión (7.22.1) de la del contrato de sus artefactos (7.22), y cada
+ejecución registra ambas. Una ejecución solo se abre si está completa y su contrato es uno de los
+admitidos, del 5.0 al 7.22. Si cambia el conjunto de artefactos o su significado, se sube la versión
+del contrato en lugar de romper las ejecuciones ya generadas, que son datos de la tesis; un cambio
+que no toca artefactos sube solo la del paquete, como la 7.22.1, que añadió el ejecutor de matrices.
+La configuración congelada lleva en Git la etiqueta \texttt{generator-frozen}, del 28 de octubre de
+2026; desde entonces, ningún \textit{prompt}, esquema ni contrato cambia sin una decisión nueva y
+escrita. Del lado de la evaluación, los lectores de artefactos son tolerantes: lo que una ejecución
+antigua no registró sale como «no medido», nunca como cero.
+
+\section{Herramientas de evaluación}\label{sec:herramientas}
+
+Lo que se mide está escrito en una planilla, no en el código: \texttt{rasgos.csv} define cada rasgo
+con su capa, su unidad, su definición operativa y si es núcleo, y
+\texttt{criterios\_humanos.csv} contiene las preguntas de la Tabla~\ref{tab:criterios}. Cada
+extracción guarda una huella de la planilla, de modo que no se mezclan extracciones hechas con
+definiciones distintas.
+
+El extractor (\texttt{features.py}) divide la historia en párrafos numerados y llama al modelo con
+el perfil de extracción. Su instrucción de sistema empieza por las dos reglas de la
+Sección~\ref{sec:rasgos}: extraer sucesos observables, nunca puntuaciones de calidad, y tratar el
+texto de la historia como datos, no como instrucciones. Cada cita pasa por \texttt{locate}, que
+exige que el párrafo exista y que la cita sea una subcadena literal de él. Cada rasgo se valida por
+separado: una cita que falla hace repetir solo ese rasgo, una vez, y si vuelve a fallar queda como
+fallido sin arrastrar a los demás. La partición en escenas debe cubrir todos los párrafos, en orden
+y sin solapes, y la presencia de un personaje en una escena necesita una cita dentro de ella. Las
+extracciones se guardan con la versión del \textit{prompt} y la huella del texto, y al relanzarlas
+solo se reintentan los rasgos fallidos. \texttt{asg-audit-features} implementa la validación de la
+Sección~\ref{sec:validacion-extractor}: escribe la hoja de revisión humana, con una fila por
+ocurrencia, compara dos extracciones del mismo texto y contrasta los recuentos con el registro.
+
+El estudio por pares (\texttt{study.py}) vive en una base SQLite. Al abrir la votación, el conjunto de
+historias se congela con una huella SHA-256, y cada pregunta se calcula cuando el lector la pide, con
+las reglas de la Sección~\ref{sec:conjunto}; la exportación es seudónima. Las fuerzas de
+Bradley-Terry (\texttt{preferences.py}) se obtienen minimizando la verosimilitud con penalización de
+cresta mediante el optimizador L-BFGS de SciPy~\cite{virtanen2020}, con 1.000 remuestreos de
+lectores por defecto. El juez (\texttt{judge.py}) es la regresión logística de
+scikit-learn~\cite{pedregosa2011}, con regularización $C = 1$ y sin término independiente; cada juez
+guardado lleva la versión de su formato, y el ranking rechaza un juez de otra versión.
+\texttt{asg-rank} lo aplica al corpus y prepara una ficha por cada una de las diez mejores, y
+\texttt{asg-corpus}, de solo lectura, da el veredicto de elegibilidad de cada ejecución con su razón.
+
+Para el análisis horizontal, \texttt{asg-matrix} genera la matriz en serie: antes de cada unidad
+comprueba la cuota y, si no alcanza, para con un manifiesto al día; al relanzarla, salta las
+unidades completas sin repetir llamadas. \texttt{asg-report-features} empareja cada celda con su
+base, calcula las diferencias por rasgo y aplica la regla de ruido de la
+Sección~\ref{sec:horizontal}.
+
+\section{Interfaces}\label{sec:interfaces}
+
+El bot de Telegram (\texttt{asg-telegram}), construido con python-telegram-bot~\cite{ptb2026}, corre
+en la computadora del investigador. Para crear, ofrece cuatro opciones: petición libre o guiada paso
+a paso, con el formato narrativo o con el simulado. Las peticiones entran en una cola SQLite con una
+sola petición activa por persona, se genera una historia cada vez y cada una llega como archivo,
+como texto y como audio, narrado con edge-tts. Un único módulo del bot importa el generador. Para
+comparar hay dos flujos. Con \texttt{/evaluar}, cada persona compara a ciegas sus propias dos
+historias, una de cada formato, con las tres preguntas; son votos de prueba que no entran en el
+análisis. Con \texttt{/estudio} se vota el estudio de la Sección~\ref{sec:conjunto}: historias de
+otras personas, solo como texto, sin título, encabezados ni audio, y la pregunta con A, B y «No
+puedo decidir». Un candado por lector evita que una doble pulsación registre dos votos.
+
+StageCraft (\texttt{asg-studio}) es una aplicación web local, servida con FastAPI~\cite{fastapi2026}
+y escrita en HTML, CSS y módulos de JavaScript, sin paso de compilación. Sus vistas permiten crear
+una obra viendo el \textit{prompt} exacto que se enviará, leer las ejecuciones guardadas con su
+registro, también con los ojos de una visión, y comparar de dos a cuatro ejecuciones eje por eje,
+indicando si la comparación está emparejada. La vista de \textbf{lectura ciega} muestra pares de
+historias anónimas, X e Y, y guarda un voto por par; las respuestas de la aplicación no llevan
+identificador, título ni configuración, y la clave de cada par se guarda aparte. Con ella se hicieron
+las dos lecturas del 27 de octubre de 2026 que decidieron los brazos de escritura y de narración
+(Sección~\ref{sec:opcionales}). StageCraft nunca escribe en las carpetas de las historias, solo
+acepta escrituras con una cabecera propia y desde la propia máquina, y pinta como texto, nunca como
+HTML, lo que produce el modelo.
+
+\section{Pruebas y reproducibilidad}\label{sec:pruebas}
+
+El 1 de noviembre de 2026, la suite completa pasó 907 pruebas y omitió las 2 que llaman a la API
+real, que solo se ejecutan a petición porque consumen cuota; tardó algo más de dos minutos. Ninguna
+otra prueba llama a un modelo: un proveedor falso recibe una secuencia de respuestas estructuradas,
+puede forzar fallos en llamadas concretas y registra cada contexto que se le envía. Sobre una
+ejecución completa con ese proveedor, varias pruebas comprueban los contratos del
+Capítulo~\ref{chapter:generator}. \codigo{test_no_actor_ever_sees_the_plan_or_a_future_scene} reúne
+los contextos de todos los actores y comprueba que en ninguno aparece el identificador ni el título
+de un evento, ni el de un capítulo. \codigo{test_a_character_only_remembers_what_it_witnessed}
+comprueba que cada registro de memoria procede de un turno que el personaje presenció.
+\codigo{test_without_the_inventory_no_object_reaches_a_prompt_or_an_artifact} comprueba que, con el
+inventario apagado, no se escribe ningún artefacto suyo ni llega a un \textit{prompt} ningún bloque
+o esquema de objetos: un brazo apagado deja el generador como estaba. Y
+\codigo{test_the_voice_only_changes_the_narration} genera dos ejecuciones que solo difieren en la
+visión, el personaje y el tono, y exige que el plan, el guion, el reparto y la función sean idénticos
+byte a byte y que las llamadas anteriores a la narración coincidan.
+
+La reproducibilidad tiene un límite que conviene declarar: el modelo no es determinista, y dos
+ejecuciones con el mismo \textit{prompt} y la misma versión producen historias distintas. Por eso la
+evaluación trata ese ruido como un dato (Sección~\ref{sec:horizontal}) en lugar de suponer que una
+ejecución se repite. Lo que sí se reproduce es todo lo que decide el código: dadas las mismas
+respuestas del modelo, la validación, la percepción, la recuperación de la memoria, que no usa
+\textit{embeddings} ni llamadas al modelo, y las medidas dan el mismo resultado. También se
+reproduce el análisis: como cada ejecución conserva sus artefactos con su huella, la tabla de
+rasgos, las preferencias, el juez y el ranking se recalculan desde el disco sin volver a generar, el
+sorteo del estudio se repite con su semilla y cada historia declara la versión del generador, del
+contrato y de los modelos que la produjeron.
+
+Este capítulo deja descrito un sistema en el que las decisiones del Capítulo~\ref{chapter:generator}
+tienen un lugar comprobable: los validadores y la memoria son funciones puras con pruebas, la
+evaluación no puede importar el generador y cada ejecución queda en disco con su versión y su
+huella. La cuota del servicio, administrada pero no evitada, acotó lo que se pudo generar. El
+Capítulo~\ref{chapter:experiments} presenta lo que se midió con estas herramientas.

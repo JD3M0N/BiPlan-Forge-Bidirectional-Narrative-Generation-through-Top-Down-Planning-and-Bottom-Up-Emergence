@@ -11,8 +11,8 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
 
 ## Estado
 
-- **Siguiente:** R05 · Capítulo 4: Implementación.
-- **Extensión acumulada:** 27,5 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
+- **Siguiente:** R06 · Capítulo 5 (a): Experimentos con datos cerrados.
+- **Extensión acumulada:** 32,5 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
 - **Hechas:**
   - R00 · portada sin marcadores: título provisional «Generación narrativa bidireccional:
     planificación *Top-Down* y emergencia *Bottom-Up*» (traducción del nombre del repo), Josue
@@ -45,6 +45,18 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
     historia y por familia; ranking y diez mejores, con T11 como trabajo futuro; amenazas). La
     rúbrica (`piad2026`, §3.8) se comprobó en el PDF; sin referencias nuevas. 10 págs. (22–31;
     ≈ 7,5 sin figura ni tablas, ≈ 7 % sobre el presupuesto), 0 \todo
+  - R05 · capítulo 4 en seis secciones, con el estado del repositorio el 2026-11-01 (organización
+    en cinco paquetes con la Tabla 4.1 de versiones y líneas, la restricción de que la evaluación
+    no importa el generador, cada mecanismo con su módulo puro y la Tabla 4.2 de comandos;
+    proveedores, validación con Pydantic, perfiles de temperatura y cuota en tres capas con la
+    cifra de los 503; artefactos atómicos, `--plan-from`/`--narrate-from` y contratos versionados;
+    extractor, estudio, Bradley-Terry, juez y matriz; bot y StageCraft; 907 pruebas y las cuatro
+    de contrato con su nombre, y los límites de la reproducibilidad). Seis referencias nuevas de
+    software verificadas en la web (`pydantic2026`, `google2026`, `virtanen2020`, `pedregosa2011`,
+    `ptb2026`, `fastapi2026`); comando `\codigo` en `Thesis.tex` para partir rutas y nombres de
+    pruebas solo tras `/ . _ -`. Studio es 0.3.0 desde el 2026-10-27: corregido el «Estado actual»
+    de `planning/roadmap.md`, que decía 0.2.2. 7 págs. (32–38; ≈ 5 sin tablas, ≈ 2 % sobre el
+    presupuesto), 0 \todo
 
 ## Reglas comunes
 
@@ -262,6 +274,15 @@ Josue o el tutor digan otra cosa.
   (`sec:horizontal`) ya están escritos: citarlos con `\ref`, no repetirlos. También quedó dicho
   que la lista provisional de 28 rasgos (2026-10-28) quedó en 24 (2026-10-30). El capítulo 3 no
   da cifras del corpus ni de elegibilidad: van aquí, con su fecha.
+- **Nota de R05:** el capítulo 4 (`sec:proveedores`) ya explica la cuota (≈ 500 peticiones
+  diarias por modelo, inferida; los 503 del 2026-10-13) y termina diciendo que «acotó lo que se
+  pudo generar»: aquí van las cifras de coste por formato y por unidad de la matriz, con su fecha,
+  y el cierre de P05 por cuota, sin volver a explicar el mecanismo. `asg-matrix`,
+  `asg-report-features`, `asg-corpus` y `--plan-from`/`--narrate-from` están descritos en
+  `sec:herramientas` y `sec:artefactos`: citarlos con `\ref`. Los modelos se nombraron como «la
+  configuración de ejemplo del repositorio» (`gemini-3.5-flash-lite` principal y
+  `gemini-3.1-flash-lite` para los actores); si un experimento usó otros, decirlo aquí con su
+  fuente (`models_used` de `metadata.json`).
 
 ### R07 · Capítulo 5 (b): Estudio humano, juez y ranking
 
@@ -301,6 +322,10 @@ Josue o el tutor digan otra cosa.
 - **Nota de R02:** los cinco objetivos específicos, en orden: analizar el estado del arte;
   diseñar el generador híbrido; diseñar la metodología de evaluación; implementar el generador y
   las herramientas de evaluación; evaluar experimentalmente el generador.
+- **Nota de R05:** la conclusión del cuarto objetivo se apoya en el capítulo 4: cinco paquetes
+  con dependencias en un sentido (la evaluación no importa el generador), validadores puros, 907
+  pruebas el 2026-11-01 (2 omitidas, las de la API real) y cuatro pruebas de contrato nombradas en
+  `sec:pruebas`. La cuota aparece como restricción práctica, no como fallo de diseño.
 
 ### R09 · Recomendaciones
 
@@ -332,6 +357,10 @@ Josue o el tutor digan otra cosa.
 - **Nota de R01:** la bibliografía da 5 cajas desbordadas porque parte los títulos en inglés con
   los patrones del español; probar `langid = {english}` en esas entradas (con `english` cargado
   en `babel`) o `autolang`.
+- **Nota de R05:** siguen siendo esas 5 cajas; las seis entradas de software de R05 no añaden
+  ninguna. `virtanen2020` lleva «and others» (solo se verificó el primer autor; completar la lista
+  desde el DOI si se quiere). Para nombres de código largos en anexos, usar `\codigo{…}` (definido
+  en `Thesis.tex`), que solo parte tras `/ . _ -`.
 - **Depende de:** R08.
 
 ### R12 · Repaso de coherencia

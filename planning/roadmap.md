@@ -8,7 +8,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 - **Siguiente:** P07.1 · qué votos entrenan al juez y cómo entran (modo `O`, conviene `/model opus`). Los 5 lectores del piloto votaron (~69 votos) y Josue los anotó a mano; la base del piloto tiene 0. **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** no se alcanzó (P07.5 daría un H3 reducido, si Josue lo acepta).
 - **Versiones** (2026-10-30): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.1, evaluación 2.1.6,
-  Telegram 6.0.3, Studio 0.2.2.
+  Telegram 6.0.3, Studio 0.3.0.
 - **Hechas:**
   - P00 · Arranque: `planning/`, skill `phase`, migración de `TODO.md` y graphify.
   - P01.1 · Inventario de código muerto: 4 candidatos aprobados por Josue (ver P01.2); sin comandos ni módulos huérfanos.

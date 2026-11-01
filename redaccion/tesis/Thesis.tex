@@ -19,6 +19,8 @@
 \usetikzlibrary{arrows.meta,backgrounds,fit}
 % Permite partir URL largas (bibliografía).
 \usepackage{xurl}
+% Nombres de código largos (rutas, pruebas): solo se parten tras «/», «.», «_» o «-».
+\DeclareUrlCommand\codigo{\urlstyle{tt}\def\UrlBreaks{\do\/\do\.\do\_\do-}\def\UrlBigBreaks{}}
 \floatstyle{plaintop}
 \restylefloat{table}
 \addbibresource{Bibliography.bib}
