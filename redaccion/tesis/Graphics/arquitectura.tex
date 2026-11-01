@@ -1,0 +1,41 @@
+% Arquitectura del generador (R03, Figura fig:arquitectura). Se incluye con \input desde
+% MainMatter/Generator.tex; necesita tikz con arrows.meta, backgrounds y fit (Thesis.tex).
+\begin{tikzpicture}[
+    font=\footnotesize,
+    caja/.style={draw, rounded corners=2pt, align=center, text width=2.2cm,
+      minimum height=1.25cm, inner sep=2pt, fill=white},
+    flecha/.style={-{Stealth[length=1.8mm]}, semithick},
+    banda/.style={draw=black!45, dashed, rounded corners=4pt, inner sep=4pt},
+    rotulo/.style={font=\footnotesize\itshape, text=black!70},
+  ]
+  % Primera fila: qué pasa.
+  \node[caja] (peticion) at (0,0) {Petición};
+  \node[caja] (analisis) at (2.9,0) {Análisis: perfil, mundo y personajes};
+  \node[caja] (plan) at (5.8,0) {Plan: grafo de eventos validado};
+  \node[caja] (promesas) at (8.7,0) {Contrato de promesas};
+  \node[caja] (guion) at (11.6,0) {Guion: actos y escenas};
+  % Segunda fila: cómo pasa y cómo se cuenta.
+  \node[caja] (reparto) at (0,-2.75) {Reparto y compuertas};
+  \node[caja] (funcion) at (2.9,-2.75) {Función: director y actores};
+  \node[caja] (registro) at (5.8,-2.75) {Registro de la función};
+  \node[caja] (narrador) at (8.7,-2.75) {Narrador};
+  \node[caja] (historia) at (11.6,-2.75) {Historia};
+
+  \foreach \a/\b in {peticion/analisis, analisis/plan, plan/promesas, promesas/guion,
+      reparto/funcion, funcion/registro, registro/narrador, narrador/historia}
+    \draw[flecha] (\a) -- (\b);
+  \draw[flecha] (guion.south) -- ++(0,-0.75) -| (reparto.north);
+  % Formato narrativo: la historia se escribe directamente desde el plan y las promesas.
+  \draw[flecha, dashed] (promesas.north) -- ++(0,0.55) -| ([xshift=4.5mm]historia.east)
+    node[rotulo, pos=0.25, above] {formato narrativo}
+    -- (historia.east);
+
+  \begin{scope}[on background layer]
+    \node[banda, fit=(peticion)(guion),
+      label={[rotulo, anchor=south west]north west:\textit{Top-Down}: qué pasa}] {};
+    \node[banda, fit=(reparto)(registro),
+      label={[rotulo, anchor=north west]south west:\textit{Bottom-Up}: cómo pasa}] {};
+    \node[banda, fit=(narrador)(historia),
+      label={[rotulo, anchor=north west]south west:Discurso: cómo se cuenta}] {};
+  \end{scope}
+\end{tikzpicture}

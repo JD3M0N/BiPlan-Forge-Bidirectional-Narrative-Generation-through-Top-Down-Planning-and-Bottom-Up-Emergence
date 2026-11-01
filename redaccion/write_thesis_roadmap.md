@@ -11,8 +11,8 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
 
 ## Estado
 
-- **Siguiente:** R03 · Capítulo 2: Generador híbrido de historias.
-- **Extensión acumulada:** 12 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
+- **Siguiente:** R04 · Capítulo 3: Metodología de evaluación.
+- **Extensión acumulada:** 20 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
 - **Hechas:**
   - R00 · portada sin marcadores: título provisional «Generación narrativa bidireccional:
     planificación *Top-Down* y emergencia *Bottom-Up*» (traducción del nombre del repo), Josue
@@ -30,6 +30,13 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
     por capítulo) e hipótesis H1–H3, con las correspondencias en comentarios LaTeX; sin
     referencias nuevas. La sigla LLMs pasa a definirse aquí y el Cap. 1 pierde su definición y
     el «con los mismos tutores» (Roger tuvo dos; esta tesis, uno). 4 págs. (1–4), 0 \todo
+  - R03 · capítulo 2 en seis secciones (arquitectura con figura TikZ y «el modelo propone, el
+    código decide»; plan como grafo acíclico con orden $\sigma$ y contrato de promesas; guion;
+    función: reparto y compuertas, actores con memoria propia y la fórmula de recuperación,
+    director; narrador; mecanismos opcionales con la Tabla 2.1 de estados congelados); una
+    referencia nueva, `piad2026` (B02, ensayo «Promises, Progress, and Payoffs»); `tikz` y
+    `array` en el preámbulo. 9 págs. (13–21; ≈ 8 sin figura ni tabla, 12,5 % sobre el
+    presupuesto), 0 \todo
 
 ## Reglas comunes
 
@@ -181,6 +188,12 @@ Josue o el tutor digan otra cosa.
   `sec:escalas-pares`, `sec:jueces-llm`, `sec:metricas-automaticas`): remitir con `\ref` en vez de
   repetirla. Faltan en el `.bib` B01 (audio), B02 (rúbrica Sanderson), B08, B37 y B41, si se
   citan.
+- **Nota de R03:** B02 ya está en el `.bib` como `piad2026` (el documento completo; la rúbrica
+  *Flash Fiction* es su §3.8): citarla con esa clave. Términos fijados en el capítulo 2, para no
+  redefinirlos: **registro** de la función (el *log*), **suceso del mundo**, **contrato de
+  promesas** (el *ledger*), **compuertas de conocimiento**, **brazo de control**, «configuración
+  congelada» (2026-10-28). Las medidas de diagnóstico de la función se presentaron como
+  comprobaciones del mecanismo, no de calidad (remitiendo a este capítulo).
 
 ### R05 · Capítulo 4: Implementación
 
@@ -196,6 +209,11 @@ Josue o el tutor digan otra cosa.
 - **Depende de:** R03, R04.
 - **Hecho cuando:** las versiones citadas coinciden con el «Estado actual» de
   `planning/roadmap.md` en la fecha de escritura, y esa fecha consta en el texto.
+- **Nota de R03:** el capítulo 2 es conceptual y no nombra módulos ni pruebas; aquí se puede
+  dar a cada mecanismo su módulo (`planning/graph.py`, `stage/memory.py`, `stage/voices.py`…) y
+  nombrar las pruebas de contrato que allí solo se mencionan (los actores no ven el plan, el
+  inventario apagado no cambia nada, la visión no toca lo anterior a la narración). La
+  Figura 2.1 (`Graphics/arquitectura.tex`, TikZ) puede reutilizarse con `\ref{fig:arquitectura}`.
 
 ### R06 · Capítulo 5 (a): Experimentos con datos cerrados
 
@@ -218,6 +236,12 @@ Josue o el tutor digan otra cosa.
   H3 (P02.1, empate 2–2–1 en 5 pares, y P02.2, A 3 – B 1 en 4 pares, con un solo lector: evidencia
   exploratoria). La auditoría de 62 contextos de 7.5 es evidencia indirecta de H2: muestra el
   aislamiento, no que mejore las escenas. Correspondencias en comentarios de `Introduction.tex`.
+- **Nota de R03:** el capítulo 2 (`sec:opcionales`, `sec:director`) ya adelanta, en una frase
+  cada una y remitiendo aquí, P02.1 (2–2–1 en 5 pares), P02.2 (A 3 – B 1 en 4 pares), los 3 de 6
+  *beats* forzados de la validación de 7.22 (5 de 10 en una anterior) y que el guion adaptado,
+  la guía compositiva, el inventario, las cláusulas por tipo y el modo adaptativo quedaron sin
+  comparación a ciegas. Aquí van con su detalle y su alcance; la Tabla 2.1 (`tab:mecanismos`)
+  da los estados congelados y no hace falta repetirlos.
 
 ### R07 · Capítulo 5 (b): Estudio humano, juez y ranking
 

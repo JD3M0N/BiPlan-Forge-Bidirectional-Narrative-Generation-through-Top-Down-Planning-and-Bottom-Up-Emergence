@@ -1,2 +1,328 @@
 \chapter{Generador híbrido de historias}\label{chapter:generator}
-% R03 en ../write_thesis_roadmap.md
+% R03 en ../write_thesis_roadmap.md. Fuentes: docs/resumen.md, docs/architecture/generation.md y
+% simulation.md, y el código congelado en Stagecraft 7.22 (etiqueta generator-frozen,
+% 2026-10-28; predeterminados en planning/decisions.md §3 y options.py). Referencia nueva:
+% piad2026 (B02 de la planilla).
+
+Este capítulo describe el generador de historias propuesto, en la configuración con que quedó
+congelado antes de los experimentos, el 28 de octubre de 2026. Primero se presenta la
+\textbf{Arquitectura} (Sección~\ref{sec:arquitectura}), que separa en etapas las tres decisiones de
+una historia: qué pasa, cómo pasa y cómo se cuenta. Después se describe cada etapa: el \textbf{Plan
+validado} y su contrato de promesas (Sección~\ref{sec:plan}), el \textbf{Guion teatral}
+(Sección~\ref{sec:guion}), la \textbf{Función simulada}, con el reparto, la memoria de los actores
+y el director (Sección~\ref{sec:funcion}), y el \textbf{Narrador} (Sección~\ref{sec:narrador}). La
+Sección~\ref{sec:opcionales} reúne los \textbf{Mecanismos opcionales}, que el generador implementa
+pero que su configuración congelada deja apagados.
+
+\section{Arquitectura}\label{sec:arquitectura}
+
+Como se muestra en la Figura~\ref{fig:arquitectura}, el generador encadena etapas, cada una a cargo
+de un agente, es decir, de una llamada a un LLM con su propio \textit{prompt} y su propio formato de
+salida. Las primeras etapas deciden qué pasa desde la perspectiva del autor: a partir de la
+petición se eligen la escala de la historia, el mundo y los personajes; se construye un plan que el
+código valida como un grafo de eventos, se traza sobre él un contrato de promesas y un dramaturgo lo
+convierte en un guion de actos y escenas. Es la mitad \textit{Top-Down}. En la mitad
+\textit{Bottom-Up}, unos actores simulados representan cada escena sin conocer el guion, y de su
+interacción sale cómo pasa: es la función, cuyo único producto es el registro de lo que cada
+personaje dijo, hizo y pensó. Por último, un narrador convierte ese registro en la historia y
+decide cómo se cuenta, es decir, el discurso en el sentido de Chatman
+(Capítulo~\ref{chapter:state-of-the-art}).
+
+\begin{figure}[t]
+  \centering
+  \input{Graphics/arquitectura.tex}
+  \caption{Arquitectura del generador: qué pasa, cómo pasa y cómo se cuenta}
+  \label{fig:arquitectura}
+\end{figure}
+
+La misma cadena admite tres formatos de salida, que comparten todo lo anterior al punto en que se
+separan. En el formato \textbf{narrativo}, la historia se escribe directamente desde el plan y las
+promesas: un redactor escribe cada capítulo, un crítico lo anota y un escritor lo corrige párrafo a
+párrafo. Es la generación \textit{Top-Down} con LLMs de la Sección~\ref{sec:top-down}. En el formato
+de \textbf{guion}, el resultado es el propio guion teatral. En el formato \textbf{simulado}, el
+guion se representa y se narra; es el generador híbrido que propone esta tesis. Como cada etapa
+guarda su resultado antes de dar paso a la siguiente, una historia se puede repetir desde cualquier
+punto: escribir en prosa directa el plan de una función ya representada, o narrar de nuevo la misma
+función desde otro punto de vista. Es lo que permite contrastar H1, que compara la historia narrada
+a partir de una función con la escrita directamente desde el mismo plan.
+
+Un principio recorre todas las etapas: \textbf{el modelo propone y el código decide}. Cada vez que
+un agente produce algo con estructura, sea un plan, un acto, un dosier de personaje o un turno, el
+código lo valida contra invariantes explícitos antes de aceptarlo. Si no los cumple, los mensajes de
+error se reinyectan en el \textit{prompt} y el agente lo intenta de nuevo; lo que admite una sola
+corrección se normaliza en lugar de rechazarse. Los hechos de los que depende el resto del sistema,
+como el orden de los eventos, quién presenció cada turno o qué guarda cada memoria, los calcula el
+código y nunca se le preguntan al modelo. Es la lección de la Sección~\ref{sec:consistencia}: los
+fallos de información de los LLMs se previenen mejor por construcción que pidiendo al modelo que no
+los cometa. Si una etapa no esencial falla, como el reparto o la narración de un capítulo, el código
+deriva un resultado de respaldo, la ejecución lo registra y la historia sigue.
+
+\section{El plan validado}\label{sec:plan}
+
+La petición es un texto libre o una ficha de la obra con su trama y su reparto. Un analista la
+interpreta y elige uno de tres perfiles, Esencial, Desarrollada o Expansiva, que fijan la escala de
+la historia. Los perfiles se describen al modelo con palabras y no con presupuestos: si la persona
+pide una extensión, el código la traduce al perfil, y la cifra no llega a ningún \textit{prompt}.
+Antes del plan, otros agentes describen el mundo, con sus lugares y objetos, y los personajes, y una
+guía recupera esqueletos de trama clásicos parecidos a la petición y los ofrece como inspiración,
+no como restricción.
+
+El plan es la decisión central del autor. Se compone de capítulos, cada uno con su objetivo
+dramático, su estado inicial, su punto de giro y su estado final, y de eventos. Cada evento declara
+su propósito, su función dramática, su conflicto y su desenlace; las condiciones que lo hacen
+posible y los cambios que produce, en lenguaje natural; los personajes, el lugar y los objetos que
+intervienen, y, si es el caso, las preparaciones anteriores que paga. Las dependencias entre
+eventos son causales o temporales.
+
+Sea $E$ el conjunto de eventos y $D \subseteq E \times E$ el de dependencias, donde $(e_i, e_j) \in
+D$ significa que $e_i$ debe ocurrir antes que $e_j$. El código acepta el plan solo si el grafo
+$(E, D)$ es acíclico, los identificadores son únicos y los órdenes consecutivos, toda referencia a
+un capítulo, personaje, lugar u objeto existe y cada capítulo tiene al menos dos eventos. Con el
+grafo aceptado, el código calcula un orden topológico estable $\sigma$, que asigna a cada evento su
+posición y es el único orden en que confía el resto del sistema; todo evento $e$ que paga una
+preparación $e'$ debe cumplir $\sigma(e') < \sigma(e)$. Un plan que no valida se rechaza, sus
+errores se reinyectan en un \textit{prompt} de reparación y se pide otro. Como DOC~\cite{yang2023} y
+Agents' Room~\cite{huot2025}, el generador planifica antes de escribir; a diferencia de ellos, el
+plan no es solo una guía para el modelo, sino un objeto que el código comprueba. La validación como
+grafo acíclico retoma el gestor de dependencias de Fuentes Rodríguez~\cite{fuentes2025}, que ya
+representaba la trama como un grafo dirigido acíclico de eventos.
+
+\subsection{Promesas, progreso y pago}\label{sec:promesas}
+
+Piad Morffis~\cite{piad2026}, a partir de Sanderson, describe la trama como una tríada: la historia
+hace \textbf{promesas} al principio, muestra un \textbf{progreso} hacia ellas y las \textbf{paga}
+al final, con tantos pagos como promesas. La tríada es, en sus palabras, «esencialmente, un contrato
+verificable», y el generador la trata así. Con el plan ya congelado, un agente traza el contrato de
+promesas: para cada una, el evento que la abre, los que la hacen progresar y el que la paga, todos
+citados por su identificador. El capítulo de cada momento no lo escribe el modelo, sino que se
+deriva del evento, de modo que el contrato no puede inventar un momento que el plan no tenga.
+
+El código valida el contrato sobre el orden $\sigma$. Si $a$ es la apertura de una promesa, $g$
+cualquiera de sus progresos y $r$ su pago, debe cumplirse $\sigma(a) < \sigma(g) < \sigma(r)$; la
+promesa principal se paga en el último capítulo, y el número de promesas cae dentro de la banda del
+perfil. Validado, el contrato se convierte en obligaciones por capítulo para los agentes que
+escriben: cambia cómo se escribe el plan, nunca lo que contiene. Es la propuesta de Yun et
+al.~\cite{yun2026}, representar cada preparación y su pago de forma comprobable, llevada a los
+eventos de un plan. El contrato se puede apagar, y ese es su brazo de control: una auditoría
+registra qué promesas pagó la historia final.
+
+\section{El guion teatral}\label{sec:guion}
+
+Un plan dice qué eventos ocurren, pero no quién está en escena, dónde ni qué quiere cada uno en ese
+momento. Eso lo decide el guion. Un dramaturgo escribe cada capítulo del plan como un acto dividido
+en escenas. Cada escena se ancla a uno o varios eventos del plan, en su orden, y declara su lugar,
+una acotación inicial con lo que vería el público, el reparto presente con el objetivo concreto que
+cada personaje persigue en ella, y sus réplicas y acotaciones. El objetivo no se imprime en el guion,
+pero es lo que después recibe el actor.
+
+El código valida cada acto contra el plan congelado: rechaza los anclajes a eventos inexistentes o
+desordenados y los lugares y repartos que no corresponden, y normaliza lo demás. Un crítico revisa el
+acto y un escritor lo corrige. El guion se puede obtener de dos maneras, con el mismo validador: el
+método \textbf{nativo}, en que el dramaturgo escribe los actos desde el plan, y el \textbf{adaptado},
+en que se adapta a actos la prosa del formato narrativo. Ambos se implementaron para compararlos a
+ciegas y quedarse con uno; esa comparación quedó fuera de los experimentos, y la configuración
+congelada usa el nativo, que es el que alimenta la función.
+
+En el formato simulado, el guion es la partitura de la función, no su texto. Cada escena del guion
+se convierte en una escena de la función, con un \textit{beat} por cada evento del plan que
+representa; el término viene del teatro y, en la generación de historias, de Façade
+(Sección~\ref{sec:hibridos}). Las réplicas que escribió el dramaturgo no las recibe nadie en la
+función: solo sirven para medir después si los actores, aun sin verlas, acabaron recitándolas.
+
+\section{La función simulada}\label{sec:funcion}
+
+La función es la mitad \textit{Bottom-Up} del generador. Su propósito es que lo que dicen y hacen
+los personajes salga de lo que cada uno sabe y quiere, y no de la visión del autor. Tiene tres
+piezas: el reparto, que fija qué sabe cada personaje al empezar; los actores, cada uno con su
+memoria, y el director, que vela por que cada escena alcance los eventos del plan.
+
+\subsection{Reparto y compuertas de conocimiento}\label{sec:reparto}
+
+Antes de la primera escena, un director de reparto escribe un dosier por personaje: su cara pública,
+sus tácticas habituales, las reglas que nunca rompe, sus relaciones, su emoción y su objetivo
+iniciales y, sobre todo, lo que ya sabe al levantarse el telón, con la procedencia de cada hecho. Si
+el personaje guarda un secreto, el dosier incluye la versión que cuenta en su lugar. Lo que no está
+en ese conocimiento inicial, el personaje tiene que aprenderlo en escena.
+
+La asimetría de información de la historia se declara en \textbf{compuertas de conocimiento}. Cada
+compuerta es un hecho que unos personajes saben y otros no, con quién lo sabe antes de la primera
+escena, quién lo sacará a la luz, de qué modo (confesión, deducción, descubrimiento, porque se lo
+cuentan o porque lo oye) y en qué evento del plan pasa a ser sabido. El código hace cumplir una
+distinción que el modelo confundía: quien descubre un hecho en escena no puede saberlo desde el
+principio. La primera ejecución real le dio al detective la solución de partida. Cada actor recibe
+solo los hechos que ya conoce, y únicamente el director ve todas las compuertas. Es la idea de
+Sabre~\cite{ware2021}, en que cada personaje actúa a partir de lo que cree, impuesta sin un
+planificador formal: un secreto se guarda porque el actor que no debe saberlo nunca lo recibe, no
+porque se le pida al modelo que lo guarde.
+
+\subsection{Los actores y su memoria}\label{sec:memoria}
+
+Cada personaje lo interpreta un actor: una llamada al LLM por turno, con un contexto propio. El
+actor nunca ve el guion ni el plan; recibe las circunstancias de la escena, su objetivo en ella, la
+nota del director y lo que recupera de su memoria. Ni los identificadores ni los títulos de los
+eventos ni las escenas futuras llegan a su contexto, y una prueba recorre una ejecución completa
+para comprobarlo. En cada turno, el actor declara qué dice, qué gesto visible hace, qué piensa sin
+decirlo, a quién se dirige, si habla en público o en susurro y qué táctica intenta, de una lista
+cerrada (enfrentar, negar, mentir, confesar, ceder…). El código valida el turno, lo rechaza si se
+sale de la ficción o del idioma de la historia y deja que el actor lo repare una vez.
+
+La percepción la decide el código, no el actor. Un turno público lo perciben los personajes
+presentes en la escena; un susurro, solo quien habla y sus destinatarios, y un pensamiento, solo
+quien lo piensa. Cada personaje tiene un flujo de memoria propio en el que se escribe únicamente lo
+que percibió. No hay un almacén común del que filtrar al leer: lo que un personaje no presenció
+nunca se escribió en su memoria. Es la respuesta del generador a fallos como el del personaje que
+revela lo que aún no podía saber~\cite{ahn2024} y a la dificultad de los LLMs para razonar quién
+sabe qué~\cite{kim2023}: en lugar de pedirle al modelo que lo razone, el contexto de cada actor ya
+contiene solo lo que su personaje sabe.
+
+Para cada turno, el actor no recibe toda su memoria, sino los registros más pertinentes. La
+recuperación sigue a los agentes generativos de Park et al.~\cite{park2023}, que combinan recencia,
+importancia y relevancia, con dos diferencias: no usa \textit{embeddings} (representaciones
+vectoriales del texto) ni llamadas al modelo, de modo que la misma ejecución puntúa igual en
+cualquier máquina, y añade un término de compañía. La puntuación de un registro $m$, formado en la
+escena $k_m$, al preparar un turno de la escena $k$ es
+\begin{equation}
+  s(m) = 1{,}0\,\mathrm{rel}(m) + 0{,}6\,\frac{1}{1 + 0{,}25\,(k - k_m)} + 0{,}5\,\mathrm{imp}(m)
+  + 0{,}3\,\mathrm{comp}(m),
+\end{equation}
+donde $\mathrm{rel}(m) \in [0, 1]$ es el solapamiento léxico entre el registro y la situación de la
+escena, en el que una palabra pesa más cuanto más rara es en el pasado del personaje;
+$\mathrm{imp}(m) \in [0, 1]$, una importancia fijada por reglas para los turnos y propuesta por el
+modelo para las reflexiones, y $\mathrm{comp}(m)$, la fracción de los personajes presentes que
+intervinieron en él. Al actor le llegan los seis registros mejor puntuados y sus dos reflexiones más
+recientes.
+
+Al terminar cada escena, cada actor reflexiona sobre lo vivido, y su estado, con sus objetivos y su
+postura hacia los demás, se sustituye en lugar de acumularse: un actor que guardara a la vez «es mi
+aliada» y «me traicionó» interpretaría mal las dos. El historial queda en los registros. La memoria
+propia tiene, además, su brazo de control. Con memoria compartida, cada turno público llega a la
+memoria de todo el reparto, esté o no en escena, mientras que susurros y pensamientos siguen siendo
+privados. Comparar ambas configuraciones sobre el mismo plan es lo que plantea H2.
+
+\subsection{El director}\label{sec:director}
+
+El director es el componente con visión de autor dentro de la función. Para cada \textit{beat} ve
+el evento del plan que hay que alcanzar, con su propósito, su conflicto y su desenlace, las
+obligaciones del contrato de promesas y las compuertas que deben abrirse en él. Como el director de
+The Virtual Storyteller~\cite{theune2003}, sugiere motivaciones y nunca dicta réplicas: abre cada
+\textit{beat} indicando quién se mueve, y su nota le dice al actor qué buscar, no qué decir.
+
+Cada tres turnos, el director lee el \textit{beat} cláusula por cláusula, y lo da por alcanzado
+cuando cada cláusula tiene un turno que la muestra. Si en la segunda lectura sigue faltando algo,
+señala quién tiene que cambiar y por qué. Cuando el \textit{beat} agota su presupuesto de turnos,
+ocho por defecto, el mundo entrega la cláusula que falta con un \textbf{suceso del mundo}: algo
+visible que ocurre en escena y entra al registro como un turno más, de modo que el registro sigue
+siendo la única fuente de la historia. Dos actores reaccionan y una última lectura decide si el
+\textit{beat} se alcanzó con ayuda o se forzó. En el último \textit{beat} de la obra, el suceso del
+mundo puede ejecutar la consecuencia visible de una decisión que los personajes ya tomaron, pero
+nunca decidir por ellos.
+
+Este mecanismo garantiza que la función avance, no que los personajes lleguen solos a cada evento.
+En la validación del generador congelado, la única función representada (perfil Esencial,
+2026-10-28) forzó 3 de sus 6 \textit{beats}, la misma proporción que una validación anterior (5 de
+10); el Capítulo~\ref{chapter:experiments} lo trata como una limitación conocida. La función se
+representa por defecto en modo \textbf{fijo}, en el que los eventos del plan son hitos que hay que
+alcanzar. El modo \textbf{adaptativo}, opcional, permite que un hito no representado revise las
+escenas futuras, con una propuesta y una reparación por frontera entre escenas; si fallan, la función
+termina con un cierre abierto, y el plan original nunca se modifica.
+
+La función registra, además, medidas de diagnóstico, como cuánto reproducen los actores las réplicas
+del guion que nunca vieron. Comprueban el mecanismo, no la calidad de la historia, que es objeto del
+Capítulo~\ref{chapter:evaluation}.
+
+\section{El narrador}\label{sec:narrador}
+
+El narrador convierte el registro de la función en la historia, con un capítulo por cada capítulo
+del plan. Como en StoryBox~\cite{chen2026a}, lo que hacen los agentes y quién lo cuenta están
+separados, pero aquí el narrador tiene un límite estricto: \textbf{cura sin inventar}. Puede cortar,
+fundir y reordenar lo ocurrido dentro de un capítulo, pero no añadir un suceso que no esté en el
+registro, y donde el plan y el registro no coinciden, manda el registro. La historia cuenta lo que la
+función produjo, no lo que el plan preveía.
+
+Darle el registro tal cual no funciona, porque el narrador copia lo que recibe: con el registro
+entero transcribía todas las réplicas, y con las réplicas recortadas copiaba los fragmentos. Por
+eso, en la narración \textbf{resumida}, que es la predeterminada, recibe enteras solo las réplicas
+clave de cada escena y los sucesos del mundo. El resto le llega en estilo indirecto y en pasado
+(«el capitán insistió en el lastre»), junto con los gestos y la ambientación de cada escena, todo
+ello resumido por otra llamada al modelo una vez por capítulo. El código descarta el resumen que
+copia su réplica, el que comparte con ella cuatro palabras seguidas. Después, un revisor comprueba
+cada capítulo contra el registro: solo lo bloquean hallazgos graves, como un suceso inventado o una
+contradicción, y el hallazgo que no puede citar el turno en que se basa se descarta.
+
+El punto de vista es modular: cada visión es un filtro determinista sobre el registro. La
+\textbf{omnisciente}, la predeterminada, ve todos los turnos; la \textbf{limitada} y la de
+\textbf{primera persona} siguen a un personaje y solo ven las escenas en que estuvo presente. Un
+capítulo sin turnos visibles no se narra, porque el narrador tendría que inventarlo. La visión, el
+personaje y el tono que pide la persona solo llegan a la narración, y una prueba comprueba que el
+plan, el guion, el reparto y la función no cambian entre dos ejecuciones que solo difieren en ellos.
+Así, la misma función se puede narrar con varias visiones o tonos, y las diferencias entre las
+historias resultantes se deben solo al discurso.
+
+\section{Mecanismos opcionales}\label{sec:opcionales}
+
+WSE-bench~\cite{chen2026b} concluye que añadir estructura no mejora la coherencia de forma uniforme,
+y H3 lo traslada a este generador: que un mecanismo mejore medidas de la prosa no basta para que los
+lectores prefieran las historias que lo usan. Por eso el generador implementa más mecanismos de los
+que usa su configuración congelada, todos con una regla de diseño: apagados, dejan el generador
+como estaba; en el inventario, una prueba automática comprueba que no cambia ningún
+\textit{prompt}, esquema ni resultado intermedio. Cada uno es así un brazo experimental, y su
+estado por defecto cambia solo por una lectura humana a ciegas, no por una medida automática. La Tabla~\ref{tab:mecanismos} resume los mecanismos con
+alternativa, su etapa y su estado en la configuración congelada.
+
+\begin{table}[htb]
+  \centering
+  \caption{Estado de los mecanismos en la configuración congelada}
+  \label{tab:mecanismos}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.4cm}>{\raggedright\arraybackslash}p{2.8cm}%
+      >{\raggedright\arraybackslash}p{2.0cm}>{\raggedright\arraybackslash}p{3.6cm}@{}}
+    \toprule
+    Mecanismo & Etapa & Congelado & Alternativa \\
+    \midrule
+    Guía de esqueletos de trama & Plan & encendida & apagada o compositiva \\
+    Contrato de promesas & Plan & encendido & apagado (control) \\
+    Método del guion & Guion & nativo & adaptado de la prosa \\
+    Memoria de los actores & Función & propia & compartida (H2) \\
+    Modo de la función & Función & fijo & adaptativo \\
+    Cláusulas por tipo & Función & apagadas & encendidas \\
+    Inventario de objetos & Función & apagado & encendido \\
+    Método de narración & Narración & resumida & por selección \\
+    Visión & Narración & omnisciente & limitada o primera persona \\
+    Fichas de escena y crítico con cita & Escritura narrativa & apagados & encendidos \\
+    Editor por fragmentos y ejemplos de estilo & Escritura y narración & apagados & encendidos \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+El más elaborado es el \textbf{inventario de objetos}, que aplica a las cosas el principio de la
+Sección~\ref{sec:arquitectura}: el actor declara un movimiento, un verbo y el nombre de un objeto, y
+el código lo valida contra la verdad que él mismo guarda. Cada uno de los seis verbos tiene una
+regla (usar, dar, soltar, esconder o mostrar exigen tener el objeto; tomar, que esté a la vista), y
+un objeto solo lo percibe quien lo ve. Su validación mostró también lo que el árbitro no cubre: el
+suceso del mundo con que el director cierra un \textit{beat} es texto libre, y en una ocasión hizo
+caer un sello de las manos de un personaje que, según el inventario, no lo tenía.
+
+Los demás mecanismos atacan defectos de la prosa que el código puede medir. Las \textbf{fichas de
+escena} convierten cada evento en una ficha (lugar, deseos, obstáculo, giro) antes de redactar; el
+\textbf{crítico con cita} nombra el problema principal de cada capítulo con una cita literal; el
+\textbf{editor por fragmentos} reescribe solo los párrafos que el código marca, y los
+\textbf{ejemplos de estilo} añaden dos párrafos de muestra al contrato de estilo. La narración
+\textbf{por selección} elige primero los momentos del registro y escribe desde ellos, y las
+\textbf{cláusulas por tipo} separan lo que deciden los personajes de lo que hace el mundo.
+
+Ninguno se encendió. Dos lecturas a ciegas de un solo lector, el 27 de octubre de 2026, decidieron
+los brazos de escritura y de narración. En la narración, la selección con editor y ejemplos corrigió
+los defectos medidos, pero empató con la resumida (2--2--1 en 5 pares); en el formato narrativo, los
+cuatro brazos de escritura redujeron a casi cero las coletillas medidas, y el lector prefirió la
+versión sin ellos en 3 de 4 pares. Tan pocos pares y un solo lector no distinguen una preferencia
+pequeña: solo muestran que esas mejoras medidas no bastaron para ganar. La guía compositiva, el
+inventario, las cláusulas por tipo, el modo adaptativo y el guion adaptado quedaron sin comparación
+a ciegas, como opciones.
+El Capítulo~\ref{chapter:experiments} presenta estas lecturas con su alcance.
+
+Este capítulo deja descrito un generador que separa qué pasa, cómo pasa y cómo se cuenta, y que
+apoya cada separación en el código: un plan que se valida como grafo, un contrato de promesas
+anclado a sus eventos, actores que solo recuerdan lo que percibieron y un narrador que no puede
+inventar. Deja también fijada su configuración, con los mecanismos que no se ganaron su
+complejidad apagados pero disponibles. El Capítulo~\ref{chapter:evaluation} describe cómo se evalúan
+las historias que produce.
