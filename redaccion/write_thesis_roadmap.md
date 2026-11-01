@@ -11,14 +11,19 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
 
 ## Estado
 
-- **Siguiente:** R01 · Capítulo 1: Estado del arte.
-- **Extensión acumulada:** 0 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
+- **Siguiente:** R02 · Introducción.
+- **Extensión acumulada:** 8 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
 - **Hechas:**
   - R00 · portada sin marcadores: título provisional «Generación narrativa bidireccional:
     planificación *Top-Down* y emergencia *Bottom-Up*» (traducción del nombre del repo), Josue
     Rolando Naranjo Sieiro, un solo tutor («Tutor:», etiqueta nueva `\advisorlabel` en la
     clase), noviembre de 2026 y enlace al repo partido en dos líneas; índice con Introducción,
     los cinco capítulos, Conclusiones y Recomendaciones. 1 pág., 0 \todo
+  - R01 · estado del arte en seis secciones (dirigida por la trama, simulación de personajes y
+    paradoja narrativa, híbridos, consistencia y personajes, evaluación en cuatro subsecciones,
+    posición del autor); `Bibliography.bib` con las 51 entradas citadas (37 de la planilla, 14
+    verificadas en la web el 2026-11-01); `uhthesis.cls` sin las redefiniciones autor-año de
+    `\cite`, que quitaban los corchetes. 8 págs. (2–9), 0 \todo
 
 ## Reglas comunes
 
@@ -115,6 +120,11 @@ Josue o el tutor digan otra cosa.
 - **Depende de:** R01.
 - **Hecho cuando:** cada objetivo específico apunta a un capítulo, y cada hipótesis, a un
   experimento de R06 o R07 (dejar la correspondencia escrita como comentario LaTeX).
+- **Nota de R01:** el capítulo 1 define historia, discurso, evento, trama, plan,
+  *Top-Down*/*Bottom-Up* y la paradoja narrativa (en sentido amplio: Louchart y Aylett más la
+  tensión trama–personaje de Riedl y Young). La sigla «*Large Language Models* (LLMs)» se define
+  en la Sección 1.1; como la introducción va antes, si la usa, se define allí y se quita la
+  definición del capítulo 1. El hueco que se declara está al final de `sec:posicion`.
 
 ### R03 · Capítulo 2: Generador híbrido de historias
 
@@ -133,6 +143,11 @@ Josue o el tutor digan otra cosa.
 - **Depende de:** R02.
 - **Hecho cuando:** figura de arquitectura incluida y citada; ningún mecanismo apagado por
   defecto se presenta como parte del predeterminado congelado (`generator-frozen`, 7.22).
+- **Nota de R01:** la posición del autor (`sec:posicion`) ya promete de dónde sale cada pieza;
+  conviene citarlas al describirlas: plan validado (`yang2023`, `huot2025`), promesas codificadas
+  (`yun2026`), memoria propia sin almacén común (`park2023`), director que sugiere
+  (`theune2003`), personajes limitados a lo que creen (`ware2021`), narrador separado de los
+  agentes (`chen2026a`) y «cada mecanismo se gana su complejidad» (`chen2026b`, WSE-bench).
 
 ### R04 · Capítulo 3: Metodología de evaluación
 
@@ -150,6 +165,10 @@ Josue o el tutor digan otra cosa.
 - **Depende de:** R02.
 - **Hecho cuando:** cada regla T1–T9 aparece y se cita su motivación en la literatura de R01;
   ninguna escala numérica se presenta como juicio de calidad.
+- **Nota de R01:** la motivación ya está en la Sección 1.5 (`sec:criterios-humanos`,
+  `sec:escalas-pares`, `sec:jueces-llm`, `sec:metricas-automaticas`): remitir con `\ref` en vez de
+  repetirla. Faltan en el `.bib` B01 (audio), B02 (rúbrica Sanderson), B08, B37 y B41, si se
+  citan.
 
 ### R05 · Capítulo 4: Implementación
 
@@ -235,6 +254,9 @@ Josue o el tutor digan otra cosa.
 - **Contenido:** depurar el `.bib` (sin entradas sin citar, datos completos); glosario con
   `nomencl` si hace falta (`\makenomenclature` ya está activo); anexos numerados y referenciados
   desde el texto (catálogo de rasgos, prompts de la matriz, ejemplos de historias).
+- **Nota de R01:** la bibliografía da 5 cajas desbordadas porque parte los títulos en inglés con
+  los patrones del español; probar `langid = {english}` en esas entradas (con `english` cargado
+  en `babel`) o `autolang`.
 - **Depende de:** R08.
 
 ### R12 · Repaso de coherencia

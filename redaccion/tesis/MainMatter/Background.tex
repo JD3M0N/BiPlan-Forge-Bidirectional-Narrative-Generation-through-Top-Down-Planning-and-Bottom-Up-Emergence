@@ -1,2 +1,307 @@
 \chapter{Estado del arte}\label{chapter:state-of-the-art}
-% R01 en ../write_thesis_roadmap.md
+% R01 en ../write_thesis_roadmap.md. Referencias: planilla/bibliografia.csv (B..) o verificadas
+% en la web el 2026-11-01 (ver los comentarios de Bibliography.bib).
+
+Este capítulo sitúa el trabajo en la literatura de la generación automática de historias y de su
+evaluación. No es una revisión exhaustiva del área: recorre las familias de enfoques que el
+generador de esta tesis combina y los resultados que dan forma a su metodología de evaluación.
+Antes conviene fijar cinco términos que se usan en todo el documento.
+
+Una \textbf{historia} es, siguiendo a Chatman~\cite{chatman1978}, el contenido de una narración:
+una cadena de eventos y los existentes que los protagonizan o los enmarcan (personajes, lugares,
+objetos). Su contrapartida es el \textbf{discurso}, la expresión por la que ese contenido llega al
+lector: qué se cuenta y qué se omite, en qué orden y desde qué punto de vista. Un
+\textbf{evento} es un cambio de estado en el mundo de la historia; Chatman distingue las acciones,
+que realiza un agente, de los sucesos, que le ocurren.
+
+En este trabajo llamamos \textbf{trama} a la
+selección de eventos con los que una historia se compromete y a las relaciones causales y
+temporales que los ordenan. Por último, un \textbf{plan} es, en planificación automática, una
+secuencia parcialmente ordenada de acciones que lleva un mundo desde un estado inicial hasta otro
+en el que se cumplen ciertas metas. Riedl y Young~\cite{riedl2010} formulan la generación narrativa
+en esos términos: encontrar una secuencia de acciones de personajes, causalmente sólida y creíble,
+que transforme el estado inicial en uno donde se cumplan las metas de la historia.
+
+Con estos términos, la literatura se puede ordenar según quién decide la trama. En la generación
+\textit{Top-Down} la trama se decide primero, desde la perspectiva de un autor, y los personajes la
+ejecutan. En la generación \textit{Bottom-Up} la trama no existe de antemano: emerge de lo que hacen
+unos personajes simulados con objetivos propios. Primero se describe la \textbf{Generación dirigida
+por la trama} (Sección~\ref{sec:top-down}) y después la \textbf{Generación por simulación de
+personajes} (Sección~\ref{sec:bottom-up}), junto con la paradoja que surge al oponerlas. La
+Sección~\ref{sec:hibridos} recorre los \textbf{Sistemas híbridos}, clásicos y con modelos de
+lenguaje. La Sección~\ref{sec:consistencia} reúne lo que se sabe de la \textbf{Consistencia y los
+personajes en los modelos de lenguaje}, y la Sección~\ref{sec:evaluacion-historias}, la
+\textbf{Evaluación de historias}. El capítulo termina con la \textbf{Posición de este trabajo}
+(Sección~\ref{sec:posicion}).
+
+\section{Generación dirigida por la trama}\label{sec:top-down}
+
+La idea de que las historias comparten una estructura reconocible es anterior a la computación.
+Propp~\cite{propp1968} analizó un corpus de cuentos maravillosos rusos y los describió como
+combinaciones de 31 \textbf{funciones}, acciones de un personaje definidas por su papel en la intriga
+(el daño, la partida del héroe, la victoria), que, cuando aparecen, lo hacen siempre en el mismo
+orden. Freytag~\cite{freytag1895}, a partir del drama clásico, dividió la acción dramática en cinco
+partes: introducción, ascenso, clímax, caída y catástrofe. Ambas estructuras sirvieron de plantilla
+a los primeros generadores, y Fuentes Rodríguez~\cite{fuentes2025} repasa los sistemas basados en
+grafos y gramáticas que se apoyaron en ellas. Su límite es conocido: describen la forma de la
+historia, pero no por qué un evento causa otro ni por qué un personaje actúa.
+
+La planificación automática aportó esa causalidad. TALE-SPIN~\cite{meehan1977}, uno de los primeros
+generadores de historias, describía un mundo de personajes animales con sus necesidades y producía
+la historia razonando cómo cada personaje resolvía sus objetivos. La historia era la traza de esa
+resolución, de modo que nada garantizaba un conflicto, un clímax o un desenlace: el programa
+planificaba para los personajes, no para el lector. Por eso TALE-SPIN está también en el origen de
+la línea \textit{Bottom-Up} de la Sección~\ref{sec:bottom-up}.
+
+Riedl y Young~\cite{riedl2010}
+invierten el punto de partida y planifican desde el autor. Sostienen que una historia comprensible
+necesita una progresión causal lógica de la trama y personajes creíbles, que el público perciba como
+agentes intencionales. Su planificador IPOCL (\textit{Intent-based Partial Order Causal Link}) busca
+un plan que alcance las metas del autor y explica cada acción por un objetivo que el personaje ha
+adoptado antes; en su evaluación, esos planes ayudaban a los lectores a entender las intenciones de
+los personajes mejor que los de un planificador convencional. El precio es un mundo descrito a mano
+en un lenguaje formal de planificación, que acota las historias posibles.
+
+Los modelos neuronales trasladaron al texto libre la separación entre planificar y escribir. Fan
+et al.~\cite{fan2018} generaban primero una premisa breve y después la historia condicionada por
+ella. Con los \textit{Large Language Models} (LLMs), modelos de lenguaje de gran tamaño capaces de
+seguir instrucciones en lenguaje natural, el plan se volvió explícito y detallado. DOC~\cite{yang2023}
+construye un esquema jerárquico de la historia y un controlador que mantiene cada pasaje fiel a su
+punto del esquema; sus evaluadores humanos compararon por pares pasajes alineados por ese esquema.
+Agents' Room~\cite{huot2025} descompone la escritura en subtareas de planificación (conflicto,
+personajes, ambientación, trama) y de escritura de cada tramo de la historia, asignadas a agentes
+especializados que comparten un espacio de notas; los evaluadores expertos prefirieron sus
+historias a las de las líneas base.
+
+Aun con plan, un LLM no siempre cumple lo que el plan promete. Yun et al.~\cite{yun2026} observan
+que los LLMs dejan sin disparar muchas «pistolas de Chéjov»: introducen compromisos al principio y
+no los resuelven, incluso cuando el contexto necesario está presente. Su propuesta codifica cada
+prefiguración y su pago como predicados causales comprobables, y supera al \textit{prompting}
+directo en la tasa de pagos realizados. La lección es doble: el plan explícito ayuda, y los
+compromisos de la trama conviene representarlos de forma que el código, y no el modelo, compruebe
+si se cumplen. Lo que esta familia no resuelve es la vida propia de los personajes. En los
+generadores con LLMs revisados, un mismo modelo escribe a todos los personajes con el plan completo
+delante, y nada impide que uno de ellos actúe según algo que solo sabe el autor.
+
+\section{Generación por simulación de personajes}\label{sec:bottom-up}
+
+La generación \textit{Bottom-Up} parte de la intuición opuesta: si los personajes tienen objetivos,
+percepciones y memoria propios, y se les deja actuar en un mundo compartido, sus interacciones
+producen eventos que un narrador puede contar. Aylett~\cite{aylett1999} llamó \textbf{narrativa
+emergente} a esta forma de obtener historias en entornos virtuales, donde la trama no está escrita de
+antemano y surge de la interacción entre los personajes y el participante.
+
+Los LLMs renovaron el interés por esta línea porque permiten simular personajes que hablan y
+razonan en lenguaje natural sin programar a mano su comportamiento. Los agentes generativos de Park
+et al.~\cite{park2023} habitan una pequeña ciudad simulada. Cada agente guarda sus observaciones en
+un flujo de memoria en lenguaje natural, recupera los recuerdos pertinentes según su recencia, su
+importancia y su relevancia para la situación, los sintetiza periódicamente en reflexiones y
+planifica su día a partir de ellos. De esas interacciones surgieron comportamientos sociales que
+nadie programó, como la difusión de una invitación a una fiesta. Los autores evaluaron la
+credibilidad de los agentes pidiendo a personas que ordenaran sus respuestas, no que las puntuaran,
+y midieron con qué frecuencia los agentes inventaban recuerdos.
+
+La simulación da personajes creíbles, pero no garantiza una historia: una ciudad de agentes produce
+días plausibles, no necesariamente un conflicto que crezca hasta un clímax y se resuelva. Louchart y
+Aylett~\cite{louchart2003} formularon esta tensión como la \textbf{paradoja narrativa} de los
+entornos virtuales: cuanta más libertad tiene el participante, más difícil es asegurar que lo que
+ocurre tenga la estructura satisfactoria que hace de una experiencia una historia. La misma tensión
+aparece sin usuario cuando quien actúa con libertad es el personaje, y es la que Riedl y
+Young~\cite{riedl2010} describen entre la progresión causal de la trama y la credibilidad de los
+personajes. En esta tesis usamos el término en ese sentido amplio. La simulación pura no hace
+historia, porque nadie vela por la estructura; la planificación pura con LLMs reparte la trama entre
+personajes sin vida propia y, como se vio en la sección anterior, ni siquiera asegura que se paguen
+sus compromisos.
+
+\section{Sistemas híbridos}\label{sec:hibridos}
+
+La salida habitual de la paradoja es combinar ambos enfoques: un componente con visión de autor que
+vela por la estructura y unos personajes con cierta autonomía que la representan. Los sistemas se
+distinguen por cuánto manda cada parte y por dónde interviene el autor.
+
+Façade~\cite{mateas2005}, un drama interactivo en el que el jugador visita a una pareja en crisis,
+organiza su contenido en \textit{beats} (unidades dramáticas mínimas, cada una con sus condiciones y
+su efecto sobre la tensión). Un gestor de drama elige el siguiente \textit{beat} según el estado de
+la historia y un arco de tensión deseado, y dentro de cada \textit{beat} los personajes reaccionan con
+comportamientos propios.
+
+Thespian~\cite{si2005} parte de personajes que son agentes de decisión con
+objetivos propios y ajusta esos objetivos (\textit{fitting}) para que, actuando por su cuenta,
+reproduzcan las rutas de la historia que el autor dio como ejemplo. The Virtual
+Storyteller~\cite{theune2003} deja actuar a personajes autónomos y añade un agente director con
+conocimiento general de la estructura de una trama, que no dicta acciones: interviene en el entorno,
+por ejemplo introduciendo un personaje, o en las motivaciones, dando objetivos nuevos a los
+personajes. Sabre~\cite{ware2021}, por último, es un planificador narrativo en el que cada acción
+debe explicarse por las intenciones de quien la realiza y en el que los personajes actúan según sus
+creencias, incluidas las falsas y las que tienen sobre las creencias de otros. El autor conserva el
+control de la trama, pero cada personaje solo puede actuar a partir de lo que cree.
+
+Los LLMs reabrieron este diseño. StoryBox~\cite{chen2026a} sitúa agentes en un entorno de pruebas
+(\textit{sandbox}) dinámico, donde sus interacciones generan eventos emergentes, y un agente narrador
+convierte esos eventos en una historia larga; sus autores lo llaman generación \textit{Bottom-Up}
+híbrida, por oposición a los enfoques \textit{Top-Down} que imponen una estructura rígida.
+WSE-bench~\cite{chen2026b}, todavía un preprint, evalúa la narración con LLMs en mundos simulados que
+evolucionan y compara tres arquitecturas: un agente narrador que decide también por los personajes,
+un único agente para todos los personajes no jugadores y un agente aislado por cada uno. Mide por
+separado la cobertura de los pasos planificados, la consistencia y la riqueza del desarrollo, y
+concluye que añadir estructura puede enriquecer las trayectorias, pero no mejora la coherencia de
+forma uniforme y puede acortarlas. Para un generador híbrido, eso significa que cada componente
+tiene que justificar su complejidad con una medida.
+
+Dos bancos de pruebas sugieren que la asimetría de información de la que viven estos sistemas no
+conviene confiarla al modelo. SOTOPIA~\cite{zhou2024} simula interacciones sociales entre agentes con
+objetivos propios y evalúa, entre otras dimensiones, si cada uno guarda los secretos que debe
+guardar. FANToM~\cite{kim2023} pone a prueba la teoría de la mente en conversaciones en las que los
+participantes entran y salen, de modo que no todos saben lo mismo, y muestra que los LLMs quedan muy
+por debajo de las personas al razonar quién sabe qué. Si el modelo confunde lo que presenció cada
+personaje, la separación del conocimiento tiene que imponerse desde fuera, en la memoria que se le
+entrega a cada uno.
+
+\section{Consistencia y personajes en los modelos de lenguaje}\label{sec:consistencia}
+
+Los fallos que estos sistemas intentan evitar están bien documentados. ConStory-Bench~\cite{li2026}
+recoge los errores de consistencia de historias largas generadas por LLMs, los clasifica en cinco
+tipos y documenta cada contradicción con los pasajes que la evidencian. Ahuja et
+al.~\cite{ahuja2025} insertan de forma controlada huecos de trama en historias escritas por personas
+y comprueban que los LLMs los detectan mal, peor cuanto más larga es la historia; además, los
+resúmenes y las historias que generan los propios LLMs contienen más huecos que los originales
+humanos.
+
+En el plano del personaje, CharacterEval~\cite{tu2024} evalúa agentes de juego de rol en chino en
+varias dimensiones, entre ellas la consistencia del personaje, y PersonaGym~\cite{samuel2025} mide la
+fidelidad de un agente a la persona asignada en entornos variados, con el hallazgo de que un modelo
+mayor no es necesariamente más fiel. TimeChara~\cite{ahn2024} describe una alucinación específica: el
+personaje situado en un punto de la historia que revela hechos que en ese momento aún no podía
+conocer. DramaBench~\cite{ma2025} lleva la evaluación a la continuación de guiones teatrales, con
+dimensiones como la consistencia de los personajes y el manejo del conflicto, y combina reglas con
+etiquetado por LLM.
+
+De esta literatura salen dos ideas. La primera es que buena parte de estos fallos, como el personaje
+que sabe demasiado o la contradicción entre capítulos, son de información: dependen de qué ve cada
+personaje y qué recuerda, y un generador puede prevenirlos por construcción con una memoria propia
+por personaje y un plan validado. La segunda es que los mismos fallos se pueden contar, y contarlos
+con la cita que los sustenta los hace verificables, como hace ConStory-Bench con las
+contradicciones. Es la base de la evaluación mecánica del Capítulo~\ref{chapter:evaluation}.
+
+\section{Evaluación de historias}\label{sec:evaluacion-historias}
+
+Evaluar una historia generada es más difícil que generarla. Yang y Jin~\cite{yang2024} proponen una
+taxonomía de los criterios con que se juzgan las historias y de las métricas que intentan
+aproximarlos. Esta sección recorre cuatro cuestiones: qué criterios usan las personas, cómo se les
+pregunta, qué ocurre cuando juzga un LLM y qué miden las métricas automáticas.
+
+\subsection{Criterios humanos}\label{sec:criterios-humanos}
+
+HANNA~\cite{chhun2022} anota historias generadas con seis criterios humanos (relevancia, coherencia,
+empatía, sorpresa, implicación y complejidad) y muestra que las métricas automáticas clásicas
+correlacionan poco con ellos. TTCW~\cite{chakrabarty2024} adapta a la escritura las pruebas de
+pensamiento creativo de Torrance en 14 pruebas binarias que aplican escritores expertos: las
+historias de LLMs superan menos pruebas que las de profesionales, y un LLM que aplica las mismas
+pruebas apenas coincide con los expertos. Otros trabajos proponen criterios de más alto nivel. Tian
+et al.~\cite{tian2024} analizan la historia en el nivel del discurso, con sus arcos y puntos de giro,
+y Harel-Canada et al.~\cite{harelcanada2024} definen la profundidad psicológica a partir de la
+teoría literaria.
+
+Lo común a todos es que la calidad de una historia tiene varias dimensiones y que es la persona que
+lee quien las aprecia. Marco et al.~\cite{marco2025} muestran además que los lectores se agrupan en
+dos perfiles, uno atento a la superficie del texto y otro a su desarrollo temático, que valoran las
+mismas historias de forma distinta. En español, la brecha entre un LLM y un autor profesional es
+mayor que en inglés~\cite{marco2024}, lo que pesa en una tesis cuyas historias están en español.
+
+\subsection{Escalas y comparaciones por pares}\label{sec:escalas-pares}
+
+La forma de preguntar importa tanto como el criterio. Las escalas de valoración absolutas, del tipo
+Likert, son las más usadas y las más criticadas en la evaluación humana de la generación de
+texto~\cite{amidei2019}. Con escalas de 1 a 5, unos profesores de inglés que evaluaban historias solo
+alcanzaron un $\alpha$ de Krippendorff de entre 0,05 y 0,33~\cite{chiang2023}. % B10
+Ordenar o comparar resulta más fiable que puntuar~\cite{novikova2018,vanderlee2019}. Las guías de
+buenas prácticas piden informar del acuerdo entre evaluadores y de su perfil~\cite{vanderlee2021}, y
+Howcroft et al.~\cite{howcroft2020}, tras revisar veinte años de evaluaciones humanas, encontraron
+que buena parte de los artículos ni siquiera publica la pregunta exacta que se hizo a los
+evaluadores.
+
+Card et al.~\cite{card2020} advierten, por último, que los estudios humanos típicos no
+tienen potencia estadística para detectar diferencias pequeñas, lo que obliga a declarar
+exploratorio un estudio con pocos lectores.
+
+El antecedente directo de esta tesis ilustra el problema. Fuentes Rodríguez~\cite{fuentes2025}, con
+los mismos tutores, comparó su sistema de simulación con un modelo monolítico guiado por un solo
+\textit{prompt}: doce voluntarios valoraron ambas salidas con preguntas puntuadas de 1 a 10, al
+estilo de los cuestionarios de experiencia de usuario, y los perfiles resultantes apenas se
+distinguieron. % B03 y METODOLOGIA.md §1
+De su diseño se conserva la línea base de un solo \textit{prompt}; la escala se sustituye por
+comparaciones por pares.
+
+Las preferencias por pares necesitan un modelo que las convierta en un orden. El sistema Elo,
+heredado del ajedrez, depende del orden en que se presentan las comparaciones y es inestable cuando
+hay pocos sistemas~\cite{boubdir2023}. El modelo de Bradley-Terry estima a la vez la fuerza de todos
+los competidores y admite intervalos de confianza; es el que usa Chatbot Arena para ordenar LLMs a
+partir de votos humanos~\cite{chiang2024}, y Agents' Room~\cite{huot2025} lo aplicó a comparaciones
+de historias hechas por expertos.
+
+\subsection{Los LLMs como jueces}\label{sec:jueces-llm}
+
+Pedir a un LLM que juzgue es barato y, por eso, tentador. Zheng et al.~\cite{zheng2023} documentaron
+sus sesgos de posición (preferir una respuesta por el lugar en que aparece), de verbosidad (preferir
+la más larga) y de autopreferencia, y Panickssery et al.~\cite{panickssery2024} mostraron que los
+LLMs reconocen sus propias generaciones y las favorecen.
+
+En la evaluación de historias, Chhun et
+al.~\cite{chhun2024} encontraron que los LLMs aciertan como jueces a nivel de sistema pero fallan
+historia por historia, y que darles guías detalladas no los mejora. Jung et al.~\cite{jung2025}
+observan que, puestos a elegir, los LLMs priorizan el estilo sobre los eventos, los personajes y el
+entorno, y Tutone et al.~\cite{tutone2026} hallan que los jueces LLM prefieren sistemáticamente las
+historias generadas por IA y que las métricas automáticas habituales apenas se alinean con los
+juicios humanos de creatividad. El juez LLM mide algo distinto de lo que mide un lector, y lo mide a
+favor de sí mismo.
+
+La alternativa es aprender el juez de las preferencias humanas en lugar de pedírselo a un modelo. En
+LitBench~\cite{fein2026}, el mejor LLM usado directamente como juez coincidió con las preferencias
+humanas en un 73~\% de los pares, y un modelo de Bradley-Terry entrenado con pares humanos, en un
+78~\%. % B09
+Es el respaldo empírico de un juez aprendido de comparaciones humanas, que la metodología de esta
+tesis construye sobre rasgos contables (Capítulo~\ref{chapter:evaluation}).
+
+\subsection{Métricas automáticas}\label{sec:metricas-automaticas}
+
+Las métricas automáticas comparan el texto con una referencia o miden propiedades de su superficie.
+OpenMEVA~\cite{guan2021} propone evaluar las propias métricas, por su correlación con los juicios
+humanos y por su sensibilidad a historias perturbadas a propósito para romper su coherencia, y
+encuentra que las métricas existentes correlacionan poco con las personas. Algunas medidas de
+superficie son útiles si se usan como recuentos y no como juicio: MTLD~\cite{mccarthy2010}, por
+ejemplo, mide la diversidad léxica de forma robusta a la longitud del texto. Ninguna sustituye al
+lector, que es la conclusión que comparten HANNA, TTCW y el trabajo de Tutone et al.
+
+\section{Posición de este trabajo}\label{sec:posicion}
+
+De la generación dirigida por la trama, esta tesis adopta un plan explícito y validado antes de
+escribir, como DOC y Agents' Room, y la idea de representar los compromisos de la trama, como la
+prefiguración y su pago, de forma que el código compruebe si se cumplen~\cite{yun2026}. De la
+simulación de personajes adopta agentes con memoria propia, recuperada con criterios como los de
+los agentes generativos~\cite{park2023}, pero sin un almacén común: cada personaje recuerda solo lo
+que presenció. De los híbridos clásicos toma un director que sugiere en lugar de dictar, como el de
+The Virtual Storyteller~\cite{theune2003}, y personajes limitados a lo que creen, como en
+Sabre~\cite{ware2021}; de StoryBox~\cite{chen2026a}, la separación entre lo que hacen los agentes y el
+narrador que lo convierte en historia.
+
+El hueco que se aborda es la combinación. En los trabajos revisados, los híbridos clásicos dependen
+de mundos formalizados a mano; los generadores con LLMs dirigidos por un plan escriben a todos los
+personajes desde la visión del autor, y los que simulan personajes con LLMs, como StoryBox, dejan que
+la trama emerja sin un plan que la comprometa. No encontramos un generador que reúna las tres
+piezas: un plan validado que decide qué pasa, unos personajes que solo saben lo que presenciaron y
+deciden cómo pasa, y un narrador que cura el registro de esa simulación sin inventar. WSE-bench añade
+una exigencia: más arquitectura no garantiza más coherencia, así que cada mecanismo debe ganarse su
+complejidad con una medida.
+
+En la evaluación, la posición es la que sugiere la literatura revisada y pide el tutor. La calidad
+la decide la lectura humana, por pares y a ciegas, nunca con una escala, e incluye una línea base de
+un solo \textit{prompt} como la de Fuentes Rodríguez~\cite{fuentes2025}. El LLM no juzga: cuenta
+rasgos de la historia y cita el pasaje de cada recuento, que el código verifica literalmente, en la
+línea de ConStory-Bench, que documenta cada contradicción con su cita, y de TTCW, que reduce el
+juicio experto a pruebas binarias. Un juez aprendido de los pares humanos, como el de
+LitBench~\cite{fein2026}, traduce después los recuentos al orden humano.
+
+Este capítulo deja fijados los términos del trabajo, la paradoja narrativa que motiva un generador
+híbrido y las razones para evaluarlo con pares humanos y recuentos verificables. El
+Capítulo~\ref{chapter:generator} describe el generador y el Capítulo~\ref{chapter:evaluation}, la
+metodología con que se evalúa.
