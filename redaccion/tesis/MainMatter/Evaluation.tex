@@ -1,2 +1,362 @@
 \chapter{Metodología de evaluación}\label{chapter:evaluation}
-% R04 en ../write_thesis_roadmap.md
+% R04 en ../write_thesis_roadmap.md. Fuentes: packages/evaluation/METODOLOGIA.md,
+% planning/decisions.md §1 (T1-T11) y §2 (decisiones de método del 2026-10-27 al 2026-10-30),
+% planilla/rasgos.csv y criterios_humanos.csv (solo lectura), y judge.py y preferences.py de
+% asg-evaluation para la forma exacta del juez y de la agregación. Sin referencias nuevas.
+% Correspondencia con las reglas del tutor: T1 -> sec:tres-evaluaciones; T2 y T3 -> sec:rasgos;
+% T4 -> sec:horizontal; T5, T6 y T7 -> sec:pares; T8 -> sec:juez; T9 y T11 -> sec:ranking.
+
+Este capítulo describe cómo se evalúan las historias del generador. El problema lo planteó el
+Capítulo~\ref{chapter:state-of-the-art}: las escalas absolutas discriminan poco, los LLMs usados como
+jueces favorecen sus propias generaciones y las métricas automáticas no siguen a los lectores. La
+metodología responde separando tres tareas que suelen mezclarse: medir, preferir y predecir la
+preferencia. Primero se presentan \textbf{Las tres evaluaciones} y cómo se relacionan
+(Sección~\ref{sec:tres-evaluaciones}). Después se describen la \textbf{Evaluación mecánica}, con sus
+rasgos contables (Sección~\ref{sec:rasgos}); el \textbf{Análisis horizontal}
+(Sección~\ref{sec:horizontal}); la \textbf{Evaluación humana por pares}
+(Sección~\ref{sec:pares}), y el \textbf{Juez aprendido} (Sección~\ref{sec:juez}), que se aplica al
+\textbf{Ranking del corpus} (Sección~\ref{sec:ranking}). El capítulo cierra con las \textbf{Amenazas
+a la validez} (Sección~\ref{sec:amenazas}).
+
+\section{Las tres evaluaciones}\label{sec:tres-evaluaciones}
+
+La metodología tiene dos evaluaciones y una intermedia. La \textbf{evaluación humana} da el criterio
+de calidad: lectores que, ante dos historias, dicen cuál prefieren. Es la única que decide si una
+historia es mejor que otra, pero es cara y no escala a cientos de historias. La \textbf{evaluación
+mecánica} escala: un LLM lee cada historia y extrae recuentos que cualquier lector podría
+comprobar, como cuántas escenas tienen un conflicto o cuántas veces miente un personaje. No dice si
+la historia es buena. La \textbf{evaluación intermedia} es un juez aprendido: un modelo que, a partir
+de los recuentos de dos historias, predice cuál preferirían los lectores, ajustado sobre las
+comparaciones humanas.
+
+Como se muestra en la Figura~\ref{fig:evaluacion}, cada evaluación aporta lo que la otra no puede:
+los recuentos cubren todas las historias, pero sin criterio de calidad, y las preferencias son el
+criterio, pero solo para una muestra. El juez aprende de la muestra qué combinación de recuentos
+acompaña a la preferencia y la aplica al corpus entero. Así, ninguna cifra automática sustituye a
+una persona que prefiere una historia a otra, a ningún modelo se le pregunta si una historia es
+buena, y el juez no se pide a un LLM: se aprende de los lectores, como en LitBench~\cite{fein2026}
+(Sección~\ref{sec:jueces-llm}).
+
+\begin{figure}[t]
+  \centering
+  \input{Graphics/evaluacion.tex}
+  \caption{Las tres evaluaciones: la mecánica cuenta, la humana prefiere y el juez traduce}
+  \label{fig:evaluacion}
+\end{figure}
+
+\section{La evaluación mecánica: rasgos contables}\label{sec:rasgos}
+
+Un \textbf{rasgo} es una cifra de la historia definida de forma operativa: un recuento, una
+proporción o un índice que una persona podría obtener leyéndola. Los rasgos que no se pueden
+calcular con código los extrae un LLM con una regla estricta: cada ocurrencia que cuenta va
+acompañada de una cita literal del pasaje que la sustenta y del número de su párrafo, y el código
+comprueba que la cita aparece, carácter por carácter, en ese párrafo. Si no aparece, el extractor
+recibe el error y tiene una oportunidad de reparar su respuesta; si vuelve a fallar, el rasgo queda
+como \textbf{fallido}. Un rasgo fallido no es un cero: es un dato que falta, y como tal se trata en
+todo el análisis.
+
+La cita cambia la naturaleza de lo que hace el modelo. Un juez LLM emite una opinión que nadie puede
+verificar, y la literatura muestra que esa opinión se aparta de la de los lectores y se inclina a
+favor del propio modelo (Sección~\ref{sec:jueces-llm}). Un recuento con cita, en cambio, se
+comprueba ocurrencia por ocurrencia, como hace ConStory-Bench~\cite{li2026} con cada contradicción, y
+se parece más a las pruebas binarias de TTCW~\cite{chakrabarty2024} que a una puntuación. Lo que la
+cita no garantiza es que el extractor encuentre todas las ocurrencias: verifica lo que se cuenta, no
+lo que se omite. Por eso el extractor se valida aparte (Sección~\ref{sec:validacion-extractor}).
+
+\subsection{Origen y capas del catálogo}\label{sec:catalogo}
+
+El catálogo de rasgos parte de dos fuentes. La primera es la rúbrica de ficción breve de Piad
+Morffis~\cite{piad2026}, con veinte dimensiones en cinco bloques: trama y estructura, personaje,
+mundo, integración y cierre, y oficio. Casi todas sus preguntas son de sí o no, o se pueden contar;
+las que la rúbrica puntúa de 1 a 5 se reformulan como recuentos, y la dimensión del canon, que solo
+tiene sentido en una serie, no entra. Así, «¿establece la apertura promesas claras?» se convierte en
+el número de promesas que el primer capítulo deja establecidas, cada una con su cita. La segunda
+fuente es una lista de recuentos de bajo nivel que propuso el tutor de esta tesis: la consistencia,
+la participación de cada personaje, las escenas con conflicto, los usos de objetos, las réplicas de
+cada personaje y las que se desvían de su personalidad, las mentiras, las complicaciones y los
+eventos aleatorios. Varios tienen antecedentes en la literatura que sirvieron de modelo para su
+definición, como las contradicciones de ConStory-Bench, el conflicto de DramaBench~\cite{ma2025} o
+las réplicas fuera de personaje de CharacterEval~\cite{tu2024} y PersonaGym~\cite{samuel2025}.
+
+El catálogo tiene unos 140 rasgos, cada uno con su definición operativa, su unidad, su fuente, el
+parámetro del generador que debería moverlo y el criterio humano al que debería ayudar, organizados
+en capas según de dónde salen. Del texto de la historia salen la capa T, calculada por código
+(palabras, proporción de diálogo, repetición de trigramas); la R, la rúbrica hecha contable, y la X,
+los recuentos de la lista anterior. De los artefactos de la ejecución salen la P, del proceso (el
+plan, el contrato de promesas, el registro de la función); la K, del coste (llamadas,
+\textit{tokens}, tiempo), y la C, de la configuración (formato, visión, tono, memoria). Las capas H y
+J guardan las preferencias humanas y las predicciones del juez.
+
+Solo las capas T, R y X pueden entrar al juez, por dos razones: el juez tiene que puntuar todas las
+historias, y las líneas base y buena parte del corpus histórico solo tienen el texto; y un juez que
+lee solo el texto se puede aplicar a las historias de otro generador. Las capas P, K y C sirven para
+el análisis horizontal, para explicar las mejores historias y para validar al extractor: en el
+formato simulado, el registro de la función contiene la verdad de referencia de varios recuentos,
+como las mentiras o los usos de objetos. Como el narrador cura sin inventar
+(Sección~\ref{sec:narrador}), el registro es un techo: se espera que la historia cuente lo mismo o
+menos, nunca más.
+
+\subsection{La lista núcleo}\label{sec:lista-nucleo}
+
+Con pocas historias juzgadas por personas, un modelo con 140 variables se sobreajusta. Por eso solo
+entran al juez los rasgos \textbf{núcleo}, dentro de una horquilla de 18 a 30 fijada de antemano; los
+demás se miden y se publican, pero no se ajustan. La lista núcleo se fijó antes de ver una sola
+preferencia humana, para que la elección de los rasgos no pudiera seguir a los votos. Una lista
+provisional de 28 rasgos (2026-10-28) quedó en 24 tras validar el extractor (2026-10-30): cuatro
+rasgos que no mostraron estabilidad ni citas suficientes pasaron a secundarios. La
+Tabla~\ref{tab:nucleo} los agrupa según el criterio humano al que deberían ayudar.
+
+\begin{table}[htb]
+  \centering
+  \caption{Rasgos núcleo que entran al juez, por criterio humano}
+  \label{tab:nucleo}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}p{11.4cm}@{}}
+    \toprule
+    Criterio & Rasgos \\
+    \midrule
+    Personajes (7) & proporción de diálogo; proactividad del protagonista; decisiones con coste;
+      cuota del personaje más presente; reparto de la participación entre escenas; mentiras;
+      reparto del diálogo entre hablantes \\
+    Trama (13) & promesas de apertura; señales de progreso; preparación del pago final; ciclos «sí,
+      pero»; ciclos «no, y además»; soluciones preparadas; escenas con cambio; escenas con
+      conflicto; secretos revelados; complicaciones; sucesos azarosos o externos; usos de objetos;
+      contradicciones \\
+    Creatividad (3) & repetición de trigramas; límites del mundo; giros \\
+    Sin criterio (1) & palabras, como covariable de la longitud \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Seis rasgos núcleo salen por código: las palabras, la proporción de diálogo y la repetición de
+trigramas, del texto; la cuota del personaje más presente y el reparto de la participación, de la
+partición en escenas que hace el extractor, y el reparto del diálogo, de sus réplicas por hablante.
+Los dos repartos son una entropía normalizada: 1 si todos participan por igual, 0 si participa uno
+solo. Los dieciocho restantes son recuentos con cita, y tres de ellos (contradicciones, soluciones
+preparadas y preparación del pago final) llevan dos citas, la del pasaje que establece algo y la del
+que lo contradice o lo cosecha. Los que crecen con la longitud se expresan por mil palabras o como
+proporción de las escenas, y el número de palabras entra al juez como un rasgo más, para que el peso
+de la longitud quede a la vista.
+
+\subsection{Validación del extractor}\label{sec:validacion-extractor}
+
+Un recuento con cita puede estar bien citado y aun así ser inestable u omitir ocurrencias. La
+validación del extractor se diseñó antes de cualquier extracción, con umbrales que no se cambian
+después de medir. Sobre una muestra de doce historias, estratificada por formato y versión del
+generador, cada rasgo núcleo extraído debe cumplir cuatro umbrales. La \textbf{precisión}: al menos
+el 80~\% de sus citas, juzgadas una a una por una persona, muestran lo que dicen mostrar. La
+\textbf{cobertura}: al menos el 70~\% de las ocurrencias que una persona encuentra al leer la
+historia están entre las que contó el extractor. La \textbf{estabilidad}: al repetir la extracción
+sobre seis historias, la diferencia relativa media entre las dos pasadas no pasa de 0,25, y como
+mucho una de las seis cambia de estado (medido, fallido o no aplicable). Y el \textbf{techo del
+registro}: en las historias simuladas, el texto no supera al registro de la función en más de un
+10~\% o de una ocurrencia, salvo, como mucho, en una de las cinco. Un rasgo con menos de cinco citas
+juzgadas queda «sin evidencia suficiente», que no equivale a no cumplir. Un rasgo núcleo que falla
+se reformula solo si sus errores son de definición y las citas lo muestran; si no, pasa a
+secundario, y si la lista bajara de 18 no se relajarían los umbrales. El
+Capítulo~\ref{chapter:experiments} informa qué se pudo medir de esta validación.
+
+\section{El análisis horizontal}\label{sec:horizontal}
+
+De cada historia sale una \textbf{tabla de rasgos}: los de las capas T, R y X junto con los del
+proceso, el coste y la configuración. El análisis horizontal compara esas tablas entre
+parametrizaciones del generador: parte de una configuración base y cambia un solo nivel cada vez,
+por ejemplo el tono. Su propósito es descriptivo. Dice qué rasgos se mueven con cada parámetro, no si
+la historia mejora, porque eso lo deciden los lectores.
+
+La comparación se hace sobre una matriz generada con la configuración congelada del generador
+(Tabla~\ref{tab:mecanismos}). Tres obras de un catálogo de peticiones preparado para los
+experimentos se representan como historias simuladas con los valores predeterminados, dos veces cada
+una; son las \textbf{bases}. De
+cada base se derivan celdas que comparten con ella todo lo anterior al punto que cambian, gracias a
+que el generador guarda cada etapa (Sección~\ref{sec:arquitectura}): la historia escrita
+directamente desde el mismo plan, que contrasta H1; la misma función narrada con tono sombrío o
+humorístico, y la misma función narrada con visión limitada o en primera persona. Así, una
+diferencia entre una celda y su base se debe al parámetro que cambió y no a otro plan u otra
+función. Las líneas base de un solo \textit{prompt}, tres por obra, forman una celda propia.
+
+Dos ejecuciones con el mismo \textit{prompt} y la misma versión producen historias distintas, y una
+diferencia del tamaño de ese ruido no dice nada. Por eso, antes de generar la matriz se fijó una
+regla. Para cada rasgo y obra, el ruido es la diferencia absoluta entre las dos repeticiones de la
+base. Una celda se interpreta para un rasgo solo si el valor absoluto de la mediana de sus
+diferencias emparejadas con la base supera el mayor ruido de ese rasgo en las tres obras, y si el
+signo coincide en al menos cinco de los seis pares. En otro caso se escribe «dentro del ruido». Un
+rasgo no medido en uno de los dos miembros deja el par fuera y reduce el número de pares, nunca
+cuenta como cero. Las líneas base se comparan con su propio ruido, el rango de sus tres repeticiones.
+La regla es conservadora para las celdas que solo cambian la narración, porque el ruido entre bases
+mezcla el del plan, el de la función y el de la narración.
+
+\section{La evaluación humana por pares}\label{sec:pares}
+
+La calidad la deciden lectores que comparan dos historias a ciegas, sin saber qué mecanismo generó
+cada una, y eligen una. No se usa ninguna escala de valoración. La
+Sección~\ref{sec:escalas-pares} reunió las razones: con escalas absolutas, incluso evaluadores
+expertos coinciden poco~\cite{chiang2023,amidei2019}, ordenar es más fiable que
+puntuar~\cite{novikova2018,vanderlee2019}, y en el antecedente directo de esta tesis las
+valoraciones de 1 a 10 apenas distinguieron dos sistemas~\cite{fuentes2025}. Un 8 en creatividad no
+significa nada por sí solo; que una historia gane a otra, sí.
+
+\subsection{Criterios y preguntas}\label{sec:criterios}
+
+Cada comparación hace una sola pregunta, de tres posibles, y no hay más criterios. Los tres son de
+muy alto nivel y coinciden con los de Agents' Room~\cite{huot2025}, que también los evaluó por pares:
+creatividad, desarrollo de los personajes e interés de la trama. Como pide Howcroft et
+al.~\cite{howcroft2020}, la Tabla~\ref{tab:criterios} publica la pregunta exacta y la indicación que
+el lector ve debajo de ella. Ante cada pregunta el lector responde A, B o «No puedo decidir». La
+abstención se registra y se informa por separado: no es un empate ni una victoria.
+
+\begin{table}[htb]
+  \centering
+  \caption{Las tres preguntas de la evaluación humana, tal como las ve el lector}
+  \label{tab:criterios}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.0cm}>{\raggedright\arraybackslash}p{5.6cm}%
+      >{\raggedright\arraybackslash}p{6.2cm}@{}}
+    \toprule
+    Criterio & Pregunta & Indicación \\
+    \midrule
+    Creatividad & De estas dos historias, ¿cuál tiene más creatividad? & Ideas propias y elementos
+      inesperados; que no suene a plantilla. No importa cuál está mejor escrita. \\
+    Personajes & De estas dos historias, ¿en cuál están los personajes mejor desarrollados? &
+      Personajes que quieren algo, deciden, pagan un precio, cambian y suenan distintos entre sí. \\
+    Trama & De estas dos historias, ¿en cuál está la trama más interesante? & Ganas de saber qué
+      pasa, complicaciones que importan y un final que paga lo prometido. \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Conjunto, lectores y asignación}\label{sec:conjunto}
+
+Entre las historias comparadas hay siempre \textbf{líneas base de un solo \textit{prompt}}: la misma
+petición, entregada literalmente a un LLM sin plan, función ni narrador. Como en el trabajo de
+Fuentes Rodríguez~\cite{fuentes2025}, la línea base dice si toda la maquinaria aporta algo frente a
+pedir la historia directamente. El conjunto del estudio se diseñó con quince historias: cinco
+premisas, las tres obras de la matriz y dos propuestas por participantes, cada una en tres
+formatos, narrativo, simulado y línea base, de modo que cada premisa da los tres enfoques sobre la
+misma entrada. Las celdas de tono y visión no entran: repetirían la trama y harían del estudio un
+análisis horizontal.
+
+La presentación no debe delatar el mecanismo. Todas las historias se muestran como texto plano, sin
+título ni encabezados de capítulo, que las líneas base no tienen, y sin audio. La longitud no se
+iguala, porque recortar una historia la cambia; se declara como amenaza y se controla en el juez
+(Sección~\ref{sec:juez}). Los lectores son hispanohablantes adultos que no conocen el sistema por
+dentro, y se registran con un seudónimo. El autor puede votar marcado como tal, pero no cuenta para
+el mínimo, y el resultado principal se informa sin él.
+
+Las preguntas se asignan de una en una, cuando el lector pide la siguiente: el criterio va en ciclo,
+se prefieren las historias que el lector ya leyó, para que el esfuerzo no crezca con cada pregunta, y
+después los pares menos comparados. Nadie compara su propia historia ni una que ya conocía, ni
+repite un par con el mismo criterio; la posición A o B se compensa y el sorteo se reproduce con la
+semilla del estudio. Cada lector responde como mucho quince preguntas, unos cinco pares por tres
+criterios. El estudio se cierra cuando hay al menos doce lectores completos sin contar al autor, cada
+historia tiene al menos seis comparaciones decididas por criterio y el grafo de cada criterio es
+conexo, o a los 21 días; hasta entonces solo se miran recuentos de participación, nunca las
+preferencias.
+
+Ningún voto de un LLM cuenta como voto humano. Antes del estudio se simuló una votación con agentes
+LLM que imitaban perfiles de lector; esos votos se conservan, pero son un juez LLM con otro nombre y
+quedan fuera de todo análisis.
+
+\subsection{Agregación}\label{sec:agregacion}
+
+Los votos decididos (A o B) de cada criterio se agregan con el modelo de Bradley-Terry, preferido a
+Elo por no depender del orden de las comparaciones~\cite{boubdir2023,chiang2024}. Cada historia $i$
+recibe una fuerza $\beta_i$, y la probabilidad de que gane a $j$ es
+\begin{equation}
+  P(i \succ j) = \frac{e^{\beta_i}}{e^{\beta_i} + e^{\beta_j}}.
+\end{equation}
+Las fuerzas se estiman con una regularización de cresta, centradas, y solo si el grafo de
+comparaciones del criterio es conexo: si una historia o un grupo de historias nunca se comparó con
+el resto, no se calcula un orden global. Los intervalos se obtienen por \textit{bootstrap}
+remuestreando lectores, no votos, porque los votos de un mismo lector no son independientes. El
+acuerdo se mide sobre los mismos pares y criterios, con la proporción de acuerdo y el $\alpha$ de
+Krippendorff nominal, con y sin el autor~\cite{vanderlee2021}. Con una docena de lectores, el
+estudio es exploratorio y no tiene potencia para diferencias pequeñas~\cite{card2020}.
+
+El estudio completo no llegó a ejecutarse en el plazo de esta tesis. El
+Capítulo~\ref{chapter:experiments} informa qué parte del diseño se recogió y con qué alcance.
+
+\section{El juez aprendido}\label{sec:juez}
+
+El juez traduce los rasgos al orden humano. Para cada criterio $c$ se ajusta una regresión logística
+por pares. Sea $\mathbf{z}_s$ el vector de los 24 rasgos núcleo de la historia $s$, estandarizados con
+la media y la desviación de las historias de entrenamiento; un rasgo no aplicable se sustituye por
+la mediana de entrenamiento, y una historia con algún rasgo núcleo fallido no entra al juez. La
+probabilidad de que los lectores prefieran $A$ a $B$ según $c$ es
+\begin{equation}
+  P(A \succ_c B) = \sigma\!\left(\mathbf{w}_c^{\top}(\mathbf{z}_A - \mathbf{z}_B)\right),
+\end{equation}
+donde $\sigma$ es la función logística. Es un modelo de Bradley-Terry en el que la fuerza de cada
+historia ya no es un parámetro libre, sino una función de sus rasgos: $\beta_s = \mathbf{w}_c^{\top}
+\mathbf{z}_s$. Los pesos se estiman con regularización L2 y sin término independiente, y cada voto
+entra en las dos orientaciones, para que el modelo no dependa de qué historia se mostró como A. Las
+abstenciones no entran. La puntuación $J_c(s) = \mathbf{w}_c^{\top}\mathbf{z}_s$ no tiene unidades:
+solo importa el orden que induce. Es una predicción de la preferencia de los lectores en un
+criterio, no una medida de calidad.
+
+Con una quincena de historias y 24 rasgos, cualquier modelo recupera el orden humano dentro de la
+muestra; hacerlo no prueba nada. Por eso el juez se valida \textbf{fuera de muestra} de dos maneras.
+En la primera se deja fuera una historia: se quitan todos los votos en los que aparece, se ajusta el
+modelo con el resto y se predicen esos votos. En la segunda se deja fuera una familia, todas las
+historias de una misma premisa, lo que impide que el juez acierte por reconocer la premisa. Se
+informan la proporción de votos acertados, frente al 0,5 del azar y frente a un juez que solo ve
+la longitud, y la $\tau$ de Kendall entre el orden que inducen las predicciones y el orden
+Bradley-Terry humano. Un juez que no supere al de la longitud sola no ha aprendido nada que la
+longitud no diga ya.
+
+Dos controles más completan la validación. Siguiendo a OpenMEVA~\cite{guan2021}, el juez se aplica a
+historias rotas a propósito por código, como la misma historia con las escenas barajadas o sin su
+desenlace, y se publican los cambios de puntuación; no se exige que toda perturbación empeore los
+tres criterios. Además, se publican los pesos de los 24 rasgos y su colinealidad, porque varios
+miden cosas cercanas, como las complicaciones, los giros y los ciclos «no, y además». Un juez que
+solo premiara la longitud o el diálogo se vería en sus pesos. Un juez que no generaliza es también
+un resultado válido, y se presenta como tal.
+
+\section{Ranking del corpus y las diez mejores}\label{sec:ranking}
+
+El juez validado puntúa todo el corpus elegible y produce tres rankings principales, uno por
+criterio. Son elegibles las historias en prosa, narrativas o simuladas, de la serie de versiones
+del generador que termina en la configuración congelada, y las líneas base; cada historia lleva
+marcada su versión. Quedan fuera, con la razón escrita, las historias de generadores anteriores, los
+guiones, que no son prosa, y las historias cuya extracción de rasgos núcleo quedó incompleta. Una
+media de los tres criterios con pesos iguales, y con la normalización fijada al entrenar el juez, se
+publica como ranking auxiliar.
+
+Sobre ese ranking auxiliar se analizan las \textbf{diez mejores} historias: qué rasgos tienen y
+cuáles no, su posición en cada criterio, su configuración y su proceso. Ahí las capas P y C, que no
+entran al juez, explican lo que el juez ordenó. El análisis es cualitativo y no atribuye a un
+parámetro la posición de una historia.
+
+El juez se usa para ordenar el corpus y para explicarlo, no para decidir qué se genera. Usarlo como
+función objetivo, generando muchas historias y quedándose con la mejor o buscando la configuración
+con un algoritmo genético, queda fuera de esta tesis y se recoge en las Recomendaciones como trabajo
+futuro.
+
+\section{Amenazas a la validez}\label{sec:amenazas}
+
+El diseño acota varias amenazas, pero no las elimina:
+
+\begin{itemize}
+  \item \textbf{Pocos lectores y el autor entre ellos:} el autor conoce el estilo del sistema; el
+  acuerdo y los rankings se informan con y sin él, y el estudio se declara exploratorio.
+  \item \textbf{Un modelo que lee a su familia:} el extractor es de la misma familia de LLMs que el
+  generador, y los LLMs favorecen sus propias generaciones~\cite{panickssery2024}. Como solo cuenta
+  y cada ocurrencia lleva una cita verificada, el sesgo solo puede actuar sobre qué cuenta; por eso
+  se valida contra el registro y con extracciones repetidas.
+  \item \textbf{Ocurrencias omitidas:} la cita verifica lo contado, no lo omitido, y los LLMs
+  detectan mal ciertos fallos de las historias largas~\cite{ahuja2025}; solo una lectura humana
+  completa mide la cobertura.
+  \item \textbf{La longitud:} una historia larga tiene más de todo, y las líneas base son más cortas;
+  de ahí la normalización, la longitud como rasgo visible y el juez de la longitud sola.
+  \item \textbf{Ruido y versiones:} una celda con una sola historia es un indicio, no una medida, y
+  el corpus mezcla versiones del generador. La regla de ruido decide qué se interpreta, el ranking
+  marca las versiones y el análisis horizontal usa solo la configuración congelada.
+  \item \textbf{La cuota:} el generador usa un servicio con un límite diario de llamadas gratuitas,
+  que acota el tamaño de la matriz y del estudio.
+\end{itemize}
+
+Este capítulo deja definida una evaluación en la que ninguna cifra automática se presenta como un
+juicio de calidad. Los LLMs cuentan, con citas que el código verifica; los lectores prefieren, por
+pares y a ciegas; y un juez aprendido de esos pares, validado fuera de muestra, ordena el corpus. El
+Capítulo~\ref{chapter:implementation} describe cómo se implementaron el generador y estas
+herramientas, y el Capítulo~\ref{chapter:experiments}, qué se pudo medir con ellas.

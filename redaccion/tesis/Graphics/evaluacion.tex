@@ -1,0 +1,38 @@
+% Las tres evaluaciones (R04, Figura fig:evaluacion). Se incluye con \input desde
+% MainMatter/Evaluation.tex; usa los mismos estilos que Graphics/arquitectura.tex.
+\begin{tikzpicture}[
+    font=\footnotesize,
+    caja/.style={draw, rounded corners=2pt, align=center, text width=2.4cm,
+      minimum height=1.25cm, inner sep=2pt, fill=white},
+    flecha/.style={-{Stealth[length=1.8mm]}, semithick},
+    banda/.style={draw=black!45, dashed, rounded corners=4pt, inner sep=4pt},
+    rotulo/.style={font=\footnotesize\itshape, text=black!70},
+  ]
+  % Primera fila: la evaluación mecánica, sobre cada historia.
+  \node[caja] (historia) at (0,0) {Historia (solo el texto)};
+  \node[caja] (extractor) at (3.1,0) {Extractor: recuentos con cita};
+  \node[caja] (codigo) at (6.2,0) {Código: la cita está en el texto};
+  \node[caja] (tablita) at (9.3,0) {Tabla de rasgos por historia};
+  % Segunda fila: la evaluación humana, sobre una muestra.
+  \node[caja] (pares) at (0,-2.75) {Pares a ciegas, tres criterios};
+  \node[caja] (orden) at (3.1,-2.75) {Orden humano (Bradley-Terry)};
+  % El juez une ambas filas.
+  \node[caja] (juez) at (6.2,-2.75) {Juez aprendido, validado fuera de muestra};
+  \node[caja] (ranking) at (9.3,-2.75) {Ranking del corpus y las diez mejores};
+
+  \foreach \a/\b in {historia/extractor, extractor/codigo, codigo/tablita, pares/orden,
+      orden/juez, juez/ranking}
+    \draw[flecha] (\a) -- (\b);
+  \draw[flecha] (tablita.south) -- ++(0,-0.6) -| (juez.north)
+    node[rotulo, pos=0.25, above] {rasgos núcleo};
+  \draw[flecha, dashed] (tablita.east) -- ++(0.55,0) |- (ranking.east);
+
+  \begin{scope}[on background layer]
+    \node[banda, fit=(historia)(tablita),
+      label={[rotulo, anchor=south west]north west:Mecánica: la máquina cuenta}] {};
+    \node[banda, fit=(pares)(orden),
+      label={[rotulo, anchor=north west]south west:Humana: el gusto}] {};
+    \node[banda, fit=(juez)(ranking),
+      label={[rotulo, anchor=north west]south west:Intermedia: traduce una a la otra}] {};
+  \end{scope}
+\end{tikzpicture}

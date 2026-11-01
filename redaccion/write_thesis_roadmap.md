@@ -11,8 +11,8 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
 
 ## Estado
 
-- **Siguiente:** R04 · Capítulo 3: Metodología de evaluación.
-- **Extensión acumulada:** 20 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
+- **Siguiente:** R05 · Capítulo 4: Implementación.
+- **Extensión acumulada:** 27,5 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
 - **Hechas:**
   - R00 · portada sin marcadores: título provisional «Generación narrativa bidireccional:
     planificación *Top-Down* y emergencia *Bottom-Up*» (traducción del nombre del repo), Josue
@@ -37,6 +37,14 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
     referencia nueva, `piad2026` (B02, ensayo «Promises, Progress, and Payoffs»); `tikz` y
     `array` en el preámbulo. 9 págs. (13–21; ≈ 8 sin figura ni tabla, 12,5 % sobre el
     presupuesto), 0 \todo
+  - R04 · capítulo 3 en siete secciones (las tres evaluaciones con figura TikZ; rasgos con cita
+    literal verificada por párrafo, catálogo por capas, lista núcleo de 24 en la Tabla 3.1 y
+    validación del extractor con sus umbrales; análisis horizontal con la matriz emparejada y la
+    regla de ruido; pares a ciegas con las preguntas exactas en la Tabla 3.2, conjunto,
+    asignación, parada y Bradley-Terry; juez como Bradley-Terry con covariables, validado por
+    historia y por familia; ranking y diez mejores, con T11 como trabajo futuro; amenazas). La
+    rúbrica (`piad2026`, §3.8) se comprobó en el PDF; sin referencias nuevas. 10 págs. (22–31;
+    ≈ 7,5 sin figura ni tablas, ≈ 7 % sobre el presupuesto), 0 \todo
 
 ## Reglas comunes
 
@@ -214,6 +222,13 @@ Josue o el tutor digan otra cosa.
   nombrar las pruebas de contrato que allí solo se mencionan (los actores no ven el plan, el
   inventario apagado no cambia nada, la visión no toca lo anterior a la narración). La
   Figura 2.1 (`Graphics/arquitectura.tex`, TikZ) puede reutilizarse con `\ref{fig:arquitectura}`.
+- **Nota de R04:** el capítulo 3 tampoco nombra código ni modelos. Aquí van: el extractor y su
+  modelo (`features.py`: `locate` comprueba la cita en su párrafo, una reparación y si no
+  `failed`), la planilla (`rasgos.csv`, `criterios_humanos.csv`), `study.py` (asignación
+  perezosa, esquema 10), `preferences.py` (Bradley-Terry de cresta, *bootstrap* por lectores) y
+  `judge.py` (`LogisticRegression` de scikit-learn, `C = 1`, sin intercepto, `MODEL_VERSION` 2):
+  la mención a scikit-learn de T8 quedó para este capítulo. La Figura 3.1
+  (`Graphics/evaluacion.tex`) se puede citar con `\ref{fig:evaluacion}`.
 
 ### R06 · Capítulo 5 (a): Experimentos con datos cerrados
 
@@ -242,6 +257,11 @@ Josue o el tutor digan otra cosa.
   la guía compositiva, el inventario, las cláusulas por tipo y el modo adaptativo quedaron sin
   comparación a ciegas. Aquí van con su detalle y su alcance; la Tabla 2.1 (`tab:mecanismos`)
   da los estados congelados y no hace falta repetirlos.
+- **Nota de R04:** el capítulo 3 da el diseño y remite aquí lo medido. Los umbrales de la
+  validación del extractor (`sec:validacion-extractor`), la matriz y la regla de ruido
+  (`sec:horizontal`) ya están escritos: citarlos con `\ref`, no repetirlos. También quedó dicho
+  que la lista provisional de 28 rasgos (2026-10-28) quedó en 24 (2026-10-30). El capítulo 3 no
+  da cifras del corpus ni de elegibilidad: van aquí, con su fecha.
 
 ### R07 · Capítulo 5 (b): Estudio humano, juez y ranking
 
@@ -260,6 +280,12 @@ Josue o el tutor digan otra cosa.
   idea-bank el 2026-10-30. Josue decidió el 2026-11-01 mantenerla en la introducción y
   responderla aquí «sin datos suficientes», como limitación declarada. H1 se completa con los
   pares narrativo–simulado del piloto, si los hay.
+- **Nota de R04:** `sec:conjunto` y `sec:agregacion` describen el estudio de P06.1 tal como se
+  diseñó y dicen que «el estudio completo no llegó a ejecutarse»; aquí va lo recogido. El juez
+  de `sec:juez` es el de `MODEL_VERSION` 2: una historia con un núcleo `failed` no entra. Si
+  P07.1 (c) adopta imputar los fallidos, corregir esa frase en el capítulo 3. Las
+  perturbaciones se describen como «escenas barajadas o sin su desenlace» (P07.4), y las diez
+  mejores salen del ranking auxiliar (`top_ten` de `rank_features`).
 
 ### R08 · Conclusiones
 
@@ -283,6 +309,8 @@ Josue o el tutor digan otra cosa.
 - **Roger:** pág. 72.
 - **Contenido:** qué ampliar (completar la matriz, estudio con más lectores, árbitro de acciones
   físicas…), aplicación a otras esferas, condiciones para usar los resultados.
+- **Nota de R04:** el capítulo 3 (`sec:ranking`) promete que las Recomendaciones recogen el juez
+  como función objetivo (generar muchas y quedarse la mejor) y el algoritmo genético (T11).
 - **Extensión:** 1 pág.
 - **Depende de:** R08.
 
