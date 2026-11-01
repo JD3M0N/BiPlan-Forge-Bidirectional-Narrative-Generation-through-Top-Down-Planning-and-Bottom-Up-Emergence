@@ -11,8 +11,10 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
 
 ## Estado
 
-- **Siguiente:** R06 · Capítulo 5 (a): Experimentos con datos cerrados.
-- **Extensión acumulada:** 32,5 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
+- **Siguiente:** R07 · Capítulo 5 (b), **bloqueada** hasta cerrar P07, P08 y P09 en
+  `planning/roadmap.md` (el 2026-11-01 la siguiente tarea allí es P07.1). R08–R11 dependen de R07
+  o de R08, así que no hay otra parte que se pueda escribir antes.
+- **Extensión acumulada:** 38,4 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
 - **Hechas:**
   - R00 · portada sin marcadores: título provisional «Generación narrativa bidireccional:
     planificación *Top-Down* y emergencia *Bottom-Up*» (traducción del nombre del repo), Josue
@@ -57,6 +59,16 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
     pruebas solo tras `/ . _ -`. Studio es 0.3.0 desde el 2026-10-27: corregido el «Estado actual»
     de `planning/roadmap.md`, que decía 0.2.2. 7 págs. (32–38; ≈ 5 sin tablas, ≈ 2 % sobre el
     presupuesto), 0 \todo
+  - R06 · capítulo 5 (a) en cuatro secciones: condiciones y corpus (los dos modelos; inventario del
+    2026-10-28, 331 y 116 elegibles, y `asg-corpus` repetido el 2026-11-01, 346 y 130, 26 de 7.22;
+    las 9 líneas base); validaciones del generador (modo fijo y adaptativo de 7.5 y los 62
+    contextos para H2; Tabla 5.1 con P02.1 y P02.2; P02.3; la validación de 7.22 con 3 de 6
+    *beats* forzados; lectura exploratoria de H3); validación del extractor (tres desviaciones,
+    Tabla 5.2 por rasgo, regla de salida y huella del catálogo), y análisis horizontal (Tabla 5.3
+    de coste desde los `llm_calls.jsonl`, 14 de 35 unidades, las dos irregularidades de la matriz,
+    Tabla 5.4 del piloto con n = 1, sin resultados interpretables y la parte mecánica de H1 sin
+    datos suficientes). Tablas a mano con su fuente en comentarios; sin referencias nuevas.
+    9 págs. (39–47; ≈ 5,9 sin tablas, ≈ 18 % sobre el presupuesto), 0 \todo
 
 ## Reglas comunes
 
@@ -307,6 +319,17 @@ Josue o el tutor digan otra cosa.
   P07.1 (c) adopta imputar los fallidos, corregir esa frase en el capítulo 3. Las
   perturbaciones se describen como «escenas barajadas o sin su desenlace» (P07.4), y las diez
   mejores salen del ranking auxiliar (`top_ten` de `rank_features`).
+- **Nota de R06:** el párrafo de apertura del capítulo nombra el estudio humano, el juez, el
+  ranking y la respuesta a las hipótesis sin `\ref` (comentario `% R07` en `Experiments.tex`):
+  añadir allí las referencias a las secciones nuevas. R06 termina con un párrafo de transición; el
+  cierre del capítulo va al final de R07. Lo que ya quedó dicho, para citarlo con `\ref` y no
+  repetirlo: H1 mecánica «sin datos suficientes» (`sec:resultados-horizontal`, `tab:piloto`), H3
+  exploratoria con un solo lector (`sec:validaciones`, `tab:lecturas`), H2 con solo la evidencia
+  indirecta de los 62 contextos (`sec:val-modo`). El corpus elegible del 2026-11-01 es de 130
+  ejecuciones (26 de 7.22); si P08 hace otro inventario, dar su fecha. Las tablas de R06 se
+  hicieron a mano (`tab:lecturas`, `tab:extractor`, `tab:coste`, `tab:piloto`); si P09 genera
+  `redaccion/tablas/`, sustituirlas o cotejarlas. Las extracciones de la validación del extractor
+  tienen la huella anterior del catálogo: el juez de P07 no puede usarlas sin repetirlas.
 
 ### R08 · Conclusiones
 
@@ -326,6 +349,11 @@ Josue o el tutor digan otra cosa.
   con dependencias en un sentido (la evaluación no importa el generador), validadores puros, 907
   pruebas el 2026-11-01 (2 omitidas, las de la API real) y cuatro pruebas de contrato nombradas en
   `sec:pruebas`. La cuota aparece como restricción práctica, no como fallo de diseño.
+- **Nota de R06:** limitaciones ya escritas en el capítulo 5 para recogerlas sin ampliarlas: la
+  validación del extractor es provisional (cobertura sin medir, veredictos de precisión propuestos
+  por Claude y aceptados por el autor, 6 de 12 extracciones incompletas); el análisis horizontal se
+  quedó en 14 de 35 unidades y sin resultados interpretables; la función fuerza la mitad de los
+  *beats* (3 de 6 en 7.22). Las lecturas de P02.1 y P02.2 son de un solo lector, el autor.
 
 ### R09 · Recomendaciones
 
@@ -336,6 +364,10 @@ Josue o el tutor digan otra cosa.
   físicas…), aplicación a otras esferas, condiciones para usar los resultados.
 - **Nota de R04:** el capítulo 3 (`sec:ranking`) promete que las Recomendaciones recogen el juez
   como función objetivo (generar muchas y quedarse la mejor) y el algoritmo genético (T11).
+- **Nota de R06:** cifras ya escritas para «completar la matriz»: faltan 21 unidades, unas 300–450
+  llamadas al modelo principal (≈ un día de cuota) más la extracción de toda la matriz y de las 9
+  líneas base. También pendiente en el capítulo 5: medir la cobertura del extractor, repetir las
+  extracciones incompletas y repetir la muestra con la huella vigente del catálogo.
 - **Extensión:** 1 pág.
 - **Depende de:** R08.
 
@@ -347,6 +379,9 @@ Josue o el tutor digan otra cosa.
   aportaciones; no un índice de capítulos. Después, la misma versión en inglés.
 - **Depende de:** R08.
 - **Hecho cuando:** 200–300 palabras cada uno y las cifras coinciden con el capítulo 5.
+- **Nota de R06:** cifras de la primera mitad del capítulo 5 que el resumen podría usar: 130
+  ejecuciones elegibles el 2026-11-01; extractor validado sobre 12 historias (provisional); matriz
+  horizontal en 14 de 35 unidades, sin resultados interpretables.
 
 ### R11 · Bibliografía, glosario y anexos
 
@@ -361,6 +396,9 @@ Josue o el tutor digan otra cosa.
   ninguna. `virtanen2020` lleva «and others» (solo se verificó el primer autor; completar la lista
   desde el DOI si se quiere). Para nombres de código largos en anexos, usar `\codigo{…}` (definido
   en `Thesis.tex`), que solo parte tras `/ . _ -`.
+- **Nota de R06:** la Tabla 5.2 (`tab:extractor`) nombra los rasgos sin su id (R01, X10…), como la
+  Tabla 3.1; el anexo del catálogo debería dar la correspondencia nombre ↔ id. R06 no añade cajas
+  desbordadas.
 - **Depende de:** R08.
 
 ### R12 · Repaso de coherencia

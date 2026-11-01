@@ -1,2 +1,357 @@
 \chapter{Experimentos y resultados}\label{chapter:experiments}
-% R06 y R07 en ../write_thesis_roadmap.md
+% R06 (secciones con datos cerrados) y R07 (estudio humano, juez, ranking y respuesta a las
+% hipótesis) en ../write_thesis_roadmap.md. Fuentes de R06, todas del repositorio:
+% - docs/resumen.md: validaciones 7.5 (2026-09-30), P02.1 y P02.2 (2026-10-27), P02.3 y 7.22
+%   (2026-10-28) y líneas base (2026-10-28). Beats de 7.5 de simulation_metrics.json de
+%   Stories/Stagecraft/20260930-153026 y 20260930-154634.
+% - packages/evaluation/METODOLOGIA.md §3 (validación del extractor, 2026-10-29) y §10
+%   (inventario del 2026-10-28); planning/decisions.md §2 (P04.3, P04.9, P05.1).
+% - asg-corpus Stories, ejecutado el 2026-11-01 (solo lectura, salida fuera del repositorio).
+% - Evaluations/horizontal/manifiesto-matriz.json (actualizado el 2026-10-31 UTC) y
+%   Evaluations/horizontal/piloto-03/horizontal.csv (P05.4).
+% - Coste (Tabla tab:coste): llm_calls.jsonl de cada ejecución de la matriz, intentos por modelo
+%   (incluidos los fallidos) y suma de total_tokens; coincide con P05.4 (78) y P05.5 (287 y 186)
+%   del roadmap. Modelos: models_used de metadata.json y el campo model de llm_calls.jsonl.
+
+Este capítulo presenta lo que se midió con el generador del Capítulo~\ref{chapter:generator} y la
+metodología del Capítulo~\ref{chapter:evaluation}, con su alcance y sin ocultar lo que quedó
+incompleto. Las primeras secciones reúnen los experimentos cuyos datos están cerrados, porque no
+dependen de votos humanos. Primero se describen las \textbf{Condiciones y el corpus}
+(Sección~\ref{sec:corpus}). Después se presentan las \textbf{Validaciones del generador} que
+fijaron su configuración congelada (Sección~\ref{sec:validaciones}), la \textbf{Validación del
+extractor} de rasgos (Sección~\ref{sec:resultados-extractor}) y el \textbf{Análisis horizontal}, que
+quedó incompleto (Sección~\ref{sec:resultados-horizontal}). Las secciones siguientes tratan lo que
+depende de los lectores: el estudio humano, el juez aprendido y el ranking del corpus. El capítulo
+cierra respondiendo a las hipótesis con lo que los datos permiten.
+% R07: añadir aquí las referencias a sus secciones.
+
+\section{Condiciones y corpus}\label{sec:corpus}
+
+Todas las historias de este capítulo se generaron con la API de Gemini, sujeta a la cuota diaria
+descrita en la Sección~\ref{sec:proveedores}, y con los dos modelos de la configuración de ejemplo:
+\texttt{gemini-3.5-flash-lite} como modelo principal y \texttt{gemini-3.1-flash-lite} para los turnos
+y las reflexiones de los actores, según los modelos que registra cada ejecución. El extractor de
+rasgos usó \texttt{gemini-3.5-flash-lite}. Cada comparación se hizo dentro de una misma versión del
+generador y sobre la misma entrada: los cambios de narración, sobre la misma función, y los de
+escritura, sobre el mismo plan (Sección~\ref{sec:artefactos}).
+
+El corpus es el conjunto de ejecuciones guardadas en el repositorio. El inventario del 28
+de octubre de 2026, hecho con \texttt{asg-corpus} antes de generar la matriz, contó 331 ejecuciones,
+de las que 116 eran elegibles para el ranking: las completas y en prosa de Stagecraft 7 y las líneas
+base. Se excluyeron 135 por ser de un generador anterior a Stagecraft 7, 72 por no haber terminado y
+8 por tener un formato fuera del estudio en prosa, como los guiones; ninguna se borró ni se editó a
+mano. El 1 de noviembre de 2026, con la matriz ya generada, el mismo inventario cuenta 346
+ejecuciones y 130 elegibles: 70 simuladas, 48 narrativas y 12 líneas base. De ellas, 26 son de la
+versión congelada (13 simuladas, 4 narrativas y 9 líneas base); las demás, de versiones anteriores de
+Stagecraft 7, entran al ranking marcadas con su versión.
+
+Los experimentos usan tres obras del catálogo de siete peticiones preparado para ellos: una fantasía
+canónica con un caballero, una princesa y un dragón (obra 01), un misterio, «La última luz del faro»
+(obra 03), y un drama, «El cine de los domingos» (obra 04). Sus líneas base de un solo
+\textit{prompt} se generaron el 28 de octubre de 2026 con la versión congelada: tres por obra, con la
+variante Esencial literal del catálogo, la misma petición que recibe el generador, sin plan ni
+revisión. Las nueve terminaron con una llamada cada una, salvo una que repitió tras un fallo del
+proveedor. Su extensión va de 834 a 978 palabras en la obra 01, de 1.149 a 1.725 en la 03 y de 1.097
+a 1.722 en la 04. Las tres repeticiones de cada obra estaban pensadas para medir el ruido de la
+propia línea base (Sección~\ref{sec:horizontal}).
+
+\section{Validaciones del generador antes de congelarlo}\label{sec:validaciones}
+
+Antes de congelar el generador, sus mecanismos con alternativa se probaron en ejecuciones reales y
+algunos, además, en una lectura a ciegas. Estas validaciones fijaron la configuración congelada de la
+Tabla~\ref{tab:mecanismos}, pero no son el estudio humano de la tesis: cada lectura la hizo un solo
+lector, el autor, sobre cuatro o cinco pares. Se presentan en orden cronológico.
+
+\subsection{El modo de la función}\label{sec:val-modo}
+
+El 30 de septiembre de 2026, con la versión 7.5, dos funciones se representaron desde el mismo plan
+de «La sombra del volcán», con el mismo presupuesto de turnos. En modo fijo, la función completó 6
+escenas y 48 turnos, y de sus 6 \textit{beats} alcanzó 5 y forzó 1. En modo adaptativo terminó con un
+cierre abierto tras 2 escenas y 16 turnos, con 1 de sus 2 \textit{beats} alcanzado. Ninguna cumplió
+las dos promesas del plan. El modo fijo quedó como predeterminado y el adaptativo, como opción sin
+lectura a ciegas. Son dos observaciones de una sola premisa: muestran que el modo adaptativo puede
+cerrar la obra antes de tiempo, no cuál de los dos da mejores historias.
+
+En esa validación se auditaron literalmente 62 contextos enviados a los actores, y ninguno contenía un
+pensamiento de otro personaje ni un susurro que el actor no hubiera presenciado. Es la comprobación,
+en ejecuciones reales, de lo que una prueba de contrato comprueba con el proveedor falso
+(Sección~\ref{sec:pruebas}). Para H2 es evidencia indirecta: muestra que la memoria propia aísla a los
+personajes, no que mejore las escenas.
+
+\subsection{Narración y escritura}\label{sec:val-brazos}
+
+El 27 de octubre de 2026, con la versión 7.21, dos lecturas a ciegas decidieron los brazos de
+narración y de escritura de la Sección~\ref{sec:opcionales}. En la primera, cinco funciones ya
+representadas se narraron de nuevo dos veces cada una: con la narración resumida (brazo A) y con la
+narración por selección, el editor por fragmentos y los ejemplos de estilo (brazo B). En la segunda,
+dos planes nuevos se escribieron en prosa directa dos veces por brazo: sin brazos (A) y con las
+fichas de escena, el crítico con cita, el editor y los ejemplos (B). El autor leyó los pares en la
+vista de lectura ciega de StageCraft (Sección~\ref{sec:interfaces}), sin saber qué brazo había
+producido cada historia. La Tabla~\ref{tab:lecturas} resume lo que cambió en las medidas y lo que
+eligió el lector.
+
+\begin{table}[htb]
+  \centering
+  \caption{Lecturas a ciegas de los brazos de narración y de escritura (un lector, 2026-10-27)}
+  \label{tab:lecturas}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.2cm}>{\raggedright\arraybackslash}p{1.0cm}%
+      >{\raggedright\arraybackslash}p{8.0cm}>{\raggedright\arraybackslash}p{2.2cm}@{}}
+    \toprule
+    Lectura & Pares & Medidas, brazo A frente a brazo B & Elección \\
+    \midrule
+    Narración de la función & 5 & réplicas con verbo de habla: 30--62~\% frente a 3--22~\%; párrafos
+      con más de dos réplicas indirectas: de 1 a 6 por historia frente a ninguno en cuatro pares y 2
+      en el quinto & A 2, B 2, ninguna 1 \\
+    Escritura narrativa & 4 & proporción de réplicas con coletilla emocional: 0,00--0,21 frente a
+      0,00; proporción de párrafos marcados por el código: 0,25--0,68 frente a 0,00--0,10; palabras:
+      1.581--1.827 frente a 1.197--1.503 & A 3, B 1 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+En las dos lecturas, el brazo B corrigió los defectos que medía el código, y en ninguna ganó. En la
+narración, B redujo los párrafos que encadenan réplicas en estilo indirecto, como un acta, y el verbo
+de habla en casi cada línea, y empató con A. Estas dos cifras son aproximadas, porque salen de
+expresiones regulares y no del código del repositorio. En la escritura, los ocho borradores ya
+cumplían, con o sin brazos, los cuatro umbrales con que el código mide la prosa (nombres repetidos,
+coletillas emocionales, gerundios en la coletilla y símiles); B redujo las coletillas a casi cero y
+acortó el texto, y el lector prefirió A en tres de los cuatro pares. Con un empate se mantuvo la
+narración más barata, y en la escritura, la preferida: todos los brazos quedaron apagados, como
+opciones.
+
+Al día siguiente, dos ejecuciones con la versión 7.21 comprobaron, sin corregir nada, dos defectos
+conocidos. El plan de una petición con ficha detallada («Las islas del cielo», perfil Expansiva)
+dejó fuera dos cosas que pedía la ficha, la división de la tripulación y quién paga el coste de la
+decisión final, y el revisor del plan lo aprobó sin notas: no comprueba cada giro pedido, una
+limitación observada en una sola ejecución. En cambio, un guion de la obra 03 salió con nombres,
+papeles y reparto en español, sin una palabra en inglés.
+
+\subsection{La versión congelada}\label{sec:val-congelada}
+
+El 28 de octubre de 2026, la versión 7.22 se validó con tres ejecuciones de la obra 03, perfil
+Esencial, con los valores predeterminados y sin corregir nada: una narrativa, un guion nativo y una
+simulada. Las tres terminaron. La narrativa hizo 22 llamadas y el guion, 18. La simulada hizo 236:
+133 al modelo principal y 103 al de la función, 9 de ellas intentos fallidos que se repitieron, con
+unos 570.000 \textit{tokens}. En la simulada se cumplieron todas las comprobaciones fijadas: los tres
+capítulos salieron del narrador y no de un respaldo automático, ninguno de los 47 pensamientos de los
+actores salió en inglés y ninguna línea de la historia quedó fuera de la ficción. Quedaron tres
+defectos menores fuera de esos criterios, sin corregir por la congelación: una contracción omitida
+(«de el faro») en la narrativa, un personaje de la ficha que el reparto del guion perdió y unos
+títulos sin tilde en la simulada. El generador se congeló ese mismo día.
+
+La limitación conocida está en los \textit{beats}: la función forzó 3 de sus 6, en tres escenas
+distintas. Una validación de la versión 7.12 había medido la misma proporción (5 de 10), así que no es
+un defecto nuevo, sino el precio del mecanismo de la Sección~\ref{sec:director}: el suceso del mundo
+garantiza que la función avance, no que los personajes lleguen solos a cada evento. Una ejecución por
+formato, en cualquier caso, no distingue el efecto del ruido.
+
+Para las hipótesis, estas validaciones aportan poco y de forma exploratoria. Sobre H3, en las dos
+lecturas a ciegas el brazo que mejoró las medidas de la prosa no ganó: empató en la narración y
+perdió tres de cuatro pares en la escritura. Es lo que H3 anticipa, pero un solo lector, que además
+es el autor, y cuatro o cinco pares no bastan para confirmarla. El modo adaptativo, el guion adaptado,
+la guía compositiva, el inventario y las cláusulas por tipo quedaron sin comparación a ciegas, y para
+ellos H3 no tiene datos.
+
+\section{Validación del extractor}\label{sec:resultados-extractor}
+
+La validación diseñada en la Sección~\ref{sec:validacion-extractor} se ejecutó el 29 de octubre de
+2026 sobre doce historias elegibles de premisas distintas, con 21.471 palabras en total: cinco
+simuladas con su registro, cuatro narrativas y tres líneas base, de las versiones 7.8 a 7.22. La
+extracción se repitió en seis de ellas para medir la estabilidad. Tres desviaciones respecto al diseño
+limitan lo que se puede concluir, y conviene decirlas antes que las cifras:
+\begin{itemize}
+  \item \textbf{Extracciones incompletas:} seis de las doce extracciones quedaron incompletas. En una
+  no salió ningún rasgo (31 fallos) y en otras dos fallaron 14 y 11. Cuentan como fallos del
+  extractor.
+  \item \textbf{Precisión sin lectura humana completa:} el diseño preveía unas siete horas de revisión
+  del autor. Los veredictos sobre cada cita los propuso un asistente basado en un LLM (Claude), que
+  leyó solo la cita y su párrafo, y el autor los aceptó. Es una revisión más débil que la prevista:
+  no puede detectar nada que el extractor no citara.
+  \item \textbf{Cobertura sin medir:} nadie anotó las ocurrencias omitidas, así que el umbral de
+  cobertura no se evaluó en ningún rasgo. Ningún «cumple» es, por tanto, definitivo.
+\end{itemize}
+
+La Tabla~\ref{tab:extractor} da el resultado por rasgo. Con las citas dudosas fuera del cálculo, como
+fijó el diseño, la precisión sale 1,00 en casi todos los rasgos; por eso se da también la cota que las
+cuenta como error.
+
+\begin{table}[p]
+  \centering
+  \caption{Validación del extractor por rasgo (12 historias, 2026-10-29)}
+  \label{tab:extractor}
+  \footnotesize
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{4.1cm}>{\raggedright\arraybackslash}p{1.9cm}%
+      >{\raggedright\arraybackslash}p{1.5cm}>{\raggedright\arraybackslash}p{2.2cm}%
+      >{\raggedright\arraybackslash}p{3.7cm}@{}}
+    \toprule
+    Rasgo & Correctas / juzgadas (dudosas) & Con dudosas como error & Estabilidad (dif.; cambios) &
+      Resultado \\
+    \midrule
+    Promesas de apertura & 5/5 & 1,00 & 0,00; 0/6 & cumple \\
+    Señales de progreso & 15/15 (3) & 0,83 & 0,00; 0/6 & cumple \\
+    Preparación del pago final & 1/1 & 1,00 & 0,00; 3/6 & falla estabilidad; sin evidencia \\
+    Ciclos «sí, pero» & 5/5 (2) & 0,71 & 0,00; 1/6 & cumple \\
+    Ciclos «no, y además» & 5/5 & 1,00 & 0,25; 1/6 & cumple \\
+    Proactividad del protagonista & 10/10 (6) & 0,62 & 0,19; 0/6 & cumple \\
+    Soluciones preparadas & 5/5 (1) & 0,83 & 0,00; 2/6 & falla estabilidad \\
+    Límites del mundo & 6/6 (7) & 0,46 & 0,12; 1/6 & cumple \\
+    Escenas con cambio & 7/7 (1) & 0,88 & 0,00; 2/6 & falla estabilidad \\
+    Decisiones con coste & 8/8 & 1,00 & 0,00; 2/6 & falla estabilidad \\
+    Escenas con conflicto & 28/28 (6) & 0,82 & 0,00; 2/6 & falla estabilidad \\
+    Mentiras & 0/0 (1) & 0,00 & 0,00; 2/6 & falla estabilidad; sin evidencia \\
+    Secretos revelados & 3/3 (1) & 0,75 & 0,00; 2/6 & falla estabilidad; sin evidencia \\
+    Complicaciones & 21/21 (1) & 0,95 & 0,00; 1/6 & cumple \\
+    Giros & 9/9 & 1,00 & 0,17; 1/6 & cumple \\
+    Sucesos azarosos o externos & 6/6 & 1,00 & 0,18; 0/6 & cumple \\
+    Usos de objetos & 21/21 (3) & 0,88 & 0,22; 1/6 & cumple \\
+    Contradicciones & 1/1 (1) & 0,50 & 0,00; 2/6 & falla estabilidad; sin evidencia \\
+    \midrule
+    Cuota del personaje más presente & por código & --- & 0,04; 0/6 & cumple \\
+    Reparto de la participación & por código & --- & 0,01; 0/6 & cumple \\
+    Reparto del diálogo & por código & --- & 0,01; 2/6 & falla estabilidad \\
+    \midrule
+    \multicolumn{5}{@{}l}{\textit{Pasaron a secundarios}} \\
+    Defecto con coste & 4/4 & 1,00 & sin pares; 3/6 & falla estabilidad; sin evidencia \\
+    Soluciones sin preparar & 0/0 & --- & 0,00; 1/6 & sin evidencia \\
+    Réplicas fuera de personalidad & 0/0 & --- & sin pares; 1/6 & falla estabilidad; sin evidencia \\
+    Preguntas pagadas & 0/0 & --- & sin pares; 2/6 & falla estabilidad; sin evidencia \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+% Fuente: tabla de METODOLOGIA.md §3 («Validación del extractor (2026-10-29)»), salidas de
+% asg-audit-features --veredictos, --pares y --run en Evaluations/validacion-extractor/. «Sin
+% evidencia»: menos de 5 citas juzgadas. Palabras, proporción de diálogo y repetición de trigramas
+% salen del texto por código y no entran en esta validación.
+
+Diez rasgos cumplen todo lo que se pudo medir: las promesas de apertura, las señales de progreso, los
+dos ciclos, la proactividad del protagonista, los límites del mundo, las complicaciones, los giros, los
+sucesos azarosos o externos y los usos de objetos. Si las dudosas contaran como error, tres de ellos
+quedarían por debajo de 0,80: los límites del mundo (0,46), la proactividad del protagonista (0,62) y
+los ciclos «sí, pero» (0,71). En los límites del mundo, las dudas tienen una causa común: el extractor
+toma por reglas del mundo restricciones de la trama, como un plazo o una salida bloqueada, lo que es un
+error de definición y no de lectura.
+
+Doce rasgos no cumplieron la estabilidad, pero no porque su valor cambiara. Donde las dos pasadas
+midieron el rasgo, la diferencia media fue 0,00 (0,01 en el reparto del diálogo); lo que cambió fue el
+estado, medido en una pasada y fallido o no aplicable en la otra, y la mitad de las extracciones
+estaban incompletas. Tres de esos rasgos no tienen ni un par medido en ambas pasadas, así que de su
+estabilidad no se sabe nada. Ocho rasgos tienen menos de cinco citas juzgadas, y tres de ellos ninguna
+ocurrencia citada en toda la muestra. El techo del registro se cumplió en los cuatro rasgos que lo
+admiten (mentiras, secretos revelados, sucesos azarosos o externos y usos de objetos): ningún texto
+contó más que su registro, aunque los usos de objetos solo pudieron compararse en una de las cinco
+historias simuladas y las mentiras, en dos. De los rasgos calculados por código, los dos que salen de
+la partición en escenas son estables, y el reparto del diálogo hereda los fallos de la extracción de
+réplicas de la que sale.
+
+La regla de salida se aplicó el 30 de octubre de 2026. Cuatro rasgos pasaron a secundarios: el defecto
+con coste, las réplicas fuera de personalidad y las preguntas pagadas, sin ningún par medido en las dos
+pasadas ni citas que mostraran si el extractor los detecta, y las soluciones sin preparar, sin citas
+juzgadas y con un cambio de estado. Ninguno mostraba un error de definición con citas que lo probaran,
+así que no se reformularon. Los otros ocho que fallaron la estabilidad se conservaron con una excepción
+escrita, porque su valor no cambió donde se midió dos veces, aunque esa evidencia descansa en uno a
+tres pares por rasgo. Así quedó la lista núcleo de 24 rasgos de la Sección~\ref{sec:lista-nucleo}. La
+validación es provisional y así se declara: falta la cobertura, la precisión no la juzgó una persona
+leyendo las historias y la mitad de la muestra quedó incompleta. Además, fijar la lista cambió la
+huella del catálogo, de modo que las extracciones de la muestra se hicieron con la definición anterior
+y habría que repetirlas para leerlas con la vigente.
+
+\section{Análisis horizontal}\label{sec:resultados-horizontal}
+
+La matriz de la Sección~\ref{sec:horizontal} preveía 35 unidades nuevas: cinco bases simuladas, porque
+la sexta es la ejecución simulada de la validación de la versión congelada, y 30 celdas derivadas,
+cinco por base. Las nueve líneas base ya existían. Con los mayores costes medidos hasta entonces, se
+estimaron unas 1.540 llamadas al modelo principal y 515 al de la función, unos cuatro días de cuota. La
+matriz se generó el 30 de octubre de 2026 con \texttt{asg-matrix} (Sección~\ref{sec:herramientas}),
+empezando por un piloto con las cinco derivadas de la primera repetición de la obra 03, que gastó 78
+llamadas al modelo principal. Después se generaron cuatro de las cinco bases que faltaban y las
+derivadas de la primera repetición de la obra 01. La Tabla~\ref{tab:coste} da el coste real por tipo de unidad.
+
+\begin{table}[htb]
+  \centering
+  \caption{Coste medido por unidad de la matriz (2026-10-28 y 2026-10-30)}
+  \label{tab:coste}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{4.6cm}>{\raggedleft\arraybackslash}p{2.0cm}%
+      >{\raggedleft\arraybackslash}p{2.2cm}>{\raggedleft\arraybackslash}p{2.2cm}%
+      >{\raggedleft\arraybackslash}p{2.2cm}@{}}
+    \toprule
+    Unidad & Ejecuciones & Modelo principal & Modelo de la función & \textit{Tokens} (miles) \\
+    \midrule
+    Base simulada & 5 & 49--133 & 49--115 & 299--570 \\
+    Narrativa desde el plan de la base & 2 & 11--14 & 0 & 49--74 \\
+    Renarración con otro tono o visión & 8 & 13--16 & 0 & 49--75 \\
+    Base fallida (obra 04, repetición 2) & 1 & 0 & 198 & 320 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+% Llamadas: intentos por modelo en llm_calls.jsonl, incluidos los fallidos. Bases:
+% 20261030-132707 (85 + 49), 20261030-234947 (49 + 115), 20261028-192554-el-misterio-del-faro
+% (133 + 103), 20261030-140119 (102 + 74), 20261030-134427 (100 + 63). Fallida: 20261031-002920
+% (198 al modelo de la función, 14 fallidas). Las carpetas llevan la hora UTC; en Cuba, todo es del
+% 2026-10-30.
+
+Una base simulada cuesta de 134 a 236 llamadas entre los dos modelos, y una celda derivada, de 11 a
+16, porque reutiliza el plan o la función de su base: emparejar por plan fuente, además de quitar
+ruido, abarata cada comparación. La tabla incluye dos irregularidades. En la segunda repetición de la
+obra 01, a mitad de la función, las llamadas del director y de la narración pasaron a responderlas el
+modelo de la función, así que esa base mezcla dos modelos. Y la segunda repetición de la obra 04 hizo
+198 llamadas, todas al modelo de la función, antes de abortar sin historia porque ningún modelo de la
+cadena tenía cupo. Con la cuota del día agotada, la comprobación previa de \texttt{asg-matrix} dejaba
+una llamada al modelo principal frente a las unas 19 que necesita una derivada, y no lanzó ninguna más.
+Ese mismo día se decidió cerrar el análisis sin generar el resto: quedaron hechas 14 de las 35
+unidades, cuatro bases y diez derivadas, y 21 sin generar, la base fallida con sus cinco derivadas y
+las quince de las otras tres bases.
+
+Solo el piloto llegó a tener rasgos. Los de sus cinco derivadas se extrajeron con 21 llamadas, y tres
+de las cinco extracciones quedaron incompletas, como en la validación del extractor; en la del tono
+humorístico fallaron la mayoría de los rasgos. La base del piloto se había extraído en la validación del
+extractor, con la huella anterior del catálogo, así que sus recuentos no se emparejan con los de las
+derivadas. Solo se emparejan los tres rasgos que salen del texto por código. La
+Tabla~\ref{tab:piloto} los da tal como los produjo \texttt{asg-report-features}.
+
+\begin{table}[htb]
+  \centering
+  \caption{Diferencias con la base en el piloto de la obra 03 (un par por celda, 2026-10-30)}
+  \label{tab:piloto}
+  \small
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.9cm}>{\raggedleft\arraybackslash}p{1.9cm}%
+      >{\raggedleft\arraybackslash}p{2.3cm}>{\raggedleft\arraybackslash}p{2.3cm}%
+      >{\raggedright\arraybackslash}p{2.4cm}@{}}
+    \toprule
+    Celda & Palabras & Proporción de diálogo & Repetición de trigramas & Lectura \\
+    \midrule
+    Base (valores absolutos) & 1.560 & 0,40 & 0,12 & --- \\
+    Narrativa desde el plan & $-$176 & $+$0,06 & $-$0,04 & n insuficiente \\
+    Tono sombrío & $-$80 & $+$0,02 & $-$0,05 & n insuficiente \\
+    Tono humorístico & $-$75 & $-$0,08 & $-$0,04 & n insuficiente \\
+    Visión limitada & $-$311 & $-$0,05 & $-$0,04 & n insuficiente \\
+    Primera persona & $-$157 & $-$0,02 & $-$0,06 & n insuficiente \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+% Fuente: Evaluations/horizontal/piloto-03/horizontal.csv (P05.4), rasgos T01, T06 y T08; el
+% resto de los núcleo sale «no medido» o «no numérico» porque la base 03-r1 tiene la huella de
+% catálogo 9de34b17… (P04.7) y las derivadas, 1c876f53…
+
+Cada celda tiene un solo par, la regla de la Sección~\ref{sec:horizontal} exige seis y el ruido entre
+repeticiones no se midió, porque la segunda base de la obra 03 no llegó a extraerse. Por la regla
+fijada antes de generar, ninguna de estas diferencias se interpreta: la tabla muestra que el análisis
+funciona de principio a fin sobre datos reales, no qué rasgos mueve cada parámetro.
+
+El análisis horizontal, en consecuencia, no tiene resultados interpretables. No hay tabla horizontal
+completa para el tono ni para la visión, y la comparación de la historia narrada desde la función con
+la escrita directamente desde el plan, que contrasta la parte mecánica de H1, tiene un solo par con
+rasgos y ningún ruido medido: para esa parte de H1 no hay datos suficientes. Las nueve líneas base
+tampoco tienen rasgos extraídos, así que su ruido propio no se midió. Lo que queda es la matriz a medio
+generar, con su manifiesto y su coste medido, y una herramienta que la reanuda sin repetir llamadas.
+Con los costes de la Tabla~\ref{tab:coste}, las 21 unidades que faltan, una base, cuatro narrativas y
+dieciséis renarraciones, necesitarían entre 300 y 450 llamadas al modelo principal, alrededor de un día
+de cuota, además de la extracción de rasgos de toda la matriz.
+
+Los datos cerrados dejan, por tanto, un generador que superó sus comprobaciones en ejecuciones reales,
+con una limitación conocida en los \textit{beats} forzados; dos lecturas a ciegas exploratorias que
+coinciden con lo que anticipa H3; un extractor cuyas citas resultaron correctas en los rasgos con
+evidencia, pero cuya estabilidad y cobertura no quedaron establecidas, y un análisis horizontal sin
+resultados interpretables. Las secciones siguientes presentan lo que se recogió de los lectores.
+% R07: el párrafo de cierre del capítulo va al final de sus secciones.
