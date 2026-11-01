@@ -1,0 +1,245 @@
+# Roadmap de redacción de la tesis
+
+Partes de la tesis en el orden en que se escriben, una por sesión, con la skill `write_thesis`
+(`/write_thesis` o `/write_thesis R03`). El LaTeX vive en [tesis/](tesis/) (plantilla oficial de
+MatCom, `github.com/matcom/thesis`) y se compila con `latexmk` dentro de esa carpeta. Es la fase
+P10 de [planning/roadmap.md](../planning/roadmap.md).
+
+Referencias de forma: la presentación «Estructura de una tesis» de la facultad y la tesis de
+Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escritura está en
+[.claude/skills/write_thesis/estilo.md](../.claude/skills/write_thesis/estilo.md).
+
+## Estado
+
+- **Siguiente:** R01 · Capítulo 1: Estado del arte.
+- **Extensión acumulada:** 0 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
+- **Hechas:**
+  - R00 · portada sin marcadores: título provisional «Generación narrativa bidireccional:
+    planificación *Top-Down* y emergencia *Bottom-Up*» (traducción del nombre del repo), Josue
+    Rolando Naranjo Sieiro, un solo tutor («Tutor:», etiqueta nueva `\advisorlabel` en la
+    clase), noviembre de 2026 y enlace al repo partido en dos líneas; índice con Introducción,
+    los cinco capítulos, Conclusiones y Recomendaciones. 1 pág., 0 \todo
+
+## Reglas comunes
+
+- Una parte por sesión y un commit por parte: `TESIS R03: <resumen>`, en `main`, sin
+  `Co-Authored-By` y sin push.
+- Toda parte se contrasta con las reglas del tutor T1–T11 (`planning/decisions.md` §1). T11 (el
+  juez como función objetivo y el algoritmo genético) solo aparece como trabajo futuro.
+- Ninguna cifra sin fuente del repo con fecha y alcance. Si falta, va `\todo{dato: …}`.
+- Ninguna referencia inventada: sale de `packages/evaluation/planilla/bibliografia.csv` o se
+  verifica en la web (DOI, ACL Anthology, arXiv) antes de entrar a `tesis/Bibliography.bib`.
+  Las marcadas «revisar cifras en el PDF» no aportan cifras sin comprobarlas.
+- Presupuesto: ≤ 50 cuartillas en total y la introducción ≤ 10. Si una parte se pasa más de un
+  20 % de su presupuesto, se avisa antes del commit.
+- **Todavía no:** agradecimientos, dedicatoria y opinión del tutor (comentados en
+  `tesis/Thesis.tex`).
+
+## Índice y presupuesto
+
+| Orden en la tesis | Parte | Archivo | Págs. |
+|---|---|---|---|
+| Resumen / *Abstract* | R10 | `FrontMatter/Abstract.tex` | 1 + 1 |
+| Introducción | R02 | `MainMatter/Introduction.tex` | 5 |
+| 1. Estado del arte | R01 | `MainMatter/Background.tex` | 9 |
+| 2. Generador híbrido de historias | R03 | `MainMatter/Generator.tex` | 8 |
+| 3. Metodología de evaluación | R04 | `MainMatter/Evaluation.tex` | 7 |
+| 4. Implementación | R05 | `MainMatter/Implementation.tex` | 5 |
+| 5. Experimentos y resultados | R06 + R07 | `MainMatter/Experiments.tex` | 5 + 4 |
+| Conclusiones | R08 | `BackMatter/Conclusions.tex` | 2 |
+| Recomendaciones | R09 | `BackMatter/Recomendations.tex` | 1 |
+| Bibliografía, glosario, anexos | R11 | `Bibliography.bib`, `BackMatter/` | — |
+
+Total previsto: ≈ 46 cuartillas. Páginas de Roger por tipo de parte (páginas del PDF): resumen
+6–7, introducción 11–17, estado del arte 18–34, modelo 35–44, implementación 45–50,
+experimentos 51–69, conclusiones 70–71, recomendaciones 72.
+
+**Pregunta abierta:** la presentación pide Arial 12 e interlineado 1,5; la plantilla oficial (y
+Roger) usan Computer Modern 12 pt e interlineado simple. Se mantiene la plantilla hasta que
+Josue o el tutor digan otra cosa.
+
+---
+
+## Tarjetas
+
+### R00 · Portada e índice
+
+- **Archivo:** `tesis/Thesis.tex`.
+- **Lee:** este roadmap.
+- **Contenido:** preguntar a Josue el título (provisional vale), su nombre completo, si hay un
+  segundo tutor, el mes y año de entrega y el enlace al repositorio; sustituir los marcadores
+  rojos de la portada.
+- **Hecho cuando:** `latexmk` compila, la portada no tiene marcadores rojos y el índice muestra
+  Introducción, los cinco capítulos, Conclusiones y Recomendaciones.
+
+### R01 · Capítulo 1: Estado del arte
+
+- **Archivo:** `tesis/MainMatter/Background.tex` (+ `Bibliography.bib`).
+- **Lee:** `docs/resumen.md` (Tesis en tres frases, contexto), `planilla/bibliografia.csv`
+  (columnas `que_aporta` y `que_se_adopta`), `packages/evaluation/METODOLOGIA.md` §1–§2.
+- **Roger:** págs. 18–34 (apertura con definiciones, secciones por familia de enfoques).
+- **Contenido:**
+  1. Apertura: conceptos de historia, trama, discurso, evento, plan; anuncio de secciones.
+  2. Generación dirigida por la trama (*Top-Down*): estructuras (Propp, Freytag), grafos y
+     planificación (TALE-SPIN, planificación de tramas, DOC B39, Agents' Room B07,
+     prefiguración y pago B34).
+  3. Generación por simulación de personajes (*Bottom-Up*) y la **paradoja narrativa**.
+  4. Sistemas híbridos: Façade, Thespian, Virtual Storyteller, Sabre; su versión con LLM:
+     Generative Agents (B31), StoryBox, WSE-bench, SOTOPIA (B33), FANToM (B32).
+  5. Consistencia y personajes en LLM: ConStory-Bench (B25), Finding Flawed Fictions (B26),
+     CharacterEval (B28), TimeChara (B30), PersonaGym (B29).
+  6. Evaluación de historias: criterios humanos (HANNA B04, TTCW B06, B35, B36), escalas y sus
+     problemas (B11, B12–B16), comparaciones por pares y Elo (B17, B18), jueces LLM y sus sesgos
+     (B05, B10, B21–B24, B09), métricas automáticas (B38, B43); la tesis de Roger (B03) como
+     antecedente directo.
+  7. Posición del autor: qué se adopta y qué hueco queda (planificación + simulación con
+     memoria propia; evaluación por recuentos con cita y pares a ciegas).
+- **Extensión:** 9 págs.
+- **Depende de:** R00.
+- **Hecho cuando:** cada sistema o resultado citado tiene entrada verificada en el `.bib`;
+  compila sin citas indefinidas.
+
+### R02 · Introducción
+
+- **Archivo:** `tesis/MainMatter/Introduction.tex`.
+- **Lee:** `docs/resumen.md`, `planning/decisions.md` §1, el capítulo 1 ya escrito.
+- **Roger:** págs. 11–17.
+- **Contenido** (en este orden, como pide la presentación): contexto; antecedentes del
+  problema; breve presentación de la problemática (paradoja narrativa, pérdida de compromisos y
+  riqueza en LLM, evaluación poco fiable); actualidad; novedad científica; importancia teórica
+  y práctica; **diseño teórico**: problema científico (como pregunta), objeto de estudio, campo
+  de acción, **Objetivo General**, **Objetivos Específicos** (en infinitivo, más que generales),
+  **hipótesis** H1–H3 de `docs/resumen.md` en forma enunciativa y verificable; estructura del
+  documento por capítulos.
+- **Extensión:** 5 págs. (≤ 10).
+- **Depende de:** R01.
+- **Hecho cuando:** cada objetivo específico apunta a un capítulo, y cada hipótesis, a un
+  experimento de R06 o R07 (dejar la correspondencia escrita como comentario LaTeX).
+
+### R03 · Capítulo 2: Generador híbrido de historias
+
+- **Archivo:** `tesis/MainMatter/Generator.tex`.
+- **Lee:** `docs/resumen.md` (Plan validado, Guion, Función simulada, Inventario),
+  `docs/architecture/generation.md`, `docs/architecture/simulation.md`.
+- **Roger:** págs. 35–44 (arquitectura primero con una figura, luego cada componente).
+- **Contenido:** arquitectura en una figura (petición → plan → guion → función → log → narrador
+  → historia; Top-Down, Bottom-Up y discurso); plan como DAG validado y perfiles; promesas
+  apertura–progreso–pago; guion teatral (nativo y adaptado); función simulada: actores que no
+  ven el guion, memoria propia (público, susurro, pensamiento) y recuperación determinista,
+  compuertas de conocimiento, director que sugiere y cierra beats, modo fijo y adaptativo;
+  narrador que cura sin inventar y sus puntos de vista; inventario («el modelo propone, el
+  código decide»). Cada mecanismo, con la hipótesis que justifica su complejidad (H3).
+- **Extensión:** 8 págs. Conceptual: sin nombres de módulos salvo cuando aclaran.
+- **Depende de:** R02.
+- **Hecho cuando:** figura de arquitectura incluida y citada; ningún mecanismo apagado por
+  defecto se presenta como parte del predeterminado congelado (`generator-frozen`, 7.22).
+
+### R04 · Capítulo 3: Metodología de evaluación
+
+- **Archivo:** `tesis/MainMatter/Evaluation.tex`.
+- **Lee:** `packages/evaluation/METODOLOGIA.md`, `planning/decisions.md` §1–§2,
+  `docs/architecture/evaluation.md`, `packages/evaluation/planilla/rasgos.csv` (solo lectura).
+- **Roger:** págs. 51–54 (métodos de evaluación), para contrastar: él usó escala 1–10; aquí no.
+- **Contenido:** las dos evaluaciones y la intermedia (T1); la máquina cuenta, no juzga:
+  rasgos contables con cita literal verificada por código (T2, T3), capas y lista núcleo; la
+  tablita por historia y el análisis horizontal (T4); evaluación humana por pares a ciegas con
+  tres criterios (T5, T7) y línea base de un solo prompt (T6); el juez como regresión de rasgos
+  a rankings, validado fuera de muestra (T8); ranking del corpus y las diez mejores (T9);
+  amenazas a la validez (jueces LLM que se prefieren, ruido entre corridas).
+- **Extensión:** 7 págs.
+- **Depende de:** R02.
+- **Hecho cuando:** cada regla T1–T9 aparece y se cita su motivación en la literatura de R01;
+  ninguna escala numérica se presenta como juicio de calidad.
+
+### R05 · Capítulo 4: Implementación
+
+- **Archivo:** `tesis/MainMatter/Implementation.tex`.
+- **Lee:** `AGENTS.md`, `docs/architecture/runtime.md`, `docs/architecture/interfaces.md`,
+  los `README.md` de `packages/*` y `apps/*`.
+- **Roger:** págs. 45–50.
+- **Contenido:** monorepo y dependencias entre paquetes (`core ← evaluation ← stagecraft ←
+  telegram, studio`); proveedores, cuotas y reintentos; artefactos persistidos y contratos
+  versionados (`pipeline_version`); comandos `asg-*` principales; bot de Telegram y
+  `asg-studio` para la lectura a ciegas; pruebas y reproducibilidad.
+- **Extensión:** 5 págs. Aquí sí van nombres de código en `\texttt{}`.
+- **Depende de:** R03, R04.
+- **Hecho cuando:** las versiones citadas coinciden con el «Estado actual» de
+  `planning/roadmap.md` en la fecha de escritura, y esa fecha consta en el texto.
+
+### R06 · Capítulo 5 (a): Experimentos con datos cerrados
+
+- **Archivo:** `tesis/MainMatter/Experiments.tex` (primeras secciones).
+- **Lee:** `docs/resumen.md` (validaciones 7.5, P02.1, P02.2, P02.3, 7.22, líneas base),
+  `METODOLOGIA.md` §3 («Validación del extractor») y §10, «Hechas» de P03–P05 en
+  `planning/roadmap.md`, salidas en `Evaluations/validacion-extractor/` y
+  `Evaluations/horizontal/`.
+- **Roger:** págs. 54–69.
+- **Contenido:** corpus y elegibilidad; validaciones del generador antes de congelarlo;
+  validación del extractor (precisión, test-retest, cobertura sin medir); análisis horizontal
+  parcial (14 de 35 unidades, cerrado por cuota el 2026-10-30). Las tablas, de P09 si ya
+  existen (`redaccion/tablas/`, `redaccion/figuras/`); si no, a mano con su fuente en un
+  comentario.
+- **Extensión:** 5 págs.
+- **Depende de:** R04.
+- **Hecho cuando:** cada tabla lleva n, fecha y alcance; los resultados nulos o incompletos se
+  dicen como tales.
+
+### R07 · Capítulo 5 (b): Estudio humano, juez y ranking
+
+- **Archivo:** `tesis/MainMatter/Experiments.tex` (secciones finales).
+- **Lee:** bloques P06–P09 de `planning/roadmap.md`, `decisions.md` §2 (juez para P08),
+  salidas de `asg-rank` y de P09.
+- **Contenido:** estudio humano (diseño de P06 y lo que realmente se recogió: piloto y votos
+  disponibles); juez (`fitted` o `insufficient`, ambos válidos); ranking y las diez mejores;
+  respuesta a H1–H3 con lo que los datos permiten.
+- **Extensión:** 4 págs.
+- **Depende de:** **P07, P08 y P09 cerradas** en `planning/roadmap.md`. Si no lo están, la skill
+  para.
+- **Hecho cuando:** cada hipótesis tiene una respuesta (confirmada, refutada o sin datos
+  suficientes) con su evidencia.
+
+### R08 · Conclusiones
+
+- **Archivo:** `tesis/BackMatter/Conclusions.tex`.
+- **Lee:** la tesis escrita; `planning/decisions.md` §1 (T10, T11).
+- **Roger:** págs. 70–71 (para la forma; evitar su tono grandilocuente).
+- **Contenido:** una conclusión por objetivo específico, en el mismo orden; aportaciones (T10:
+  el generador más la metodología de evaluación); limitaciones y dificultades (cuota, estudio
+  sin la muestra prevista, extractor parcial); T11 como trabajo futuro.
+- **Extensión:** 2 págs.
+- **Depende de:** R07.
+- **Hecho cuando:** ninguna conclusión afirma algo que no esté demostrado en el cuerpo.
+
+### R09 · Recomendaciones
+
+- **Archivo:** `tesis/BackMatter/Recomendations.tex`.
+- **Lee:** `planning/future/idea-bank.md` (solo los titulares), R08.
+- **Roger:** pág. 72.
+- **Contenido:** qué ampliar (completar la matriz, estudio con más lectores, árbitro de acciones
+  físicas…), aplicación a otras esferas, condiciones para usar los resultados.
+- **Extensión:** 1 pág.
+- **Depende de:** R08.
+
+### R10 · Resumen y *Abstract*
+
+- **Archivo:** `tesis/FrontMatter/Abstract.tex`.
+- **Roger:** págs. 6–7 (forma; sus cifras sin respaldo, no).
+- **Contenido:** ≈ 250 palabras: objeto, objetivos, método, resultados más relevantes y
+  aportaciones; no un índice de capítulos. Después, la misma versión en inglés.
+- **Depende de:** R08.
+- **Hecho cuando:** 200–300 palabras cada uno y las cifras coinciden con el capítulo 5.
+
+### R11 · Bibliografía, glosario y anexos
+
+- **Archivos:** `tesis/Bibliography.bib`, `tesis/BackMatter/`.
+- **Contenido:** depurar el `.bib` (sin entradas sin citar, datos completos); glosario con
+  `nomencl` si hace falta (`\makenomenclature` ya está activo); anexos numerados y referenciados
+  desde el texto (catálogo de rasgos, prompts de la matriz, ejemplos de historias).
+- **Depende de:** R08.
+
+### R12 · Repaso de coherencia
+
+- **Contenido:** objetivos ↔ conclusiones, hipótesis ↔ resultados, cifras ↔ fuentes, extensión
+  total ≤ 50, `\todo` restantes, avisos de compilación (referencias indefinidas, cajas
+  desbordadas). Lista de pendientes para Josue antes de **H5** (borrador al tutor).
+- **Depende de:** R10, R11.

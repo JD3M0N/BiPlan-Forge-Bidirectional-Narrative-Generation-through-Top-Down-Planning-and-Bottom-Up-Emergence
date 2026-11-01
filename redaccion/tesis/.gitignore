@@ -1,0 +1,21 @@
+# Artefactos de latexmk; el PDF compilado no se versiona.
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.glo
+*.ilg
+*.lof
+*.log
+*.lol
+*.lot
+*.nlo
+*.nls
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+Thesis.pdf
+*-SAVE-ERROR

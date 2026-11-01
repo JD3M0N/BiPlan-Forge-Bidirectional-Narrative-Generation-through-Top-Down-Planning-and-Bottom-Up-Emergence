@@ -48,7 +48,7 @@ Si la tarea pedida no tiene tarjeta, para y dilo: propone `/phase cards Pxx`.
 7. **Probar.**
    - `.\run-tests.ps1` (suite completa; nunca `pytest` directo) y `.\quality.ps1`.
    - Si cambió una versión: `python -m pip install --no-deps -e <paquete>` antes de probar.
-   - En la tesis: `latexmk` en `redaccion/` compila sin errores.
+   - En la tesis: `latexmk` en `redaccion/tesis/` compila sin errores.
    - Lo que pida **Prueba**.
    - Si falla una prueba ajena a la tarea: anótala en la tarjeta que corresponda y sigue; si
      bloquea el commit, para y avisa.

@@ -417,15 +417,15 @@ públicos y README), que se cierra aquí.
 
 ### P10 · Escribir la tesis
 
-LaTeX en `redaccion/`, compilado con `latexmk`. Toda la fase se contrasta con T1–T11; T11 va a
-conclusiones como trabajo futuro.
+LaTeX en `redaccion/tesis/` (plantilla de MatCom), compilado con `latexmk`. Toda la fase se
+contrasta con T1–T11; T11 va a conclusiones como trabajo futuro.
 
-- Primera tarjeta en modo `O`: plantilla, índice y extensión, con la tesis de Roger Fuentes
-  (`docs/`) como referencia de formato.
-- Una tarjeta por capítulo: introducción; estado del arte (de `planilla/bibliografia.csv`,
-  verificando las cifras marcadas «revisar cifras en el PDF»); el generador; la metodología de
-  evaluación del tutor; experimentos y resultados (de P09); conclusiones y trabajo futuro;
-  resumen y abstract.
+- Se escribe con la skill `write_thesis`, una parte por sesión. Las partes (R00–R12), su orden,
+  presupuesto y tarjetas están en
+  [redaccion/write_thesis_roadmap.md](../redaccion/write_thesis_roadmap.md), no aquí.
+- Las partes que no dependen de datos nuevos (estado del arte, introducción, generador,
+  metodología, implementación) pueden escribirse antes; R07 (estudio humano, juez y ranking)
+  espera a P07, P08 y P09.
 - **H5:** borrador completo al tutor.
 
 ### P11 · Reescribir la tesis
