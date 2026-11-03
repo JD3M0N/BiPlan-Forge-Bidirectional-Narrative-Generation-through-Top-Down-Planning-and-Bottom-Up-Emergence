@@ -379,6 +379,22 @@ Amenazas, además de las generales del estudio:
 - **Tamaño.** 5 lectores, 6 historias y 2 familias: sirve para entrenar el juez exploratorio de
   P07 (`decisions.md` §2, P07.1 a), no para concluir qué enfoque prefieren los lectores.
 
+**Rasgos del piloto (P07.6, 2026-11-02 y 2026-11-03).** Extraídos con `gemini-3.5-flash-lite`,
+selección núcleo y el catálogo vigente, sobre las 6 historias congeladas y sus 12 perturbaciones
+(`asg-perturb`: escenas barajadas y sin el último quinto). Costó **653 llamadas reales** (178 y
+475), frente a las ~54 estimadas: la extracción sale `incompleta` a menudo y hubo que relanzarla
+muchas veces, y unas 45 llamadas se perdieron al rehacer desde cero una versión de H3 casi
+completa. Resultado: las 6 historias con los 24 núcleo `measured` o `not_applicable`; X15 de H3
+sale de un intento archivado del mismo protocolo (`decisions.md` §2, P07.6), validado contra otra
+segmentación en escenas. 11 de 12 perturbaciones completas; `s037b5a5c6f0949ae-no-ending` no
+mide R03 y queda fuera de `casos.json`. La tablita de las 6 está en `tabla-rasgos.json` y `.csv`.
+
+- **Inestabilidad del extractor.** En H3 cada extracción desde cero atascó un rasgo distinto
+  (R03 y R16 por exigir dos citas, X15–X17 por citas fuera de su escena); reintentar sobre la
+  misma segmentación repite casi la misma respuesta. En los textos sin desenlace el modelo se
+  marca incompleto en R03 en vez de contar 0. Las 5 versiones archivadas de H3 que miden X15
+  dan el mismo valor (1).
+
 ## 6. El juez aprendido
 
 Por cada criterio se ajusta una regresión logística por pares (ficha EXP-7):

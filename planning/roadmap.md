@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P07.6 · rasgos del piloto y de sus perturbaciones (modo `S`, gasta cuota: `--dry-run` y coste antes de extraer). **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** reducido (piloto cerrado y exportado, P07.5) pendiente de que Josue lo acepte.
+- **Siguiente:** P07.7 · entrenar, validar y publicar el juez (modo `S`, sin cuota). **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** reducido (piloto cerrado y exportado, P07.5) pendiente de que Josue lo acepte.
 - **Versiones** (2026-11-02): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.2, evaluación 2.1.9,
   Telegram 6.0.3, Studio 0.3.0.
 - **Hechas:**
@@ -50,6 +50,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P07.3 · El informe del juez (`MODEL_VERSION` 3) da la longitud sola también por familias (`length_baseline.by_story/by_family`), la cobertura (votos probados / votos) en cada validación y la colinealidad por criterio (pares |r| ≥ 0,8, número de condición, constantes); evaluación 2.1.8.
   - P07.4 · `asg-perturb DB --out DIR [--seed N]` escribe por historia congelada `<id>-shuffled` (capítulos barajados, tercios de párrafos en las líneas base, nunca el orden original) y `<id>-no-ending` (prefijo sin el último quinto de los párrafos), con `perturbation.json`; `--casos` arma el JSON de `asg-judge --perturbations` solo con extracciones compatibles (`build_cases`); sin cambio de visión; evaluación 2.1.9, core 0.8.2.
   - P07.5 · Los 69 votos transcritos (cotejados por Josue) importados en `Evaluations/estudio-piloto-722/study.sqlite3` (copia previa `study.antes-votos.sqlite3`, CSV `af101770…`); base `closed`, `export-piloto-2026-11-02.json` coincide fila a fila con el CSV, todos con `seconds` nulo; `preferencias.json` da `insufficient` en los tres criterios (grafo en dos componentes) y acuerdo cercano al azar (α −0,14 a 0,05); subsección «Piloto 7.22 (votos transcritos)» en METODOLOGIA.md §5.
+  - P07.6 · Rasgos núcleo (`gemini-3.5-flash-lite`) de las 6 historias del piloto y de sus 12 perturbaciones (`asg-perturb`): 17 de 18 extracciones completas; X15 de H3 se tomó, con aprobación de Josue, de un intento archivado del mismo protocolo (`decisions.md` §2, P07.6; las 5 versiones que lo miden dan 1), y `s037…-no-ending` (sin R03) quedó fuera de `casos.json` (11 de 12 casos, filtrado a mano: no regenerar); las 6 pasan los controles de `train_judge`; tablita en `tabla-rasgos.json`/`.csv`. **653 llamadas reales** (178 el 2026-11-02 y 475 el 2026-11-03) frente a ~54 estimadas, ~45 perdidas al rehacer una H3 casi completa.
 
 
 ## Cómo leer una tarjeta
@@ -286,25 +287,13 @@ por historia y por familia, frente al azar y a la longitud sola. T10: nada toca 
 el juez no elige qué generar. P07.1 cambió, con el «ok» de Josue, la decisión de P06.1 de dejar
 el piloto fuera.
 
-#### P07.6 · Rasgos del piloto y de sus perturbaciones
-- **Modo:** S · **Cuota:** ~36–54 llamadas (6 originales y 12 perturbadas, 2–3 por texto) más
-  reintentos · **Paquete:** —
-- **Lee:** README de evaluación §3; la decisión de P07.1 (c); METODOLOGIA.md §3 «El extractor».
-- **Haz:**
-  - `--dry-run`, enseñar el coste y esperar.
-  - `asg-perturb` (P07.4); extraer con `gemini-3.5-flash-lite` los 18 textos con el mismo
-    protocolo; relanzar solo los fallidos hasta completar (P07.1 c), con el coste de
-    cada relanzamiento enseñado antes.
-  - El JSON de casos y la tablita de las 6 con `asg-report-features`.
-- **No hagas:** `--selection all`; cambiar de modelo; tocar `rasgos.csv`.
-- **Prueba:** huella de catálogo vigente y `text_hash` del estudio en cada extracción; los 24
-  núcleo como exija P07.1.
-- **Hecho cuando:** 18 extracciones compatibles con `train_judge` y llamadas reales anotadas.
-
 #### P07.7 · Entrenar, validar y publicar el juez
 - **Modo:** S · **Cuota:** sin cuota · **Paquete:** —
-- **Lee:** METODOLOGIA.md §6; `decisions.md` §2 (P07.1 y «Un juez que no generaliza es un
-  resultado válido»).
+- **Lee:** METODOLOGIA.md §6; `decisions.md` §2 (P07.1, P07.6 y «Un juez que no generaliza es
+  un resultado válido»).
+- **Ojo:** `Evaluations/estudio-piloto-722/casos.json` (11 casos, SHA-256 `ccedda1e…`) se usa
+  tal cual: no regenerarlo con `asg-perturb --casos`, que volvería a meter el caso incompleto.
+  Entre las limitaciones van X15 de H3 (intento archivado) y las 11 de 12 perturbaciones.
 - **Haz:**
   - `asg-judge Evaluations/estudio-piloto-722/study.sqlite3 --output juez.json --perturbations
     casos.json`.

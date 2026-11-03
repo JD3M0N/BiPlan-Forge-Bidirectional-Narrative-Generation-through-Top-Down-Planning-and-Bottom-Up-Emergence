@@ -276,6 +276,27 @@ rasgos, juez, análisis o tesis se contrasta con esta lista antes de empezar.
     | H4 | `s4ce9516cd71c4562` | `20261030-140119-el-misterio-del-faro` (simulada, obra 03) |
     | H5 | `s8bbc2c9f31a1484a` | `20261028-192554-el-faro-de-la-habitacion-cerrada` (narrativa, obra 03) |
     | H6 | `s283387af5930405f` | `03-ultima-luz-del-faro-2` (línea base, obra 03) |
+- **2026-11-03 · X15 de H3 tomado de un intento archivado (P07.6).** Aprobado por Josue. Precisa
+  P07.1 (c) **solo para X15 de H3 en este piloto**; no es una regla general para combinar
+  intentos en P08 ni en otro estudio. Tras 7 extracciones desde cero y decenas de reintentos, H3
+  (`s037b5a5c6f0949ae`) nunca quedó completa a la vez: cada intento atascaba un rasgo distinto
+  (R03/R16 por una sola cita, X15–X17 por citas fuera de la escena asignada). La versión vigente
+  solo fallaba en X15. Regla, fijada antes de mirar valores: X15 sale de la versión archivada
+  más reciente con X15 medido y la misma identidad (texto, catálogo, modelo, protocolo).
+  - **Dato exacto:** archivo `features/s037b5a5c6f0949ae.history/b4d395e5….json`
+    (SHA-256 `b9419ebb…ae0de`), X15 = 1. El sidecar resultante lleva `merged_from` con la
+    procedencia (SHA-256 `bf09b1ba…f6ae30`). Las 5 versiones archivadas que miden X15 dan 1,
+    así que la elección no cambia el valor.
+  - **No reproducible tal cual:** «la más reciente» depende de la fecha de archivo, y el
+    historial guarda además copias manuales de Claude (`ciclo3-antes-de-restaurar.json`,
+    `ultimo-ciclo-descartado.json`, `antes-de-x15-archivado.json`), que no son archivos del
+    extractor. Vale la huella de arriba.
+  - **Diferencia declarada:** las ocurrencias de X15 se validaron contra otra segmentación en
+    escenas que la del resto de rasgos de H3. No es imputación: es una medida con citas
+    verificadas por código sobre el mismo texto.
+  - **Perturbaciones:** `casos.json` (SHA-256 `ccedda1e…b55c976`) tiene 11 de los 12 casos;
+    se quitó a mano `s037b5a5c6f0949ae-no-ending` (R03 sin medir, una sola cita). Volver a
+    lanzar `asg-perturb --casos` da 12: P07.7 usa este archivo sin regenerarlo.
 
 ## 3. Decisiones de proyecto
 
