@@ -307,6 +307,41 @@ rasgos, juez, análisis o tesis se contrasta con esta lista antes de empezar.
   longitud sola (0,60 / 0,70 / 0,62) en los dos esquemas; sin τ (grafo partido). Detalle en
   METODOLOGIA.md §6, «Resultado del juez (piloto 7.22)». Si P08 ordena el corpus con este juez, y
   cómo lo presenta, lo decide P08.1 con Josue.
+- **2026-11-03 · Ranking del corpus (P08.1).** Aprobado por Josue. Cubre T9 (el juez ordena el
+  corpus y se leen las diez), T8 (juez congelado, sin reajuste), T7 (tres rankings y el combinado
+  auxiliar), T6 (las líneas base se ordenan con las demás), T2 y §4 (el extractor solo cuenta; los
+  juicios de las diez son de Josue) y T11 (el ranking no elige qué generar).
+  - **Se ordena con el juez congelado de P07.7, como ranking exploratorio**, y al lado va el **orden
+    por longitud sola (T01)** como control declarado. Los tres criterios están `fitted`, así que no
+    hay criterio `insufficient` que resolver. El juez no generaliza (por debajo del azar y de la
+    longitud en los dos esquemas): las diez describen **lo que premia este ajuste**, no las mejores
+    historias, y así se presentan. El orden por longitud no reentrena ni cambia el juez: es la
+    referencia que le ganó en P07.7, se calcula por código y no gasta llamadas.
+  - **Alcance escalonado.** Recuento sin cuota del 2026-11-03 (`asg-corpus Stories`, 130 elegibles,
+    con las extracciones del piloto): 7.20–7.22 y líneas base, 64 runs (6 del piloto, 2 completas,
+    3 incompletas, 7 con catálogo anterior, 46 sin extracción): **56 por extraer**; 7.0–7.19, 66
+    runs (4 con catálogo anterior, 62 sin extracción). Primero 7.20+ y las líneas base; 7.0–7.19
+    solo si queda cuota y Josue lo pide. La decisión «Corpus elegible» no cambia: lo no extraído
+    sale del ranking como «Extracción ausente u obsoleta», con su razón, y se declara como sesgo.
+  - **Reintentos.** Por texto: una pasada inicial y hasta 3 reanudaciones; si sigue incompleto, un
+    único `--force` desde cero con otras 3 reanudaciones. Si aún falla, sale del ranking como
+    «Extracción incompleta» (sesgo declarado: quedan las que se extraen bien). **Nunca se combinan
+    intentos**: lo del X15 de H3 (P07.6) no se extiende.
+  - **Tope y parada.** Como mucho **400 llamadas principales al día**, con
+    `gemini-3.5-flash-lite`, medidas con `asg-budget` antes y después de cada lote. Se para al
+    cubrir el alcance, cuando lo diga Josue, o si tras el primer lote menos de la mitad de los
+    textos lanzados queda completa; en ese caso se revisa antes de seguir gastando.
+  - **Las diez:** las diez primeras del **combinado auxiliar** (10 lecturas), con los empates
+    resueltos por ruta como hace el código. Las 6 del piloto se ordenan y se marcan, pero **no
+    entran en las diez**: su puntuación es de dentro de la muestra; si una cae entre las diez,
+    entra la siguiente. Los tres rankings por criterio se publican enteros.
+  - **Marcas** en cada historia ordenada: `training` (su `text_hash` está en el estudio del
+    piloto), `version-no-comparable` (pipeline 7.0 y 7.1, frente a 7.2+) y `premisa-no-vista`
+    (el prompt de la petición no es el de las obras 01 ni 03 de `planilla/prompts.md`).
+  - **Fichas de las diez.** El código rellena: run y ruta, formato y versión, puestos en los tres
+    rankings, el combinado y la longitud, los 24 núcleo frente a la mediana del corpus ordenado, y
+    configuración (C), proceso (P) y coste (K) cuando existan. Josue escribe fortalezas y
+    debilidades, marcadas «(Josue)»; Claude no escribe juicios.
 
 ## 3. Decisiones de proyecto
 
