@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P10 · Escribir la tesis: R07 en [redaccion/write_thesis_roadmap.md](../redaccion/write_thesis_roadmap.md) (`/write_thesis`), desbloqueada al cerrar P07, P08 y P09. **H2** cerrado por Josue el 2026-10-31; **H3** reducido (piloto cerrado y exportado, P07.5) pendiente de que Josue lo acepte; **H4** no alcanzado (P08 cerrada sin P08.6).
+- **Siguiente:** **H5**, Josue manda el borrador al tutor: P10 tiene todas sus partes escritas (R00–R12, 2026-11-03) y los pendientes del borrador están en [redaccion/write_thesis_roadmap.md](../redaccion/write_thesis_roadmap.md). **H2** cerrado por Josue el 2026-10-31; **H3** reducido (piloto cerrado y exportado, P07.5) pendiente de que Josue lo acepte; **H4** no alcanzado (P08 cerrada sin P08.6).
 - **Versiones** (2026-11-03): Stagecraft 7.22.2 (pipeline 7.22), core 0.8.3, evaluación 2.1.12,
   Telegram 6.0.3, Studio 0.3.0.
 - **Hechas:**

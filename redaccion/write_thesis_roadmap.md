@@ -11,8 +11,9 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
 
 ## Estado
 
-- **Siguiente:** R12 · Repaso de coherencia.
-- **Extensión acumulada:** 45,4 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
+- **Siguiente:** ninguna parte. Borrador completo: **H5**, Josue manda el borrador al tutor.
+- **Extensión acumulada:** 45,4 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía);
+  76 págs. en el PDF, cuerpo 1–55 y anexos 63–68.
 - **Compilar:** en `redaccion/tesis/` (disco E:) las pasadas sucesivas de `latexmk` fallan con
   «Extra }» o «File ended while scanning» en `Thesis.aux`: al releerlo en `\end{document}` aún
   tiene restos de la pasada anterior. Desde el 2026-11-03 se compila en una copia de `redaccion/`
@@ -111,6 +112,35 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
     01, 03 y 04 (`app:obras`, desde `sec:corpus`); C, `matriz.tex` y `ranking_perfil.tex` de P09
     (`app:tablas`, desde `sec:resultados-horizontal` y `sec:resultados-ranking`). Sin ejemplos de
     historias. 6 págs. de anexos (63–68), 0 \todo
+  - R12 · repaso del 2026-11-03: objetivos ↔ conclusiones (cinco párrafos en orden), hipótesis ↔
+    `sec:respuesta-hipotesis` (anotado en `Introduction.tex`), cifras del resumen y de las
+    conclusiones cotejadas con el capítulo 5; 0 `\todo`, 0 referencias indefinidas, 0 cajas
+    desbordadas. Corregido: el capítulo 3 daba el juez por validado (`sec:ranking` y el cierre) y
+    remitía al capítulo 5 en vez de a `sec:resultados-estudio`; la introducción menciona los
+    anexos. Pendientes para Josue antes de **H5** en «Pendientes del borrador».
+
+## Pendientes del borrador (R12, 2026-11-03)
+
+Para Josue antes de mandar el borrador al tutor (H5). Ninguno impide compilar.
+
+- **Hitos.** H3 (reducido al piloto) espera su aceptación; H4 no se alcanzó (P08 cerrada sin
+  P08.6), así que el juez, el ranking y las preguntas abiertas de H4 (la 5 de H2, si basta un juez
+  de 2 familias, si se retoman P05 y P06) llegan al tutor con este borrador.
+- **Las tres primeras del ranking.** Si Josue escribe sus fortalezas y debilidades en
+  `Evaluations/ranking/ranking-2026-11-03.md`, `sec:resultados-ranking` puede ganar un párrafo
+  atribuido a él; hoy dice que la lectura cualitativa no se hizo.
+- **Fecha del capítulo 4.** `Implementation.tex` describe el repositorio el 2026-11-01 (Tabla 4.1:
+  core 0.8.1, evaluación 2.1.6, Stagecraft 7.22.1); el 2026-11-03 son 0.8.3, 2.1.12 y 7.22.2, y
+  las líneas y las 907 pruebas no se volvieron a contar. Decidir si se actualiza o se deja fechado.
+- **Nombres de rasgos en las tablas generadas.** `ranking_perfil.tex` (Tabla C.2) usa los nombres de
+  `rasgos.csv`: «Ciclos 'si, pero'» y «Eventos azarosos o externos», frente a «sí, pero» y
+  «Sucesos azarosos o externos» del texto. Arreglarlo es tocar `rasgos.csv` (contrato) o
+  `asg-results`, no la tesis.
+- **Forma.** La pregunta abierta de Arial 12 e interlineado 1,5 frente a la plantilla; título
+  provisional; agradecimientos, dedicatoria y opinión del tutor siguen comentados en `Thesis.tex`.
+- **Anexos.** No hay ejemplos de historias; si el tutor los pide, una línea base y una simulada de
+  la obra 03 serían las candidatas (están en el piloto y en el ranking).
+- **Compilar** en una copia en `%TEMP%` (ver «Estado»).
 
 ## Reglas comunes
 
