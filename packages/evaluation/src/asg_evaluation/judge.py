@@ -16,7 +16,8 @@ from .catalog import CRITERIA, catalog_snapshot, core_ids, digest
 from .corpus import exclusion_reason
 from .preferences import bradley_terry, decided_votes
 
-MODEL_VERSION = 2
+MODEL_VERSION = 3
+COLLINEARITY_THRESHOLD = 0.8
 
 
 def protocol(identity: dict) -> dict:
@@ -79,6 +80,42 @@ def fit_linear(vectors: dict[str, list], votes: list[dict], fields: list[str]) -
         "inactive_features": [fields[i] for i in range(len(fields)) if not available[i]],
         "score_center": float(scores.mean()),
         "score_scale": float(scores.std()) or 1.0,
+    }
+
+
+def collinearity(vectors: dict[str, list], votes: list[dict], fields: list[str]) -> dict:
+    """Report correlated pairs, condition number and constant features of the training stories."""
+    stories = sorted({s for v in votes for s in (v["left"], v["right"])})
+    raw = np.array([vectors[s] for s in stories], dtype=float)
+    available = np.isfinite(raw).any(axis=0)
+    medians = np.zeros(len(fields))
+    if available.any():
+        medians[available] = np.nanmedian(raw[:, available], axis=0)
+    filled = np.where(np.isfinite(raw), raw, medians)
+    scales = filled.std(axis=0)
+    constant = scales == 0
+    varying = np.flatnonzero(~constant)
+    pairs = []
+    condition = None
+    if len(varying) >= 2 and len(stories) >= 2:
+        matrix = filled[:, varying]
+        with np.errstate(invalid="ignore"):
+            corr = np.corrcoef(matrix, rowvar=False)
+        for i in range(len(varying)):
+            for j in range(i + 1, len(varying)):
+                r = float(corr[i, j])
+                if np.isfinite(r) and abs(r) >= COLLINEARITY_THRESHOLD - 1e-12:
+                    pairs.append({"a": fields[varying[i]], "b": fields[varying[j]], "r": r})
+        pairs.sort(key=lambda p: (-abs(p["r"]), p["a"], p["b"]))
+        standard = (matrix - matrix.mean(axis=0)) / scales[varying]
+        singular = np.linalg.svd(standard, compute_uv=False)
+        condition = float(singular[0] / singular[-1]) if singular[-1] > 1e-12 else None
+    return {
+        "threshold": COLLINEARITY_THRESHOLD,
+        "training_stories": len(stories),
+        "pairs": pairs,
+        "condition_number": condition,
+        "constant_features": [fields[i] for i in np.flatnonzero(constant)],
     }
 
 
@@ -151,6 +188,7 @@ def _validate(vectors: dict, votes: list[dict], fields: list[str], groups: dict[
         "chance_accuracy": 0.5,
         "tested_votes": len(records),
         "total_votes": len(votes),
+        "coverage": len(records) / len(votes) if votes else None,
         "kendall_tau": tau,
         "predictions": records,
         "folds": folds,
@@ -215,7 +253,11 @@ def train_judge(dataset: dict, features: dict[str, dict]) -> dict:
             "status": "fitted",
             "model": model,
             "validation": validation,
-            "length_baseline": length_validation,
+            "length_baseline": {
+                "by_story": length_validation,
+                "by_family": _validate(length, votes, ["T01"], families),
+            },
+            "collinearity": collinearity(vectors, votes, fields),
             "family_validation": _validate(vectors, votes, fields, families),
         }
     return result

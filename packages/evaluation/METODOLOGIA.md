@@ -334,6 +334,15 @@ Por cada criterio se ajusta una regresión logística por pares (ficha EXP-7):
 - Hay además un **control con perturbaciones** (OpenMEVA): historias rotas a propósito, con
   escenas barajadas, el pago final borrado o la visión cambiada a mitad. Se publican los cambios;
   no se exige que toda perturbación empeore todos los criterios.
+- Cada validación publica su **cobertura** (votos probados / votos): al dejar fuera una historia o
+  una familia se descartan todos los votos que la tocan, y una precisión con poca cobertura se lee
+  con ese dato al lado.
+- La longitud sola (T01) se valida con el mismo esquema por historias y por familias
+  (`length_baseline.by_story`, `length_baseline.by_family`); el juez solo cuenta si supera a la
+  longitud en el esquema que corresponde.
+- Se informa la **colinealidad** de las historias de entrenamiento de cada criterio (`collinearity`):
+  los pares de rasgos con |r| ≥ 0,8, el número de condición de la matriz estandarizada (nulo si es singular) y los rasgos
+  constantes. Es un diagnóstico: no cambia la regularización (`C = 1`) ni elige rasgos.
 - Los pesos se publican. Un juez que solo premia la longitud o el diálogo se ve a simple vista.
 
 ## 7. Ranking del corpus y análisis de las mejores

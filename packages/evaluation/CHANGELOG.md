@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.8] - 2026-11-02
+
+- P07.3: `train_judge` (judge `MODEL_VERSION` 3) publishes `length_baseline` as
+  `{by_story, by_family}`, a `coverage` (tested / total votes) in every validation and, per
+  criterion, `collinearity` (pairs with |r| >= 0.8, condition number, constant features) over the
+  training stories. Estimator, `C`, preprocessing and validation are unchanged; judges saved with
+  version 2 must be retrained.
+
 ## [2.1.7] - 2026-11-02
 
 - P07.2: `asg-study --db DB import-votes CSV --protocolo JSON` loads transcribed paper votes

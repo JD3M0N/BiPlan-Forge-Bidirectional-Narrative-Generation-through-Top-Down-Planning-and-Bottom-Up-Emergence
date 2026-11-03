@@ -8,7 +8,14 @@ import pytest
 from asg_evaluation import learning_cli
 from asg_evaluation.feature_report import read_features, study_extractions
 from asg_evaluation.features import extract_features
-from asg_evaluation.judge import _validate, fit_linear, predict, rank_features, train_judge
+from asg_evaluation.judge import (
+    _validate,
+    collinearity,
+    fit_linear,
+    predict,
+    rank_features,
+    train_judge,
+)
 from asg_evaluation.learning_cli import load_study_features
 from asg_evaluation.preferences import agreement, bradley_terry, decided_votes
 from evaluation_fakes import SyntheticProvider, voted_study
@@ -61,6 +68,30 @@ def test_families_are_held_out_together_and_linear_scores_are_antisymmetric():
         fit_linear(vectors, votes[:1], ["T01", "R01"])
 
 
+def test_collinearity_lists_identical_and_constant_features():
+    vectors, votes = sample()
+    vectors = {s: [v[0], v[0], 3.0, (int(s) * 7) % 5] for s, v in vectors.items()}
+    result = collinearity(vectors, votes, ["T01", "T02", "K01", "R01"])
+    assert result["constant_features"] == ["K01"]
+    assert (result["pairs"][0]["a"], result["pairs"][0]["b"]) == ("T01", "T02")
+    assert result["pairs"][0]["r"] == pytest.approx(1.0)
+    assert result["condition_number"] is None  # exactly singular
+    vectors = {s: [v[0], v[3]] for s, v in vectors.items()}
+    assert collinearity(vectors, votes, ["T01", "R01"])["condition_number"] >= 1
+
+
+def test_family_baseline_keeps_families_together_and_reports_coverage():
+    vectors, votes = sample()
+    families = {s: "f" + str(int(s) // 3) for s in vectors}
+    result = _validate(vectors, votes, ["T01", "R01"], families)
+    assert sorted(tuple(f["held_out"]) for f in result["folds"]) == [
+        ("0", "1", "2"),
+        ("3", "4", "5"),
+    ]
+    assert result["coverage"] == result["tested_votes"] / result["total_votes"] == 1.0
+    assert _validate(vectors, [], ["T01"], families)["coverage"] is None
+
+
 def test_abstention_does_not_connect_graph_and_agreement_normalizes_orientation():
     votes = [
         {"left": "a", "right": "b", "choice": "A", "participant": "p1", "criterion": "H01"},
@@ -108,5 +139,8 @@ def test_public_commands_reuse_study_extractions_and_reject_mixed_protocols(tmp_
         for p in (tmp_path / "runs").rglob("story.md")
     ]
     judge = json.loads(judge_path.read_text(encoding="utf-8"))
+    fitted = judge["criteria"]["H01"]
+    assert set(fitted["length_baseline"]) == {"by_story", "by_family"}
+    assert "coverage" in fitted["family_validation"] and "pairs" in fitted["collinearity"]
     excluded = rank_features(judge, rows)["excluded"]
     assert [e["reason"] for e in excluded] == ["Protocolo de extracción distinto"]

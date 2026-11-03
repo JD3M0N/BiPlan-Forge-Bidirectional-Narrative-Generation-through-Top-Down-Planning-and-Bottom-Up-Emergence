@@ -6,8 +6,8 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P07.3 · colinealidad, longitud por familias y cobertura en el informe del juez (modo `S+P`). Para P07.5: los 69 votos están en `Evaluations/estudio-piloto-722/votos-transcritos.csv`, el protocolo con la tabla H1–H6 en `protocolo.json` de esa carpeta y la base del piloto tiene 0 votos. **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** no se alcanzó (P07.5 daría un H3 reducido, si Josue lo acepta).
-- **Versiones** (2026-11-02): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.1, evaluación 2.1.7,
+- **Siguiente:** P07.4 · perturbaciones por código (modo `S+P`). Para P07.5: los 69 votos están en `Evaluations/estudio-piloto-722/votos-transcritos.csv`, el protocolo con la tabla H1–H6 en `protocolo.json` de esa carpeta y la base del piloto tiene 0 votos. **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** no se alcanzó (P07.5 daría un H3 reducido, si Josue lo acepta).
+- **Versiones** (2026-11-02): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.1, evaluación 2.1.8,
   Telegram 6.0.3, Studio 0.3.0.
 - **Hechas:**
   - P00 · Arranque: `planning/`, skill `phase`, migración de `TODO.md` y graphify.
@@ -47,6 +47,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P06 · Cerrada por decisión de Josue el 2026-10-31 sin ejecutar P06.5, P06.6 ni P06.7: piloto con 0 votos guardados y 5 lectores con notas (9 fallos anotados en el bloque de P06, sin arreglar); sin estudio real, sin votos humanos y sin **H3**.
   - P07.1 · «Datos del juez (P07.1)» en `decisions.md` §2: el piloto se votó con hoja de orden fijo (mismos 5 pares, orden y A/B para los 5 lectores; el bot no da esa secuencia) y sus 69 votos entrenan un juez exploratorio; entran con `import-votes` en esquema 10 y `seconds` nulo; extracciones repetidas hasta completar; validación por familias en una cifra de 2 pliegues; grafo partido, sin τ.
   - P07.2 · `asg-study import-votes CSV --protocolo JSON` (`StudyRepository.import_votes`): importa votos transcritos todo o nada, con el orden A/B de la hoja, `seconds` nulo y `votos-importados.json` (protocolo, SHA-256) junto a la base; sin ejecutar sobre la base real (P07.5); evaluación 2.1.7.
+  - P07.3 · El informe del juez (`MODEL_VERSION` 3) da la longitud sola también por familias (`length_baseline.by_story/by_family`), la cobertura (votos probados / votos) en cada validación y la colinealidad por criterio (pares |r| ≥ 0,8, número de condición, constantes); evaluación 2.1.8.
 
 
 ## Cómo leer una tarjeta
@@ -282,20 +283,6 @@ criterios, ni uno más. T8: 24 rasgos, regresión L2 de scikit-learn, validació
 por historia y por familia, frente al azar y a la longitud sola. T10: nada toca el generador. T11:
 el juez no elige qué generar. P07.1 cambió, con el «ok» de Josue, la decisión de P06.1 de dejar
 el piloto fuera.
-
-#### P07.3 · Colinealidad, longitud por familias y cobertura en el informe del juez
-- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation
-- **Lee:** `judge.py`; `packages/evaluation/tests/test_preference_learning.py`; METODOLOGIA.md §6;
-  `decisions.md` §2 (P04.2: «P07 usa regularización e informa la colinealidad»).
-- **Haz:** por criterio, en `train_judge`: `length_baseline` también por familias;
-  `collinearity` (pares con |r| ≥ 0,8 sobre las historias de entrenamiento, número de condición y
-  rasgos constantes); cobertura de predicciones (votos probados / votos) en las tres validaciones.
-  Poner al día METODOLOGIA.md §6 y README §4.
-- **No hagas:** cambiar `C`, el estimador, el preprocesado ni la validación (fijados antes de ver
-  votos); elegir rasgos mirando votos.
-- **Prueba:** suite y calidad. Tests: dos rasgos idénticos salen con |r| = 1; una constante sale
-  listada; la longitud por familias deja juntas las historias de cada familia.
-- **Hecho cuando:** suite verde y parche de evaluación.
 
 #### P07.4 · Perturbaciones por código
 - **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation
