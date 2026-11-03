@@ -11,8 +11,8 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
 
 ## Estado
 
-- **Siguiente:** R08 · Conclusiones.
-- **Extensión acumulada:** 42,4 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
+- **Siguiente:** R09 · Recomendaciones (R10 y R11 también se pueden escribir).
+- **Extensión acumulada:** 44,4 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
 - **Hechas:**
   - R00 · portada sin marcadores: título provisional «Generación narrativa bidireccional:
     planificación *Top-Down* y emergencia *Bottom-Up*» (traducción del nombre del repo), Josue
@@ -79,6 +79,12 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
     Arrastres: `Implementation.tex` con 18 comandos (`asg-perturb`, `asg-results`) e
     `import-votes`; apertura del capítulo con sus `\ref`. Sin referencias nuevas. 6 págs. (47–52;
     ≈ 4 sin tablas, en el presupuesto), 0 \todo
+  - R08 · conclusiones sin secciones: apertura con el objetivo general; un párrafo por objetivo
+    específico, en orden (estado del arte, generador, metodología, implementación con las 907
+    pruebas del 2026-11-01, evaluación experimental con H1–H3 sin datos suficientes e indicios para
+    H3); **aportaciones** (T10: generador y metodología); **limitaciones** de escala (cuota, plazo,
+    extracción cara, un solo lector en las validaciones, ranking de 9 de 130) y T11 remitido a las
+    Recomendaciones. Sin referencias nuevas. 2 págs. (53–54, ≈ 820 palabras), 0 \todo
 
 ## Reglas comunes
 

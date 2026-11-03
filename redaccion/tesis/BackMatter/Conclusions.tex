@@ -1,3 +1,67 @@
 \begin{conclusions}
-% R08 en ../write_thesis_roadmap.md
+% R08 en ../write_thesis_roadmap.md. Una conclusión por objetivo específico, en el orden de
+% Introduction.tex; ninguna afirma algo que no esté en los capítulos 1 a 5. Sin referencias nuevas.
+
+Esta tesis se propuso desarrollar un generador híbrido de historias con LLMs, que combinara un plan
+validado con la simulación de personajes con memoria propia, y una metodología para evaluarlo basada
+en recuentos verificables y comparaciones humanas por pares a ciegas. A continuación se recoge lo
+alcanzado en cada objetivo específico, en el orden en que se plantearon.
+
+El análisis del estado del arte (Capítulo~\ref{chapter:state-of-the-art}) mostró que las tres
+familias de generadores resuelven partes distintas del problema. Los dirigidos por la trama
+garantizan la estructura y los compromisos, pero escriben a todos los personajes desde la visión del
+autor; los que simulan personajes dan agencia y conocimiento limitado, pero dejan la trama a la
+emergencia, y los híbridos clásicos dependían de mundos formalizados a mano. No se encontró un
+generador con LLMs que reuniera un plan validado, personajes que solo saben lo que presenciaron y un
+narrador separado de ellos. En la evaluación, la literatura revisada desaconseja las escalas
+absolutas y los jueces LLM como medida de calidad, y respalda las comparaciones por pares.
+
+El diseño del generador (Capítulo~\ref{chapter:generator}) separa qué pasa, cómo pasa y cómo se
+cuenta. Un plan, validado por código como grafo acíclico y con un contrato de promesas anclado a sus
+eventos, decide qué pasa; una función de actores que no ven el plan y recuerdan solo lo que
+percibieron decide cómo pasa, con un director que sugiere y cierra cada \textit{beat}, y un narrador
+que cura el registro sin inventar decide cómo se cuenta. Los mecanismos que no se ganaron su
+complejidad en las validaciones quedaron apagados en la configuración congelada, como opciones.
+
+La metodología de evaluación (Capítulo~\ref{chapter:evaluation}) articula tres evaluaciones en las
+que ninguna cifra automática se presenta como juicio de calidad: un extractor que cuenta 24 rasgos
+núcleo con una cita que el código verifica literalmente, una evaluación humana por pares a ciegas con
+tres preguntas y una línea base de un solo \textit{prompt}, y un juez que traduce los rasgos al orden
+humano y se valida fuera de muestra, frente al azar y frente a la longitud sola.
+
+La implementación (Capítulo~\ref{chapter:implementation}) se organizó en cinco paquetes con
+dependencias en un solo sentido, de modo que la evaluación no importa el generador y mide del mismo
+modo cualquier historia guardada. Cada decisión del código vive en un validador puro con pruebas: el 1
+de noviembre de 2026 la suite pasó 907 pruebas, entre ellas las que comprueban que ningún actor ve el
+plan y que, con el inventario apagado, el generador queda como estaba. Cada ejecución queda en disco con su
+versión y su huella, y las tablas de resultados se regeneran desde esos artefactos. La cuota diaria
+del servicio de modelos fue una restricción práctica que el sistema administra, pero no evita.
+
+La evaluación experimental (Capítulo~\ref{chapter:experiments}) validó el generador en ejecuciones
+reales antes de congelarlo, con una limitación conocida: la función fuerza la mitad de sus
+\textit{beats}. El resto de la evaluación funcionó de principio a fin sobre datos reales, pero con
+muestras que no bastan para concluir. La validación del extractor es provisional; el análisis
+horizontal se quedó en 14 de 35 unidades y sin resultados interpretables; el estudio humano, en un
+piloto de cinco lectores con un acuerdo cercano al azar, y el juez aprendido de ese piloto no
+generaliza: fuera de muestra queda por debajo de la longitud sola. Las tres hipótesis quedan sin datos
+suficientes. Para H3 hay indicios a favor, siempre exploratorios: las mejoras medidas de la prosa no
+ganaron en las lecturas a ciegas, y en el piloto las historias del generador empataron con las líneas
+base.
+
+Las \textbf{aportaciones} son las dos que se plantearon. La primera es el generador: una arquitectura
+que combina planificación y simulación con LLMs y que apoya cada separación en una comprobación del
+código, disponible con sus opciones y su configuración congelada. La segunda es la metodología de
+evaluación con sus herramientas: recuentos citados y verificables en lugar de puntuaciones, pares a
+ciegas en lugar de escalas, y un juez cuyo fracaso fuera de muestra se detecta y se publica en lugar de
+pasar por una medida de calidad.
+
+Las \textbf{limitaciones} son, sobre todo, de escala. La cuota diaria acotó cuántas historias se
+pudieron generar y extraer, y el plazo, cuántos lectores se pudieron reunir; la extracción de rasgos
+resultó más cara e inestable de lo previsto, con la mitad de la muestra de validación incompleta y la
+cobertura sin medir. Las lecturas que fijaron la configuración del generador son de un solo lector, el
+autor, y el ranking del corpus solo ordenó 9 de 130 historias elegibles, sin la lectura cualitativa de
+las primeras. Usar el juez como función objetivo para elegir qué generar, y buscar la configuración con
+un algoritmo genético, quedan fuera de este trabajo; las Recomendaciones los recogen como trabajo
+futuro, junto con lo necesario para completar la evaluación.
+
 \end{conclusions}
