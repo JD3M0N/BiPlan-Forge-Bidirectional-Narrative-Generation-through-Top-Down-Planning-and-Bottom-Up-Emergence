@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P07.1 · qué votos entrenan al juez y cómo entran (modo `O`, conviene `/model opus`). Los 5 lectores del piloto votaron (~69 votos) y Josue los anotó a mano; la base del piloto tiene 0. **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** no se alcanzó (P07.5 daría un H3 reducido, si Josue lo acepta).
+- **Siguiente:** P07.2 · `asg-study import-votes` (modo `S+P`). Los 69 votos del piloto (hoja de orden fijo) están en `Evaluations/estudio-piloto-722/votos-transcritos.csv`; la base del piloto tiene 0. **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** no se alcanzó (P07.5 daría un H3 reducido, si Josue lo acepta).
 - **Versiones** (2026-10-30): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.1, evaluación 2.1.6,
   Telegram 6.0.3, Studio 0.3.0.
 - **Hechas:**
@@ -45,6 +45,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P06.2 · `/estudio` sin encabezados ni audio (`neutral_story`, `send_story(plain=True)`) y con aviso de seudónimo; con el estudio en `evaluation`, comandos y `/start` ofrecen `/estudio` en vez de `/evaluar` (la lista se publica al arrancar: reiniciar el bot tras `open`); `DEFAULT_STUDY` = `Evaluations/estudio-tesis/`; el `.env` coincide con los predeterminados congelados (solo difieren formato, perfil y audio, que fija la petición o el bot); Telegram 6.0.3.
   - P06.4 · Base sintética `Evaluations/estudio` cerrada y exportada (`export-sintetico-2026-10-31.json`); piloto abierto en `Evaluations/estudio-piloto-722/study.sqlite3` con 6 historias 7.22 fuera del estudio (3 simuladas, 1 narrativa, 2 líneas base `-2`), huella `077eefd52b6810c342b0ad6c9e060ceeabd202b951f575d325ff323de250220c`; falta marcar al autor (`asg-study author ID`) y que Josue invite a los lectores.
   - P06 · Cerrada por decisión de Josue el 2026-10-31 sin ejecutar P06.5, P06.6 ni P06.7: piloto con 0 votos guardados y 5 lectores con notas (9 fallos anotados en el bloque de P06, sin arreglar); sin estudio real, sin votos humanos y sin **H3**.
+  - P07.1 · «Datos del juez (P07.1)» en `decisions.md` §2: el piloto se votó con hoja de orden fijo (mismos 5 pares, orden y A/B para los 5 lectores; el bot no da esa secuencia) y sus 69 votos entrenan un juez exploratorio; entran con `import-votes` en esquema 10 y `seconds` nulo; extracciones repetidas hasta completar; validación por familias en una cifra de 2 pliegues; grafo partido, sin τ.
 
 
 ## Cómo leer una tarjeta
@@ -269,7 +270,7 @@ informa la colinealidad que prometió P04.2 ni genera perturbaciones. Exige los 
 o `not_applicable` en cada historia. Los únicos votos humanos son los del piloto
 (`Evaluations/estudio-piloto-722/`): 6 historias 7.22 de 2 familias (obra 01: 2 simuladas y la
 línea base `-2`; obra 03: 1 simulada, 1 narrativa y la línea base `-2`), 5 lectores, ~69 votos
-(L2 hizo 9), anotados a mano por Josue porque la base no guardó ninguno. La asignación del bot es
+(L2 hizo 9), votados con una hoja de orden fijo y transcritos a mano (P07.1). La asignación del bot es
 perezosa y no se puede repetir: los votos se importan. El esquema 10 admite `seconds` nulo. Los
 75 votos sintéticos de `Evaluations/estudio` no entran (`decisions.md` §2 y §4).
 
@@ -278,32 +279,8 @@ humanos; las perturbaciones se hacen por código y el extractor solo cuenta. T5:
 ciego (A/B/abstención); sus fugas se declaran. T6: las 2 líneas base están dentro. T7: los tres
 criterios, ni uno más. T8: 24 rasgos, regresión L2 de scikit-learn, validación fuera de muestra
 por historia y por familia, frente al azar y a la longitud sola. T10: nada toca el generador. T11:
-el juez no elige qué generar. P07.1 cambia la decisión de P06.1 de dejar el piloto fuera del
-estudio: necesita el «ok» de Josue.
-
-#### P07.1 · Qué votos entrenan al juez y cómo entran
-- **Modo:** O · **Cuota:** sin cuota · **Paquete:** —
-- **Lee:** el archivo de votos de Josue (pídele la ruta); `decisions.md` §2 «Diseño del estudio
-  humano (P06.1)» y §4; METODOLOGIA.md §5–§6; `judge.py` (`train_judge`); `study.py` (`vote`,
-  `export`, `_SCHEMA`); las notas del piloto en el bloque de P06.
-- **Haz:**
-  1. Comprobar que cada voto del archivo da lector (L1–L5), criterio, las **dos historias
-     identificables** entre las 6 del piloto (no basta «A» y «B») y la elección. Si falta la
-     identidad de las historias, parar y avisar.
-  2. Dar opciones con recomendación sobre: (a) si los votos del piloto entrenan al juez de la
-     tesis; (b) cómo entran: subcomando `asg-study import-votes CSV` con `seconds` nulo como marca
-     de transcripción y sin cambiar el esquema, frente a un esquema 11 con columna de origen o un
-     JSON aparte que lea `train_judge`; (c) extracciones `incompleta`: repetir hasta completar
-     (lo que exige hoy `train_judge`) o aceptar `failed` como faltante con la mediana de
-     entrenamiento (`MODEL_VERSION` 3), y con qué tope de reintentos; (d) cómo se presenta la
-     validación por familias con solo 2 familias.
-  3. Con el «ok» de Josue, escribir la decisión fechada en `decisions.md` §2, con las columnas del
-     CSV de transcripción.
-- **No hagas:** código; tocar el bot; usar los votos sintéticos de `Evaluations/estudio`;
-  reconstruir un voto que el archivo no dé.
-- **Prueba:** —
-- **Hecho cuando:** `decisions.md` §2 tiene «Datos del juez (P07.1)» con (a)–(d) aprobados y el
-  formato del CSV.
+el juez no elige qué generar. P07.1 cambió, con el «ok» de Josue, la decisión de P06.1 de dejar
+el piloto fuera.
 
 #### P07.2 · Importar votos transcritos
 - **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation
@@ -315,7 +292,8 @@ estudio: necesita el «ok» de Josue.
     criterio en `CRITERIA`, elección A/B/abstención, sin repetir lector, par y criterio, y como
     mucho `QUESTIONS_PER_READER` por lector. Crea participantes, lecturas y asignaciones con el
     orden A/B transcrito, y deja la huella SHA-256 del CSV en un JSON junto a la base.
-  - Si P07.1 elige imputar los fallidos: ese cambio en `judge.py`, con sus tests.
+  - Traduce `H1`–`H6` con la tabla de P07.1 y `abstencion` a `abstain`; deja el protocolo («hoja
+    de orden fijo») en el JSON de la huella. Sin cambios en `judge.py` (P07.1 c).
   - README y CHANGELOG.
 - **No hagas:** cambiar `next_question` ni la asignación del bot; ejecutarlo sobre la base real
   (es P07.5).
@@ -378,7 +356,8 @@ estudio: necesita el «ok» de Josue.
 - **Haz:**
   - `--dry-run`, enseñar el coste y esperar.
   - `asg-perturb` (P07.4); extraer con `gemini-3.5-flash-lite` los 18 textos con el mismo
-    protocolo; relanzar solo los fallidos hasta el tope de P07.1.
+    protocolo; relanzar solo los fallidos hasta completar (P07.1 c), con el coste de
+    cada relanzamiento enseñado antes.
   - El JSON de casos y la tablita de las 6 con `asg-report-features`.
 - **No hagas:** `--selection all`; cambiar de modelo; tocar `rasgos.csv`.
 - **Prueba:** huella de catálogo vigente y `text_hash` del estudio en cada extracción; los 24

@@ -220,6 +220,62 @@ rasgos, juez, análisis o tesis se contrasta con esta lista antes de empezar.
     estudio: no es un par a ciegas. Lo que vote ahí no se analiza.
   - **Riesgo para P07:** `train_judge` exige los 24 rasgos `measured` o `not_applicable` en cada
     historia, y en P04.7 la mitad de las extracciones quedaron `incompleta`.
+- **2026-11-02 · Datos del juez (P07.1).** Aprobado por Josue. Cambia, para P07, la decisión de
+  P06.1 de dejar el piloto fuera: el estudio real no se hizo (P06 cerrada el 2026-10-31) y estos
+  son los únicos votos humanos. Cubre T2 y §4 (solo votos de personas; los 75 sintéticos de
+  `Evaluations/estudio` no entran), T6 (las 2 líneas base están dentro), T7 (los tres criterios)
+  y T8 (validación fuera de muestra, ahora con 2 familias).
+  - **Protocolo real del piloto.** Los 5 lectores (30–31 de octubre; el autor no votó) votaron
+    con una **hoja de orden fijo**, no con la asignación del bot: los cinco tienen los mismos 5
+    pares en el mismo orden y con la misma historia como A (H1–H3, H2–H3, H4–H5, H4–H6 y H5–H6,
+    cada uno con los tres criterios en ciclo); L2 paró en la 9. El bot no puede producir esa
+    secuencia (`_assign` habría dado H1–H2 en la pregunta 7, compensa la posición A/B entre
+    lectores y empareja obras distintas; comprobado simulando el bot sobre una copia de la base).
+    Consecuencias que se declaran: sin pares entre obras, así que el grafo de cada criterio tiene
+    dos componentes y no hay ranking humano global ni τ de Kendall (`bradley_terry` da
+    `insufficient`); el sesgo de posición no se separa de la historia; H1–H2 nunca se comparan
+    directamente; los votos se transcribieron a mano; siguen los fallos del piloto (tabla del
+    bloque P06 del roadmap) y la sospecha de L4 por el diálogo. Votos decididos: creatividad 20
+    (3 abstenciones), personajes 20 (3) y trama 21 (2). Si las historias se leyeron en Telegram o
+    en papel, y con qué presentación, se documenta en P07.5 como amenaza a T5.
+  - **(a) Sí entrenan al juez de la tesis**, que se presenta como **juez exploratorio del piloto
+    (hoja de orden fijo)**, nunca como medida de calidad.
+  - **(b) Entran con `asg-study import-votes CSV`** en
+    `Evaluations/estudio-piloto-722/study.sqlite3`, **esquema 10 sin cambios**, con `seconds`
+    nulo como marca de transcripción. La base no tiene votos del bot, así que todos sus votos
+    tienen el mismo origen y no hace falta columna de origen. Junto a la base, un JSON con el
+    protocolo («hoja de orden fijo»), la ruta y la huella SHA-256 del CSV. La importación no
+    aplica `_assign`: crea participantes, lecturas y asignaciones con la posición y el orden A/B
+    transcritos.
+  - **(c) Extracciones: repetir hasta completar.** `train_judge` sigue exigiendo los 24 núcleo
+    `measured` o `not_applicable`; sin imputación de fallidos y sin `MODEL_VERSION` 3. Cada
+    relanzamiento usa el mismo modelo y protocolo (`gemini-3.5-flash-lite`, huella de catálogo
+    vigente) y enseña su coste antes de gastar (§4); no hay tope fijo de reintentos, y parar es
+    decisión de Josue.
+  - **(d) Validación por familias: una sola cifra** que junta las predicciones de los 2 pliegues
+    (cada uno entrena con las 3 historias de una obra y prueba con la otra), como ya hace
+    `_validate`, frente a 0,5 y a la longitud sola. Se publica con el número de votos probados y
+    diciendo que sale de 2 pliegues.
+  - **CSV de transcripción** (`Evaluations/estudio-piloto-722/votos-transcritos.csv`, UTF-8, una
+    fila por respuesta dada):
+
+    | Columna | Valores |
+    |---|---|
+    | `lector` | `L1`–`L5` (seudónimo; pasa a participante) |
+    | `pregunta` | `1`–`15`, orden en la hoja; único por lector |
+    | `criterio` | `creatividad`, `personajes`, `trama` (H01, H02, H03) |
+    | `historia_a`, `historia_b` | `H1`–`H6`, distintas; A y B tal como estaban en la hoja |
+    | `eleccion` | `A`, `B`, `abstencion` (→ `abstain`) |
+    | `fuente` | `papel` |
+
+    | Código | Historia del estudio | Run |
+    |---|---|---|
+    | H1 | `sa4b09bb6b0dd4b75` | `20261030-221208-la-sombra-del-volcan` (simulada, obra 01) |
+    | H2 | `s7e46754afd9445ac` | `20261030-234947-la-promesa-del-volcan` (simulada, obra 01) |
+    | H3 | `s037b5a5c6f0949ae` | `01-fantasia-canonica-2` (línea base, obra 01) |
+    | H4 | `s4ce9516cd71c4562` | `20261030-140119-el-misterio-del-faro` (simulada, obra 03) |
+    | H5 | `s8bbc2c9f31a1484a` | `20261028-192554-el-faro-de-la-habitacion-cerrada` (narrativa, obra 03) |
+    | H6 | `s283387af5930405f` | `03-ultima-luz-del-faro-2` (línea base, obra 03) |
 
 ## 3. Decisiones de proyecto
 
