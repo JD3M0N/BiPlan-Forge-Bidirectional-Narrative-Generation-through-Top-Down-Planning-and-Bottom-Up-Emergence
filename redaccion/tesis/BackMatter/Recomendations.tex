@@ -1,3 +1,34 @@
 \begin{recomendations}
-% R09 en ../write_thesis_roadmap.md
+% R09 en ../write_thesis_roadmap.md. Fuentes: capítulo 5 (pendientes y cifras de la matriz),
+% planning/future/idea-bank.md (titulares: el juez como función objetivo, EXP-2, EXP-6, árbitro de
+% acciones físicas) y planning/decisions.md §1 (T11). Sin referencias nuevas.
+
+La primera recomendación es \textbf{completar la evaluación} con los instrumentos que ya existen. A
+la matriz horizontal le faltan 21 unidades, unas 300 a 450 llamadas al modelo principal, más la
+extracción de rasgos de toda la matriz y de las líneas base. El estudio humano debería ejecutarse con
+el diseño de la Sección~\ref{sec:conjunto}, con al menos doce lectores y pares entre obras para que el
+grafo de cada criterio sea conexo; con esos votos, reentrenar y validar el juez, y solo después
+extraer el resto del corpus y leer las diez mejores. Al extractor le falta \textbf{medir la
+cobertura}, con una lectura humana que anote lo omitido, y repetir las extracciones incompletas.
+
+Dos hipótesis piden \textbf{experimentos propios}: H1, pares narrativo--simulado sobre el mismo plan
+dentro del estudio; H2, dos matrices idénticas salvo en la memoria de los actores, propia o compartida,
+un brazo de control que el generador ya admite y nunca se ejecutó. El inventario de objetos debería
+medirse igual antes de extender el arbitraje del código a otras acciones físicas.
+
+El trabajo posterior que sugiere el tutor es \textbf{usar el juez como función objetivo}: generar
+varias historias con distintos parámetros y devolver la que el juez ordene primero, y después buscar
+la configuración con un \textbf{algoritmo genético}. Requiere antes un juez que generalice fuera de
+muestra y supere a la longitud sola, lo que el de esta tesis no hace.
+
+La metodología puede \textbf{aplicarse a otros textos generados} cuya calidad no tiene una respuesta
+correcta, cambiando el catálogo de rasgos y las preguntas: contar con una cita verificada, comparar
+por pares a ciegas con una línea base y aprender un juez de esas comparaciones no depende de la
+narrativa.
+
+Por último, los resultados se usan con sus \textbf{condiciones}: las cifras del
+Capítulo~\ref{chapter:experiments} son exploratorias y llevan fecha, n y alcance; el juez del piloto
+no mide calidad y el ranking describe lo que ese juez premia. Otra versión del generador u otro modelo
+exigen repetir las mediciones.
+
 \end{recomendations}

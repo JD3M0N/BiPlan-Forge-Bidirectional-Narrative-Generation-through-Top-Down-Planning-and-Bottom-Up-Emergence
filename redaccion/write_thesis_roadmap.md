@@ -11,8 +11,13 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
 
 ## Estado
 
-- **Siguiente:** R09 · Recomendaciones (R10 y R11 también se pueden escribir).
-- **Extensión acumulada:** 44,4 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
+- **Siguiente:** R10 · Resumen y *Abstract* (R11 también se puede escribir).
+- **Extensión acumulada:** 45,4 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
+- **Compilar:** en `redaccion/tesis/` (disco E:) las pasadas sucesivas de `latexmk` fallan con
+  «Extra }» o «File ended while scanning» en `Thesis.aux`: al releerlo en `\end{document}` aún
+  tiene restos de la pasada anterior. Desde el 2026-11-03 se compila en una copia de `redaccion/`
+  en `%TEMP%` y se copian de vuelta `Thesis.pdf`, `.log` y `.toc`; borrar todos los `.aux` y el
+  `.fdb_latexmk` antes de compilar en E: también funciona si el número de páginas no baja.
 - **Hechas:**
   - R00 · portada sin marcadores: título provisional «Generación narrativa bidireccional:
     planificación *Top-Down* y emergencia *Bottom-Up*» (traducción del nombre del repo), Josue
@@ -85,6 +90,12 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
     H3); **aportaciones** (T10: generador y metodología); **limitaciones** de escala (cuota, plazo,
     extracción cara, un solo lector en las validaciones, ranking de 9 de 130) y T11 remitido a las
     Recomendaciones. Sin referencias nuevas. 2 págs. (53–54, ≈ 820 palabras), 0 \todo
+  - R09 · recomendaciones en cinco párrafos con rótulos en negrita: completar la evaluación (21
+    unidades de la matriz, estudio con ≥ 12 lectores y pares entre obras, reentrenar el juez,
+    cobertura del extractor), experimentos propios para H1 y H2 (y el inventario), el juez como
+    función objetivo y el algoritmo genético (T11) con la condición de un juez que generalice,
+    aplicación a otros textos generados y condiciones de uso de los resultados. Sin referencias
+    nuevas. 1 pág. (55, ≈ 340 palabras; una primera versión de 1,4 págs. se recortó), 0 \todo
 
 ## Reglas comunes
 
