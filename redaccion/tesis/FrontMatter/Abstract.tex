@@ -1,7 +1,52 @@
+% R10 en ../write_thesis_roadmap.md. Cifras del capítulo 5 (Experiments.tex): 130 elegibles
+% (2026-11-01 y 2026-11-03), extractor sobre 12 historias, matriz en 14 de 35 unidades, piloto de 5
+% lectores y 69 respuestas, 24-24 frente a la línea base, juez 0,40-0,50 frente a 0,60-0,70.
 \begin{resumen}
-% R10 en ../write_thesis_roadmap.md
+Los modelos de lenguaje de gran tamaño escriben prosa fluida, pero al generar historias tienden a
+perder los compromisos de la trama o a mover a los personajes como piezas del autor. Esta tesis
+desarrolla un generador híbrido de historias que combina planificación y simulación de personajes, y
+una metodología para evaluarlo sin pedir a un modelo que juzgue la calidad.
+
+En el generador, un plan validado por código como grafo acíclico, con un contrato de promesas,
+decide qué pasa; actores que no ven el plan y recuerdan solo lo que presenciaron representan cada
+escena y deciden cómo pasa, y un narrador convierte ese registro en prosa sin inventar. En la
+evaluación, un modelo cuenta 24 rasgos de cada historia y cita el pasaje de cada recuento, que el
+código verifica; lectores comparan pares de historias a ciegas con tres preguntas, frente a una línea
+base de un solo \textit{prompt}, y un juez aprendido de esas comparaciones se valida fuera de muestra
+frente a la longitud sola.
+
+El generador superó sus validaciones en ejecuciones reales y se congeló, con la mitad de los
+\textit{beats} forzados como limitación. Las muestras de la evaluación fueron
+insuficientes: el extractor se validó de forma provisional sobre 12 historias, el análisis entre
+configuraciones se quedó en 14 de 35 unidades, y el estudio humano, en un piloto de 5 lectores con un
+acuerdo cercano al azar, en el que las historias del generador empataron con las líneas base, 24 votos
+a 24. El juez aprendido no generaliza: acierta entre 0,40 y 0,50 de los votos fuera de muestra, frente
+a 0,60 a 0,70 de la longitud sola. Las tres hipótesis quedan sin datos suficientes. Las aportaciones
+son el generador y una metodología que detecta y publica ese resultado negativo.
 \end{resumen}
 
 \begin{abstract}
-% R10 en ../write_thesis_roadmap.md
+\begin{otherlanguage}{english}
+Large language models write fluent prose, but when they generate stories they tend to lose the
+commitments of the plot or to move the characters as pieces of the author. This thesis develops a
+hybrid story generator that combines planning with character simulation, together with a methodology
+to evaluate it without asking a model to judge quality.
+
+In the generator, a plan validated by code as an acyclic graph, with a ledger of promises, decides
+what happens; actors that do not see the plan and remember only what they witnessed perform each scene
+and decide how it happens; and a narrator turns that log into prose without inventing. In the
+evaluation, a model counts 24 features of each story and quotes the passage behind every count, which
+the code verifies; readers compare pairs of stories blindly with three questions, against a
+single-prompt baseline; and a judge learned from those comparisons is validated out of sample against
+length alone.
+
+The generator passed its validations on real runs and was frozen, with half of its beats forced as a
+known limitation. The evaluation samples were insufficient: the extractor was
+validated provisionally on 12 stories, the analysis across configurations reached 14 of 35 units, and
+the human study became a pilot with 5 readers and near-chance agreement, in which the generated stories
+tied with the baselines, 24 votes to 24. The learned judge does not generalize: it predicts between
+0.40 and 0.50 of the held-out votes, against 0.60 to 0.70 for length alone. All three hypotheses remain
+without sufficient data. The contributions are the generator and a methodology that detects and
+reports this negative result.
+\end{otherlanguage}
 \end{abstract}

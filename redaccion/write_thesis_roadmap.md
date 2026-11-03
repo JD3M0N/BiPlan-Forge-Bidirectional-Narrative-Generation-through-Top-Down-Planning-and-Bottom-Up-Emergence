@@ -11,7 +11,7 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
 
 ## Estado
 
-- **Siguiente:** R10 · Resumen y *Abstract* (R11 también se puede escribir).
+- **Siguiente:** R11 · Bibliografía, glosario y anexos.
 - **Extensión acumulada:** 45,4 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
 - **Compilar:** en `redaccion/tesis/` (disco E:) las pasadas sucesivas de `latexmk` fallan con
   «Extra }» o «File ended while scanning» en `Thesis.aux`: al releerlo en `\end{document}` aún
@@ -96,6 +96,12 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
     función objetivo y el algoritmo genético (T11) con la condición de un juez que generalice,
     aplicación a otros textos generados y condiciones de uso de los resultados. Sin referencias
     nuevas. 1 pág. (55, ≈ 340 palabras; una primera versión de 1,4 págs. se recortó), 0 \todo
+  - R10 · resumen (294 palabras) y *abstract* (273) en tres párrafos: problema y objetivo,
+    generador y metodología, resultados (generador congelado con la mitad de los *beats* forzados;
+    extractor sobre 12 historias; 14 de 35 unidades; piloto de 5 lectores, 24–24 con la línea base;
+    juez 0,40–0,50 frente a 0,60–0,70 de la longitud; H1–H3 sin datos suficientes) y aportaciones.
+    `english` añadido a `babel` en `uhthesis.cls` (spanish sigue siendo el principal) y el
+    *abstract* dentro de `otherlanguage`. 1 + 1 págs., 0 \todo
 
 ## Reglas comunes
 

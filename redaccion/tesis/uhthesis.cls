@@ -14,7 +14,9 @@
 \RequirePackage[T1]{fontenc}
 \RequirePackage{lmodern}
 
-\RequirePackage[spanish,es-ucroman]{babel}
+% english para el Abstract (otherlanguage) y la partición de los títulos en inglés; spanish, el
+% último, es el idioma principal.
+\RequirePackage[english,spanish,es-ucroman]{babel}
 \RequirePackage[refpage, intoc, spanish]{nomencl}
 \RequirePackage{graphicx}
 \RequirePackage{xcolor}
