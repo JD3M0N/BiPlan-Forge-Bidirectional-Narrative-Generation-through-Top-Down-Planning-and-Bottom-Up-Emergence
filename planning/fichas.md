@@ -69,6 +69,8 @@ MED-8 y la revisión de MED-9
 
 ### ING-8 · Documentar los contratos públicos y rellenar el README
 
+> **Recortada el 2026-11-03 (P09):** P09 cerró el contrato de artefactos del README raíz y `asg-results`; ejemplos de las fachadas y traducciones pasan a `ING-8b` en `future/idea-bank.md`.
+
 *Área:* ingeniería · *Cuota:* sin cuota · *Depende de:* el cierre del proyecto
 
 - **Síntoma.**

@@ -22,6 +22,20 @@ con ID conservan el del antiguo `TODO.md`.
 - **Por qué está aquí.** Salió de MED-6 al escribir las tarjetas de P03 (2026-10-28): exige subir
   `PIPELINE_VERSION`, y el generador está congelado en 7.22 (`decisions.md` §3).
 
+### ING-8b · Resto de la documentación de contratos públicos
+
+*Área:* ingeniería · *Cuota:* sin cuota · *Depende de:* el cierre del proyecto
+
+- **Síntoma.**
+  - Las fachadas `asg_core`, `asg_stagecraft` y `asg_evaluation` no tienen ejemplos que se
+    ejecuten.
+  - `packages/core/README.md` sigue en inglés y los demás están en español; lo mismo pasa con los
+    changelogs de `core` y `evaluation` frente a los otros tres.
+- **Qué hacer.** Ejemplos mínimos de entrada, salida y fallo para las tres fachadas, validados en
+  los tests, y la traducción de lo que queda en inglés.
+- **Por qué está aquí.** Recortado de ING-8 por Josue el 2026-11-03 al cerrar P09, que dejó solo
+  el comando de resultados y el contrato de artefactos en el README de la raíz.
+
 ### ING-3 · Dividir `pipeline.py`
 
 *Área:* ingeniería · *Cuota:* sin cuota · *Depende de:* —

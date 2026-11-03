@@ -523,14 +523,14 @@ referencia, la desviación de las puntuaciones de las 6 historias (`score_scale`
 
 | Caso | H01 | H02 | H03 |
 |---|---|---|---|
-| H1 barajada | −0,80 | +1,59 | −1,12 |
-| H1 sin desenlace | −0,20 | −0,26 | +0,23 |
-| H2 barajada | +0,11 | −0,40 | +0,29 |
+| H1 barajada | −0,79 | +1,59 | −1,12 |
+| H1 sin desenlace | −0,19 | −0,26 | +0,23 |
+| H2 barajada | +0,11 | −0,40 | +0,28 |
 | H2 sin desenlace | +0,07 | −0,38 | +0,28 |
 | H3 barajada | −0,47 | +0,20 | −0,00 |
 | H4 barajada | +0,35 | −0,42 | +0,28 |
 | H4 sin desenlace | +0,10 | −0,10 | +0,09 |
-| H5 barajada | −0,25 | −0,58 | +0,47 |
+| H5 barajada | −0,24 | −0,58 | +0,46 |
 | H5 sin desenlace | +0,26 | −0,71 | +0,39 |
 | H6 barajada | +0,64 | +0,25 | −0,37 |
 | H6 sin desenlace | +0,87 | +0,22 | −0,51 |
@@ -566,6 +566,100 @@ El juez puntúa todas las historias completadas de `Stories/`: el corpus histór
   configuración y su proceso.
 - Los runs de versiones que no se comparan se marcan. Por ejemplo, las funciones 7.0 y 7.1 frente
   a las de 7.2 en adelante.
+
+### Ranking del corpus (P08, 2026-11-03)
+
+Medido el 2026-11-03 (P08.5), sin llamadas al modelo, con el juez congelado de P07.7 (`juez.json`,
+SHA-256 `50472656…6df3e1d93`, `data_hash` `072c1c0d…3d7690b92`, protocolo de extracción
+`gemini-3.5-flash-lite` / `evidence-2`):
+
+```powershell
+asg-rank Evaluations/estudio-piloto-722/juez.json Stories `
+  --study Evaluations/estudio-piloto-722/study.sqlite3 `
+  --output Evaluations/ranking/ranking-2026-11-03.json
+```
+
+Salidas (ignoradas por Git, como `Evaluations/`): `ranking-2026-11-03.json` y la hoja
+`ranking-2026-11-03.md`, con «Fortalezas (Josue)» y «Debilidades (Josue)» vacías. **Es un ranking
+exploratorio y no mide calidad:** el juez no generaliza ([§6](#resultado-del-juez-piloto-722): fuera de
+muestra queda por debajo del azar y de la longitud sola), así que el orden describe lo que premia
+este ajuste, no las mejores historias.
+
+**Cobertura.** `asg-corpus Stories` cuenta 346 runs y 130 elegibles; los otros 216 no lo son
+(135 de un generador anterior a Stagecraft 7, 73 sin completar y 8 de formato fuera de la prosa
+del estudio). `asg-rank` solo ve los 277 runs que tienen `story.md`: los 69 sin completar que no
+la tienen no aparecen en su informe. De esos 277, se ordenaron **9** (≈ 7 % de las 130
+elegibles) y las otras 121 elegibles salieron con su razón, medidas el 2026-11-03 uniendo
+`excluded` con `identity` de cada `features/features.json`:
+
+| Razón de salida (elegibles) | Runs |
+|---|---|
+| Extracción ausente u obsoleta: 74 sin ninguna extracción y 5 de 3.5 con el catálogo anterior (`9de34b17…`) | 79 |
+| Extracción incompleta (algún rasgo núcleo sin medir): 34 de `gemini-3.1-flash-lite` y 7 de `gemini-3.5-flash-lite` | 41 |
+| Protocolo de extracción distinto: 1 completa de `gemini-3.1-flash-lite` | 1 |
+
+`extraction_compatible` no mira el modelo, así que una extracción de 3.1 incompleta sale por
+«incompleta» y solo la completa llega a la comprobación del protocolo.
+
+Las diez primeras son **tres**, no diez: de las 9 ordenadas, 6 son las del entrenamiento del juez
+(`training`, dentro de muestra, no entran en las diez) y quedan 3. La regla de las diez no se
+cambió ni se completó con otras (`decisions.md` §2, «Corrección y cierre de P08.4»).
+
+**Qué se ordenó.** Solo textos con extracción núcleo completa de `gemini-3.5-flash-lite`, todos del
+generador 7.22 (pipeline 7.22): 5 simulados, 1 narrativo y 3 líneas base. No hay textos 7.0 a 7.19 ni
+guiones. La extracción con `gemini-3.1-flash-lite` de 35 textos (lote 2) no entra:
+el protocolo del juez fija el modelo (T8), así que esas historias salen del ranking aunque su
+extracción sea completa. Marcas: `training` en 6; `version-no-comparable` en ninguna;
+`premisa-no-vista` en ninguna.
+
+**Puestos** (1 = primero; 9 ordenadas). El orden por longitud (T01, las más largas primero) va al
+lado:
+
+| Historia | Formato | Marca | H01 | H02 | H03 | Combinado | Longitud |
+|---|---|---|---|---|---|---|---|
+| `20261030-130819-el-misterio-del-faro` | simulado | — | 3 | 2 | 9 | 4 | 4 |
+| `01-fantasia-canonica-1` | línea base | — | 5 | 6 | 3 | 6 | 9 |
+| `20261030-130258-el-misterio-del-faro` | simulado | — | 8 | 5 | 4 | 7 | 3 |
+| `20261030-221208-la-sombra-del-volcan` | simulado | training | 2 | 9 | 1 | 1 | 8 |
+| `01-fantasia-canonica-2` | línea base | training | 1 | 7 | 5 | 2 | 7 |
+| `20261030-140119-el-misterio-del-faro` | simulado | training | 4 | 8 | 2 | 3 | 5 |
+| `20261028-192554-el-faro-de-la-habitacion-cerrada` | narrativo | training | 6 | 1 | 8 | 5 | 2 |
+| `20261030-234947-la-promesa-del-volcan` | simulado | training | 7 | 3 | 7 | 8 | 6 |
+| `03-ultima-luz-del-faro-2` | línea base | training | 9 | 4 | 6 | 9 | 1 |
+
+- **Las tres fuera del entrenamiento** salen en este orden del combinado: `…130819-el-misterio-del-faro`
+  (puesto 4 de 9), `01-fantasia-canonica-1` (6) y `…130258-el-misterio-del-faro` (7). Por longitud
+  están en los puestos 4, 9 y 3. Con solo tres textos fuera del entrenamiento, comparar «las diez
+  frente a las diez más largas» no tiene sentido: cualquier orden de tres coincide en los mismos
+  tres.
+- **Líneas base.** Hay tres entre las 9: una fuera del entrenamiento (`01-fantasia-canonica-1`,
+  combinado 6, la más corta) y dos de entrenamiento (combinado 2 y 9). El orden de 9 textos no
+  permite decir si las líneas base quedan por encima o por debajo de lo generado.
+- **Entrenamiento.** Los 6 del piloto ocupan los puestos 1, 2, 3, 5, 8 y 9 del combinado: sus
+  puntuaciones son de dentro de muestra, así que ese orden no se interpreta.
+- Los tres rankings por criterio (H01, H02, H03) y el combinado salen enteros en el JSON.
+
+**Qué tienen y qué no** (`top_ten_profile`, medianas de los 24 núcleo entre las tres, el resto de
+las ordenadas y las 9). Es descriptivo y n es 1 a 3 por rasgo: sirve para leer las hojas, no para
+comparar. Las medianas de las tres son mayores que las del resto en mentiras (X10: 2 frente a 0),
+complicaciones (X14: 3 frente a 1) y usos de objetos (X17: 8,4 frente a 3,8). Rasgos sin medir en
+alguna de las tres (R03, R04, R05, R16, X10 y X20, ver la hoja) bajan n a 1 o 2. La tabla
+completa está en la hoja `.md`.
+
+**Limitaciones.**
+
+- **Juez exploratorio** de 2 familias y 5 lectores que no generaliza: el número no es calidad.
+- **Cobertura parcial:** 9 de 130 elegibles. Lo no extraído, o extraído sin completar, sale del
+  ranking: sesgo hacia los textos que el extractor mide bien (y, por la cuota, hacia los de 7.22).
+  Las 35 extracciones con `gemini-3.1-flash-lite` (lote 2) quedan fuera del ranking aunque una
+  esté completa: el protocolo del juez fija el modelo (T8) y 3.1 no está validado.
+- **Extractor con rasgos que no pasan el test-retest** (P04.8 y P04.9): las diferencias de rasgos
+  entre textos mezclan el texto con el ruido de la extracción.
+- **Premisas no vistas:** ninguna de las tres sale de una obra distinta de 01 y 03.
+- **Longitud y versiones:** todas son de 7.22, así que no se compara entre versiones, y la
+  longitud sola le ganó al juez en P07.7.
+- **N = 3 con un criterio fijo:** no se puede decir que las diez primeras sean una muestra de lo
+  que premia el juez; son las tres únicas que cumplen las condiciones.
 
 ## 8. Lo que aporta y lo que queda para después
 

@@ -6,8 +6,8 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P08.4 · Extraer el corpus elegible, un lote por día (modo `S`, cuota: tope de 400 llamadas principales al día; enseñar `--dry-run` y esperar el «ok»). Lote 3 tras el reinicio de cuota (03:00) y solo si Josue sigue: el lote 2 dejó 1 de 35 completo. **Cada texto con el modelo de su extracción y por run (`--root DIR`), nunca `--elegibles` a secas**: para cada modelo, las extracciones del otro tienen «otra huella» y se rehacerían desde cero (`decisions.md` §2, «Extractor 3.1»). **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** reducido (piloto cerrado y exportado, P07.5) pendiente de que Josue lo acepte.
-- **Versiones** (2026-11-03): Stagecraft 7.22.2 (pipeline 7.22), core 0.8.2, evaluación 2.1.11,
+- **Siguiente:** P08.6 · Las diez primeras y H4 (sin cuota), **a la espera de Josue**: leer las 3 historias de `Evaluations/ranking/ranking-2026-11-03.md` y escribir sus fortalezas y debilidades en la hoja. Con ellas P08 se cierra, y R07 (`/write_thesis`) deja de estar bloqueada: P09 ya está cerrada. **H2** cerrado por Josue el 2026-10-31; **H3** reducido (piloto cerrado y exportado, P07.5) pendiente de que Josue lo acepte.
+- **Versiones** (2026-11-03): Stagecraft 7.22.2 (pipeline 7.22), core 0.8.3, evaluación 2.1.12,
   Telegram 6.0.3, Studio 0.3.0.
 - **Hechas:**
   - P00 · Arranque: `planning/`, skill `phase`, migración de `TODO.md` y graphify.
@@ -57,6 +57,9 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P08.3 · `asg-rank` para la tesis: las diez del combinado sin las `training` (entra la siguiente), `length_control` (T01, más largas primero) y `positions` en cada historia; marcas `training` (texto en `--study`; sin él no se marca y se avisa), `version-no-comparable` (7.0 y 7.1 exactos) y `premisa-no-vista` (prompt fuera de las obras 01 y 03, `prompt_work` sobre `planilla/prompts.md`, ahora empaquetado); `top_ten_profile` (medianas núcleo de las diez, el resto y el corpus); hoja `.md` rellenada por código con aviso de que el juez no generaliza, C/P/K, enlace a la matriz (`--horizontal`) y «Fortalezas/Debilidades (Josue)» vacías. Humo sin cuota sobre `Stories` (2026-11-03): 8 ordenadas (6 `training`), 2 en las diez. Evaluación 2.1.11.
   - P08.4 (lote 1, 2026-11-03) · Lote reducido a lo que quedaba de `gemini-3.5-flash-lite` (25 llamadas; `asg-budget` 475 → 500 de 500), con el «ok» de Josue; `--limite 5` y reanudaciones por run con `--root`. Lanzados 5 (todos `Stories/Baseline/`), **1 completo**: `01-fantasia-canonica-1` (pasada + 1 reanudación). Incompletos: `02-el-pacto-roto` (pasada + 3 reanudaciones, R03 y R16; le toca el único `--force`), `01-fantasia-canonica-3` (pasada + 1 reanudación cortada por `ProviderOverloadedError` al agotarse la cuota; 16 fallos: R02, R03, R09, R16, R18, R24, X08, X10, X11, X13–X17, X20, X29), `01-la-isla-del-cielo` y `03-la-isla-del-cielo` (solo la pasada, los 27 rasgos fallidos con `REPAIR: … Evidence is not a literal passage`). Medidas 25 principales para 5 textos. **Parada de P08.1 activada** (1 de 5 completo), aunque con el lote cortado por cuota: Josue revisa antes del lote 2. `--dry-run`: 56 pendientes (8 se reanudan).
   - P08.4 (lote 2, 2026-11-03) · Con 3.5 agotado, Josue decide `gemini-3.1-flash-lite` solo para los 48 textos sin extracción vigente de 3.5 (42 sin extraer y 6 con un catálogo anterior, archivados en `features.history/`), tope de 375 (400 menos las 25 del lote 1) y levanta la parada; decisión y limitación en `decisions.md` §2, «Extractor 3.1». Las 3 completas y las 7 incompletas de 3.5 no se tocan. Por run con `--root`, `GEMINI_MODEL` solo en el proceso. **185 llamadas** de 3.1 (`asg-budget` 6 → 191 de 500; 3.5 sigue en 500). Se paró tras tres `ProviderOverloadedError` (5xx del servidor, no la cuota; la tercera vez con 6 llamadas sin tokens). Lanzados 35, todos con solo la pasada inicial (1 intento cada uno, sin reanudaciones ni `--force`): **1 completo** (`20261027-203858-la-isla-del-cielo`). 8 sin segmentar (partición de escenas inválida, `ValueError`, 2 o 3 llamadas cada uno: `20261019-141038-las-islas-del-cielo`, `20261019-161904-el-precio-del-tiempo`, `20261020-212920-` y `20261020-213446-el-pacto-roto`, `20261021-192148-la-isla-del-cielo`, `20261027-202446-las-islas-del-cielo`, `20261027-202947-la-isla-del-cielo` y `20261027-203523-el-pacto-roto`). 3 cortados por la sobrecarga (`20261027-204222-el-ultimo-tren`, `20261027-220832-la-regencia-de-las-escamas` y `20261027-221018-el-giro-de-la-vieja`, este último sin segmentar). Los otros 23 son incompletos con 2 a 19 rasgos fallidos. Los que más fallan, sobre los 34 incompletos, son R16 (31), R03 (30), R02 (26), R05 (22) y R24 (21). Quedan 13 de los 48 sin lanzar (12 sin extraer y `20261028-192554-el-misterio-del-faro`, con un catálogo anterior). La parada de P08.1 se cumple otra vez (1 de 35), aunque ningún texto llegó a reanudarse. `--dry-run` con 3.1: 1 completo, 34 se reanudan, 12 sin extraer, 11 con otra huella (las 10 de 3.5 y la del catálogo anterior).
+  - P08.4 · Cerrada por decisión de Josue el 2026-11-03 sin cumplir su «Hecho cuando» (`decisions.md` §2, «Corrección y cierre de P08.4»): `asg-rank` excluye por «Protocolo de extracción distinto» toda extracción de 3.1, así que el lote 3 de 3.1 no se lanza (quedan 276 llamadas de 3.1, 0 de 3.5). Alcance 7.20+ y líneas base (64 textos): con 3.5, 3 completos, 7 incompletos y 12 sin extraer; con 3.1, 1 completo y 34 incompletos (fuera del ranking). Sin extraer 7.0–7.19.
+  - P08.5 · `asg-rank` con el juez congelado (SHA-256 `50472656…`, `data_hash` `072c1c0d…`, ya cotejados) sobre `Stories` el 2026-11-03: 9 ordenadas (6 `training`) de 130 elegibles, y **las diez son 3** (`…130819-el-misterio-del-faro`, `01-fantasia-canonica-1`, `…130258-el-misterio-del-faro`); 121 elegibles salen por «Extracción ausente u obsoleta» (79), «Extracción incompleta» (41) y «Protocolo de extracción distinto» (1). `Evaluations/ranking/ranking-2026-11-03.json` y `.md` (campos de Josue vacíos); subsección «Ranking del corpus (P08, 2026-11-03)» en METODOLOGIA.md §7.
+  - P09 · Cerrada el 2026-11-03 (ING-8 recortada por Josue al comando y al contrato de artefactos; el resto, a `ING-8b` en `future/idea-bank.md`): `asg-results` (evaluación 2.1.12, core 0.8.3) regenera desde `Evaluations/` las tablas `juez`, `preferencias`, `perturbaciones`, `piloto`, `matriz`, `ranking_cobertura`, `ranking_puestos` y `ranking_perfil` (`tabular` booktabs + CSV en `redaccion/tablas/`), la figura TikZ `redaccion/figuras/juez.tex` y `manifiesto.json` con fecha y SHA-256 de entradas y salidas; entrada que falta = «No disponible» y salida 1. `tab:lecturas`, `tab:extractor` y `tab:coste` siguen a mano (el manifiesto lo declara). Contrato en el README raíz y en el de evaluación. Al regenerar, 5 celdas de la tabla de perturbaciones de METODOLOGIA.md §6 estaban redondeadas a mano (−0,80→−0,79, −0,20→−0,19, +0,29→+0,28, −0,25→−0,24, +0,47→+0,46) y se corrigieron; la tabla `piloto` coincide con `tab:piloto` y `juez` con la de §6. `asg help` pasa a 19 líneas: `Implementation.tex` ("dieciséis comandos", `tab:comandos`) queda para R07. Comprobado con `latexmk` desde PowerShell sobre una copia de `redaccion/` con `uhthesis.cls` (66 págs., sin errores ni cajas desbordadas): las tablas se incluyen con `\input{../tablas/x.tex}` y la figura con `\input{../figuras/juez.tex}`; `redaccion/tesis/` no se tocó.
 
 
 ## Cómo leer una tarjeta
@@ -334,57 +337,6 @@ herramienta, no el generador. Lo del X15 de H3 (P07.6) no se extiende a P08.
 
 **H4:** enseñar al tutor el juez, el ranking y las diez (`planning/h4.md`, P08.6).
 
-#### P08.4 · Extraer el corpus elegible, un lote por día
-- **Modo:** S · **Cuota:** un lote por día, con el tope de P08.1 · **Paquete:** —
-- **Tarjeta repetible:** se queda en el roadmap y cada sesión anota su lote en «Hechas» como
-  `P08.4 (lote k, fecha) · …`, hasta cubrir el alcance de P08.1 o hasta que Josue pare.
-- **Lee:** «Ranking del corpus (P08.1)» en `decisions.md` §2; el README de evaluación
-  (`asg-features`); el último lote anotado en «Hechas».
-- **Haz:**
-  - Enseña `asg-budget` y `asg-features --root Stories --elegibles --desde 7.20 --reusar
-    Evaluations/estudio-piloto-722/study.sqlite3 --dry-run` (pendientes, modelo y coste). El
-    modelo tiene que ser `gemini-3.5-flash-lite`. Espera el «ok». Sin `--desde` (7.0–7.19) solo
-    cuando 7.20+ esté cubierto y Josue lo pida.
-  - Lanza el lote con `--limite N` dentro del tope de **400 llamadas principales al día** y
-    aplica los reintentos de P08.1: por texto, hasta 3 reanudaciones; si sigue incompleto, un
-    único `--force` desde cero y otras 3 reanudaciones; después queda «Extracción incompleta».
-    Lleva la cuenta de intentos por texto en la línea del lote.
-  - Después, `asg-budget` otra vez. Anota textos lanzados, completos, incompletos, los rasgos que
-    fallan y las llamadas medidas.
-  - **Parada:** si en el primer lote menos de la mitad de los textos lanzados queda completa,
-    para y avisa antes de seguir gastando.
-- **No hagas:** `--force` sobre extracciones completas ni más de un `--force` por texto;
-  `--selection all`; extraer textos no elegibles; editar a mano un `features.json`; combinar
-  intentos (lo de P07.6 no vale aquí); pasar del tope; cambiar de modelo.
-- **Hecho cuando:** cada texto del alcance está completo o agotó sus reintentos, según el
-  `--dry-run`. Desde el lote 2 hay dos modelos y cada `--dry-run` ve las extracciones del otro
-  como «otra huella», así que cada texto se juzga con el modelo de su propia extracción. Entonces se borra la tarjeta y se deja una línea final con los totales.
-
-#### P08.5 · Ordenar el corpus y publicar el ranking
-- **Modo:** S · **Cuota:** sin cuota · **Paquete:** —
-- **Lee:** METODOLOGIA.md §7; «Juez para P08» y «Ranking del corpus (P08.1)» en `decisions.md`
-  §2; la última línea de P08.4 en «Hechas».
-- **Haz:**
-  - Comprueba que el `data_hash` del juez es el de «Juez para P08».
-  - `asg-rank <juez.json> Stories --study Evaluations/estudio-piloto-722/study.sqlite3
-    --output Evaluations/ranking/ranking-<fecha>.json`, que escribe también la hoja `.md`.
-  - «Ranking del corpus (P08, fecha)» en METODOLOGIA.md §7:
-    - cobertura: elegibles, ordenadas y excluidas por razón;
-    - que el juez no generaliza (METODOLOGIA.md §6) y que el orden describe lo que premia este
-      ajuste, no la calidad;
-    - versiones y marcas;
-    - las primeras de cada ranking y del combinado, y el orden por longitud al lado (cuántas
-      de las diez coinciden con las diez más largas);
-    - dónde caen las líneas base y las 6 de entrenamiento;
-    - la tabla «qué tienen y qué no»;
-    - limitaciones: juez exploratorio de 2 familias y 5 lectores, premisas no vistas, sesgo
-      por extracciones incompletas o ausentes (alcance escalonado), longitud y versiones
-      mezcladas.
-  - Avisa a Josue de que toca leer las diez y escribir sus fortalezas y debilidades en la hoja.
-- **No hagas:** reajustar o reentrenar el juez; cambiar la regla de las diez tras ver el
-  ranking; llamar «calidad» al número; rellenar juicios.
-- **Hecho cuando:** `ranking-<fecha>.json` y `.md` escritos y sección publicada con sus cifras.
-
 #### P08.6 · Las diez primeras y H4
 - **Modo:** S · **Cuota:** sin cuota · **Paquete:** —
 - **Antes:** Josue ha escrito sus fortalezas y debilidades en la hoja de P08.5. Si no, para.
@@ -401,12 +353,6 @@ herramienta, no el generador. Lo del X15 de H3 (P07.6) no se extiende a P08.
       H4), si un juez exploratorio de 2 familias basta para la tesis, y si se retoman P05 y P06.
 - **No hagas:** añadir juicios propios a los de Josue; reescribir sus notas; cambiar el ranking.
 - **Hecho cuando:** sección y `planning/h4.md` publicados. Cierra P08 y **H4**.
-
-### P09 · Resultados reproducibles
-
-Un comando que regenera todas las tablas y figuras de la tesis desde `Evaluations/` hacia
-`redaccion/figuras/` y `redaccion/tablas/`, con fecha y alcance. Origen: ING-8 (contratos
-públicos y README), que se cierra aquí.
 
 ### P10 · Escribir la tesis
 

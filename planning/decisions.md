@@ -357,6 +357,34 @@ rasgos, juez, análisis o tesis se contrasta con esta lista antes de empezar.
     del juez sobre sus rasgos es un cambio de distribución que T8 no cubre. `extraction_compatible`
     no mira el modelo, y `asg-rank` mezcla los dos sin avisar. P08.5 dice qué modelo midió cada
     historia ordenada y lo declara como sesgo.
+  - **Lote 3, el mismo día (2026-11-03).** Decidido por Josue tras el lote 2 («necesito terminar
+    hoy»), con 3.5 agotado. Solo por hoy: se lanza un tercer lote el mismo día (en contra de «un
+    lote por día»), se levanta la parada de P08.1 y el tope pasa a lo que queda de la cuota de
+    3.1 (309 llamadas, de 191 a 500), en vez de las 190 que dejaba el tope de 400. Las **7
+    incompletas con 3.5 se rehacen con 3.1** desde cero (la de 3.5 queda en `features.history/`);
+    eso cuenta como su único `--force` y les quedan 3 reanudaciones. Las 3 completas con 3.5 y las
+    6 del piloto no se tocan. Todo va por run (`--root DIR`), nunca con `--elegibles`.
+  - **Corrección y cierre de P08.4 (2026-11-03).** Josue pidió cerrar P08 y P09 ese día, aceptó cerrar con
+    cobertura parcial y mantuvo la regla de T8.
+    - **Lo que dice el código.** `rank_features` (`judge.py`) excluye con «Protocolo de extracción
+      distinto» toda historia cuyo `extraction_identity` no coincide con el `extraction_protocol` del
+      juez (`gemini-3.5-flash-lite`): las extracciones de 3.1, completas o no, **no entran al
+      ranking**. Lo que arriba dice que `asg-rank` las mezcla sin avisar es incorrecto; el
+      `.md` y el JSON de P08.5 lo muestran en `excluded`. Quedan 276 llamadas de 3.1 (224 de 500 en
+      `asg-budget`), no 309; las 33 de diferencia con el lote 2 no están anotadas.
+    - **El lote 3 de 3.1 no se lanza.** Ninguna de sus llamadas cambiaría el ranking, y 3.5 está
+      agotado (500 de 500) hasta las 03:00. La limitación «3.1 no está validado» sigue valiendo
+      para los datos de 3.1 que existen (1 completo y 34 incompletos), que quedan como dato fuera
+      del ranking.
+    - **P08.4 se cierra con cobertura parcial**, sin cumplir su «Hecho cuando». Alcance 7.20+ y
+      líneas base (64 textos, `asg-features --dry-run` del 2026-11-03): con 3.5, 3 completos y 6
+      del piloto reutilizados, 7 incompletos, 12 sin extraer y 36 con otra huella (los de 3.1); con
+      3.1, 1 completo, 34 incompletos, 12 sin extraer y 11 con otra huella. Sin `--desde` (7.0–7.19,
+      66 runs) no se extrajo nada. Sesgo declarado: el ranking solo contiene textos con extracción
+      completa de 3.5 (los que el extractor mide bien) y todos son de 7.22.
+    - **Las diez son las N que haya** (Josue): si no hay diez fuera del entrenamiento, se publican
+      las N con su cobertura. No se bajan umbrales, no se combinan intentos ni se meten textos de
+      entrenamiento.
 
 ## 3. Decisiones de proyecto
 
