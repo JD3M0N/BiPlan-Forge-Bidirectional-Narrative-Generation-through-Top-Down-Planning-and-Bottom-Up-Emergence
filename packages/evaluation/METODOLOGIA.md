@@ -430,6 +430,131 @@ Por cada criterio se ajusta una regresión logística por pares (ficha EXP-7):
   constantes. Es un diagnóstico: no cambia la regularización (`C = 1`) ni elige rasgos.
 - Los pesos se publican. Un juez que solo premia la longitud o el diálogo se ve a simple vista.
 
+### Resultado del juez (piloto 7.22)
+
+Medido el 2026-11-03 (P07.7), sin llamadas al modelo, con:
+
+```powershell
+asg-judge Evaluations/estudio-piloto-722/study.sqlite3 `
+  --output Evaluations/estudio-piloto-722/juez.json `
+  --perturbations Evaluations/estudio-piloto-722/casos.json
+```
+
+Es el **juez exploratorio del piloto (hoja de orden fijo)** (`decisions.md` §2, P07.1 a): 69 votos
+de 5 lectores sobre 6 historias de 2 obras (H1–H6 de [Piloto 7.22](#piloto-722-votos-transcritos)),
+los 24 rasgos núcleo de P07.6 y `casos.json` tal cual (11 casos, SHA-256 `ccedda1e…b55c976`).
+`juez.json` (`schema_version` 3, `status` `exploratory`, scikit-learn 1.9.1, SHA-256
+`50472656…6df3e1d93`, `data_hash` `072c1c0d…3d7690b92`) da `fitted` en los tres criterios. La base no
+cambió al entrenar (misma huella antes y después). El número que da no es una medida de calidad.
+
+**Validación fuera de muestra.** Aciertos por pares sobre los votos decididos; la cobertura es 1,0
+en todos los esquemas. Por historia, cada voto se predice con la media de los pliegues que dejan
+fuera una de sus dos historias; por familia, una sola cifra que junta los 2 pliegues (cada uno
+entrena con las 3 historias de una obra y prueba con la otra).
+
+| Criterio | Votos | Juez por historia | Juez por familia | Longitud por historia | Longitud por familia | Azar |
+|---|---|---|---|---|---|---|
+| Creatividad (H01) | 20 | 0,40 (8) | 0,40 (8) | 0,60 (12) | 0,60 (12) | 0,5 |
+| Personajes (H02) | 20 | 0,40 (8) | 0,50 (10) | 0,70 (14) | 0,70 (14) | 0,5 |
+| Trama (H03) | 21 | 0,43 (9) | 0,43 (9) | 0,62 (13) | 0,62 (13) | 0,5 |
+
+- **El juez no generaliza** (`decisions.md` §2): queda por debajo del azar en los tres criterios por
+  historia, y por familia por debajo en creatividad y trama e igual al azar en personajes. La
+  longitud sola (T01) lo supera en los tres criterios y en los dos esquemas.
+- **Ninguna cifra se separa del azar con estos datos.** Con 20 votos, 14 aciertos (la mejor
+  longitud) darían p ≈ 0,12 en una binomial a dos colas, y los votos no son independientes (mismos
+  lectores y mismos 5 pares).
+- **Que la longitud dé lo mismo en los dos esquemas es mecánico:** con un solo rasgo, cada par se
+  predice por el signo de su peso, y ese signo no cambió entre pliegues. Que el juez completo
+  coincida en H01 y H03 es casualidad de estos datos.
+- **Pliegues por historia.** En la obra 01 todos los votos tocan H3 (pares H1–H3 y H2–H3): dejar
+  fuera H3 deja entrenar solo con la obra 03 (11–12 votos). Los pliegues entrenan con 11 a 16 votos;
+  los de familia, con 8 a 12.
+- **τ de Kendall: no calculable.** El grafo de cada criterio tiene dos componentes, una por obra, y
+  tanto el orden humano (`asg-preferences`) como el predicho dan `insufficient` (P07.1). No se
+  calcula una τ dentro de cada componente: con 3 historias no dice nada.
+- **Un buen ajuste dentro de muestra no acredita nada.** Con 6 historias y 24 rasgos el modelo
+  puede ajustar los votos de entrenamiento; solo cuentan las cifras de arriba.
+
+**Pesos** (coeficientes sobre los rasgos estandarizados con las 6 historias; `C = 1`, sin
+intercepto). Signo y tamaño son de este ajuste, no efectos de cada rasgo:
+
+| Rasgo | Nombre | H01 | H02 | H03 |
+|---|---|---|---|---|
+| T01 | Palabras | −0,07 | +0,11 | −0,06 |
+| T06 | Proporción de diálogo | −0,16 | +0,13 | −0,02 |
+| T08 | Repetición de trigramas | −0,02 | −0,10 | +0,12 |
+| R01 | Promesas de apertura | 0 (constante) | 0 (constante) | 0 (constante) |
+| R02 | Señales de progreso | −0,03 | +0,01 | −0,01 |
+| R03 | Preparación del pago final | +0,05 | −0,01 | −0,02 |
+| R04 | Ciclos 'si, pero' | +0,04 | −0,01 | −0,01 |
+| R05 | Ciclos 'no, y además' | −0,04 | +0,26 | −0,22 |
+| R09 | Proactividad del protagonista | +0,09 | −0,19 | +0,12 |
+| R16 | Soluciones preparadas | +0,05 | −0,01 | −0,02 |
+| R18 | Límites del mundo | 0 (constante) | 0 (constante) | 0 (constante) |
+| R23 | Escenas con cambio | +0,05 | −0,01 | −0,02 |
+| R24 | Decisiones con coste | 0 (constante) | 0 (constante) | 0 (constante) |
+| X02 | Cuota del personaje más presente | −0,16 | +0,25 | −0,15 |
+| X03 | Reparto de la participación | +0,04 | −0,11 | +0,10 |
+| X06 | Escenas con conflicto | −0,04 | +0,01 | +0,02 |
+| X10 | Mentiras | −0,003 | +0,09 | −0,06 |
+| X13 | Secretos revelados | −0,06 | +0,17 | −0,10 |
+| X14 | Complicaciones | +0,05 | −0,04 | +0,01 |
+| X15 | Giros | +0,03 | +0,05 | −0,05 |
+| X16 | Eventos azarosos o externos | +0,05 | −0,10 | +0,05 |
+| X17 | Usos de objetos | −0,05 | −0,05 | +0,05 |
+| X20 | Contradicciones | 0 (constante) | 0 (constante) | 0 (constante) |
+| X29 | Reparto del diálogo | +0,06 | −0,07 | +0,04 |
+
+**Colinealidad** (igual en los tres criterios, porque entrenan con las mismas 6 historias):
+
+- R01, R18, R24 y X20 son constantes en las 6 historias; su peso es 0 por construcción.
+- 10 pares con |r| ≥ 0,8: R03, R16 y R23 entre sí con r = 1,0 (sus pesos iguales son el reparto de
+  la L2, no tres efectos iguales); R04–X14 0,97; X10–X13 0,97; X14–X29 −0,88; R03, R16 y R23 con
+  X06 0,88; R04–X29 −0,83.
+- El número de condición es nulo: la matriz es singular (6 historias frente a 20 rasgos que
+  varían, rango 5 como mucho). Solo la combinación de pesos está determinada; un peso suelto no se
+  interpreta. Que H02 tenga casi los signos opuestos de H01 y H03 describe este ajuste, no un
+  hallazgo.
+
+**Perturbaciones.** Diferencia de la puntuación lineal (perturbada − original), sin normalizar; como
+referencia, la desviación de las puntuaciones de las 6 historias (`score_scale`) es 0,47 en H01,
+0,85 en H02 y 0,57 en H03.
+
+| Caso | H01 | H02 | H03 |
+|---|---|---|---|
+| H1 barajada | −0,80 | +1,59 | −1,12 |
+| H1 sin desenlace | −0,20 | −0,26 | +0,23 |
+| H2 barajada | +0,11 | −0,40 | +0,29 |
+| H2 sin desenlace | +0,07 | −0,38 | +0,28 |
+| H3 barajada | −0,47 | +0,20 | −0,00 |
+| H4 barajada | +0,35 | −0,42 | +0,28 |
+| H4 sin desenlace | +0,10 | −0,10 | +0,09 |
+| H5 barajada | −0,25 | −0,58 | +0,47 |
+| H5 sin desenlace | +0,26 | −0,71 | +0,39 |
+| H6 barajada | +0,64 | +0,25 | −0,37 |
+| H6 sin desenlace | +0,87 | +0,22 | −0,51 |
+
+La puntuación baja en 4 de 11 casos en creatividad, en 7 de 11 en personajes y en 4 de 11 en trama;
+en ninguno bajan los tres a la vez. El descenso de H3 barajada en trama (−0,0009) es nulo en la
+práctica. No se exige que toda perturbación empeore todos los criterios: se publican los cambios.
+
+**Limitaciones**, además de las dos genéricas de `juez.json` (muestra pequeña; preferencias que
+dependen de premisas y lectores):
+
+- **Votos.** Hoja de orden fijo, transcripción a mano sin segundo transcriptor, acuerdo entre
+  lectores cercano al azar y grafo partido en dos obras ([Piloto 7.22](#piloto-722-votos-transcritos)).
+- **Rango.** 6 historias para 24 rasgos: pesos no identificables uno a uno y validación con 6 y 2
+  pliegues de 8 a 16 votos de entrenamiento.
+- **X15 de H3** sale de un intento archivado del mismo protocolo y se validó contra otra
+  segmentación en escenas (`decisions.md` §2, P07.6).
+- **Perturbaciones.** 11 de 12: falta H3 sin desenlace (R03 sin medir). Cada perturbación se volvió
+  a extraer con `flash-lite`, y 8 de los núcleo conservados no cumplen el test-retest (P04.8 y
+  P04.9): cada diferencia mezcla el efecto de la perturbación con el ruido del extractor, y aquí no
+  se pueden separar.
+- **Sin reajuste.** El juez se entrenó una vez, tal como dice P07.1; no se quitaron rasgos ni se
+  cambió la regularización tras ver estos resultados.
+
 ## 7. Ranking del corpus y análisis de las mejores
 
 El juez puntúa todas las historias completadas de `Stories/`: el corpus histórico más la matriz

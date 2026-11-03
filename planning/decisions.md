@@ -297,6 +297,16 @@ rasgos, juez, análisis o tesis se contrasta con esta lista antes de empezar.
   - **Perturbaciones:** `casos.json` (SHA-256 `ccedda1e…b55c976`) tiene 11 de los 12 casos;
     se quitó a mano `s037b5a5c6f0949ae-no-ending` (R03 sin medir, una sola cita). Volver a
     lanzar `asg-perturb --casos` da 12: P07.7 usa este archivo sin regenerarlo.
+- **2026-11-03 · Juez para P08 (P07.7).** `Evaluations/estudio-piloto-722/juez.json` (ignorado por
+  Git; valen estas huellas): SHA-256 `5047265671faf67daba29f4fde5767bb97ce2cfd39e26772bc27c5b6df3e1d93`,
+  `data_hash` `072c1c0dc216c2e6170d47a2699999f3ba919e2c7832b2fb1ae716f3d7690b92`, `study_hash`
+  `077eefd5…0220c`, `catalog_hash` `1c876f53…911ae6b`, `schema_version` 3, protocolo
+  `gemini-3.5-flash-lite` / `evidence-2`. Juez exploratorio del piloto, `fitted` en los tres
+  criterios y entrenado una sola vez. **No generaliza:** fuera de muestra 0,40 / 0,40 / 0,43 por
+  historia y 0,40 / 0,50 / 0,43 por familia (creatividad / personajes / trama), por debajo de la
+  longitud sola (0,60 / 0,70 / 0,62) en los dos esquemas; sin τ (grafo partido). Detalle en
+  METODOLOGIA.md §6, «Resultado del juez (piloto 7.22)». Si P08 ordena el corpus con este juez, y
+  cómo lo presenta, lo decide P08.1 con Josue.
 
 ## 3. Decisiones de proyecto
 
