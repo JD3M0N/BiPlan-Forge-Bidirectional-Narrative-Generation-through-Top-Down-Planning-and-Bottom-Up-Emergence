@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.1.7] - 2026-11-02
+
+- P07.2: `asg-study --db DB import-votes CSV --protocolo JSON` loads transcribed paper votes
+  (`StudyRepository.import_votes`) in one transaction, all or nothing. It checks the frozen
+  pool, criterion, A/B/abstention, repeated reader/pair/criterion, repeated question and the
+  15-question cap, and refuses readers that already have questions. It keeps the transcribed
+  position and A/B order, leaves `seconds` null and writes `votos-importados.json` (protocol,
+  CSV SHA-256, counts) beside the database. Schema 10 and `next_question` are unchanged.
+
 ## [2.1.6] - 2026-10-30
 
 - P05.3 (MED-5): `asg-report-features ROOT --horizontal OUT --manifest MANIFEST [--matrix CSV]`

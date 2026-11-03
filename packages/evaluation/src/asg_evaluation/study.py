@@ -25,6 +25,7 @@ from .preferences import components
 
 # The retired fixed, rolling and pack studies used schemas 1-4; their files stay as data.
 SCHEMA_VERSION = 10
+SPANISH_CRITERIA = dict(zip(("creatividad", "personajes", "trama"), CRITERIA, strict=True))
 PROSE_FORMATS = {"baseline", "narrative", "simulated"}
 QUESTIONS_PER_READER = 15
 MIN_POOL = 3
@@ -442,6 +443,91 @@ class StudyRepository:
                 (question, choice, max(0, seconds), audit_timestamp()),
             )
         return True
+
+    def import_votes(self, rows: list[dict], codes: dict[str, str]) -> dict:
+        """Load transcribed paper votes all-or-nothing, with a null ``seconds`` mark.
+
+        ``codes`` maps the sheet codes (H1..H6) to story ids of the frozen pool. Readers,
+        readings and assignments are created with the transcribed position and A/B order;
+        ``_assign`` is never used.
+        """
+        with self.transaction() as db:
+            self._require(db, "evaluation")
+            pool = {s["id"] for s in self._pool(db)}
+            unknown = sorted(c for c, sid in codes.items() if sid not in pool)
+            if unknown:
+                raise ValueError(f"Códigos fuera del conjunto congelado: {', '.join(unknown)}.")
+            seen: set[tuple] = set()
+            positions: set[tuple] = set()
+            per_reader: Counter = Counter()
+            prepared = []
+            for number, row in enumerate(rows, start=2):
+                prepared.append(self._import_row(number, row, codes, seen, positions, per_reader))
+            for reader, count in per_reader.items():
+                if db.execute(
+                    "SELECT 1 FROM assignments a JOIN participants p ON p.id=a.participant "
+                    "WHERE p.external_id=?",
+                    (reader,),
+                ).fetchone():
+                    raise ValueError(f"{reader} ya tiene preguntas en la base; no se reimporta.")
+                if count > QUESTIONS_PER_READER:
+                    raise ValueError(
+                        f"{reader}: {count} votos, el máximo es {QUESTIONS_PER_READER}."
+                    )
+            for reader, position, criterion, left, right, choice in prepared:
+                participant = self._participant(db, reader)
+                qid = identifier("q")
+                now = audit_timestamp()
+                db.execute(
+                    "INSERT INTO assignments(id,participant,position,criterion,left_id,right_id,"
+                    "issued_at) VALUES (?,?,?,?,?,?,?)",
+                    (qid, participant, position, criterion, left, right, now),
+                )
+                db.execute("INSERT INTO votes VALUES (?,?,?,?)", (qid, choice, None, now))
+                for story in (left, right):
+                    db.execute("INSERT OR IGNORE INTO readings VALUES (?,?)", (participant, story))
+        return {"votes": len(prepared), "readers": len(per_reader)}
+
+    @staticmethod
+    def _import_row(number, row, codes, seen, positions, per_reader) -> tuple:
+        """Validate one transcribed row and return it normalized."""
+
+        def fail(message: str):
+            """Raise a row-numbered validation error."""
+            raise ValueError(f"Fila {number}: {message}")
+
+        reader = (row.get("lector") or "").strip()
+        criterion = SPANISH_CRITERIA.get((row.get("criterio") or "").strip())
+        left = codes.get((row.get("historia_a") or "").strip())
+        right = codes.get((row.get("historia_b") or "").strip())
+        choice = {"A": "A", "B": "B", "abstencion": "abstain"}.get(
+            (row.get("eleccion") or "").strip()
+        )
+        try:
+            position = int(row.get("pregunta") or "")
+        except ValueError:
+            fail("la pregunta no es un número.")
+        if not reader:
+            fail("falta el lector.")
+        if position < 1:
+            fail("la pregunta debe ser positiva.")
+        if criterion is None:
+            fail(f"criterio desconocido «{row.get('criterio')}».")
+        if left is None or right is None:
+            fail("historia desconocida en la tabla de códigos.")
+        if left == right:
+            fail("las dos historias son la misma.")
+        if choice is None:
+            fail(f"elección desconocida «{row.get('eleccion')}».")
+        if (reader, position) in positions:
+            fail(f"{reader} ya tiene la pregunta {position}.")
+        key = (reader, criterion, frozenset((left, right)))
+        if key in seen:
+            fail(f"{reader} ya votó ese par con el criterio {criterion}.")
+        positions.add((reader, position))
+        seen.add(key)
+        per_reader[reader] += 1
+        return reader, position, criterion, left, right, choice
 
     def status(self) -> dict:
         """Summarize the phase, the pool and the answers for the operator."""

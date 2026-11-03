@@ -6,8 +6,8 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P07.2 · `asg-study import-votes` (modo `S+P`). Los 69 votos del piloto (hoja de orden fijo) están en `Evaluations/estudio-piloto-722/votos-transcritos.csv`; la base del piloto tiene 0. **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** no se alcanzó (P07.5 daría un H3 reducido, si Josue lo acepta).
-- **Versiones** (2026-10-30): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.1, evaluación 2.1.6,
+- **Siguiente:** P07.3 · colinealidad, longitud por familias y cobertura en el informe del juez (modo `S+P`). Para P07.5: los 69 votos están en `Evaluations/estudio-piloto-722/votos-transcritos.csv`, el protocolo con la tabla H1–H6 en `protocolo.json` de esa carpeta y la base del piloto tiene 0 votos. **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** no se alcanzó (P07.5 daría un H3 reducido, si Josue lo acepta).
+- **Versiones** (2026-11-02): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.1, evaluación 2.1.7,
   Telegram 6.0.3, Studio 0.3.0.
 - **Hechas:**
   - P00 · Arranque: `planning/`, skill `phase`, migración de `TODO.md` y graphify.
@@ -46,6 +46,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P06.4 · Base sintética `Evaluations/estudio` cerrada y exportada (`export-sintetico-2026-10-31.json`); piloto abierto en `Evaluations/estudio-piloto-722/study.sqlite3` con 6 historias 7.22 fuera del estudio (3 simuladas, 1 narrativa, 2 líneas base `-2`), huella `077eefd52b6810c342b0ad6c9e060ceeabd202b951f575d325ff323de250220c`; falta marcar al autor (`asg-study author ID`) y que Josue invite a los lectores.
   - P06 · Cerrada por decisión de Josue el 2026-10-31 sin ejecutar P06.5, P06.6 ni P06.7: piloto con 0 votos guardados y 5 lectores con notas (9 fallos anotados en el bloque de P06, sin arreglar); sin estudio real, sin votos humanos y sin **H3**.
   - P07.1 · «Datos del juez (P07.1)» en `decisions.md` §2: el piloto se votó con hoja de orden fijo (mismos 5 pares, orden y A/B para los 5 lectores; el bot no da esa secuencia) y sus 69 votos entrenan un juez exploratorio; entran con `import-votes` en esquema 10 y `seconds` nulo; extracciones repetidas hasta completar; validación por familias en una cifra de 2 pliegues; grafo partido, sin τ.
+  - P07.2 · `asg-study import-votes CSV --protocolo JSON` (`StudyRepository.import_votes`): importa votos transcritos todo o nada, con el orden A/B de la hoja, `seconds` nulo y `votos-importados.json` (protocolo, SHA-256) junto a la base; sin ejecutar sobre la base real (P07.5); evaluación 2.1.7.
 
 
 ## Cómo leer una tarjeta
@@ -281,25 +282,6 @@ criterios, ni uno más. T8: 24 rasgos, regresión L2 de scikit-learn, validació
 por historia y por familia, frente al azar y a la longitud sola. T10: nada toca el generador. T11:
 el juez no elige qué generar. P07.1 cambió, con el «ok» de Josue, la decisión de P06.1 de dejar
 el piloto fuera.
-
-#### P07.2 · Importar votos transcritos
-- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation
-- **Lee:** la decisión de P07.1; `study.py` (`StudyRepository`); `study_cli.py`;
-  `packages/evaluation/tests/test_study.py`; README de evaluación §2.
-- **Haz:**
-  - Lo que fije P07.1. Si es el subcomando: `StudyRepository.import_votes(rows)` en una sola
-    transacción, todo o nada. Valida estudio en `evaluation`, historias del conjunto congelado,
-    criterio en `CRITERIA`, elección A/B/abstención, sin repetir lector, par y criterio, y como
-    mucho `QUESTIONS_PER_READER` por lector. Crea participantes, lecturas y asignaciones con el
-    orden A/B transcrito, y deja la huella SHA-256 del CSV en un JSON junto a la base.
-  - Traduce `H1`–`H6` con la tabla de P07.1 y `abstencion` a `abstain`; deja el protocolo («hoja
-    de orden fijo») en el JSON de la huella. Sin cambios en `judge.py` (P07.1 c).
-  - README y CHANGELOG.
-- **No hagas:** cambiar `next_question` ni la asignación del bot; ejecutarlo sobre la base real
-  (es P07.5).
-- **Prueba:** `.\run-tests.ps1` y `.\quality.ps1`. Tests nuevos: una importación válida sale en
-  `export()` con `seconds` nulo; un CSV con una fila mala no escribe nada; un repetido se rechaza.
-- **Hecho cuando:** suite verde y evaluación 2.1.7.
 
 #### P07.3 · Colinealidad, longitud por familias y cobertura en el informe del juez
 - **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation

@@ -40,6 +40,21 @@ asg-study --db $db close
 asg-study --db $db export Evaluations/estudio/datos.json
 ```
 
+Los votos de una hoja en papel se importan con `import-votes` (sin cuota), en la fase de
+votación y una sola vez por lector (todo o nada):
+
+```powershell
+asg-study --db $db import-votes votos-transcritos.csv --protocolo protocolo.json
+```
+
+El CSV tiene `lector, pregunta, criterio, historia_a, historia_b, eleccion, fuente`
+(`criterio` en español, `eleccion` = `A`, `B` o `abstencion`). El protocolo es un JSON con
+`protocolo` (p. ej. «hoja de orden fijo») e `historias` (código de la hoja → ID de historia del
+conjunto congelado). Se crean participantes, lecturas y asignaciones con el orden A/B transcrito,
+y los votos quedan con `seconds` nulo (marca de transcripción). Junto a la base se escribe
+`votos-importados.json` con el protocolo, el SHA-256 del CSV y los recuentos. No usa la
+asignación del bot.
+
 Las preguntas se asignan de una en una cuando el lector las pide, sin lista previa de lectores:
 
 - el criterio va en ciclo (creatividad, personajes, trama);

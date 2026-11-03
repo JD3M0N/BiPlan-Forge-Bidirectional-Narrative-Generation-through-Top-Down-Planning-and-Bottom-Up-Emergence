@@ -69,3 +69,76 @@ def test_assignment_is_capped_connected_and_export_is_pseudonymous(tmp_path):
         db.execute("PRAGMA user_version=4")
     with pytest.raises(ValueError, match="esquema"):
         StudyRepository(legacy)
+
+
+def _sheet_study(tmp_path):
+    """Open a study of three stories and return it with its sheet codes."""
+    study = StudyRepository(tmp_path / "study.sqlite3")
+    ids = [study.add_story(synthetic_run(tmp_path / f"run-{i}", i)) for i in range(3)]
+    study.open()
+    return study, dict(zip(("H1", "H2", "H3"), ids, strict=True))
+
+
+def _sheet_row(reader, question, criterion, a, b, choice):
+    return {
+        "lector": reader,
+        "pregunta": str(question),
+        "criterio": criterion,
+        "historia_a": a,
+        "historia_b": b,
+        "eleccion": choice,
+        "fuente": "papel",
+    }
+
+
+def test_import_votes_keeps_transcribed_order_and_null_seconds(tmp_path):
+    study, codes = _sheet_study(tmp_path)
+    rows = [
+        _sheet_row("L1", 1, "creatividad", "H1", "H3", "A"),
+        _sheet_row("L1", 2, "personajes", "H1", "H3", "abstencion"),
+        _sheet_row("L2", 1, "trama", "H3", "H2", "B"),
+    ]
+    assert study.import_votes(rows, codes) == {"votes": 3, "readers": 2}
+    data = study.export()
+    assert Counter(v["choice"] for v in data["votes"]) == Counter(A=1, B=1, abstain=1)
+    assert all(v["seconds"] is None for v in data["votes"])
+    first = next(v for v in data["votes"] if v["choice"] == "A")
+    assert (first["left"], first["right"], first["criterion"]) == (codes["H1"], codes["H3"], "H01")
+    assert len(data["participants"]) == 2 and len(data["readings"]) == 4
+
+
+@pytest.mark.parametrize(
+    ("bad", "message"),
+    [
+        (_sheet_row("L1", 3, "creatividad", "H1", "H3", "A"), "ya votó ese par"),
+        (_sheet_row("L1", 1, "trama", "H1", "H2", "A"), "ya tiene la pregunta"),
+        (_sheet_row("L1", 3, "trama", "H1", "H9", "A"), "historia desconocida"),
+        (_sheet_row("L1", 3, "trama", "H2", "H2", "A"), "la misma"),
+        (_sheet_row("L1", 3, "estilo", "H1", "H2", "A"), "criterio desconocido"),
+        (_sheet_row("L1", 3, "trama", "H1", "H2", ""), "elección desconocida"),
+    ],
+)
+def test_import_votes_rejects_bad_rows_without_writing(tmp_path, bad, message):
+    study, codes = _sheet_study(tmp_path)
+    rows = [_sheet_row("L1", 1, "creatividad", "H1", "H3", "A"), bad]
+    rows.insert(1, _sheet_row("L1", 2, "trama", "H2", "H3", "B"))
+    with pytest.raises(ValueError, match=message):
+        study.import_votes(rows, codes)
+    assert study.export()["votes"] == [] and study.export()["participants"] == []
+
+
+def test_import_votes_caps_questions_per_reader(tmp_path):
+    study = StudyRepository(tmp_path / "study.sqlite3")
+    ids = [study.add_story(synthetic_run(tmp_path / f"run-{i}", i)) for i in range(6)]
+    study.open()
+    codes = {f"H{i + 1}": sid for i, sid in enumerate(ids)}
+    pairs = [(f"H{a}", f"H{b}") for a in range(1, 7) for b in range(a + 1, 7)]
+    rows = [_sheet_row("L1", n, "trama", a, b, "A") for n, (a, b) in enumerate(pairs, start=1)]
+    assert study.import_votes(rows, codes)["votes"] == QUESTIONS_PER_READER
+    with pytest.raises(ValueError, match="no se reimporta"):
+        study.import_votes(rows, codes)
+    fresh = [_sheet_row("L3", n, "trama", a, b, "A") for n, (a, b) in enumerate(pairs, 1)]
+    fresh.append(_sheet_row("L3", 16, "creatividad", "H1", "H2", "A"))
+    with pytest.raises(ValueError, match="máximo"):
+        study.import_votes(fresh, codes)
+    assert len(study.export()["votes"]) == QUESTIONS_PER_READER
