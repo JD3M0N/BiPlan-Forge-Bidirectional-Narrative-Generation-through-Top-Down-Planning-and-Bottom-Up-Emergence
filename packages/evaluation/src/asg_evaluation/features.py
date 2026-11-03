@@ -473,23 +473,29 @@ def extract_features(
         return _extract(text, provider, model, output, selection, force)
 
 
-def _extract(text, provider, model, output, selection, force) -> dict:
-    """Run the locked extraction, preserving successful work after interrupted batches."""
+def extraction_identity(text: str, model: str, selection: Literal["core", "all"] = "core") -> dict:
+    """Return the cache identity an extraction of this text would carry, without calls."""
     definitions = catalog()
     chosen = (
         core_ids()
         if selection == "core"
         else [key for key, row in definitions.items() if row["capa"] in {"T", "R", "X"}]
     )
-    chosen = list(dict.fromkeys([*chosen, *sorted(DERIVED | AUXILIARY), "X23"]))
-    identity = {
+    return {
         "version": EXTRACTION_VERSION,
         "prompt_version": PROMPT_VERSION,
         "text_hash": digest(text),
         "catalog_hash": catalog_snapshot()["sha256"],
         "model": model,
-        "selection": chosen,
+        "selection": list(dict.fromkeys([*chosen, *sorted(DERIVED | AUXILIARY), "X23"])),
     }
+
+
+def _extract(text, provider, model, output, selection, force) -> dict:
+    """Run the locked extraction, preserving successful work after interrupted batches."""
+    definitions = catalog()
+    identity = extraction_identity(text, model, selection)
+    chosen = identity["selection"]
     cached = load_json_object(output)
     if cached and (force or cached.get("identity") != identity):
         archive = output.parent / (output.stem + ".history") / (digest(cached) + ".json")

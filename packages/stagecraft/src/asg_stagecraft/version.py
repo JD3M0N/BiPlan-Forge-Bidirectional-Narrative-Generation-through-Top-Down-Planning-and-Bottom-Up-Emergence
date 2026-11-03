@@ -1,7 +1,7 @@
 """Version identifiers persisted with every generated story."""
 
 GENERATOR_NAME = "asg-stagecraft"
-__version__ = "7.22.1"
+__version__ = "7.22.2"
 GENERATOR_VERSION = __version__
 PIPELINE_VERSION = "7.22"
 # 7.22 rejects any turn that speaks of code (paths, snake_case, backticks) as OUT_OF_FICTION.

@@ -95,6 +95,13 @@ asg-corpus Stories --json inventario.json --csv inventario.csv   # qué runs ent
 - `asg-audit-features --second OTRA.json` compara dos extracciones del mismo texto
   (test-retest); `--run DIR` contrasta los recuentos con el log del run simulado (techo del
   log; lo que el run no registró sale «no medido»). `asg-features --root RUTA` mide un corpus fuera del estudio.
+- Para el ranking, `asg-features --root Stories --elegibles [--desde 7.20] [--reusar $db]
+  [--limite N] --dry-run` mide solo lo que `asg-rank` ordenará: `--elegibles` aplica la regla de
+  `asg-corpus`, `--desde` se queda con pipelines ≥ X.Y (como versión: 7.20 > 7.9), `--reusar`
+  omite los textos completos en ese estudio congelado y `--limite` acota los textos que gastan
+  llamadas en una invocación. El `--dry-run` no crea proveedor: da el modelo, cuántos están
+  completos, se reanudan, faltan o tienen otra huella (se rehacen desde cero) y el coste medido,
+  de ~4 a ~36 llamadas por texto.
 
 ### 4. Preferencias, juez y ranking
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.10] - 2026-11-03
+
+- P08.2: `extraction_identity(text, model, selection)` returns the cache identity an extraction
+  would carry, without calls; `_extract` builds its identity with it (unchanged fields and values).
+  `_compatible` becomes the public `extraction_compatible` so that `asg-features --reusar` applies
+  the same rule as `asg-rank --study`.
+
 ## [2.1.9] - 2026-11-02
 
 - P07.4: `asg-perturb DB --out DIR [--seed N]` writes two deterministic perturbations of each

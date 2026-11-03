@@ -236,7 +236,7 @@ def study_extractions(db: str | Path) -> dict[str, dict]:
     }
 
 
-def _compatible(report: dict, text_hash: str) -> bool:
+def extraction_compatible(report: dict, text_hash: str) -> bool:
     """Accept an extraction only for this exact text and the current catalog."""
     identity = report.get("identity", {})
     return (
@@ -252,9 +252,9 @@ def read_features(directory: str | Path, *, extractions: dict[str, dict] | None 
     text_hash = digest(text)
     result = {key: measurement(status="missing") for key in catalog()}
     extracted = load_json_object(directory / "features" / "features.json")
-    if not _compatible(extracted, text_hash):
+    if not extraction_compatible(extracted, text_hash):
         extracted = (extractions or {}).get(text_hash, {})
-    compatible = _compatible(extracted, text_hash)
+    compatible = extraction_compatible(extracted, text_hash)
     if compatible:
         result.update(extracted.get("features", {}))
     result.update(deterministic_features(text))

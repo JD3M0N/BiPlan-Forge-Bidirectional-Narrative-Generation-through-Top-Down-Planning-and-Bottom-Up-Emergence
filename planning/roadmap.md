@@ -6,8 +6,8 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P08.2 · `asg-features` solo para el corpus elegible, con `--desde` (modo `S+P`, sin cuota). **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** reducido (piloto cerrado y exportado, P07.5) pendiente de que Josue lo acepte.
-- **Versiones** (2026-11-02): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.2, evaluación 2.1.9,
+- **Siguiente:** P08.3 · `asg-rank` para la tesis: las diez, las marcas y las fichas (modo `S+P`, sin cuota). **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** reducido (piloto cerrado y exportado, P07.5) pendiente de que Josue lo acepte.
+- **Versiones** (2026-11-03): Stagecraft 7.22.2 (pipeline 7.22), core 0.8.2, evaluación 2.1.10,
   Telegram 6.0.3, Studio 0.3.0.
 - **Hechas:**
   - P00 · Arranque: `planning/`, skill `phase`, migración de `TODO.md` y graphify.
@@ -53,6 +53,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P07.6 · Rasgos núcleo (`gemini-3.5-flash-lite`) de las 6 historias del piloto y de sus 12 perturbaciones (`asg-perturb`): 17 de 18 extracciones completas; X15 de H3 se tomó, con aprobación de Josue, de un intento archivado del mismo protocolo (`decisions.md` §2, P07.6; las 5 versiones que lo miden dan 1), y `s037…-no-ending` (sin R03) quedó fuera de `casos.json` (11 de 12 casos, filtrado a mano: no regenerar); las 6 pasan los controles de `train_judge`; tablita en `tabla-rasgos.json`/`.csv`. **653 llamadas reales** (178 el 2026-11-02 y 475 el 2026-11-03) frente a ~54 estimadas, ~45 perdidas al rehacer una H3 casi completa.
   - P07.7 · `asg-judge` sobre el piloto (sin cuota, entrenado una vez): `juez.json` `fitted` en los tres criterios, pero **no generaliza**: fuera de muestra 0,40 / 0,40 / 0,43 por historia y 0,40 / 0,50 / 0,43 por familia, por debajo del azar o igual y de la longitud sola (0,60 / 0,70 / 0,62); sin τ (grafo partido), matriz singular, perturbaciones que bajan 4, 7 y 4 de 11 veces. «Resultado del juez (piloto 7.22)» en METODOLOGIA.md §6 y «Juez para P08» con huellas en `decisions.md` §2. Cierra P07.
   - P08.1 · «Ranking del corpus (P08.1)» en `decisions.md` §2: ranking exploratorio con el juez congelado (los tres criterios `fitted`, no generaliza) y el orden por longitud sola como control; alcance escalonado (56 por extraer en 7.20+ y líneas base, 66 en 7.0–7.19, recuento sin cuota); 3 reanudaciones, un `--force` y otras 3 por texto, sin combinar intentos; tope de 400 llamadas al día; las diez del combinado sin las 6 de entrenamiento; marcas `training`, `version-no-comparable` y `premisa-no-vista`. Tarjetas P08.2–P08.6 corregidas.
+  - P08.2 · `asg-features --root Stories --elegibles [--desde X.Y] [--reusar DB] [--limite N] [--dry-run]`: solo el corpus elegible (`corpus.scan`), pipelines ≥ X.Y como versión, omite los completos del estudio y acota el lote; el `--dry-run` no crea proveedor y clasifica con la identidad completa (`extraction_identity`, nueva en evaluación; `extraction_compatible` pasa a público). Real: 56 pendientes en 7.20+ (3 se reanudan, 46 sin extraer, 7 con otra huella; ~224 a ~2.016 llamadas) y 122 sin `--desde`; Stagecraft 7.22.2, evaluación 2.1.10.
 
 
 ## Cómo leer una tarjeta
@@ -330,36 +331,6 @@ herramienta, no el generador. Lo del X15 de H3 (P07.6) no se extiende a P08.
 
 **H4:** enseñar al tutor el juez, el ranking y las diez (`planning/h4.md`, P08.6).
 
-#### P08.2 · `asg-features` solo para el corpus elegible
-- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-stagecraft
-- **Lee:** `tools/extract_features.py` de Stagecraft; `scan` y `exclusion_reason` en
-  `corpus.py`; `study_extractions` y `_compatible` en `feature_report.py`; la identidad de
-  `_extract` en `features.py`; `packages/stagecraft/tests/test_extract_features_cli.py`.
-- **Haz:**
-  - `--elegibles` (solo con `--root`): filtra con `corpus.scan`, la misma regla que `asg-rank`.
-  - `--desde X.Y` (con `--elegibles`): solo pipelines ≥ X.Y, comparando como versión (7.20 >
-    7.9), no como texto. Las líneas base 7.22 entran con `--desde 7.20`. Es el alcance
-    escalonado de P08.1.
-  - `--reusar DB`: omite los textos que ya tienen extracción completa y compatible en ese
-    estudio congelado, por `text_hash`, como `asg-rank --study`. Son las 6 del piloto.
-  - `--limite N`: como mucho N textos que necesiten llamadas por invocación. Los ya completos
-    no cuentan.
-  - `--dry-run`, sin proveedor: totales, ya completos (0 llamadas), incompletos que se reanudan,
-    sin extraer o con otra huella, y el coste con la cifra medida (de ~4 por texto en la primera
-    pasada a ~36 hasta completar), no «~3». También el modelo que se usaría.
-  - Los reintentos de P08.1 (3 reanudaciones, un `--force`, otras 3) los aplica P08.4 a mano con
-    el `--dry-run`; aquí no se codifican.
-- **No hagas:** cambiar prompts, esquemas ni la identidad de la extracción (`EXTRACTION_VERSION`,
-  `PROMPT_VERSION`); cambiar la conducta sin opciones; hacer llamadas reales; tocar
-  `PIPELINE_VERSION`.
-- **Prueba:** tests en `test_extract_features_cli.py` (con `FakeProvider` o sin proveedor):
-  `--elegibles` salta un guion, un run fallido y uno anterior a 7; `--desde 7.20` salta un 7.9 y
-  conserva un 7.20 y una línea base; `--reusar` salta un texto con extracción del estudio;
-  `--limite` corta; `--dry-run` no crea proveedor. Suite y `quality.ps1`.
-- **Hecho cuando:** `asg-features --root Stories --elegibles --desde 7.20 --reusar
-  Evaluations/estudio-piloto-722/study.sqlite3 --dry-run` da 56 pendientes (3 se reanudan) y el
-  modelo, y sin `--desde`, 122; Stagecraft 7.22.2 con su CHANGELOG.
-
 #### P08.3 · `asg-rank` para la tesis: las diez, las marcas y las fichas
 - **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation
 - **Lee:** «Ranking del corpus (P08.1)» en `decisions.md` §2; `rank_features` y `_ineligible`
@@ -391,7 +362,7 @@ herramienta, no el generador. Lo del X15 de H3 (P07.6) no se extiende a P08.
   las marcas de versión y premisa; la tabla de medianas; la hoja sin campos de juicio rellenados.
   Suite y `quality.ps1`.
 - **Hecho cuando:** `asg-rank` sobre los datos de prueba da las diez según P08.1, con marcas y
-  hoja; evaluación 2.1.10 con su CHANGELOG.
+  hoja; evaluación 2.1.11 con su CHANGELOG.
 
 #### P08.4 · Extraer el corpus elegible, un lote por día
 - **Modo:** S · **Cuota:** un lote por día, con el tope de P08.1 · **Paquete:** —

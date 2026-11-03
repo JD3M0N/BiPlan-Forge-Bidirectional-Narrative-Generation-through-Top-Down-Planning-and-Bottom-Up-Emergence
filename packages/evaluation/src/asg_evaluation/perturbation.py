@@ -14,7 +14,7 @@ from asg_core import atomic_write_json, atomic_write_text, use_utf8_output
 
 from .artifacts import load_json_object
 from .catalog import digest
-from .feature_report import _compatible
+from .feature_report import extraction_compatible
 from .study import StudyRepository
 
 SCHEMA_VERSION = 1
@@ -144,8 +144,8 @@ def build_cases(repository: StudyRepository, out: Path) -> tuple[list[dict], lis
             origin is None
             or meta.get("origin", {}).get("text_hash") != origin["text_hash"]
             or meta.get("text_hash") != digest(text)
-            or not _compatible(original, origin["text_hash"])
-            or not _compatible(perturbed, digest(text))
+            or not extraction_compatible(original, origin["text_hash"])
+            or not extraction_compatible(perturbed, digest(text))
         ):
             missing.append(directory.name)
             continue

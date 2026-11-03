@@ -1,5 +1,16 @@
 # Historial de cambios
 
+## 7.22.2
+
+- P08.2: `asg-features --root RAÍZ --elegibles` extrae solo los runs elegibles del ranking
+  (`corpus.scan`, la regla de `asg-rank`); `--desde X.Y` se queda con pipelines ≥ X.Y comparando
+  como versión (7.20 > 7.9); `--reusar DB` omite los textos completos y compatibles en ese
+  estudio congelado, por `text_hash`; `--limite N` acota los textos que necesitan llamadas. El
+  `--dry-run` no crea proveedor: clasifica cada texto (completo, reutilizado, se reanuda, sin
+  extraer, otra huella) con la identidad de la extracción, da el modelo y el coste medido (~4 a
+  ~36 llamadas por texto) en vez de «~3». Sin las opciones nuevas, la conducta no cambia. Sin
+  cambios en el pipeline: sigue en 7.22.
+
 ## 7.22.1
 
 - P05.2 (MED-3): `asg-matrix MATRIZ.csv` lanza una matriz de experimentos en serie: expande
