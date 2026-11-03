@@ -357,7 +357,8 @@ herramienta, no el generador. Lo del X15 de H3 (P07.6) no se extiende a P08.
   `--selection all`; extraer textos no elegibles; editar a mano un `features.json`; combinar
   intentos (lo de P07.6 no vale aquí); pasar del tope; cambiar de modelo.
 - **Hecho cuando:** cada texto del alcance está completo o agotó sus reintentos, según el
-  `--dry-run`. Entonces se borra la tarjeta y se deja una línea final con los totales.
+  `--dry-run`. Desde el lote 2 hay dos modelos y cada `--dry-run` ve las extracciones del otro
+  como «otra huella», así que cada texto se juzga con el modelo de su propia extracción. Entonces se borra la tarjeta y se deja una línea final con los totales.
 
 #### P08.5 · Ordenar el corpus y publicar el ranking
 - **Modo:** S · **Cuota:** sin cuota · **Paquete:** —
