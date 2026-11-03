@@ -390,6 +390,10 @@ sin el autor coinciden porque el autor no votó.
 % Generada por asg-results desde Evaluations/estudio-piloto-722/preferencias.json
 % (asg-preferences --bootstrap 1000). «Comp.»: componentes del grafo de comparaciones.
 
+% 24-24: suma a mano de la tabla «Votos por par» de METODOLOGIA.md §5 (A-B-abstenciones), pares
+% H1-H3, H2-H3, H4-H6 y H5-H6, con A = la generada en los cuatro. Creatividad 2+1+3+2 = 8 frente a
+% 2+3+1+2 = 8; personajes 1+3+1+2 = 7 frente a 4+1+3+1 = 9; trama 4+2+2+1 = 9 frente a 1+3+1+2 = 7.
+% Par H4-H5 (simulada frente a narrativa): 2-2-1, 1-3-1 y 3-2-0.
 Sumando los cuatro pares en los que una historia del generador se enfrenta a su línea base, el
 generador ganó 24 votos y la línea base otros 24: 8 a 8 en creatividad, 7 a 9 en personajes y 9 a 7 en
 trama. En el par de la obra 03 entre la simulada y la narrativa, la narrativa ganó en personajes (3
@@ -466,8 +470,9 @@ Extraer el resto chocó con la cuota: el lote del modelo del protocolo terminó 
 35. Esas extracciones no sirven al juez, porque su protocolo fija el modelo que mide los rasgos y el
 segundo modelo no se validó, así que la extracción se cerró con cobertura parcial.
 
-La Tabla~\ref{tab:ranking-cobertura} da el resultado: se ordenaron 9 de las 130 historias elegibles,
-y las otras 121 salieron con su razón. Las nueve son de la versión congelada, y seis son las del
+La Tabla~\ref{tab:ranking-cobertura} da el resultado sobre las 277 ejecuciones que tienen historia;
+las otras 69, sin terminar, no tienen texto que ordenar. Se ordenaron 9 de las 130 historias
+elegibles, y las otras 121 salieron con su razón. Las nueve son de la versión congelada, y seis son las del
 entrenamiento del juez, que puntúan dentro de la muestra y no entran en las diez mejores. Las
 \textbf{diez mejores son, por tanto, tres}: la regla no se cambió ni se completó con otras historias.
 El ranking está sesgado hacia los textos que el extractor mide bien y, por la cuota, hacia la versión
@@ -475,7 +480,7 @@ congelada.
 
 \begin{table}[htb]
   \centering
-  \caption{Cobertura del ranking del corpus (346 ejecuciones, 2026-11-03)}
+  \caption{Cobertura del ranking del corpus (277 ejecuciones con historia, 2026-11-03)}
   \label{tab:ranking-cobertura}
   \small
   \input{../tablas/ranking_cobertura.tex}
@@ -523,10 +528,10 @@ Con lo recogido, ninguna de las tres hipótesis se puede confirmar ni refutar:
   no se ejecutó. Solo hay evidencia indirecta de que la memoria propia aísla a los personajes: los 62
   contextos auditados de la Sección~\ref{sec:val-modo}, que no dicen nada de la calidad de las
   escenas.
-  \item \textbf{H3, sin datos suficientes, con indicios a favor.} En las dos lecturas a ciegas de los
+  \item \textbf{H3, sin datos suficientes.} En las dos lecturas a ciegas de los
   mecanismos opcionales, el brazo que mejoró las medidas de la prosa empató o perdió
   (Sección~\ref{sec:val-brazos}), y en el piloto las historias del generador empataron con las líneas
-  base, 24 votos a 24. Es lo que H3 anticipa, pero las lecturas son de un solo lector, el autor, y el piloto
+  base, 24 votos a 24. Es coherente con lo que H3 anticipa, pero las lecturas son de un solo lector, el autor, y el piloto
   tiene un acuerdo cercano al azar y la posición confundida con el enfoque. El juez, que podía decir
   qué rasgos acompañan a la preferencia, no generaliza.
 \end{itemize}

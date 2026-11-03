@@ -24,8 +24,9 @@ que cura el registro sin inventar decide cómo se cuenta. Los mecanismos que no 
 complejidad en las validaciones quedaron apagados en la configuración congelada, como opciones.
 
 La metodología de evaluación (Capítulo~\ref{chapter:evaluation}) articula tres evaluaciones en las
-que ninguna cifra automática se presenta como juicio de calidad: un extractor que cuenta 24 rasgos
-núcleo con una cita que el código verifica literalmente, una evaluación humana por pares a ciegas con
+que ninguna cifra automática se presenta como juicio de calidad: 24 rasgos núcleo, 18 de ellos
+recuentos de un extractor con una cita que el código verifica literalmente y 6 medidas calculadas por
+código, una evaluación humana por pares a ciegas con
 tres preguntas y una línea base de un solo \textit{prompt}, y un juez que traduce los rasgos al orden
 humano y se valida fuera de muestra, frente al azar y frente a la longitud sola.
 
@@ -34,7 +35,8 @@ dependencias en un solo sentido, de modo que la evaluación no importa el genera
 modo cualquier historia guardada. Cada decisión del código vive en un validador puro con pruebas: el 1
 de noviembre de 2026 la suite pasó 907 pruebas, entre ellas las que comprueban que ningún actor ve el
 plan y que, con el inventario apagado, el generador queda como estaba. Cada ejecución queda en disco con su
-versión y su huella, y las tablas de resultados se regeneran desde esos artefactos. La cuota diaria
+versión y su huella, y las tablas del estudio, del juez y del ranking se regeneran desde esos
+artefactos. La cuota diaria
 del servicio de modelos fue una restricción práctica que el sistema administra, pero no evita.
 
 La evaluación experimental (Capítulo~\ref{chapter:experiments}) validó el generador en ejecuciones
@@ -44,9 +46,9 @@ muestras que no bastan para concluir. La validación del extractor es provisiona
 horizontal se quedó en 14 de 35 unidades y sin resultados interpretables; el estudio humano, en un
 piloto de cinco lectores con un acuerdo cercano al azar, y el juez aprendido de ese piloto no
 generaliza: fuera de muestra queda por debajo de la longitud sola. Las tres hipótesis quedan sin datos
-suficientes. Para H3 hay indicios a favor, siempre exploratorios: las mejoras medidas de la prosa no
-ganaron en las lecturas a ciegas, y en el piloto las historias del generador empataron con las líneas
-base.
+suficientes. Para H3, lo observado es coherente con lo que anticipa, pero no la confirma: las mejoras
+medidas de la prosa no ganaron en las lecturas a ciegas, y en el piloto las historias del generador
+empataron con las líneas base.
 
 Las \textbf{aportaciones} son las dos que se plantearon. La primera es el generador: una arquitectura
 que combina planificación y simulación con LLMs y que apoya cada separación en una comprobación del

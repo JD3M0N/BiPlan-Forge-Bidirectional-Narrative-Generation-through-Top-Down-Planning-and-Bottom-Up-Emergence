@@ -9,7 +9,8 @@
 % (las de test_gemini_live.py). La cifra de los 503 es de docs/architecture/runtime.md.
 % Referencias nuevas, verificadas en la web el 2026-11-01: pydantic2026, google2026,
 % virtanen2020, pedregosa2011, ptb2026, fastapi2026. \codigo está definido en Thesis.tex.
-% R07 (2026-11-03): asg-perturb, asg-results (asg_core/help.py) e import-votes de asg-study, que
+% R07 (2026-11-03): asg-perturb (P07.4, 2026-11-02), asg-results (P09, 2026-11-03; fechas de git log
+% -S sobre asg_core/help.py) e import-votes de asg-study, que
 % los experimentos del capítulo 5 usan; el resto del capítulo sigue fechado el 2026-11-01.
 
 Este capítulo describe cómo se implementaron el generador del Capítulo~\ref{chapter:generator} y
@@ -80,9 +81,9 @@ solo lugar, \texttt{options.py}, en el que confluyen la línea de comandos, las 
 las dos interfaces.
 
 Todo el sistema se maneja desde la línea de comandos. \texttt{asg help} enumeraba dieciséis
-comandos, todos con el prefijo \texttt{asg-}; el 3 de noviembre de 2026 se añadieron dos para los
-experimentos del Capítulo~\ref{chapter:experiments}, \texttt{asg-perturb} y \texttt{asg-results}. La
-Tabla~\ref{tab:comandos} agrupa los dieciocho por tarea.
+comandos, todos con el prefijo \texttt{asg-}; para los experimentos del
+Capítulo~\ref{chapter:experiments} se añadieron después \texttt{asg-perturb}, el 2 de noviembre de
+2026, y \texttt{asg-results}, el 3. La Tabla~\ref{tab:comandos} agrupa los dieciocho por tarea.
 
 \begin{table}[htb]
   \centering

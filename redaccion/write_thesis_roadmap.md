@@ -79,16 +79,16 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
     A); juez (653 llamadas de extracción, `fitted` pero no generaliza, por debajo de la longitud,
     matriz singular, perturbaciones 4/7/4 de 11); ranking (9 de 130, las diez son 3: dos
     renarraciones M07 y M04 de la misma función de la obra 03 y la línea base 01-1, sin lectura
-    cualitativa por el cierre de P08); H1, H2 y H3 «sin datos suficientes» (H3 con indicios a
-    favor) y cierre del capítulo. Tablas de P09 con `\input{../tablas/…}`: `preferencias`, `juez`,
+    cualitativa por el cierre de P08); H1, H2 y H3 «sin datos suficientes» (en H3, lo
+    observado es coherente con lo que anticipa; corregido en R12) y cierre del capítulo. Tablas de P09 con `\input{../tablas/…}`: `preferencias`, `juez`,
     `perturbaciones`, `ranking_cobertura`, `ranking_puestos`, y `piloto` sustituye a la de R06.
     Arrastres: `Implementation.tex` con 18 comandos (`asg-perturb`, `asg-results`) e
     `import-votes`; apertura del capítulo con sus `\ref`. Sin referencias nuevas. 6 págs. (47–52;
     ≈ 4 sin tablas, en el presupuesto), 0 \todo
   - R08 · conclusiones sin secciones: apertura con el objetivo general; un párrafo por objetivo
     específico, en orden (estado del arte, generador, metodología, implementación con las 907
-    pruebas del 2026-11-01, evaluación experimental con H1–H3 sin datos suficientes e indicios para
-    H3); **aportaciones** (T10: generador y metodología); **limitaciones** de escala (cuota, plazo,
+    pruebas del 2026-11-01, evaluación experimental con H1–H3 sin datos suficientes y lo observado en
+    H3 coherente con lo que anticipa); **aportaciones** (T10: generador y metodología); **limitaciones** de escala (cuota, plazo,
     extracción cara, un solo lector en las validaciones, ranking de 9 de 130) y T11 remitido a las
     Recomendaciones. Sin referencias nuevas. 2 págs. (53–54, ≈ 820 palabras), 0 \todo
   - R09 · recomendaciones en cinco párrafos con rótulos en negrita: completar la evaluación (21
@@ -97,7 +97,7 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
     función objetivo y el algoritmo genético (T11) con la condición de un juez que generalice,
     aplicación a otros textos generados y condiciones de uso de los resultados. Sin referencias
     nuevas. 1 pág. (55, ≈ 340 palabras; una primera versión de 1,4 págs. se recortó), 0 \todo
-  - R10 · resumen (294 palabras) y *abstract* (273) en tres párrafos: problema y objetivo,
+  - R10 · resumen (298 palabras tras R12) y *abstract* (284) en tres párrafos: problema y objetivo,
     generador y metodología, resultados (generador congelado con la mitad de los *beats* forzados;
     extractor sobre 12 historias; 14 de 35 unidades; piloto de 5 lectores, 24–24 con la línea base;
     juez 0,40–0,50 frente a 0,60–0,70 de la longitud; H1–H3 sin datos suficientes) y aportaciones.
@@ -117,7 +117,13 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
     conclusiones cotejadas con el capítulo 5; 0 `\todo`, 0 referencias indefinidas, 0 cajas
     desbordadas. Corregido: el capítulo 3 daba el juez por validado (`sec:ranking` y el cierre) y
     remitía al capítulo 5 en vez de a `sec:resultados-estudio`; la introducción menciona los
-    anexos. Pendientes para Josue antes de **H5** en «Pendientes del borrador».
+    anexos. Segunda pasada, cotejando lo nuevo con los capítulos: resumen, *abstract* y
+    conclusiones decían que un modelo cuenta y cita los 24 rasgos (son 18 con cita y 6 por código);
+    el título de `tab:ranking-cobertura` decía 346 ejecuciones (la tabla suma 277, las que tienen
+    historia); `asg-perturb` es del 2026-11-02, no del 3; H3 queda en «sin datos suficientes» a
+    secas, con lo observado «coherente con lo que anticipa»; la suma 24–24 lleva su aritmética en
+    un comentario, y las conclusiones ya no dicen que se regeneran todas las tablas (tres siguen a
+    mano). Pendientes para Josue antes de **H5** en «Pendientes del borrador».
 
 ## Pendientes del borrador (R12, 2026-11-03)
 
@@ -431,7 +437,7 @@ Josue o el tutor digan otra cosa.
   quedó en 14 de 35 unidades y sin resultados interpretables; la función fuerza la mitad de los
   *beats* (3 de 6 en 7.22). Las lecturas de P02.1 y P02.2 son de un solo lector, el autor.
 - **Nota de R07:** el quinto objetivo se apoya en `sec:respuesta-hipotesis`: H1, H2 y H3 «sin datos
-  suficientes» (H3 con indicios a favor). Limitaciones ya escritas: estudio humano reducido a un
+  suficientes» (en H3, lo observado es «coherente con lo que anticipa», sin confirmarla). Limitaciones ya escritas: estudio humano reducido a un
   piloto de 5 lectores con hoja de orden fijo (acuerdo cercano al azar, grafo partido); juez que no
   generaliza (por debajo de la longitud sola); ranking de 9 de 130 elegibles, las diez son 3 y sin
   lectura cualitativa (P08 cerrada sin P08.6); extracción cara e inestable (653 llamadas para 18

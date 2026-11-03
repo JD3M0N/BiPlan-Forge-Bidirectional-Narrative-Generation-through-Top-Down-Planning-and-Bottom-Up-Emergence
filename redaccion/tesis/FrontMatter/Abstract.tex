@@ -10,8 +10,8 @@ una metodología para evaluarlo sin pedir a un modelo que juzgue la calidad.
 En el generador, un plan validado por código como grafo acíclico, con un contrato de promesas,
 decide qué pasa; actores que no ven el plan y recuerdan solo lo que presenciaron representan cada
 escena y deciden cómo pasa, y un narrador convierte ese registro en prosa sin inventar. En la
-evaluación, un modelo cuenta 24 rasgos de cada historia y cita el pasaje de cada recuento, que el
-código verifica; lectores comparan pares de historias a ciegas con tres preguntas, frente a una línea
+evaluación se miden 24 rasgos de cada historia: 18 los cuenta un modelo citando el pasaje, que el
+código verifica, y 6 los calcula el código; lectores comparan pares a ciegas con tres preguntas, frente a una línea
 base de un solo \textit{prompt}, y un juez aprendido de esas comparaciones se valida fuera de muestra
 frente a la longitud sola.
 
@@ -35,8 +35,8 @@ to evaluate it without asking a model to judge quality.
 In the generator, a plan validated by code as an acyclic graph, with a ledger of promises, decides
 what happens; actors that do not see the plan and remember only what they witnessed perform each scene
 and decide how it happens; and a narrator turns that log into prose without inventing. In the
-evaluation, a model counts 24 features of each story and quotes the passage behind every count, which
-the code verifies; readers compare pairs of stories blindly with three questions, against a
+evaluation, 24 features of each story are measured: a model counts 18 of them, quoting the passage
+behind every count, which the code verifies, and the code computes the other 6; readers compare pairs of stories blindly with three questions, against a
 single-prompt baseline; and a judge learned from those comparisons is validated out of sample against
 length alone.
 
