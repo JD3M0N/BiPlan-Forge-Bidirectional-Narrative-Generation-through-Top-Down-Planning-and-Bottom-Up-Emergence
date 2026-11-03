@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P07.5 · votos del piloto en la base, cerrada y exportada (modo `S`): los 69 votos están en `Evaluations/estudio-piloto-722/votos-transcritos.csv`, el protocolo con la tabla H1–H6 en `protocolo.json` de esa carpeta y la base del piloto tiene 0 votos. **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** no se alcanzó (P07.5 daría un H3 reducido, si Josue lo acepta).
+- **Siguiente:** P07.6 · rasgos del piloto y de sus perturbaciones (modo `S`, gasta cuota: `--dry-run` y coste antes de extraer). **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** reducido (piloto cerrado y exportado, P07.5) pendiente de que Josue lo acepte.
 - **Versiones** (2026-11-02): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.2, evaluación 2.1.9,
   Telegram 6.0.3, Studio 0.3.0.
 - **Hechas:**
@@ -49,6 +49,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P07.2 · `asg-study import-votes CSV --protocolo JSON` (`StudyRepository.import_votes`): importa votos transcritos todo o nada, con el orden A/B de la hoja, `seconds` nulo y `votos-importados.json` (protocolo, SHA-256) junto a la base; sin ejecutar sobre la base real (P07.5); evaluación 2.1.7.
   - P07.3 · El informe del juez (`MODEL_VERSION` 3) da la longitud sola también por familias (`length_baseline.by_story/by_family`), la cobertura (votos probados / votos) en cada validación y la colinealidad por criterio (pares |r| ≥ 0,8, número de condición, constantes); evaluación 2.1.8.
   - P07.4 · `asg-perturb DB --out DIR [--seed N]` escribe por historia congelada `<id>-shuffled` (capítulos barajados, tercios de párrafos en las líneas base, nunca el orden original) y `<id>-no-ending` (prefijo sin el último quinto de los párrafos), con `perturbation.json`; `--casos` arma el JSON de `asg-judge --perturbations` solo con extracciones compatibles (`build_cases`); sin cambio de visión; evaluación 2.1.9, core 0.8.2.
+  - P07.5 · Los 69 votos transcritos (cotejados por Josue) importados en `Evaluations/estudio-piloto-722/study.sqlite3` (copia previa `study.antes-votos.sqlite3`, CSV `af101770…`); base `closed`, `export-piloto-2026-11-02.json` coincide fila a fila con el CSV, todos con `seconds` nulo; `preferencias.json` da `insufficient` en los tres criterios (grafo en dos componentes) y acuerdo cercano al azar (α −0,14 a 0,05); subsección «Piloto 7.22 (votos transcritos)» en METODOLOGIA.md §5.
 
 
 ## Cómo leer una tarjeta
@@ -284,23 +285,6 @@ criterios, ni uno más. T8: 24 rasgos, regresión L2 de scikit-learn, validació
 por historia y por familia, frente al azar y a la longitud sola. T10: nada toca el generador. T11:
 el juez no elige qué generar. P07.1 cambió, con el «ok» de Josue, la decisión de P06.1 de dejar
 el piloto fuera.
-
-#### P07.5 · Votos del piloto en la base, cerrada y exportada
-- **Modo:** S · **Cuota:** sin cuota · **Paquete:** — (datos)
-- **Lee:** la decisión de P07.1; README de evaluación §2 y §4; el archivo de votos de Josue.
-- **Haz:**
-  - Pasar el archivo a `Evaluations/estudio-piloto-722/votos-transcritos.csv`; **Josue lo coteja
-    fila a fila** antes de importar.
-  - Copia `study.antes-votos.sqlite3`; `asg-study import-votes`; `status`; `close`; `export`;
-    `asg-preferences --bootstrap 1000`.
-  - Subsección «Piloto 7.22 (votos transcritos)» en METODOLOGIA.md §5: votos efectivos y
-    abstenciones por criterio, cobertura, grafo, acuerdo. Amenazas: transcripción a mano, fallos
-    del piloto (tabla del bloque P06), sospecha de L4 por el diálogo, creatividad ambigua.
-- **No hagas:** reconstruir votos; editar la base a mano; borrar nada.
-- **Prueba:** los votos de `export` coinciden con las filas del CSV, todos con `seconds` nulo;
-  base `closed`.
-- **Hecho cuando:** base cerrada, exportación, preferencias y subsección escritas. Es un **H3**
-  reducido si Josue lo acepta.
 
 #### P07.6 · Rasgos del piloto y de sus perturbaciones
 - **Modo:** S · **Cuota:** ~36–54 llamadas (6 originales y 12 perturbadas, 2–3 por texto) más

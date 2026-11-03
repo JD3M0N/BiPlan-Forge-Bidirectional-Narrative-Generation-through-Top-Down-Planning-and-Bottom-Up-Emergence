@@ -313,6 +313,72 @@ para diferencias pequeñas.
 
 El registro persistente usa SQLite fuera de los runs, con seudónimos en las exportaciones.
 
+### Piloto 7.22 (votos transcritos)
+
+Medido el 2026-11-02 sobre `Evaluations/estudio-piloto-722/` (P07.5). Son los únicos votos humanos
+de la tesis y no siguen el protocolo de arriba: los 5 lectores (30–31 de octubre; el autor no votó)
+respondieron con una **hoja de orden fijo** (`decisions.md` §2, P07.1), y Josue transcribió a mano
+y cotejó fila a fila sus respuestas en `votos-transcritos.csv`. `asg-study import-votes` las cargó
+todas o ninguna (`votos-importados.json`: SHA-256 `af101770…9ecc2`, 69 votos, 5 lectores), con el
+orden A/B de la hoja y `seconds` nulo. La base está `closed`; la exportación es
+`export-piloto-2026-11-02.json` y sus 69 votos coinciden uno a uno con las filas del CSV
+(lector, posición, criterio, historias A y B, elección). La copia previa es
+`study.antes-votos.sqlite3`.
+
+Historias (6, todas 7.22): obra 01, H1 y H2 simuladas y H3 línea base; obra 03, H4 simulada, H5
+narrativa y H6 línea base. Cada lector vio los pares H1–H3, H2–H3, H4–H5, H4–H6 y H5–H6, en ese
+orden y con la misma historia como A, cada uno con los tres criterios en ciclo; L2 paró en la
+pregunta 9 (29 lecturas en total).
+
+| Criterio | Preguntas | Votos efectivos | Abstenciones | Acuerdo | α nominal | Pares de lectores |
+|---|---|---|---|---|---|---|
+| Creatividad | 23 | 20 | 3 | 0,40 | −0,14 | 30 |
+| Personajes | 23 | 20 | 3 | 0,52 | 0,05 | 31 |
+| Trama | 23 | 21 | 2 | 0,44 | −0,09 | 36 |
+
+Votos por par (A–B–abstenciones; A es la primera historia del par):
+
+| Par | Creatividad | Personajes | Trama |
+|---|---|---|---|
+| H1–H3 | 2–2–1 | 1–4–0 | 4–1–0 |
+| H2–H3 | 1–3–1 | 3–1–1 | 2–3–0 |
+| H4–H5 | 2–2–1 | 1–3–1 | 3–2–0 |
+| H4–H6 | 3–1–0 | 1–3–0 | 2–1–1 |
+| H5–H6 | 2–2–0 | 2–1–1 | 1–2–1 |
+
+- **Cobertura.** Por criterio, H1 y H2 entran en 4 comparaciones cada una y las otras cuatro en 8.
+  H1–H2 nunca se comparan directamente.
+- **Grafo.** En los tres criterios tiene dos componentes, una por obra, porque no hay pares entre
+  obras. `asg-preferences --bootstrap 1000` (`preferencias.json`) da `insufficient` en los tres,
+  sin puntuaciones ni intervalos (0 réplicas válidas): no hay ranking humano global ni τ de
+  Kendall. Con y sin el autor sale lo mismo, porque el autor no votó.
+- **Acuerdo.** Cercano al azar en los tres criterios (α entre −0,14 y 0,05) con 5 pares repetidos
+  por criterio. Con estos datos no se puede afirmar que los lectores coincidan en qué historia es
+  mejor en ningún criterio.
+
+Amenazas, además de las generales del estudio:
+
+- **Transcripción a mano.** El CSV es una copia hecha por Josue y cotejada por él mismo; no hay
+  un segundo transcriptor. La huella fija el archivo importado, no su fidelidad a las hojas.
+- **Orden fijo.** El sesgo de posición no se separa de la historia (en total, 30 A y 31 B), el
+  cansancio cae siempre sobre los mismos pares (H5–H6 al final) y los pares no salen de la
+  asignación del bot, que compensa A/B y empareja obras distintas.
+- **Presentación (T5).** Las notas describen la lectura en Telegram (escritorio, Telegram Web,
+  Android e iPhone) y el CSV marca todas las respuestas con fuente `papel`; no consta con qué
+  presentación exacta se enviaron las historias, así que no se puede asegurar que no tuvieran las
+  fugas de encabezado de antes de P06.2.
+- **Fallos del piloto.** Los de la tabla del bloque P06 del roadmap, sin arreglar: duración y
+  abandono sin avisar (L2 paró en la 9 por tiempo), abstención mal entendida (L1, L3, L5; L5
+  necesitó que se la explicaran), confirmación del voto poco visible (L2, L4), historias que
+  reaparecen sin explicación (L5) y navegación difícil entre historias largas.
+- **Sospecha de L4.** Conjeturó que alguna historia venía de una simulación por los turnos de
+  diálogo y acciones repetidas; no consta si acertó ni en qué votos influyó.
+- **Creatividad ambigua.** L1 dudó entre una idea poco habitual y una forma original de contarla;
+  L3 dudó entre personajes desarrollados y personajes que le caían bien, y entre trama y emoción
+  del final. Las preguntas no se cambian (T7).
+- **Tamaño.** 5 lectores, 6 historias y 2 familias: sirve para entrenar el juez exploratorio de
+  P07 (`decisions.md` §2, P07.1 a), no para concluir qué enfoque prefieren los lectores.
+
 ## 6. El juez aprendido
 
 Por cada criterio se ajusta una regresión logística por pares (ficha EXP-7):
