@@ -6,7 +6,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P07.7 · entrenar, validar y publicar el juez (modo `S`, sin cuota). **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** reducido (piloto cerrado y exportado, P07.5) pendiente de que Josue lo acepte.
+- **Siguiente:** P07.7 · entrenar, validar y publicar el juez (modo `S`, sin cuota); después P08.1 (modo `O`, tarjetas de P08 escritas). **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** reducido (piloto cerrado y exportado, P07.5) pendiente de que Josue lo acepte.
 - **Versiones** (2026-11-02): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.2, evaluación 2.1.9,
   Telegram 6.0.3, Studio 0.3.0.
 - **Hechas:**
@@ -309,10 +309,175 @@ el piloto fuera.
 
 ### P08 · Ranking y diez mejores
 
-El juez ordena el corpus elegible y se leen las diez mejores (T9). Origen: EXP-8.
+El juez congelado de P07 ordena el corpus elegible y se leen las diez primeras (T9). Origen:
+EXP-8 (absorbida en P08.3–P08.6). Contrato: METODOLOGIA.md §7 y
+[evaluation.md](../docs/architecture/evaluation.md). **Las tarjetas se escribieron antes de P07.7:**
+P08.1 las coteja con `juez.json` y, si hace falta, propone corregirlas.
 
-- Extraer rasgos del corpus elegible (cuota), `asg-rank`, fichas cualitativas de las diez.
-- **H4:** enseñar al tutor juez, ranking y análisis.
+Lo que hay (2026-11-03, `asg-corpus Stories` sin cuota): 346 runs, **130 elegibles** (70
+simulados, 48 narrativos y 12 líneas base, del 7.0 al 7.22; ~235.000 palabras, mediana 1.679).
+Solo 2 tienen extracción núcleo compatible y completa, 3 compatible pero incompleta, 12 la tienen
+con un catálogo anterior y 113 no tienen ninguna. Las 6 del piloto coinciden byte a byte con su
+`story.md`, así que `asg-rank --study` reutiliza sus extracciones; el modelo configurado es
+`gemini-3.5-flash-lite`, el del protocolo del juez. Quedan ~122 textos por extraer.
+
+- `asg-features --root Stories` recorre todo `story.md` con `rglob`: también los 216 no elegibles
+  (anteriores a 7, guiones, fallidos). Gastaría cuota en textos que `asg-rank` excluye después.
+- `rank_features` saca las diez de `combined[:10]`, que solo existe si los tres criterios son
+  `fitted`. Con un criterio `insufficient`, las diez salen vacías. La hoja `.md` pide
+  «Fortalezas» y «Debilidades» sin decir quién las escribe, y no marca las 6 historias de
+  entrenamiento, que puntúan dentro de muestra.
+- **Coste de extraer.** El `--dry-run` dice «~3 llamadas por texto», pero no es lo medido. P05.4
+  gastó ~4 por texto en la primera pasada y dejó 3 de 5 incompletas. P07.6 gastó ~36 por texto
+  (653 en 18) hasta completarlas todas. Para ~122 textos, eso va de **~500 a ~4.400 llamadas
+  principales**, de 1 a 9 días de cuota. El ledger de `asg-budget` solo guarda totales por día y
+  modelo: el coste de un lote se mide con `asg-budget` antes y después.
+
+**Reglas del tutor.** T9: el juez ordena todo el corpus elegible y se analizan las diez primeras.
+Las exclusiones se dicen con su razón. T8: el juez queda congelado (no se reajusta, no se quitan
+rasgos, la normalización es la del entrenamiento) y el ranking no es otra validación. T7: tres
+rankings principales y el combinado auxiliar. T6: las líneas base se ordenan con las demás. T2 y
+`decisions.md` §4: el extractor solo cuenta. Los campos de juicio de las diez (fortalezas,
+debilidades) los escribe Josue, nunca Claude. T11: el ranking es posterior y no elige qué
+generar. T10: nada aquí toca el generador ni `PIPELINE_VERSION`; `asg-features` es una
+herramienta, no el generador. Lo del X15 de H3 (P07.6) no se extiende a P08.
+
+**H4:** enseñar al tutor el juez, el ranking y las diez (`planning/h4.md`, P08.6).
+
+#### P08.1 · Decidir el alcance, la extracción y las diez
+- **Modo:** O · **Cuota:** sin cuota · **Paquete:** —
+- **Antes:** P07.7 cerrada. Sin `juez.json`, para.
+- **Lee:** el bloque de P08 de arriba; `decisions.md` §2 («Corpus elegible», P07.1 c, P07.6 y
+  «Juez para P08»); el `juez.json` de P07.7 (estado de cada criterio); METODOLOGIA.md §7;
+  `rank_features` y `_ineligible` en `judge.py`.
+- **Haz:** opciones con pros, contras y recomendación para cada punto, y espera:
+  - **Criterios `insufficient`.** Con uno o dos, qué ranking se publica y de dónde salen las diez.
+    Con los tres, P08 se cierra sin ranking y T9 se declara no alcanzada.
+  - **Qué elige las diez:** el combinado auxiliar (lo que hace hoy el código), o las diez de
+    cada criterio (hasta 30 lecturas), u otra regla. Empates y marcas.
+  - **Alcance:** los 130 elegibles, o primero 7.20–7.22 y las líneas base, y el resto si queda
+    cuota. Reducirlo cambia la decisión «Corpus elegible» de §2 y necesita el «ok» de Josue.
+  - **Reintentos:** cuántas reanudaciones por texto como máximo, si se permite `--force` desde
+    cero, el tope diario de llamadas y la regla de parada. Una extracción incompleta tras los
+    reintentos sale del ranking como «Extracción incompleta», y eso es un sesgo que se declara:
+    quedan las que se extraen bien.
+  - **Marcas:** las 6 de entrenamiento (puntuación dentro de muestra), los 7.0–7.1 (no
+    comparables con 7.2+, `evaluation.md`) y las premisas que el juez no vio.
+  - **Fichas de las diez:** qué rellena el código (rasgos frente a la mediana del corpus,
+    configuración C, proceso P, coste K, puestos) y qué escribe Josue (fortalezas, debilidades).
+- **No hagas:** extraer ni probar con llamadas; cambiar el juez; añadir criterios; combinar
+  intentos de extracción como en P07.6.
+- **Hecho cuando:** «Ranking del corpus (P08.1)» en `decisions.md` §2, aprobado por Josue, y
+  las tarjetas P08.2–P08.6 corregidas si la decisión las cambia.
+
+#### P08.2 · `asg-features` solo para el corpus elegible
+- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-stagecraft
+- **Lee:** `tools/extract_features.py` de Stagecraft; `scan` y `exclusion_reason` en
+  `corpus.py`; `study_extractions` y `_compatible` en `feature_report.py`; la identidad de
+  `_extract` en `features.py`; `packages/stagecraft/tests/test_extract_features_cli.py`.
+- **Haz:**
+  - `--elegibles` (solo con `--root`): filtra con `corpus.scan`, la misma regla que `asg-rank`.
+  - `--reusar DB`: omite los textos que ya tienen extracción completa y compatible en ese
+    estudio congelado, por `text_hash`, como `asg-rank --study`. Son las 6 del piloto.
+  - `--limite N`: como mucho N textos que necesiten llamadas por invocación. Los ya completos
+    no cuentan.
+  - `--dry-run`, sin proveedor: totales, ya completos (0 llamadas), incompletos que se reanudan,
+    sin extraer o con otra huella, y el coste con la cifra medida (de ~4 por texto en la primera
+    pasada a ~36 hasta completar), no «~3». También el modelo que se usaría.
+  - Política de reintentos de P08.1, si pide código.
+- **No hagas:** cambiar prompts, esquemas ni la identidad de la extracción (`EXTRACTION_VERSION`,
+  `PROMPT_VERSION`); cambiar la conducta sin opciones; hacer llamadas reales; tocar
+  `PIPELINE_VERSION`.
+- **Prueba:** tests en `test_extract_features_cli.py` (con `FakeProvider` o sin proveedor):
+  `--elegibles` salta un guion, un run fallido y uno anterior a 7; `--reusar` salta un texto con
+  extracción del estudio; `--limite` corta; `--dry-run` no crea proveedor. Suite y
+  `quality.ps1`.
+- **Hecho cuando:** `asg-features --root Stories --elegibles --reusar
+  Evaluations/estudio-piloto-722/study.sqlite3 --dry-run` da ~122 pendientes y el modelo;
+  Stagecraft 7.22.2 con su CHANGELOG.
+
+#### P08.3 · `asg-rank` para la tesis: las diez, las marcas y las fichas
+- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation
+- **Lee:** «Ranking del corpus (P08.1)» en `decisions.md` §2; `rank_features` y `_ineligible`
+  en `judge.py`; `rank_main` en `learning_cli.py`; `read_features` y `process_features` en
+  `feature_report.py`; las pruebas de ranking de `packages/evaluation/tests/test_preference_learning.py`.
+- **Haz**, según P08.1:
+  - Elegir las diez con la regla decidida, también cuando haya criterios `insufficient`.
+  - Marcar cada historia ordenada: `training` (su `text_hash` está en `--study`), versiones no
+    comparables y lo que decida P08.1.
+  - «Qué tienen y qué no»: para cada rasgo núcleo, la mediana de las diez frente a la del resto
+    de ordenadas, y el valor de cada una frente a la mediana del corpus. Es descriptivo y no
+    pondera nada.
+  - Hoja `.md` de las diez rellenada por código: run y ruta, formato y versión, puestos en los
+    tres rankings y el combinado, rasgos con su mediana, configuración (C), proceso (P) y coste
+    (K) cuando existan, y enlace al análisis horizontal solo si el run está en
+    `Evaluations/horizontal/`. «Fortalezas» y «Debilidades» quedan vacías, marcadas «(Josue)».
+  - Conservar las claves actuales del JSON (`rankings`, `combined_auxiliary`, `stories`,
+    `excluded`, `top_ten`) y añadir las nuevas.
+- **No hagas:** cambiar pesos, normalización, `MODEL_VERSION` ni `train_judge`; leer las
+  historias con un LLM; escribir juicios en la hoja.
+- **Prueba:** ampliar las pruebas de ranking de `test_preference_learning.py`: las diez con un
+  criterio `insufficient`, la marca `training` con `--study`, la tabla de medianas y la hoja sin
+  campos de juicio rellenados. Suite y `quality.ps1`.
+- **Hecho cuando:** `asg-rank` sobre los datos de prueba da las diez según P08.1, con marcas y
+  hoja; evaluación 2.1.10 con su CHANGELOG.
+
+#### P08.4 · Extraer el corpus elegible, un lote por día
+- **Modo:** S · **Cuota:** un lote por día, con el tope de P08.1 · **Paquete:** —
+- **Tarjeta repetible:** se queda en el roadmap y cada sesión anota su lote en «Hechas» como
+  `P08.4 (lote k, fecha) · …`, hasta cubrir el alcance de P08.1 o hasta que Josue pare.
+- **Lee:** «Ranking del corpus (P08.1)» en `decisions.md` §2; el README de evaluación
+  (`asg-features`); el último lote anotado en «Hechas».
+- **Haz:**
+  - Enseña `asg-budget` y `asg-features --root Stories --elegibles --reusar
+    Evaluations/estudio-piloto-722/study.sqlite3 --dry-run` (pendientes, modelo y coste). El
+    modelo tiene que ser `gemini-3.5-flash-lite`. Espera el «ok».
+  - Lanza el lote con `--limite N` dentro del tope y aplica los reintentos de P08.1.
+  - Después, `asg-budget` otra vez. Anota textos lanzados, completos, incompletos, los rasgos que
+    fallan y las llamadas medidas.
+- **No hagas:** `--force` sobre extracciones completas; `--selection all`; extraer textos no
+  elegibles; editar a mano un `features.json`; combinar intentos (lo de P07.6 no vale aquí);
+  pasar del tope; cambiar de modelo.
+- **Hecho cuando:** cada texto del alcance está completo o agotó sus reintentos, según el
+  `--dry-run`. Entonces se borra la tarjeta y se deja una línea final con los totales.
+
+#### P08.5 · Ordenar el corpus y publicar el ranking
+- **Modo:** S · **Cuota:** sin cuota · **Paquete:** —
+- **Lee:** METODOLOGIA.md §7; «Juez para P08» y «Ranking del corpus (P08.1)» en `decisions.md`
+  §2; la última línea de P08.4 en «Hechas».
+- **Haz:**
+  - Comprueba que el `data_hash` del juez es el de «Juez para P08».
+  - `asg-rank <juez.json> Stories --study Evaluations/estudio-piloto-722/study.sqlite3
+    --output Evaluations/ranking/ranking-<fecha>.json`, que escribe también la hoja `.md`.
+  - «Ranking del corpus (P08, fecha)» en METODOLOGIA.md §7:
+    - cobertura: elegibles, ordenadas y excluidas por razón;
+    - versiones y marcas;
+    - las primeras de cada ranking y del combinado;
+    - dónde caen las líneas base y las 6 de entrenamiento;
+    - la tabla «qué tienen y qué no»;
+    - limitaciones: juez exploratorio de 2 familias y 5 lectores, premisas no vistas, sesgo
+      por extracciones incompletas, longitud y versiones mezcladas.
+  - Avisa a Josue de que toca leer las diez y escribir sus fortalezas y debilidades en la hoja.
+- **No hagas:** reajustar o reentrenar el juez; cambiar la regla de las diez tras ver el
+  ranking; llamar «calidad» al número; rellenar juicios.
+- **Hecho cuando:** `ranking-<fecha>.json` y `.md` escritos y sección publicada con sus cifras.
+
+#### P08.6 · Las diez primeras y H4
+- **Modo:** S · **Cuota:** sin cuota · **Paquete:** —
+- **Antes:** Josue ha escrito sus fortalezas y debilidades en la hoja de P08.5. Si no, para.
+- **Lee:** la hoja `ranking-<fecha>.md`; METODOLOGIA.md §6 y §7; `planning/h2.md` (formato y
+  preguntas pendientes); «Juez para P08» en `decisions.md` §2.
+- **Haz:**
+  - «Las diez primeras» en METODOLOGIA.md §7: qué tienen y qué no (la tabla de código), su
+    configuración y su proceso, y las notas de Josue atribuidas a él. Enlaza el análisis
+    horizontal, que solo existe para `piloto-03`, porque P05 se cerró sin terminar.
+  - `planning/h4.md` para el tutor:
+    - el juez: acierto fuera de muestra frente a 0,5 y a la longitud, y los pesos;
+    - el ranking y las diez;
+    - preguntas abiertas: «todas las cosas activadas» (la pregunta 5 de H2, que §2 deja para
+      H4), si un juez exploratorio de 2 familias basta para la tesis, y si se retoman P05 y P06.
+- **No hagas:** añadir juicios propios a los de Josue; reescribir sus notas; cambiar el ranking.
+- **Hecho cuando:** sección y `planning/h4.md` publicados. Cierra P08 y **H4**.
 
 ### P09 · Resultados reproducibles
 

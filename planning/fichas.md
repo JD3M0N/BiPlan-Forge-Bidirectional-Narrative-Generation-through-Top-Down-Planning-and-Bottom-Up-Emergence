@@ -65,25 +65,6 @@ MED-8 y la revisión de MED-9
   Las bases de los estudios anteriores (`Evaluations/pack-prueba`, `Evaluations/telegram-rolling`)
   quedan como datos y el estudio nuevo no las abre.
 
-## P08 · Ranking y diez mejores
-
-### EXP-8 · Ranking del corpus y análisis de las diez mejores
-
-*Área:* experimento · *Cuota:* ranking sin cuota con extracciones compatibles · *Depende de:*
-EXP-7
-
-- **Síntoma.** `asg-rank --study` ya ordena por los comandos públicos las once historias de
-  la demo, pero las fichas de las diez mejores salen vacías y no hay corpus real extraído.
-- **Qué hacer.**
-  - Aplicar el juez al corpus real elegible y publicar tres rankings principales y el combinado
-    auxiliar con normalización fijada al entrenar; detallar versiones, formatos y exclusiones.
-  - Leer diez historias seleccionadas por el ranking y completar sus fortalezas, debilidades,
-    evidencias, configuración y proceso; enlazar el análisis horizontal.
-- **Hecho cuando.** Corpus real ordenado y diez análisis cualitativos cumplimentados, con
-  limitaciones y exclusiones explícitas.
-- **Ojo.** No usar el juez para seleccionar automáticamente qué generar: el tutor lo deja
-  fuera de esta tesis [06:21–07:43].
-
 ## P09 · Resultados reproducibles
 
 ### ING-8 · Documentar los contratos públicos y rellenar el README
