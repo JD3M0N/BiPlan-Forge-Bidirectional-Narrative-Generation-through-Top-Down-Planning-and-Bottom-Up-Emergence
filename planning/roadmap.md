@@ -6,8 +6,8 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P07.4 · perturbaciones por código (modo `S+P`). Para P07.5: los 69 votos están en `Evaluations/estudio-piloto-722/votos-transcritos.csv`, el protocolo con la tabla H1–H6 en `protocolo.json` de esa carpeta y la base del piloto tiene 0 votos. **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** no se alcanzó (P07.5 daría un H3 reducido, si Josue lo acepta).
-- **Versiones** (2026-11-02): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.1, evaluación 2.1.8,
+- **Siguiente:** P07.5 · votos del piloto en la base, cerrada y exportada (modo `S`): los 69 votos están en `Evaluations/estudio-piloto-722/votos-transcritos.csv`, el protocolo con la tabla H1–H6 en `protocolo.json` de esa carpeta y la base del piloto tiene 0 votos. **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** no se alcanzó (P07.5 daría un H3 reducido, si Josue lo acepta).
+- **Versiones** (2026-11-02): Stagecraft 7.22.1 (pipeline 7.22), core 0.8.2, evaluación 2.1.9,
   Telegram 6.0.3, Studio 0.3.0.
 - **Hechas:**
   - P00 · Arranque: `planning/`, skill `phase`, migración de `TODO.md` y graphify.
@@ -48,6 +48,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P07.1 · «Datos del juez (P07.1)» en `decisions.md` §2: el piloto se votó con hoja de orden fijo (mismos 5 pares, orden y A/B para los 5 lectores; el bot no da esa secuencia) y sus 69 votos entrenan un juez exploratorio; entran con `import-votes` en esquema 10 y `seconds` nulo; extracciones repetidas hasta completar; validación por familias en una cifra de 2 pliegues; grafo partido, sin τ.
   - P07.2 · `asg-study import-votes CSV --protocolo JSON` (`StudyRepository.import_votes`): importa votos transcritos todo o nada, con el orden A/B de la hoja, `seconds` nulo y `votos-importados.json` (protocolo, SHA-256) junto a la base; sin ejecutar sobre la base real (P07.5); evaluación 2.1.7.
   - P07.3 · El informe del juez (`MODEL_VERSION` 3) da la longitud sola también por familias (`length_baseline.by_story/by_family`), la cobertura (votos probados / votos) en cada validación y la colinealidad por criterio (pares |r| ≥ 0,8, número de condición, constantes); evaluación 2.1.8.
+  - P07.4 · `asg-perturb DB --out DIR [--seed N]` escribe por historia congelada `<id>-shuffled` (capítulos barajados, tercios de párrafos en las líneas base, nunca el orden original) y `<id>-no-ending` (prefijo sin el último quinto de los párrafos), con `perturbation.json`; `--casos` arma el JSON de `asg-judge --perturbations` solo con extracciones compatibles (`build_cases`); sin cambio de visión; evaluación 2.1.9, core 0.8.2.
 
 
 ## Cómo leer una tarjeta
@@ -283,23 +284,6 @@ criterios, ni uno más. T8: 24 rasgos, regresión L2 de scikit-learn, validació
 por historia y por familia, frente al azar y a la longitud sola. T10: nada toca el generador. T11:
 el juez no elige qué generar. P07.1 cambió, con el «ok» de Josue, la decisión de P06.1 de dejar
 el piloto fuera.
-
-#### P07.4 · Perturbaciones por código
-- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation
-- **Lee:** `judge.py` (`perturbation_report`); `learning_cli.py` (`train_main`,
-  `--perturbations`); README de evaluación §3 (`asg-features --root`); METODOLOGIA.md §6.
-- **Haz:**
-  - `asg-perturb DB --out DIR` (en `asg_core/help.py` y `pyproject.toml`): sobre el texto
-    congelado de cada historia del estudio escribe `DIR/<id>-<tipo>/story.md` y
-    `perturbation.json` (origen, tipo, semilla y huellas).
-  - Dos tipos deterministas: **escenas barajadas** (por capítulos; en las líneas base, por tercios
-    de párrafos) y **sin desenlace**.
-  - Una función que arme el JSON de casos de `--perturbations` desde las extracciones.
-- **No hagas:** el cambio de visión (necesitaría que un LLM reescriba); exigir que las
-  perturbaciones empeoren los criterios.
-- **Prueba:** suite y calidad. Tests: misma semilla, mismo texto; «sin desenlace» es un prefijo
-  más corto; «barajado» conserva los párrafos.
-- **Hecho cuando:** suite verde, el comando sale en `asg help` y sube el parche.
 
 #### P07.5 · Votos del piloto en la base, cerrada y exportada
 - **Modo:** S · **Cuota:** sin cuota · **Paquete:** — (datos)

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.8.2] - 2026-11-02
+
+- P07.4: `asg help` lists `asg-perturb`.
+
 ## [0.8.1] - 2026-10-28
 
 - `asg help` lists `asg-corpus`.

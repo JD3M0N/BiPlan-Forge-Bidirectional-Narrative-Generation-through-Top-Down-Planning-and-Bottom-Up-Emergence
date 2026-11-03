@@ -102,6 +102,10 @@ asg-corpus Stories --json inventario.json --csv inventario.csv   # qué runs ent
 asg-preferences $db --output preferencias.json --bootstrap 1000
 asg-judge $db --output juez.json
 asg-rank juez.json Stories --study $db --output ranking.json
+asg-perturb $db --out perturbaciones            # textos rotos por código, sin cuota
+asg-features --root perturbaciones              # consume cuota
+asg-perturb $db --out perturbaciones --casos casos.json
+asg-judge $db --output juez.json --perturbations casos.json
 ```
 
 - Bradley–Terry regularizado por criterio, con intervalos remuestreando lectores, y el acuerdo
@@ -111,6 +115,10 @@ asg-rank juez.json Stories --study $db --output ranking.json
   validación da su cobertura (votos probados / votos) y cada criterio su colinealidad (pares con
   |r| ≥ 0,8, número de condición y rasgos constantes).
 - `asg-rank` ordena el corpus y prepara las fichas de las diez primeras (un `.md` junto al `--output`).
+- `asg-perturb` escribe, por historia congelada, `<id>-shuffled` (capítulos barajados, o tercios de
+  párrafos en las líneas base) y `<id>-no-ending` (prefijo sin el último quinto de los párrafos),
+  con `perturbation.json`; `--casos` arma los pares original/perturbado con extracciones
+  compatibles y nombra las que faltan.
 - Un juez que no generaliza es un resultado válido: se marca exploratorio.
 
 ## Módulos

@@ -12,11 +12,14 @@ from asg_evaluation.judge import (
     _validate,
     collinearity,
     fit_linear,
+    perturbation_report,
     predict,
     rank_features,
     train_judge,
 )
 from asg_evaluation.learning_cli import load_study_features
+from asg_evaluation.perturbation import blocks, no_ending, shuffled
+from asg_evaluation.perturbation import main as perturb_main
 from asg_evaluation.preferences import agreement, bradley_terry, decided_votes
 from evaluation_fakes import SyntheticProvider, voted_study
 
@@ -144,3 +147,48 @@ def test_public_commands_reuse_study_extractions_and_reject_mixed_protocols(tmp_
     assert "coverage" in fitted["family_validation"] and "pairs" in fitted["collinearity"]
     excluded = rank_features(judge, rows)["excluded"]
     assert [e["reason"] for e in excluded] == ["Protocolo de extracción distinto"]
+
+
+CHAPTERS = "# Título\n\nAntes.\n\n## Uno\n\nA1.\n\nA2.\n\n## Dos\n\nB1.\n"
+THIRDS = "# Base\n\n" + "\n\n".join(f"P{i}." for i in range(7)) + "\n"
+
+
+@pytest.mark.parametrize("text", [CHAPTERS, THIRDS])
+def test_perturbations_are_deterministic_shuffles_and_strict_prefixes(text):
+    first, order = shuffled(text, seed=3, story="s1")
+    assert (first, order) == shuffled(text, seed=3, story="s1")
+    assert order != sorted(order) and first.splitlines()[0] == text.splitlines()[0]
+    assert sorted(b for _, b in blocks(first)) == sorted(b for _, b in blocks(text))
+    cut, removed = no_ending(text)
+    assert removed >= 1 and len(cut) < len(text) and text.startswith(cut.rstrip())
+    assert not blocks(cut)[-1][1].startswith("#")
+
+
+def test_perturb_command_builds_cases_only_from_matching_extractions(tmp_path):
+    study = voted_study(tmp_path)
+    provider = SyntheticProvider()
+    for story in study.export()["stories"]:
+        extract_features(
+            story["text"],
+            provider,
+            model="fake",
+            output=tmp_path / "features" / f"{story['id']}.json",
+        )
+    db, out, cases = tmp_path / "study.sqlite3", tmp_path / "perturbed", tmp_path / "casos.json"
+    assert perturb_main([str(db), "--out", str(out)]) == 0
+    first = sorted(p.read_bytes() for p in out.rglob("story.md"))
+    assert perturb_main([str(db), "--out", str(out)]) == 0
+    assert sorted(p.read_bytes() for p in out.rglob("story.md")) == first and len(first) == 12
+    for path in out.rglob("story.md"):
+        text = path.read_text(encoding="utf-8")
+        extract_features(
+            text, provider, model="fake", output=path.parent / "features" / "features.json"
+        )
+    stale = next(out.glob("*-no-ending"))
+    (stale / "story.md").write_text("Otro texto.", encoding="utf-8")
+    assert perturb_main([str(db), "--out", str(out), "--casos", str(cases)]) == 1
+    built = json.loads(cases.read_text(encoding="utf-8"))
+    assert len(built) == 11 and stale.name not in {c["name"] for c in built}
+    judge = train_judge(study.export(), load_study_features(study))
+    report = perturbation_report(judge, built)
+    assert {r["name"] for r in report} == {c["name"] for c in built}

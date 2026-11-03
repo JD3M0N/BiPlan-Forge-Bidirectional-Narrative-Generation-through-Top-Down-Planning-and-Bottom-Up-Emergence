@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.1.9] - 2026-11-02
+
+- P07.4: `asg-perturb DB --out DIR [--seed N]` writes two deterministic perturbations of each
+  frozen study text, `DIR/<id>-shuffled` (chapters reordered, or paragraph thirds when there are
+  no chapters; never the original order) and `DIR/<id>-no-ending` (strict prefix without the last
+  fifth of body paragraphs), each with `story.md` and `perturbation.json` (origin, type, rule,
+  seed, hashes). `--casos JSON` pairs the study extractions with compatible extractions of the
+  perturbed texts (`build_cases`) for `asg-judge --perturbations`. No change of point of view.
+
 ## [2.1.8] - 2026-11-02
 
 - P07.3: `train_judge` (judge `MODEL_VERSION` 3) publishes `length_baseline` as

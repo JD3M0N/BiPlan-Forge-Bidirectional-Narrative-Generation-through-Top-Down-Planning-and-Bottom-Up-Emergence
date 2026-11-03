@@ -19,6 +19,7 @@ COMMANDS = (
     ("asg-corpus", "inventario del corpus: qué runs entran al ranking y cuáles son anomalías"),
     ("asg-preferences", "preferencias humanas: Bradley-Terry y acuerdo"),
     ("asg-judge", "entrena el juez aprendido con los votos"),
+    ("asg-perturb", "perturba por código los textos del estudio (barajado, sin desenlace)"),
     ("asg-rank", "ordena el corpus con el juez y prepara las diez mejores"),
     ("asg-budget", "cuota gastada y cuántas historias caben hoy"),
     ("asg-matrix", "lanza una matriz de experimentos en serie con cuota y manifiesto"),

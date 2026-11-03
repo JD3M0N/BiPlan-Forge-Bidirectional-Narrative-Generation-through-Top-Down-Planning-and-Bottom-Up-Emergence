@@ -333,7 +333,10 @@ Por cada criterio se ajusta una regresión logística por pares (ficha EXP-7):
   - la τ de Kendall frente al orden Bradley-Terry humano.
 - Hay además un **control con perturbaciones** (OpenMEVA): historias rotas a propósito, con
   escenas barajadas, el pago final borrado o la visión cambiada a mitad. Se publican los cambios;
-  no se exige que toda perturbación empeore todos los criterios.
+  no se exige que toda perturbación empeore todos los criterios. `asg-perturb` hace por código
+  las dos primeras: capítulos barajados (tercios de párrafos en las líneas base, nunca el orden
+  original) y el texto sin el último quinto de sus párrafos. El cambio de visión necesitaría que
+  un LLM reescribiera y no se hace.
 - Cada validación publica su **cobertura** (votos probados / votos): al dejar fuera una historia o
   una familia se descartan todos los votos que la tocan, y una precisión con poca cobertura se lee
   con ese dato al lado.
