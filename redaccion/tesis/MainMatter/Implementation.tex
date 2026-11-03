@@ -9,6 +9,8 @@
 % (las de test_gemini_live.py). La cifra de los 503 es de docs/architecture/runtime.md.
 % Referencias nuevas, verificadas en la web el 2026-11-01: pydantic2026, google2026,
 % virtanen2020, pedregosa2011, ptb2026, fastapi2026. \codigo está definido en Thesis.tex.
+% R07 (2026-11-03): asg-perturb, asg-results (asg_core/help.py) e import-votes de asg-study, que
+% los experimentos del capítulo 5 usan; el resto del capítulo sigue fechado el 2026-11-01.
 
 Este capítulo describe cómo se implementaron el generador del Capítulo~\ref{chapter:generator} y
 las herramientas de evaluación del Capítulo~\ref{chapter:evaluation}. A diferencia de esos
@@ -77,8 +79,10 @@ que decide el código se puede probar sin un modelo. Las opciones de una ejecuci
 solo lugar, \texttt{options.py}, en el que confluyen la línea de comandos, las variables de entorno y
 las dos interfaces.
 
-Todo el sistema se maneja desde la línea de comandos. \texttt{asg help} enumera los dieciséis
-comandos, todos con el prefijo \texttt{asg-}, y la Tabla~\ref{tab:comandos} los agrupa por tarea.
+Todo el sistema se maneja desde la línea de comandos. \texttt{asg help} enumeraba dieciséis
+comandos, todos con el prefijo \texttt{asg-}; el 3 de noviembre de 2026 se añadieron dos para los
+experimentos del Capítulo~\ref{chapter:experiments}, \texttt{asg-perturb} y \texttt{asg-results}. La
+Tabla~\ref{tab:comandos} agrupa los dieciocho por tarea.
 
 \begin{table}[htb]
   \centering
@@ -98,8 +102,10 @@ comandos, todos con el prefijo \texttt{asg-}, y la Tabla~\ref{tab:comandos} los 
       \texttt{asg-corpus} & extracción y auditoría de rasgos, tabla de rasgos y análisis
       horizontal, inventario del corpus elegible \\
     Preferir y juzgar & \texttt{asg-study}, \texttt{asg-preferences}, \texttt{asg-judge},
-      \texttt{asg-rank} & estudio por pares, Bradley-Terry, juez aprendido y ranking con las
-      diez mejores \\
+      \texttt{asg-perturb}, \texttt{asg-rank} & estudio por pares, Bradley-Terry, juez aprendido,
+      historias rotas por código para controlarlo y ranking con las diez mejores \\
+    Publicar & \texttt{asg-results} & tablas y figuras de la tesis regeneradas desde los
+      resultados, con la huella de cada entrada \\
     Interfaces & \texttt{asg-telegram}, \texttt{asg-studio} & el bot y StageCraft \\
     \bottomrule
   \end{tabular}
@@ -195,7 +201,9 @@ ocurrencia, compara dos extracciones del mismo texto y contrasta los recuentos c
 
 El estudio por pares (\texttt{study.py}) vive en una base SQLite. Al abrir la votación, el conjunto de
 historias se congela con una huella SHA-256, y cada pregunta se calcula cuando el lector la pide, con
-las reglas de la Sección~\ref{sec:conjunto}; la exportación es seudónima. Las fuerzas de
+las reglas de la Sección~\ref{sec:conjunto}; la exportación es seudónima. Los votos recogidos fuera
+del bot entran con \texttt{asg-study import-votes}, todos o ninguno, con el orden A/B de la hoja y la
+huella del archivo transcrito. Las fuerzas de
 Bradley-Terry (\texttt{preferences.py}) se obtienen minimizando la verosimilitud con penalización de
 cresta mediante el optimizador L-BFGS de SciPy~\cite{virtanen2020}, con 1.000 remuestreos de
 lectores por defecto. El juez (\texttt{judge.py}) es la regresión logística de

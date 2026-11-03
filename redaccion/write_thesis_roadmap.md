@@ -11,9 +11,8 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
 
 ## Estado
 
-- **Siguiente:** R07 · Capítulo 5 (b), desbloqueada el 2026-11-03: P07, P08 y P09 cerradas en
-  `planning/roadmap.md` (P08 sin P08.6, por decisión de Josue).
-- **Extensión acumulada:** 38,4 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
+- **Siguiente:** R08 · Conclusiones.
+- **Extensión acumulada:** 42,4 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
 - **Hechas:**
   - R00 · portada sin marcadores: título provisional «Generación narrativa bidireccional:
     planificación *Top-Down* y emergencia *Bottom-Up*» (traducción del nombre del repo), Josue
@@ -68,6 +67,18 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
     Tabla 5.4 del piloto con n = 1, sin resultados interpretables y la parte mecánica de H1 sin
     datos suficientes). Tablas a mano con su fuente en comentarios; sin referencias nuevas.
     9 págs. (39–47; ≈ 5,9 sin tablas, ≈ 18 % sobre el presupuesto), 0 \todo
+  - R07 · capítulo 5 (b) en cuatro secciones, con datos del 2026-11-03: estudio humano (P06 cerrada
+    sin estudio; piloto de 5 lectores con hoja de orden fijo, 69 respuestas, grafo en dos
+    componentes, α −0,14 a 0,05; generador frente a línea base 24–24 con la generada siempre como
+    A); juez (653 llamadas de extracción, `fitted` pero no generaliza, por debajo de la longitud,
+    matriz singular, perturbaciones 4/7/4 de 11); ranking (9 de 130, las diez son 3: dos
+    renarraciones M07 y M04 de la misma función de la obra 03 y la línea base 01-1, sin lectura
+    cualitativa por el cierre de P08); H1, H2 y H3 «sin datos suficientes» (H3 con indicios a
+    favor) y cierre del capítulo. Tablas de P09 con `\input{../tablas/…}`: `preferencias`, `juez`,
+    `perturbaciones`, `ranking_cobertura`, `ranking_puestos`, y `piloto` sustituye a la de R06.
+    Arrastres: `Implementation.tex` con 18 comandos (`asg-perturb`, `asg-results`) e
+    `import-votes`; apertura del capítulo con sus `\ref`. Sin referencias nuevas. 6 págs. (47–52;
+    ≈ 4 sin tablas, en el presupuesto), 0 \todo
 
 ## Reglas comunes
 
@@ -357,6 +368,13 @@ Josue o el tutor digan otra cosa.
   por Claude y aceptados por el autor, 6 de 12 extracciones incompletas); el análisis horizontal se
   quedó en 14 de 35 unidades y sin resultados interpretables; la función fuerza la mitad de los
   *beats* (3 de 6 en 7.22). Las lecturas de P02.1 y P02.2 son de un solo lector, el autor.
+- **Nota de R07:** el quinto objetivo se apoya en `sec:respuesta-hipotesis`: H1, H2 y H3 «sin datos
+  suficientes» (H3 con indicios a favor). Limitaciones ya escritas: estudio humano reducido a un
+  piloto de 5 lectores con hoja de orden fijo (acuerdo cercano al azar, grafo partido); juez que no
+  generaliza (por debajo de la longitud sola); ranking de 9 de 130 elegibles, las diez son 3 y sin
+  lectura cualitativa (P08 cerrada sin P08.6); extracción cara e inestable (653 llamadas para 18
+  textos). El último párrafo del capítulo 5 atribuye la falta de datos a la escala (cuota y plazo):
+  no ampliarlo como fallo de diseño.
 
 ### R09 · Recomendaciones
 
@@ -371,6 +389,11 @@ Josue o el tutor digan otra cosa.
   llamadas al modelo principal (≈ un día de cuota) más la extracción de toda la matriz y de las 9
   líneas base. También pendiente en el capítulo 5: medir la cobertura del extractor, repetir las
   extracciones incompletas y repetir la muestra con la huella vigente del catálogo.
+- **Nota de R07:** pendientes escritos en el capítulo 5: el estudio con el diseño de P06.1 (15
+  historias, ≥ 12 lectores, pares entre obras para un grafo conexo); extraer el resto del corpus
+  (121 elegibles fuera del ranking) con el modelo del protocolo o validar otro extractor; la lectura
+  cualitativa de las diez (P08.6) y la comparación narrativo–simulado sobre el mismo plan (H1) y de
+  memoria propia frente a compartida (H2, EXP-2).
 - **Extensión:** 1 pág.
 - **Depende de:** R08.
 
@@ -385,6 +408,9 @@ Josue o el tutor digan otra cosa.
 - **Nota de R06:** cifras de la primera mitad del capítulo 5 que el resumen podría usar: 130
   ejecuciones elegibles el 2026-11-01; extractor validado sobre 12 historias (provisional); matriz
   horizontal en 14 de 35 unidades, sin resultados interpretables.
+- **Nota de R07:** piloto de 5 lectores y 6 historias (69 respuestas), acuerdo cercano al azar;
+  juez por debajo de la longitud sola fuera de muestra (0,40–0,50 frente a 0,60–0,70); ranking de 9
+  de 130; generador frente a línea base 24–24; las tres hipótesis sin datos suficientes.
 
 ### R11 · Bibliografía, glosario y anexos
 
@@ -402,6 +428,11 @@ Josue o el tutor digan otra cosa.
 - **Nota de R06:** la Tabla 5.2 (`tab:extractor`) nombra los rasgos sin su id (R01, X10…), como la
   Tabla 3.1; el anexo del catálogo debería dar la correspondencia nombre ↔ id. R06 no añade cajas
   desbordadas.
+- **Nota de R07:** `redaccion/tablas/ranking_perfil.tex` (24 rasgos, las tres frente al resto) y
+  `redaccion/tablas/matriz.tex` no se usaron en el capítulo 5: candidatos a anexo, con `\ref` desde
+  `sec:resultados-ranking` y `sec:resultados-horizontal`. La figura `redaccion/figuras/juez.tex`
+  duplica `tab:juez` y no se incluyó. `piloto.tex` necesita `\footnotesize` y `\tabcolsep` 4pt para
+  no desbordar.
 - **Depende de:** R08.
 
 ### R12 · Repaso de coherencia
