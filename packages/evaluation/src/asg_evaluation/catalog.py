@@ -6,6 +6,8 @@ import csv
 import hashlib
 import io
 import json
+import re
+from functools import cache
 from importlib.resources import files
 from pathlib import Path
 
@@ -49,6 +51,22 @@ def guidance() -> dict[str, str]:
         row["id"]: row["que_mirar"]
         for row in csv.DictReader(io.StringIO(resource_text("criterios_humanos.csv")))
     }
+
+
+@cache
+def _catalog_prompts() -> dict[str, str]:
+    """Map every whitespace-normalized prompt block of prompts.md to its work number."""
+    blocks = re.finditer(
+        r"<!-- PROMPT_(\w+?)_START -->\s*(.*?)\s*<!-- PROMPT_\1_END -->",
+        resource_text("prompts.md"),
+        re.S,
+    )
+    return {" ".join(m.group(2).split()): m.group(1)[:2] for m in blocks}
+
+
+def prompt_work(prompt: str | None) -> str | None:
+    """Name the catalog work ('01'..'07') whose prompt, in any profile variant, is this one."""
+    return _catalog_prompts().get(" ".join(prompt.split())) if prompt else None
 
 
 def digest(value: object) -> str:

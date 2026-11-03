@@ -6,8 +6,8 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
 
 ## Estado actual
 
-- **Siguiente:** P08.3 · `asg-rank` para la tesis: las diez, las marcas y las fichas (modo `S+P`, sin cuota). **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** reducido (piloto cerrado y exportado, P07.5) pendiente de que Josue lo acepte.
-- **Versiones** (2026-11-03): Stagecraft 7.22.2 (pipeline 7.22), core 0.8.2, evaluación 2.1.10,
+- **Siguiente:** P08.4 · Extraer el corpus elegible, un lote por día (modo `S`, cuota: tope de 400 llamadas principales al día; enseñar `--dry-run` y esperar el «ok»). **H2** cerrado por Josue el 2026-10-31 (el tutor vio `planning/h2.md`); **H3** reducido (piloto cerrado y exportado, P07.5) pendiente de que Josue lo acepte.
+- **Versiones** (2026-11-03): Stagecraft 7.22.2 (pipeline 7.22), core 0.8.2, evaluación 2.1.11,
   Telegram 6.0.3, Studio 0.3.0.
 - **Hechas:**
   - P00 · Arranque: `planning/`, skill `phase`, migración de `TODO.md` y graphify.
@@ -54,6 +54,7 @@ Las fichas heredadas del antiguo `TODO.md`, íntegras: [fichas.md](fichas.md).
   - P07.7 · `asg-judge` sobre el piloto (sin cuota, entrenado una vez): `juez.json` `fitted` en los tres criterios, pero **no generaliza**: fuera de muestra 0,40 / 0,40 / 0,43 por historia y 0,40 / 0,50 / 0,43 por familia, por debajo del azar o igual y de la longitud sola (0,60 / 0,70 / 0,62); sin τ (grafo partido), matriz singular, perturbaciones que bajan 4, 7 y 4 de 11 veces. «Resultado del juez (piloto 7.22)» en METODOLOGIA.md §6 y «Juez para P08» con huellas en `decisions.md` §2. Cierra P07.
   - P08.1 · «Ranking del corpus (P08.1)» en `decisions.md` §2: ranking exploratorio con el juez congelado (los tres criterios `fitted`, no generaliza) y el orden por longitud sola como control; alcance escalonado (56 por extraer en 7.20+ y líneas base, 66 en 7.0–7.19, recuento sin cuota); 3 reanudaciones, un `--force` y otras 3 por texto, sin combinar intentos; tope de 400 llamadas al día; las diez del combinado sin las 6 de entrenamiento; marcas `training`, `version-no-comparable` y `premisa-no-vista`. Tarjetas P08.2–P08.6 corregidas.
   - P08.2 · `asg-features --root Stories --elegibles [--desde X.Y] [--reusar DB] [--limite N] [--dry-run]`: solo el corpus elegible (`corpus.scan`), pipelines ≥ X.Y como versión, omite los completos del estudio y acota el lote; el `--dry-run` no crea proveedor y clasifica con la identidad completa (`extraction_identity`, nueva en evaluación; `extraction_compatible` pasa a público). Real: 56 pendientes en 7.20+ (3 se reanudan, 46 sin extraer, 7 con otra huella; ~224 a ~2.016 llamadas) y 122 sin `--desde`; Stagecraft 7.22.2, evaluación 2.1.10.
+  - P08.3 · `asg-rank` para la tesis: las diez del combinado sin las `training` (entra la siguiente), `length_control` (T01, más largas primero) y `positions` en cada historia; marcas `training` (texto en `--study`; sin él no se marca y se avisa), `version-no-comparable` (7.0 y 7.1 exactos) y `premisa-no-vista` (prompt fuera de las obras 01 y 03, `prompt_work` sobre `planilla/prompts.md`, ahora empaquetado); `top_ten_profile` (medianas núcleo de las diez, el resto y el corpus); hoja `.md` rellenada por código con aviso de que el juez no generaliza, C/P/K, enlace a la matriz (`--horizontal`) y «Fortalezas/Debilidades (Josue)» vacías. Humo sin cuota sobre `Stories` (2026-11-03): 8 ordenadas (6 `training`), 2 en las diez. Evaluación 2.1.11.
 
 
 ## Cómo leer una tarjeta
@@ -330,39 +331,6 @@ generar. T10: nada aquí toca el generador ni `PIPELINE_VERSION`; `asg-features`
 herramienta, no el generador. Lo del X15 de H3 (P07.6) no se extiende a P08.
 
 **H4:** enseñar al tutor el juez, el ranking y las diez (`planning/h4.md`, P08.6).
-
-#### P08.3 · `asg-rank` para la tesis: las diez, las marcas y las fichas
-- **Modo:** S+P · **Cuota:** sin cuota · **Paquete:** asg-evaluation
-- **Lee:** «Ranking del corpus (P08.1)» en `decisions.md` §2; `rank_features` y `_ineligible`
-  en `judge.py`; `rank_main` en `learning_cli.py`; `read_features` y `process_features` en
-  `feature_report.py`; las pruebas de ranking de `packages/evaluation/tests/test_preference_learning.py`.
-- **Haz**, según P08.1:
-  - Las diez: las primeras del combinado auxiliar sin las marcadas `training` (si una cae entre
-    las diez, entra la siguiente); empates por ruta, como hoy. Los tres rankings por criterio y el
-    combinado siguen enteros, con las de entrenamiento dentro y marcadas.
-  - Orden por longitud sola (T01) como control, en una clave nueva (`length_control`), sobre las
-    mismas historias ordenadas por el juez; T01 se calcula por código. No cambia el juez.
-  - Marcar cada historia ordenada: `training` (su `text_hash` está en `--study`),
-    `version-no-comparable` (pipeline 7.0 y 7.1) y `premisa-no-vista` (el prompt de la petición
-    no es el de las obras 01 ni 03 de `planilla/prompts.md`).
-  - «Qué tienen y qué no»: para cada rasgo núcleo, la mediana de las diez frente a la del resto
-    de ordenadas, y el valor de cada una frente a la mediana del corpus. Es descriptivo y no
-    pondera nada.
-  - Hoja `.md` de las diez rellenada por código, que dice al principio que el juez no generaliza
-    y que las diez describen lo que premia este ajuste: run y ruta, formato y versión, marcas,
-    puestos en los tres rankings, el combinado y la longitud, rasgos con su mediana, configuración (C), proceso (P) y coste
-    (K) cuando existan, y enlace al análisis horizontal solo si el run está en
-    `Evaluations/horizontal/`. «Fortalezas» y «Debilidades» quedan vacías, marcadas «(Josue)».
-  - Conservar las claves actuales del JSON (`rankings`, `combined_auxiliary`, `stories`,
-    `excluded`, `top_ten`) y añadir las nuevas.
-- **No hagas:** cambiar pesos, normalización, `MODEL_VERSION` ni `train_judge`; leer las
-  historias con un LLM; escribir juicios en la hoja.
-- **Prueba:** ampliar las pruebas de ranking de `test_preference_learning.py`: una historia de
-  entrenamiento en cabeza del combinado queda marcada y fuera de las diez; el orden por longitud;
-  las marcas de versión y premisa; la tabla de medianas; la hoja sin campos de juicio rellenados.
-  Suite y `quality.ps1`.
-- **Hecho cuando:** `asg-rank` sobre los datos de prueba da las diez según P08.1, con marcas y
-  hoja; evaluación 2.1.11 con su CHANGELOG.
 
 #### P08.4 · Extraer el corpus elegible, un lote por día
 - **Modo:** S · **Cuota:** un lote por día, con el tope de P08.1 · **Paquete:** —

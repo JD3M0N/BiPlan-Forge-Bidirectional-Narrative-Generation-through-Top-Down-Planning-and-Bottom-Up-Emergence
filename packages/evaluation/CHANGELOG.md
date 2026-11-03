@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.1.11] - 2026-11-03
+
+- P08.3: `rank_features(judge, rows, training=...)` keeps the three rankings and the combined
+  auxiliary whole and adds `length_control` (T01, longest first), each story's `positions`, the
+  marks `training`, `version-no-comparable` (pipeline 7.0 and 7.1) and `premisa-no-vista` (prompt
+  outside works 01 and 03), `training_marked` and `top_ten_profile` (core-feature medians of the
+  ten, the rest and the ranked corpus). `top_ten` skips training stories and is filled by code;
+  judgment fields stay empty. `asg-rank` marks `--study` texts, reads the work from
+  `planilla/prompts.md` (`prompt_work`, now packaged) and links matrix units from
+  `--horizontal DIR` (default `<root>/../Evaluations/horizontal`). `original_prompt` is public in
+  `pairing`. Weights, normalization, `MODEL_VERSION` and `train_judge` are unchanged.
+
 ## [2.1.10] - 2026-11-03
 
 - P08.2: `extraction_identity(text, model, selection)` returns the cache identity an extraction

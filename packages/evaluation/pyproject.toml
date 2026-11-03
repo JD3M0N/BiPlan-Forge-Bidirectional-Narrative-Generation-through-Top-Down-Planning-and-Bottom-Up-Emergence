@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "asg-evaluation"
-version = "2.1.10"
+version = "2.1.11"
 description = "Pairwise human study, story features and learned judge for ASG stories"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -32,3 +32,4 @@ packages = ["src/asg_evaluation"]
 [tool.hatch.build.targets.wheel.force-include]
 "planilla/rasgos.csv" = "asg_evaluation/data/rasgos.csv"
 "planilla/criterios_humanos.csv" = "asg_evaluation/data/criterios_humanos.csv"
+"planilla/prompts.md" = "asg_evaluation/data/prompts.md"

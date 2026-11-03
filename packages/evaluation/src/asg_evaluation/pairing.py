@@ -159,14 +159,23 @@ def _title(run_dir: Path, request: dict) -> str:
     return text_field(request, "title") or run_dir.name
 
 
+def original_prompt(run_dir: str | Path, request: dict | None = None) -> str | None:
+    """Return the prompt a run was asked with, from request.json or its submitted copy."""
+    run_dir = Path(run_dir)
+    if request is None:
+        request = load_json_object(run_dir / "request.json")
+    prompt = text_field(request, "original_prompt")
+    if prompt is None:
+        prompt = text_field(load_json_object(run_dir / "submitted_request.json"), "prompt")
+    return prompt
+
+
 def _work(run_dir: Path, request: dict) -> str | None:
     """Fingerprint what the run was asked to tell: its brief, else its original prompt."""
     brief = load_json_object(run_dir / "brief.json")
     if brief:
         return f"ficha-{_digest(brief)}"
-    prompt = text_field(request, "original_prompt")
-    if prompt is None:
-        prompt = text_field(load_json_object(run_dir / "submitted_request.json"), "prompt")
+    prompt = original_prompt(run_dir, request)
     return f"prompt-{_digest(' '.join(prompt.split()))}" if prompt else None
 
 

@@ -121,7 +121,17 @@ asg-judge $db --output juez.json --perturbations casos.json
   y familias de premisa, frente al azar y a la longitud sola (también por familias). Cada
   validación da su cobertura (votos probados / votos) y cada criterio su colinealidad (pares con
   |r| ≥ 0,8, número de condición y rasgos constantes).
-- `asg-rank` ordena el corpus y prepara las fichas de las diez primeras (un `.md` junto al `--output`).
+- `asg-rank` ordena el corpus con el juez congelado y escribe, junto a los tres rankings y el
+  combinado auxiliar, el orden por longitud sola (`length_control`, T01, más largas primero) y
+  los puestos de cada historia. Marca cada historia ordenada con `training` (su texto está en
+  `--study`; sin él no se marca y el informe lo dice), `version-no-comparable` (pipeline 7.0 y
+  7.1) y `premisa-no-vista` (su prompt no es el de las obras 01 ni 03 de `planilla/prompts.md`).
+  Las diez (`top_ten`) son las primeras del combinado sin las de entrenamiento;
+  `top_ten_profile` compara la mediana de cada rasgo núcleo en las diez, en el resto y en todo
+  el corpus ordenado. La hoja `.md` junto al `--output` la rellena el código (marcas, puestos,
+  rasgos, C/P/K y el enlace a la matriz si el run está en un manifiesto de
+  `Evaluations/horizontal/`, o de `--horizontal DIR`) y deja vacías «Fortalezas (Josue)» y
+  «Debilidades (Josue)».
 - `asg-perturb` escribe, por historia congelada, `<id>-shuffled` (capítulos barajados, o tercios de
   párrafos en las líneas base) y `<id>-no-ending` (prefijo sin el último quinto de los párrafos),
   con `perturbation.json`; `--casos` arma los pares original/perturbado con extracciones

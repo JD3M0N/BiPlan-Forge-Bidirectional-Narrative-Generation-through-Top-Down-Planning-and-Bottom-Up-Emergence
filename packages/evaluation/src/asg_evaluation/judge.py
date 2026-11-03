@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import statistics
 import warnings
 from collections import defaultdict
 
@@ -12,12 +13,16 @@ from scipy.stats import kendalltau
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LogisticRegression
 
-from .catalog import CRITERIA, catalog_snapshot, core_ids, digest
+from .catalog import CRITERIA, catalog, catalog_snapshot, core_ids, digest
 from .corpus import exclusion_reason
 from .preferences import bradley_terry, decided_votes
 
 MODEL_VERSION = 3
 COLLINEARITY_THRESHOLD = 0.8
+# Decided in P08.1: the pilot voted works 01 and 03 only, and 7.0-7.1 predate 7.2+ contracts.
+SEEN_WORKS = frozenset({"01", "03"})
+UNCOMPARABLE_PIPELINES = frozenset({"7.0", "7.1"})
+TOP = 10
 
 
 def protocol(identity: dict) -> dict:
@@ -263,15 +268,85 @@ def train_judge(dataset: dict, features: dict[str, dict]) -> dict:
     return result
 
 
-def rank_features(judge: dict, rows: list[dict]) -> dict:
-    """Score eligible complete prose using frozen scales and keep three primary rankings."""
+def story_marks(row: dict, training: set[str] | None) -> list[str]:
+    """Flag scores that are in-sample, from an older pipeline or on a premise never voted."""
+    marks = []
+    if training and row.get("text_hash") in training:
+        marks.append("training")
+    if row.get("pipeline_version") in UNCOMPARABLE_PIPELINES:
+        marks.append("version-no-comparable")
+    if row.get("work") not in SEEN_WORKS:
+        marks.append("premisa-no-vista")
+    return marks
+
+
+def _numbers(rows: list[dict], key: str) -> list[float]:
+    """Collect measured numeric values of one feature, ignoring missing and structured ones."""
+    numbers = []
+    for row in rows:
+        entry = row["features"].get(key, {})
+        value = entry.get("value")
+        if (
+            entry.get("status") == "measured"
+            and isinstance(value, int | float)
+            and not isinstance(value, bool)
+        ):
+            numbers.append(float(value))
+    return numbers
+
+
+def _summary(rows: list[dict], key: str) -> dict:
+    """Describe one group by its median and how many stories actually measured the feature."""
+    numbers = _numbers(rows, key)
+    return {"median": statistics.median(numbers) if numbers else None, "n": len(numbers)}
+
+
+def _top_ten_entry(record: dict, row: dict) -> dict:
+    """Fill a top-ten worksheet entry by code; judgment fields stay empty for the author."""
+    definitions = catalog()
+    features = row["features"]
+    return {
+        "story": record["story"],
+        "run_id": record["run_id"],
+        "format": record["format"],
+        "generator_version": record["generator_version"],
+        "pipeline_version": record["pipeline_version"],
+        "work": record["work"],
+        "marks": record["marks"],
+        "positions": record["positions"],
+        "features": {
+            k: features[k]["value"] if features[k]["status"] == "measured" else None
+            for k in core_ids()
+        },
+        "context": {
+            k: v["value"]
+            for k, v in features.items()
+            if definitions.get(k, {}).get("capa") in {"C", "P", "K"}
+            and v.get("status") == "measured"
+            and v.get("value") is not None
+        },
+        "horizontal": row.get("horizontal", []),
+        "observations": "",
+        "strengths": "",
+        "weaknesses": "",
+    }
+
+
+def rank_features(judge: dict, rows: list[dict], *, training: set[str] | None = None) -> dict:
+    """Score eligible complete prose with frozen scales, beside a length-only control order.
+
+    ``training`` holds the text hashes the judge was fitted on; those stories stay in every
+    ranking, marked, but never enter the top ten because their scores are in-sample. None means
+    no study was given, so in-sample stories cannot be marked at all.
+    """
     if (
         judge.get("schema_version") != MODEL_VERSION
         or judge.get("catalog_hash") != catalog_snapshot()["sha256"]
     ):
         raise ValueError("Modelo incompatible con el catálogo actual.")
     rankings = {c: [] for c in CRITERIA}
-    excluded, combined, scored = [], [], []
+    excluded, combined, scored, length = [], [], [], []
+    by_story = {}
     for row in rows:
         reason = _ineligible(row) or (
             "Protocolo de extracción distinto"
@@ -281,11 +356,17 @@ def rank_features(judge: dict, rows: list[dict]) -> dict:
         if reason:
             excluded.append({"story": row["story"], "reason": reason})
             continue
+        marks = story_marks(row, training)
+        words = _numbers([row], "T01")
         record = {
             "story": row["story"],
+            "run_id": row.get("run_id"),
             "generator_version": row.get("generator_version"),
             "pipeline_version": row.get("pipeline_version"),
             "format": row.get("format"),
+            "work": row.get("work"),
+            "marks": marks,
+            "words": words[0] if words else None,
             "scores": {},
             "missing": [k for k in core_ids() if row["features"][k]["status"] != "measured"],
         }
@@ -298,23 +379,44 @@ def rank_features(judge: dict, rows: list[dict]) -> dict:
             score = predict(model, feature_vector(row, model["features"]))
             record["scores"][criterion] = score
             standardized.append((score - model["score_center"]) / model["score_scale"])
-            rankings[criterion].append({"story": row["story"], "score": score})
+            rankings[criterion].append({"story": row["story"], "score": score, "marks": marks})
         if len(standardized) == 3:
             record["combined"] = float(np.mean(standardized))
-            combined.append({"story": row["story"], "score": record["combined"]})
+            combined.append({"story": row["story"], "score": record["combined"], "marks": marks})
+        length.append({"story": row["story"], "words": record["words"], "marks": marks})
         scored.append(record)
+        by_story[row["story"]] = row
     for ranking in [*rankings.values(), combined]:
         ranking.sort(key=lambda r: (-r["score"], r["story"]))
+    # Longest first, the direction the length-only baseline of P07.7 rewarded.
+    length.sort(key=lambda r: (r["words"] is None, -(r["words"] or 0), r["story"]))
+    orders = {**rankings, "combined": combined, "length": length}
+    places = {
+        name: {r["story"]: i for i, r in enumerate(order, 1)} for name, order in orders.items()
+    }
+    for record in scored:
+        record["positions"] = {name: places[name].get(record["story"]) for name in orders}
+    records = {r["story"]: r for r in scored}
+    top = [r["story"] for r in combined if "training" not in r["marks"]][:TOP]
+    rest = [by_story[s] for s in by_story if s not in top]
     return {
         "status": "exploratory",
+        "training_marked": training is not None,
         "rankings": rankings,
         "combined_auxiliary": combined,
+        "length_control": length,
+        "length_order": "T01 descendente: las más largas primero",
         "stories": scored,
         "excluded": excluded,
-        "top_ten": [
-            {"story": r["story"], "observations": "", "strengths": "", "weaknesses": ""}
-            for r in combined[:10]
-        ],
+        "top_ten": [_top_ten_entry(records[s], by_story[s]) for s in top],
+        "top_ten_profile": {
+            k: {
+                "top_ten": _summary([by_story[s] for s in top], k),
+                "rest": _summary(rest, k),
+                "corpus": _summary(list(by_story.values()), k),
+            }
+            for k in core_ids()
+        },
     }
 
 
