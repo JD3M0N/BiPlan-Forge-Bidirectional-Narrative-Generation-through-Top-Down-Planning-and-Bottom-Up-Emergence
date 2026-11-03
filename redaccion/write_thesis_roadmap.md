@@ -11,9 +11,8 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
 
 ## Estado
 
-- **Siguiente:** R07 · Capítulo 5 (b), **bloqueada** hasta cerrar P07, P08 y P09 en
-  `planning/roadmap.md` (el 2026-11-01 la siguiente tarea allí es P07.1). R08–R11 dependen de R07
-  o de R08, así que no hay otra parte que se pueda escribir antes.
+- **Siguiente:** R07 · Capítulo 5 (b), desbloqueada el 2026-11-03: P07, P08 y P09 cerradas en
+  `planning/roadmap.md` (P08 sin P08.6, por decisión de Josue).
 - **Extensión acumulada:** 38,4 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
 - **Hechas:**
   - R00 · portada sin marcadores: título provisional «Generación narrativa bidireccional:
@@ -309,6 +308,10 @@ Josue o el tutor digan otra cosa.
   para.
 - **Hecho cuando:** cada hipótesis tiene una respuesta (confirmada, refutada o sin datos
   suficientes) con su evidencia.
+- **Nota del cierre de P08 (2026-11-03):** P08 se cerró sin P08.6 (`decisions.md` §2, «Cierre de
+  P08 sin P08.6»): las diez son 3 y no tienen fortalezas ni debilidades de Josue. Se presentan
+  solo con lo que da el código (puestos, longitud, marcas, perfil frente a la mediana), diciendo
+  que falta la lectura cualitativa; Claude no escribe juicios sobre ellas. H4 no se alcanzó.
 - **Nota de R02:** H2 (memoria propia frente a compartida) no tiene experimento: EXP-2 pasó a
   idea-bank el 2026-10-30. Josue decidió el 2026-11-01 mantenerla en la introducción y
   responderla aquí «sin datos suficientes», como limitación declarada. H1 se completa con los

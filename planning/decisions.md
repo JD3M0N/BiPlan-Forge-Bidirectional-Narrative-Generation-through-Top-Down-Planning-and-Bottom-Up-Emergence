@@ -385,6 +385,16 @@ rasgos, juez, análisis o tesis se contrasta con esta lista antes de empezar.
     - **Las diez son las N que haya** (Josue): si no hay diez fuera del entrenamiento, se publican
       las N con su cobertura. No se bajan umbrales, no se combinan intentos ni se meten textos de
       entrenamiento.
+- **2026-11-03 · Cierre de P08 sin P08.6.** Decidido por Josue para desbloquear la redacción (R07).
+  P08 se cierra sin cumplir el «Hecho cuando» de P08.6, como P05, P06 y P08.4.
+  - Las «Fortalezas» y «Debilidades (Josue)» de las 3 historias de
+    `Evaluations/ranking/ranking-2026-11-03.md` quedan vacías: **no hay lectura cualitativa de las
+    diez** (que son 3). La tesis presenta solo lo que da el código (puestos, longitud, marcas y
+    perfil de rasgos frente a la mediana) y lo dice. Claude sigue sin escribir esos juicios (T2, §4).
+  - No se escriben «Las diez primeras» en METODOLOGIA.md §7 ni `planning/h4.md`: **H4 no se
+    alcanza**. El juez, el ranking y las preguntas abiertas (la 5 de H2, si basta un juez de 2
+    familias, si se retoman P05 y P06) llegan al tutor con el borrador de la tesis (H5).
+  - El ranking del 2026-11-03 (`ranking-2026-11-03.json`) es el resultado final de P08.
 
 ## 3. Decisiones de proyecto
 
