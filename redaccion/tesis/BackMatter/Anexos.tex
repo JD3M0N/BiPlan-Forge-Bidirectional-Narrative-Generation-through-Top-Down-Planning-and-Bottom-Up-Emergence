@@ -1,0 +1,142 @@
+% R11 en ../write_thesis_roadmap.md. Fuentes: packages/evaluation/planilla/rasgos.csv (solo
+% lectura; definición operativa resumida, nombres como en las tablas 3.1 y 5.2),
+% packages/evaluation/planilla/prompts.md (variantes Esencial, literales) y las tablas que genera
+% asg-results en redaccion/tablas/ (2026-11-03).
+\appendix
+% babel fija \appendixname («Apéndice») al empezar el documento; aquí se cambia por «Anexo».
+\renewcommand{\appendixname}{Anexo}
+
+\chapter{Lista núcleo de rasgos}\label{app:nucleo}
+
+La Tabla~\ref{tab:anexo-nucleo} da los 24 rasgos núcleo de la Sección~\ref{sec:lista-nucleo} con su
+identificador en el catálogo, que es el que usan las tablas generadas por código del
+Capítulo~\ref{chapter:experiments}. La letra indica la capa del catálogo
+(Sección~\ref{sec:catalogo}): T, medidas del texto calculadas por código; R, la rúbrica hecha
+contable, y X, los recuentos de los ejemplos del tutor. Los recuentos que crecen con la longitud se
+expresan por mil palabras («/1000 pal.»). La última columna resume qué se cuenta; la definición
+operativa completa está en la planilla del catálogo (Sección~\ref{sec:herramientas}).
+
+\begin{table}[p]
+  \centering
+  \caption{Rasgos núcleo con su identificador, criterio y unidad}
+  \label{tab:anexo-nucleo}
+  \footnotesize
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{@{}l>{\raggedright\arraybackslash}p{3.5cm}>{\raggedright\arraybackslash}p{1.8cm}%
+      >{\raggedright\arraybackslash}p{1.7cm}>{\raggedright\arraybackslash}p{6.3cm}@{}}
+    \toprule
+    Id & Nombre & Criterio & Unidad & Qué se cuenta \\
+    \midrule
+    T01 & Palabras & --- & recuento & palabras de la prosa (por código) \\
+    T06 & Proporción de diálogo & personajes & proporción & párrafos con diálogo (por código) \\
+    T08 & Repetición de trigramas & creatividad & proporción & trigramas repetidos (por código) \\
+    R01 & Promesas de apertura & trama & recuento & promesas que deja el primer capítulo \\
+    R02 & Señales de progreso & trama & /1000 pal. & avances del tramo medio \\
+    R03 & Preparación del pago final & trama & recuento & preparaciones que cosecha el final (dos citas) \\
+    R04 & Ciclos «sí, pero» & trama & recuento & intentos que logran algo con un coste nuevo \\
+    R05 & Ciclos «no, y además» & trama & recuento & intentos fallidos que empeoran la situación \\
+    R09 & Proactividad del protagonista & personajes & /1000 pal. & acciones que inicia el protagonista \\
+    R16 & Soluciones preparadas & trama & recuento & conflictos resueltos con algo ya visto (dos citas) \\
+    R18 & Límites del mundo & creatividad & recuento & una regla del mundo impide algo \\
+    R23 & Escenas con cambio & trama & proporción & escenas en que algo cambia \\
+    R24 & Decisiones con coste & personajes & recuento & decisiones que cuestan algo real \\
+    X02 & Cuota del personaje más presente & personajes & proporción & escenas del personaje más presente \\
+    X03 & Reparto de la participación & personajes & 0--1 & entropía de la presencia (por código) \\
+    X06 & Escenas con conflicto & trama & proporción & escenas con objetivos enfrentados \\
+    X10 & Mentiras & personajes & recuento & engaños deliberados a otro personaje \\
+    X13 & Secretos revelados & trama & recuento & secretos que salen a la luz \\
+    X14 & Complicaciones & trama & recuento & obstáculos nuevos a un objetivo \\
+    X15 & Giros & creatividad & recuento & lo que se daba por cierto cambia \\
+    X16 & Sucesos azarosos o externos & trama & recuento & sucesos que no provoca nadie \\
+    X17 & Usos de objetos & trama & /1000 pal. & usar, dar, tomar, esconder o mostrar \\
+    X20 & Contradicciones & trama & recuento & contradicciones internas (dos citas) \\
+    X29 & Reparto del diálogo & personajes & 0--1 & entropía de las réplicas (por código) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\chapter{Peticiones de las obras de los experimentos}\label{app:obras}
+
+Las tres obras de la matriz, del piloto y de las líneas base (Sección~\ref{sec:corpus}) recibieron
+literalmente estas peticiones, la variante Esencial del catálogo. La línea base de un solo
+\textit{prompt} recibe el mismo texto.
+
+\section*{Obra 01: fantasía canónica}
+
+\begin{quote}\small
+Escribe en español un relato de fantasía épica con perfil narrativo Esencial. Sir Aldren, un caballero
+veterano atormentado por el fracaso de una misión anterior, debe entrar en una fortaleza levantada
+sobre un volcán para rescatar a la princesa Elara de un dragón ancestral. Elara no debe ser una víctima
+pasiva: debe investigar su cautiverio, tomar decisiones arriesgadas y contribuir de forma decisiva a su
+propia liberación. El dragón debe tener una motivación comprensible relacionada con una antigua promesa
+rota por el reino, y no ser simplemente un monstruo malvado. Desarrolla una cadena causal clara desde la
+llegada del caballero hasta el enfrentamiento final; prepara con antelación cualquier objeto,
+conocimiento o habilidad que resulte decisivo. Mantén la continuidad de lugares, heridas, información y
+relaciones. Usa un tono aventurero y emotivo, incluye un dilema moral que obligue a Aldren a elegir
+entre obedecer al rey y hacer lo correcto, y termina con un desenlace cerrado y esperanzador. Evita el
+deus ex machina, las profecías que resuelven el conflicto por sí solas y las explicaciones sobre el
+proceso de escritura.
+\end{quote}
+
+\section*{Obra 03: «La última luz del faro»}
+
+\begin{quote}\small
+Escribe en español un relato de misterio con perfil narrativo Esencial. Durante una tormenta que deja
+incomunicada una pequeña isla, la archivista Mara Vela llega al faro para catalogar sus registros y
+descubre que el farero ha desaparecido de una habitación cerrada por dentro. En el edificio permanecen
+su hija, un meteorólogo, la médica de la isla y un contrabandista retirado; todos ocultan algo, pero no
+todos mienten sobre la desaparición. Construye un misterio de juego limpio: presenta antes de la
+revelación todas las pistas necesarias para deducir qué ocurrió, incluida una anotación alterada, una
+pieza del mecanismo del faro y una contradicción horaria. Distingue claramente lo que sabe cada
+personaje y mantén una cronología consistente durante la tormenta. Incluye al menos una pista falsa que
+tenga una explicación causal y no sea un engaño del narrador. No uses causas sobrenaturales, gemelos
+secretos, amnesia ni confesiones que sustituyan la investigación. Usa una atmósfera tensa y aislada,
+permite que Mara resuelva el caso relacionando evidencias observables y termina revelando tanto el
+método como el motivo y las consecuencias humanas.
+\end{quote}
+
+\section*{Obra 04: «El cine de los domingos»}
+
+\begin{quote}\small
+Escribe en español un drama contemporáneo con perfil narrativo Esencial. Tras la muerte de su madre,
+los hermanos Lucía y Tomás heredan un viejo cine de barrio que será demolido en siete días si no pagan
+una deuda. Lucía quiere venderlo y regresar a la ciudad donde construyó su carrera; Tomás quiere
+organizar una última función para demostrar que el lugar todavía importa. Ambos recuerdan de manera
+diferente el abandono de su padre y creen que la madre favoreció al otro. Desarrolla el conflicto
+mediante conversaciones, silencios, acciones prácticas y decisiones económicas concretas, sin
+convertir a ninguno de los dos en villano. Un rollo de película incompleto, una libreta de cuentas y la
+antigua cabina de proyección deben adquirir significado dramático y participar en la resolución. Haz
+que cada cambio emocional tenga una causa visible y que la verdad sobre la familia complique el
+conflicto en lugar de resolverlo de inmediato. Usa un tono íntimo y contenido, evita accidentes
+oportunistas, enfermedades repentinas y herencias secretas, y termina con una decisión conjunta creíble
+que implique una pérdida real y una forma limitada de reconciliación.
+\end{quote}
+
+\chapter{Tablas complementarias de los experimentos}\label{app:tablas}
+
+La Tabla~\ref{tab:anexo-matriz} da el estado de la matriz del análisis horizontal
+(Sección~\ref{sec:resultados-horizontal}) según su manifiesto: las unidades nuevas, las nueve líneas
+base y la base de la obra 03 adoptada de la validación de la versión congelada. La
+Tabla~\ref{tab:anexo-perfil} da las medianas de los rasgos núcleo de las tres primeras del ranking
+(Sección~\ref{sec:resultados-ranking}), del resto de las ordenadas y de las nueve; entre paréntesis,
+cuántas historias midieron el rasgo. Es descriptiva: con uno a tres valores por rasgo no sirve para
+comparar.
+
+\begin{table}[htb]
+  \centering
+  \caption{Estado de la matriz del análisis horizontal (manifiesto, 2026-10-31)}
+  \label{tab:anexo-matriz}
+  \small
+  \input{../tablas/matriz.tex}
+\end{table}
+% Generada por asg-results desde Evaluations/horizontal/manifiesto-matriz.json.
+
+\begin{table}[htb]
+  \centering
+  \caption{Medianas de los rasgos núcleo en el ranking del corpus (2026-11-03)}
+  \label{tab:anexo-perfil}
+  \footnotesize
+  \input{../tablas/ranking_perfil.tex}
+\end{table}
+% Generada por asg-results desde Evaluations/ranking/ranking-2026-11-03.json (top_ten_profile).
+% «Las diez»: las tres fuera del entrenamiento; «Resto»: las otras seis ordenadas.

@@ -11,7 +11,7 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
 
 ## Estado
 
-- **Siguiente:** R11 · Bibliografía, glosario y anexos.
+- **Siguiente:** R12 · Repaso de coherencia.
 - **Extensión acumulada:** 45,4 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía).
 - **Compilar:** en `redaccion/tesis/` (disco E:) las pasadas sucesivas de `latexmk` fallan con
   «Extra }» o «File ended while scanning» en `Thesis.aux`: al releerlo en `\end{document}` aún
@@ -102,6 +102,15 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
     juez 0,40–0,50 frente a 0,60–0,70 de la longitud; H1–H3 sin datos suficientes) y aportaciones.
     `english` añadido a `babel` en `uhthesis.cls` (spanish sigue siendo el principal) y el
     *abstract* dentro de `otherlanguage`. 1 + 1 págs., 0 \todo
+  - R11 · bibliografía: 58 entradas, todas citadas; `langid = {english}` en las 56 inglesas (no en
+    `piad2026` ni `fuentes2025`), `autolang=hyphen` en `biblatex` y `\emergencystretch` en
+    `BackMatter/Bibliography.tex`: 0 cajas desbordadas. Sin glosario (las siglas se definen en el
+    texto; `\makenomenclature` sigue activo sin entradas). `BackMatter/Anexos.tex` con «Anexo A–C»
+    (`\appendixname` cambiado tras `\appendix`): A, la lista núcleo con id, criterio, unidad y qué se
+    cuenta (`app:nucleo`, citado desde `sec:lista-nucleo`); B, las peticiones Esencial de las obras
+    01, 03 y 04 (`app:obras`, desde `sec:corpus`); C, `matriz.tex` y `ranking_perfil.tex` de P09
+    (`app:tablas`, desde `sec:resultados-horizontal` y `sec:resultados-ranking`). Sin ejemplos de
+    historias. 6 págs. de anexos (63–68), 0 \todo
 
 ## Reglas comunes
 

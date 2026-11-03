@@ -28,6 +28,7 @@
 \RequirePackage[
 	style=numeric,
 	sorting=none,
+	autolang=hyphen,
   hyperref=true,
 	backref=true
 	]{biblatex}
