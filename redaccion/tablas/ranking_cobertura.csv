@@ -1,0 +1,10 @@
+group,situation,runs
+Ordenada,Ordenadas por el juez,9
+Ordenada,"de ellas, del entrenamiento (fuera de las diez)",6
+Ordenada,Las diez primeras (las que haya),3
+Elegible que sale,Extracción ausente u obsoleta,79
+Elegible que sale,Extracción incompleta,41
+Elegible que sale,Protocolo de extracción distinto,1
+No elegible,Generador anterior a Stagecraft 7,135
+No elegible,Formato fuera del estudio en prosa,8
+No elegible,Run no completado,4

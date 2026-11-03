@@ -1,0 +1,9 @@
+cell,units,completed,failed,ungenerated
+M01,6,5,1,0
+M02,9,9,0,0
+M03,6,2,0,4
+M04,6,2,0,4
+M05,6,2,0,4
+M06,6,2,0,4
+M07,6,2,0,4
+total,45,24,1,20

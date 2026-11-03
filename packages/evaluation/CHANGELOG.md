@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.1.12] - 2026-11-03
+
+- P09.1, P09.2: `asg-results [--evaluations DIR] [--tablas DIR] [--figuras DIR] [--ranking FILE]
+  [--fecha AAAA-MM-DD]` regenerates the thesis tables and figure from `Evaluations/`
+  (`results.py`): `juez`, `preferencias`, `perturbaciones`, `piloto`, `matriz` and, from the
+  newest `ranking/ranking-*.json` (or `--ranking`), `ranking_cobertura`, `ranking_puestos` and
+  `ranking_perfil`, each a booktabs `tabular` for `\input` plus a CSV, and the TikZ figure
+  `juez.tex`. `manifiesto.json` records the date, the SHA-256 of every input and output and the
+  tables kept by hand. A missing input leaves that table marked "No disponible" and the exit
+  code is 1.
+
 ## [2.1.11] - 2026-11-03
 
 - P08.3: `rank_features(judge, rows, training=...)` keeps the three rankings and the combined

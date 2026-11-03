@@ -21,6 +21,7 @@ COMMANDS = (
     ("asg-judge", "entrena el juez aprendido con los votos"),
     ("asg-perturb", "perturba por código los textos del estudio (barajado, sin desenlace)"),
     ("asg-rank", "ordena el corpus con el juez y prepara las diez mejores"),
+    ("asg-results", "regenera las tablas y figuras de la tesis desde Evaluations/"),
     ("asg-budget", "cuota gastada y cuántas historias caben hoy"),
     ("asg-matrix", "lanza una matriz de experimentos en serie con cuota y manifiesto"),
     ("asg-recover", "cierra o descarta runs atascados"),

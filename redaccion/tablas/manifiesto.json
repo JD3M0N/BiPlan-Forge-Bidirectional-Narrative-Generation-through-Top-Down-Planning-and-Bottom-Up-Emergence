@@ -1,0 +1,105 @@
+{
+  "comando": "asg-results",
+  "version": "2.1.12",
+  "fecha": "2026-11-03",
+  "alcance": "tablas y figuras de la tesis regenerables desde Evaluations/",
+  "tablas": {
+    "juez": {
+      "estado": "generada",
+      "entradas": {
+        "estudio-piloto-722/juez.json": "5047265671faf67daba29f4fde5767bb97ce2cfd39e26772bc27c5b6df3e1d93"
+      },
+      "salidas": {
+        "juez.tex": "f3dbd3a3dea73ee76827161c030916258690109e472a978889cbeff0188a4fe6",
+        "juez.csv": "7c88c53e27f653b0dd39725cc6fd3abe1aa7c753e2977d5bcf355d4d902a2863"
+      }
+    },
+    "preferencias": {
+      "estado": "generada",
+      "entradas": {
+        "estudio-piloto-722/preferencias.json": "2d013d8eabf369d4285f12ce1523d30c43b46040a5cb2d58668537e5cca3d6f0"
+      },
+      "salidas": {
+        "preferencias.tex": "d25ccdc8956b5281843aba074b0dc6150c1a02c24739016999df586c75b84c81",
+        "preferencias.csv": "73ed85d0a1c6133850bb08d3fc8696bddd8e0ce4cdc4794f310c481b6061934d"
+      }
+    },
+    "perturbaciones": {
+      "estado": "generada",
+      "entradas": {
+        "estudio-piloto-722/juez.json": "5047265671faf67daba29f4fde5767bb97ce2cfd39e26772bc27c5b6df3e1d93",
+        "estudio-piloto-722/protocolo.json": "724dd2320e98c7de1b20c5c1a02aa03d67866a2af2e7d61782253b33ec22ae23"
+      },
+      "salidas": {
+        "perturbaciones.tex": "bcb28923f493e67c216237a9873117ba1e74e55ccaaaf366a646cbb4d26e4edf",
+        "perturbaciones.csv": "da030c526da7b03aeca64bc64487e979f90778e04f12d87acf3597bb6cdbec3d"
+      }
+    },
+    "piloto": {
+      "estado": "generada",
+      "entradas": {
+        "horizontal/piloto-03/horizontal.csv": "6ebc7e924bdc691c66a377597165dcc6aba1d3314960a8fc68abb81c7c531b3f"
+      },
+      "salidas": {
+        "piloto.tex": "3f5b50f24e3dd98b39fc877e548c4895e19f8e3ab019d5e7303ffc393229e58e",
+        "piloto.csv": "2bf2ae6f9d1fb3f4cacde89a652b5b64e0509385cdad893f44fb7dfff94502ea"
+      }
+    },
+    "matriz": {
+      "estado": "generada",
+      "entradas": {
+        "horizontal/manifiesto-matriz.json": "484d546caaedd4cafb7c1fc6da3130f3fa1ea8f9351043909180c0a2b660b053"
+      },
+      "salidas": {
+        "matriz.tex": "bf97f25db8a13864a4a5ead648bb12b848d079a1928c09835d392d8ed7683c65",
+        "matriz.csv": "30a6de273919114c6900fb82700663a471a2af5099dcabc4d70970309d8b0dad"
+      }
+    },
+    "ranking_cobertura": {
+      "estado": "generada",
+      "entradas": {
+        "ranking/ranking-2026-11-03.json": "68cc760d6f46ecc3dbbf73e9c11de0307c8f7d66f147d399a155a87561425ea5"
+      },
+      "salidas": {
+        "ranking_cobertura.tex": "f3f42d3ea00f86f1f76e2ceecbaefc920ab4f5d30ffb96796b017bad71c77fb1",
+        "ranking_cobertura.csv": "ab827974b32401d8040e4b275b8b2a30af932067cf7c065682f70c081161808d"
+      }
+    },
+    "ranking_puestos": {
+      "estado": "generada",
+      "entradas": {
+        "ranking/ranking-2026-11-03.json": "68cc760d6f46ecc3dbbf73e9c11de0307c8f7d66f147d399a155a87561425ea5"
+      },
+      "salidas": {
+        "ranking_puestos.tex": "d1dbcf6d1f9e5e93e4ae840bb3fe895d1595e1cb836ee1525aabf4c1e192e76e",
+        "ranking_puestos.csv": "536de08e3755c1cf5e0889d65cd18433a952c1115f4be4f86642dc42cdb2a88b"
+      }
+    },
+    "ranking_perfil": {
+      "estado": "generada",
+      "entradas": {
+        "ranking/ranking-2026-11-03.json": "68cc760d6f46ecc3dbbf73e9c11de0307c8f7d66f147d399a155a87561425ea5"
+      },
+      "salidas": {
+        "ranking_perfil.tex": "b46adf326ed4c53ca9c6f793279d5688201764d147481bc09b24f086b787297b",
+        "ranking_perfil.csv": "7a1110c39c0da3bc3dbab4db6c23b01732e09319bf6eede6c11fb4dc9e0a318f"
+      }
+    }
+  },
+  "figuras": {
+    "juez": {
+      "estado": "generada",
+      "entradas": {
+        "estudio-piloto-722/juez.json": "5047265671faf67daba29f4fde5767bb97ce2cfd39e26772bc27c5b6df3e1d93"
+      },
+      "salidas": {
+        "juez.tex": "49ddf9f25f9c442ad757132890c361ab5ea1be10836759b22e7c647300da3e4c"
+      }
+    }
+  },
+  "a_mano": {
+    "tab:lecturas": "docs/resumen.md (P02.1 y P02.2) y Evaluations/estudio/lecturas/",
+    "tab:extractor": "packages/evaluation/METODOLOGIA.md §3, Validación del extractor",
+    "tab:coste": "llm_calls.jsonl de los runs de la matriz (carpetas citadas en Experiments.tex)"
+  }
+}

@@ -153,3 +153,31 @@ asg-judge $db --output juez.json --perturbations casos.json
 
 Los estudios `fixed`, `rolling` y `pack` y la evaluación 1–10 (`evaluation.json`) se retiraron
 en 2.0.0. Sus bases y archivos quedan como datos en `Evaluations/` y `Stories/`.
+
+### 5. Tablas y figuras de la tesis
+
+```powershell
+asg-results [--evaluations Evaluations] [--tablas redaccion/tablas] [--figuras redaccion/figuras]
+            [--ranking ranking/ranking-AAAA-MM-DD.json] [--fecha AAAA-MM-DD]
+```
+
+Sin cuota. Lee los artefactos de `Evaluations/` y escribe, por tabla, un `tabular` con `booktabs`
+(para `\input{../tablas/x.tex}`) y un CSV con los valores sin formato; la figura del juez es TikZ
+(`redaccion/figuras/juez.tex`, sin dependencias nuevas). `manifiesto.json` guarda la fecha, el
+SHA-256 de cada entrada y de cada salida, y las tablas que se mantienen a mano. Si falta una
+entrada, esa tabla sale como «No disponible», las demás se escriben y el código de salida es 1.
+Los números se escriben con coma decimal y signos matemáticos, y las tablas anchas pueden
+necesitar `\small` o `\resizebox` en el capítulo.
+
+| Tabla | Entrada |
+|---|---|
+| `juez`, `perturbaciones` | `estudio-piloto-722/juez.json` (y `protocolo.json`) |
+| `preferencias` | `estudio-piloto-722/preferencias.json` |
+| `piloto` | `horizontal/piloto-03/horizontal.csv` |
+| `matriz` | `horizontal/manifiesto-matriz.json` |
+| `ranking_cobertura`, `ranking_puestos`, `ranking_perfil` | el último `ranking/ranking-*.json` (o `--ranking`) |
+
+`tab:lecturas`, `tab:extractor` y `tab:coste` no se regeneran: salen de lecturas con medidas por
+expresión regular, de una tabla de este documento (§3) y de los `llm_calls.jsonl` de cada run, y el
+manifiesto lo declara en `a_mano`. `Evaluations/` está ignorado por Git: quien clone el repositorio
+conserva las tablas ya generadas, no sus entradas.

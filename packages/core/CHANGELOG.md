@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.8.3] - 2026-11-03
+
+- P09.1: `asg help` lists `asg-results`.
+
 ## [0.8.2] - 2026-11-02
 
 - P07.4: `asg help` lists `asg-perturb`.

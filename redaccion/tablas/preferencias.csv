@@ -1,0 +1,7 @@
+group,criterion,status,components,agreement,alpha,abstentions
+all,H01,insufficient,2,0.4,-0.14000000000000012,3
+all,H02,insufficient,2,0.5161290322580645,0.04999999999999993,3
+all,H03,insufficient,2,0.4444444444444444,-0.09090909090909083,2
+without_author,H01,insufficient,2,0.4,-0.14000000000000012,3
+without_author,H02,insufficient,2,0.5161290322580645,0.04999999999999993,3
+without_author,H03,insufficient,2,0.4444444444444444,-0.09090909090909083,2
