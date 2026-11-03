@@ -342,6 +342,21 @@ rasgos, juez, análisis o tesis se contrasta con esta lista antes de empezar.
     rankings, el combinado y la longitud, los 24 núcleo frente a la mediana del corpus ordenado, y
     configuración (C), proceso (P) y coste (K) cuando existan. Josue escribe fortalezas y
     debilidades, marcadas «(Josue)»; Claude no escribe juicios.
+- **2026-11-03 · Extractor 3.1 para los textos nuevos (P08.4).** Decidido por Josue tras el lote 1,
+  con la cuota de `gemini-3.5-flash-lite` agotada. Cambia el modelo de «Tope y parada» de P08.1
+  solo para una parte del corpus, y levanta la parada del lote 1.
+  - Los textos de 7.20+ y líneas base **sin extracción vigente de 3.5** (42 sin extraer y 6 con
+    un catálogo anterior, `--dry-run` del 2026-11-03) se extraen con `gemini-3.1-flash-lite`
+    (`GEMINI_MODEL` solo en el proceso; el `.env` no cambia). Las 3 completas con 3.5 no se
+    tocan, y las 7 incompletas con 3.5 se reanudan con 3.5 cuando vuelva su cuota. Así no se
+    rehace nada de 3.5, porque el modelo forma parte de la huella de la extracción.
+  - Hoy el tope son 375 llamadas: las 400 diarias menos las 25 del lote 1, que cuentan. Los
+    reintentos siguen siendo los de P08.1 y nunca se combinan intentos de modelos distintos.
+  - **Limitación declarada.** El juez se entrenó con rasgos de 3.5 (P07.6) y el extractor se
+    validó con 3.5 (P04.7–P04.8). 3.1 no está validado, y aplicar al ranking la normalización
+    del juez sobre sus rasgos es un cambio de distribución que T8 no cubre. `extraction_compatible`
+    no mira el modelo, y `asg-rank` mezcla los dos sin avisar. P08.5 dice qué modelo midió cada
+    historia ordenada y lo declara como sesgo.
 
 ## 3. Decisiones de proyecto
 
