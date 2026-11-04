@@ -62,13 +62,16 @@ esta tesis están en español, una lengua en la que la brecha entre un LLM y un 
 mayor que en inglés~\cite{marco2024}.
 
 La \textbf{novedad científica} del trabajo está en dos aportaciones. La primera es un generador
-híbrido que separa tres decisiones. Un plan validado decide qué pasa; unos personajes simulados que
+híbrido, bidireccional en el sentido del título: el plan baja de arriba abajo
+(\textit{Top-Down}) y los personajes simulados suben de abajo arriba (\textit{Bottom-Up}). Separa tres
+decisiones. Un plan validado decide qué pasa; unos personajes simulados que
 solo saben lo que presenciaron deciden cómo pasa, al representar el plan escena a escena en lo que
 llamamos una \textbf{función}, como en el teatro; y un narrador que cura el registro de esa función,
-sin inventar, decide cómo se cuenta. En la literatura revisada no encontramos un generador con LLMs
-que reúna las tres piezas (Sección~\ref{sec:posicion}). La segunda es una metodología de evaluación
-en la que el LLM no juzga: cuenta rasgos de la historia y cita el pasaje de cada recuento, que el
-código verifica literalmente. La calidad la deciden lectores que comparan pares de historias a
+sin inventar, decide cómo se cuenta. En la literatura revisada, que no es exhaustiva
+(Sección~\ref{sec:posicion}), no encontramos un generador con LLMs que reúna las tres piezas; los más
+cercanos comparten solo parte de ellas~\cite{yu2025,chen2026a}. La segunda es una metodología de
+evaluación en la que el LLM no juzga la calidad: cuenta rasgos de la historia y cita el pasaje de cada
+recuento, que el código verifica literalmente. La calidad la deciden lectores que comparan pares de historias a
 ciegas, y un juez aprendido de esas comparaciones traduce los recuentos al orden humano.
 
 La importancia teórica del trabajo es doble. Como el plan, la función y la narración son etapas
@@ -144,9 +147,13 @@ personajes e interés de la trama.
   podía conocer, y que los lectores prefieren a ciegas.
   \item \textbf{H3:} más mecanismos no implican una historia mejor: que un mecanismo mejore medidas
   de la prosa no basta para que los lectores prefieran a ciegas las historias que lo usan frente a
-  las que no. Es la conclusión de WSE-bench~\cite{chen2026b} aplicada a este generador, y obliga a
-  que cada mecanismo se gane su complejidad.
+  las que no. Parte de la conclusión de WSE-bench~\cite{chen2026b}, que mide la coherencia con jueces
+  LLM, y la traslada a la preferencia de los lectores en este generador; obliga a que cada mecanismo
+  se gane su complejidad.
 \end{itemize}
+
+Salvo la regla de ruido de H1 (Sección~\ref{sec:horizontal}), las hipótesis no fijan de antemano qué
+resultado las confirmaría o refutaría.
 
 El documento se organiza en cinco capítulos. El Capítulo~\ref{chapter:state-of-the-art} revisa el
 estado del arte de la generación y la evaluación de historias y fija la posición del trabajo. El

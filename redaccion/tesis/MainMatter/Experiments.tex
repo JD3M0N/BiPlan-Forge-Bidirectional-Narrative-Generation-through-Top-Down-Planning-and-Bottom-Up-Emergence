@@ -44,7 +44,9 @@ rasgos usó \texttt{gemini-3.5-flash-lite}. Cada comparación se hizo dentro de 
 generador y sobre la misma entrada: los cambios de narración, sobre la misma función, y los de
 escritura, sobre el mismo plan (Sección~\ref{sec:artefactos}).
 
-El corpus es el conjunto de ejecuciones guardadas en el repositorio. El inventario del 28
+El corpus es el conjunto de ejecuciones guardadas en la copia del autor del repositorio, en la
+carpeta \texttt{Stories/}, que no está bajo control de versiones (Sección~\ref{sec:pruebas}). El
+inventario del 28
 de octubre de 2026, hecho con \texttt{asg-corpus} antes de generar la matriz, contó 331 ejecuciones,
 de las que 116 eran elegibles para el ranking: las completas y en prosa de Stagecraft 7 y las líneas
 base. Se excluyeron 135 por ser de un generador anterior a Stagecraft 7, 72 por no haber terminado y
@@ -85,8 +87,11 @@ cerrar la obra antes de tiempo, no cuál de los dos da mejores historias.
 En esa validación se auditaron literalmente 62 contextos enviados a los actores, y ninguno contenía un
 pensamiento de otro personaje ni un susurro que el actor no hubiera presenciado. Es la comprobación,
 en ejecuciones reales, de lo que una prueba de contrato comprueba con el proveedor falso
-(Sección~\ref{sec:pruebas}). Para H2 es evidencia indirecta: muestra que la memoria propia aísla a los
-personajes, no que mejore las escenas.
+(Sección~\ref{sec:pruebas}). No se conserva una tabla de esa auditoría, solo su resultado en la
+documentación del repositorio (\texttt{docs/resumen.md}), y revisó dos categorías, los pensamientos y
+los susurros ajenos, que el diseño ya mantiene privados por construcción. Para H2 es evidencia
+indirecta: es coherente con que la memoria propia aísle a los personajes de esas dos fugas, no muestra
+que mejore las escenas.
 
 \subsection{Narración y escritura}\label{sec:val-brazos}
 
@@ -123,7 +128,11 @@ eligió el lector.
 En las dos lecturas, el brazo B corrigió los defectos que medía el código, y en ninguna ganó. En la
 narración, B redujo los párrafos que encadenan réplicas en estilo indirecto, como un acta, y el verbo
 de habla en casi cada línea, y empató con A. Estas dos cifras son aproximadas, porque salen de
-expresiones regulares y no del código del repositorio. En la escritura, los ocho borradores ya
+expresiones regulares y no del código del repositorio. La misma fuente registra, en cambio, que B
+conservó más del registro: la proporción de réplicas del registro que sobreviven en la narración fue
+de 0,73 a 0,85 frente a 0,48 a 0,67 de A, y las réplicas directas por ejecución, de 18 a 68 frente a
+12 a 35, justo el riesgo de darle al narrador el registro tal cual (Sección~\ref{sec:narrador}). En la
+escritura, los ocho borradores ya
 cumplían, con o sin brazos, los cuatro umbrales con que el código mide la prosa (nombres repetidos,
 coletillas emocionales, gerundios en la coletilla y símiles); B redujo las coletillas a casi cero y
 acortó el texto, y el lector prefirió A en tres de los cuatro pares. Con un empate se mantuvo la
@@ -151,10 +160,11 @@ defectos menores fuera de esos criterios, sin corregir por la congelación: una 
 títulos sin tilde en la simulada. El generador se congeló ese mismo día.
 
 La limitación conocida está en los \textit{beats}: la función forzó 3 de sus 6, en tres escenas
-distintas. Una validación de la versión 7.12 había medido la misma proporción (5 de 10), así que no es
-un defecto nuevo, sino el precio del mecanismo de la Sección~\ref{sec:director}: el suceso del mundo
-garantiza que la función avance, no que los personajes lleguen solos a cada evento. Una ejecución por
-formato, en cualquier caso, no distingue el efecto del ruido.
+distintas. Una validación de la versión 7.12 había medido la misma proporción (5 de 10), aunque la de la
+versión 7.5 forzó 1 de 6 (Sección~\ref{sec:val-modo}), así que no es un defecto nuevo, sino el precio
+del mecanismo de la Sección~\ref{sec:director}: el suceso del mundo garantiza que la función avance, no
+que los personajes lleguen solos a cada evento. Una ejecución por formato, en cualquier caso, no
+distingue el efecto del ruido, y los datos de la versión 7.12 no se reproducen en esta tesis.
 
 Para las hipótesis, estas validaciones aportan poco y de forma exploratoria. Sobre H3, en las dos
 lecturas a ciegas el brazo que mejoró las medidas de la prosa no ganó: empató en la narración y
@@ -242,7 +252,8 @@ los ciclos «sí, pero» (0,71). En los límites del mundo, las dudas tienen una
 toma por reglas del mundo restricciones de la trama, como un plazo o una salida bloqueada, lo que es un
 error de definición y no de lectura.
 
-Doce rasgos no cumplieron la estabilidad, pero no porque su valor cambiara. Donde las dos pasadas
+Doce rasgos no cumplieron la estabilidad (nueve de la lista núcleo, ocho con cita y el reparto del
+diálogo, y tres de los que pasaron a secundarios), pero no porque su valor cambiara. Donde las dos pasadas
 midieron el rasgo, la diferencia media fue 0,00 (0,01 en el reparto del diálogo); lo que cambió fue el
 estado, medido en una pasada y fallido o no aplicable en la otra, y la mitad de las extracciones
 estaban incompletas. Tres de esos rasgos no tienen ni un par medido en ambas pasadas, así que de su
@@ -256,11 +267,13 @@ réplicas de la que sale.
 
 La regla de salida se aplicó el 30 de octubre de 2026. Cuatro rasgos pasaron a secundarios: el defecto
 con coste, las réplicas fuera de personalidad y las preguntas pagadas, sin ningún par medido en las dos
-pasadas ni citas que mostraran si el extractor los detecta, y las soluciones sin preparar, sin citas
-juzgadas y con un cambio de estado. Ninguno mostraba un error de definición con citas que lo probaran,
-así que no se reformularon. Los otros ocho que fallaron la estabilidad se conservaron con una excepción
-escrita, porque su valor no cambió donde se midió dos veces, aunque esa evidencia descansa en uno a
-tres pares por rasgo. Así quedó la lista núcleo de 24 rasgos de la Sección~\ref{sec:lista-nucleo}. La
+pasadas y con menos de cinco citas juzgadas (cuatro, todas correctas, en el primero; ninguna en los
+otros dos), y las soluciones sin preparar, sin citas juzgadas y con un cambio de estado. Ninguno
+mostraba un error de definición con citas que lo probaran, así que no se reformularon. Los otros nueve
+que fallaron la estabilidad se conservaron con una excepción escrita que la regla de la
+Sección~\ref{sec:validacion-extractor} no preveía, porque su valor no cambió donde se midió dos veces,
+aunque esa evidencia descansa en uno a tres pares por rasgo que la Tabla~\ref{tab:extractor} no
+muestra. Así quedó la lista núcleo de 24 rasgos de la Sección~\ref{sec:lista-nucleo}. La
 validación es provisional y así se declara: falta la cobertura, la precisión no la juzgó una persona
 leyendo las historias y la mitad de la muestra quedó incompleta. Además, fijar la lista cambió la
 huella del catálogo, de modo que las extracciones de la muestra se hicieron con la definición anterior
@@ -310,9 +323,11 @@ modelo de la función, así que esa base mezcla dos modelos. Y la segunda repeti
 cadena tenía cupo. Con la cuota del día agotada, la comprobación previa de \texttt{asg-matrix} dejaba
 una llamada al modelo principal frente a las unas 19 que necesita una derivada, y no lanzó ninguna más.
 Ese mismo día se decidió cerrar el análisis sin generar el resto: quedaron hechas 14 de las 35
-unidades, cuatro bases y diez derivadas, y 21 sin generar, la base fallida con sus cinco derivadas y
-las quince de las otras tres bases. La Tabla~\ref{tab:anexo-matriz} del Anexo~\ref{app:tablas} da el
-estado de cada celda.
+unidades, cuatro bases y diez derivadas, y 21 sin completar: la base fallida y las 20 derivadas que
+quedaron sin generar, las cinco de esa base y las quince de las otras tres. La
+Tabla~\ref{tab:anexo-matriz} del Anexo~\ref{app:tablas} da el estado de cada celda sobre 45
+unidades, las 35 nuevas más las nueve líneas base y la base de la obra 03 que se adoptó de la
+validación de la versión congelada.
 
 Solo el piloto llegó a tener rasgos. Los de sus cinco derivadas se extrajeron con 21 llamadas, y tres
 de las cinco extracciones quedaron incompletas, como en la validación del extractor; en la del tono
@@ -342,15 +357,16 @@ funciona de principio a fin sobre datos reales, no qué rasgos mueve cada parám
 El análisis horizontal, en consecuencia, no tiene resultados interpretables. No hay tabla horizontal
 completa para el tono ni para la visión, y la comparación de la historia narrada desde la función con
 la escrita directamente desde el plan, que contrasta la parte mecánica de H1, tiene un solo par con
-rasgos y ningún ruido medido: para esa parte de H1 no hay datos suficientes. Las nueve líneas base
-tampoco tienen rasgos extraídos, así que su ruido propio no se midió. Lo que queda es la matriz a medio
+rasgos y ningún ruido medido: para esa parte de H1 no hay datos suficientes. Al cerrar la matriz, las
+nueve líneas base tampoco tenían rasgos extraídos con la huella vigente del catálogo (tres se habían
+extraído en la validación del extractor, con la anterior), así que su ruido propio no se midió. Lo que queda es la matriz a medio
 generar, con su manifiesto y su coste medido, y una herramienta que la reanuda sin repetir llamadas.
 Con los costes de la Tabla~\ref{tab:coste}, las 21 unidades que faltan, una base, cuatro narrativas y
 dieciséis renarraciones, necesitarían entre 300 y 450 llamadas al modelo principal, alrededor de un día
 de cuota, además de la extracción de rasgos de toda la matriz.
 
-Los datos cerrados dejan, por tanto, un generador que superó sus comprobaciones en ejecuciones reales,
-con una limitación conocida en los \textit{beats} forzados; dos lecturas a ciegas exploratorias que
+Los datos cerrados dejan, por tanto, un generador que superó sus comprobaciones en una ejecución por
+formato, con una limitación conocida en los \textit{beats} forzados; dos lecturas a ciegas exploratorias que
 coinciden con lo que anticipa H3; un extractor cuyas citas resultaron correctas en los rasgos con
 evidencia, pero cuya estabilidad y cobertura no quedaron establecidas, y un análisis horizontal sin
 resultados interpretables. Las secciones siguientes presentan lo que se recogió de los lectores.
@@ -366,7 +382,10 @@ flujo de votación antes del estudio, y no siguen el protocolo diseñado.
 El piloto usó seis historias de la versión congelada, tres por obra. De la obra 01, dos simuladas, una
 base de la matriz y la renarración en tono sombrío de otra base, y una línea base; de la obra 03, una
 base simulada, la historia narrativa de la validación de la Sección~\ref{sec:val-congelada} y una
-línea base. Cinco lectores, sin el autor, votaron el 30 y el 31 de octubre de 2026 con una
+línea base. Las tablas las rotulan H1 a H6: H1 y H2 son las dos simuladas de la obra 01, H3 su línea
+base, y H4, H5 y H6 la simulada, la narrativa y la línea base de la obra 03. Los criterios llevan los
+códigos H01 (creatividad), H02 (personajes) y H03 (trama), que no son las hipótesis H1 a H3 de la
+Introducción. Cinco lectores, sin el autor, votaron el 30 y el 31 de octubre de 2026 con una
 \textbf{hoja de orden fijo}: los cinco recibieron los mismos cinco pares, en el mismo orden y con la
 misma historia como A, y respondieron las tres preguntas de la Tabla~\ref{tab:criterios} en cada
 par. Un lector paró en la novena pregunta. Las respuestas, 69 en total, se transcribieron a mano y se
@@ -396,9 +415,13 @@ sin el autor coinciden porque el autor no votó.
 % Par H4-H5 (simulada frente a narrativa): 2-2-1, 1-3-1 y 3-2-0.
 Sumando los cuatro pares en los que una historia del generador se enfrenta a su línea base, el
 generador ganó 24 votos y la línea base otros 24: 8 a 8 en creatividad, 7 a 9 en personajes y 9 a 7 en
-trama. En el par de la obra 03 entre la simulada y la narrativa, la narrativa ganó en personajes (3
-a 1), la simulada en trama (3 a 2) y empataron en creatividad. Ninguna de estas cifras se separa del
-azar, y las cuatro amenazas del protocolo les quitan aún más peso: la historia generada fue siempre
+trama. La suma mezcla resultados de signo contrario: frente a la misma línea base de la obra 01, H1
+pierde en personajes por 1 a 4 y gana en trama por 4 a 1, mientras que H2 gana en personajes por 3 a 1
+y pierde en trama por 2 a 3. Los 48 votos son además los mismos lectores sobre los mismos cuatro pares,
+y sumar los tres criterios cuenta tres veces a cada lector, de modo que el 24 a 24 no se lee como un
+empate entre enfoques. En el par de la obra 03 entre la simulada y la narrativa, la narrativa ganó en
+personajes (3 a 1), la simulada en trama (3 a 2) y empataron en creatividad. Ninguna de estas cifras
+se separa del azar, y las cuatro amenazas del protocolo les quitan aún más peso: la historia generada fue siempre
 la A, así que el sesgo de posición no se separa del enfoque; el cansancio cayó siempre sobre los
 mismos pares; la transcripción no tuvo un segundo revisor, y no consta con qué presentación exacta
 se enviaron las historias. El piloto sirve para entrenar un juez exploratorio, no para decir qué
@@ -415,14 +438,18 @@ giros se tomó, con la aprobación del autor, de un intento anterior del mismo p
 intento completó a la vez todos los rasgos de ese texto. El juez se entrenó una sola vez, el 3 de
 noviembre de 2026, sin quitar rasgos ni cambiar la regularización después de ver los resultados.
 
-El juez se ajustó en los tres criterios, pero \textbf{no generaliza}. La Tabla~\ref{tab:juez} da los
-aciertos fuera de muestra: por historia queda por debajo del azar en los tres criterios, y por
-familia queda por debajo en creatividad y trama e iguala al azar en personajes. La longitud sola le
-gana en los tres criterios y en los dos esquemas. Ninguna de estas cifras se separa del azar con tan
-pocos votos: con 20 votos, los 14 aciertos de la mejor longitud tendrían una probabilidad de
-alrededor de 0,12 en una prueba binomial a dos colas, y los votos no son independientes, porque
-vienen de los mismos lectores sobre los mismos cinco pares. La $\tau$ de Kendall no se puede calcular,
-porque no hay orden humano global.
+El juez se ajustó en los tres criterios, pero \textbf{no se mostró que generalice}. La
+Tabla~\ref{tab:juez} da los aciertos fuera de muestra: por historia queda por debajo del azar en los
+tres criterios, y por familia queda por debajo en creatividad y trama e iguala al azar en personajes.
+La longitud sola, que no tiene pesos que ajustar y por eso da la misma cifra en los dos esquemas, le
+gana al juez en los tres criterios. Ninguna de estas cifras se separa del azar con tan pocos votos:
+con 20 votos, los 14 aciertos de la mejor longitud tendrían una probabilidad de alrededor de 0,12 en
+una prueba binomial a dos colas, y 8 aciertos de 20, de 0,50; los votos no son independientes, porque
+vienen de los mismos lectores sobre los mismos cinco pares, y la brecha de 4 a 6 votos entre el juez y
+la longitud, que se puntúan sobre los mismos votos, no se contrastó con una prueba pareada. Un juez que
+sí generalizara, entrenado con seis historias, daría cifras igual de indistinguibles del azar, y la
+validación no incluye un control positivo que distinga ambas situaciones. La $\tau$ de Kendall no se
+puede calcular, porque no hay orden humano global.
 
 \begin{table}[htb]
   \centering
@@ -442,7 +469,7 @@ describe este ajuste, no un hallazgo sobre los rasgos.
 
 La Tabla~\ref{tab:perturbaciones} da el control de perturbaciones. La puntuación baja en 4 de los 11
 casos en creatividad, en 7 en personajes y en 4 en trama, y en ningún caso bajan los tres criterios a
-la vez. Cada perturbación se volvió a extraer, y ocho de los rasgos núcleo no superaron la prueba de
+la vez. Cada perturbación se volvió a extraer, y nueve de los rasgos núcleo no superaron la prueba de
 estabilidad (Sección~\ref{sec:resultados-extractor}): cada diferencia mezcla el efecto de romper la
 historia con el ruido del extractor, y aquí no se pueden separar. Que el juez no premie de forma
 sistemática la historia intacta es coherente con que no haya aprendido una preferencia que
@@ -462,8 +489,8 @@ generalice.
 \section{El ranking del corpus}\label{sec:resultados-ranking}
 
 El juez congelado se aplicó al corpus el 3 de noviembre de 2026 como \textbf{ranking exploratorio},
-con el orden por longitud al lado como control. Como el juez no generaliza, el orden describe lo que
-premia este ajuste, no las mejores historias. Ese día el inventario contaba 346 ejecuciones y 130
+con el orden por longitud al lado como control. Como no se mostró que el juez generalice, el orden
+describe lo que premia este ajuste, no las mejores historias. Ese día el inventario contaba 346 ejecuciones y 130
 elegibles, pero solo 2 tenían una extracción completa y compatible además de las seis del piloto.
 Extraer el resto chocó con la cuota: el lote del modelo del protocolo terminó con su cupo diario tras
 25 llamadas y completó 1 de 5 textos, y un segundo lote con el otro modelo, 185 llamadas, completó 1 de
@@ -494,8 +521,9 @@ renarran la misma función de la obra 03, la simulada de la validación de la ve
 primera persona y en tono sombrío: comparten plan, guion y función, y solo difieren en la narración.
 La tercera es una línea base de la obra 01, la más corta de las nueve. Por longitud, las tres están en
 los puestos 4, 9 y 3; con solo tres historias, compararlas con las tres más largas no dice nada. Sus
-medianas superan a las del resto en mentiras (2 frente a 0), complicaciones (3 frente a 1) y usos de
-objetos (8,4 frente a 3,8), con uno a tres valores por rasgo: sirven para describirlas, no para
+medianas superan a las del resto en complicaciones (3 frente a 1), usos de objetos (8,4 frente a 3,8)
+y mentiras (2 frente a 0, un rasgo sin citas juzgadas en la validación del extractor), con uno a tres
+valores por rasgo: sirven para describirlas, no para
 compararlas. La Tabla~\ref{tab:anexo-perfil} del Anexo~\ref{app:tablas} da las 24 medianas.
 
 \begin{table}[htb]
@@ -527,20 +555,26 @@ Con lo recogido, ninguna de las tres hipótesis se puede confirmar ni refutar:
   \item \textbf{H2, sin datos suficientes.} La comparación entre memoria propia y memoria compartida
   no se ejecutó. Solo hay evidencia indirecta de que la memoria propia aísla a los personajes: los 62
   contextos auditados de la Sección~\ref{sec:val-modo}, que no dicen nada de la calidad de las
-  escenas.
+  escenas. Además, la medida que H2 nombra, las menciones a hechos que el personaje no podía conocer,
+  no es ninguno de los 24 rasgos núcleo, y esa auditoría cubre los pensamientos y susurros ajenos, no
+  los hechos públicos que un personaje ausente no presenció.
   \item \textbf{H3, sin datos suficientes.} En las dos lecturas a ciegas de los
   mecanismos opcionales, el brazo que mejoró las medidas de la prosa empató o perdió
-  (Sección~\ref{sec:val-brazos}), y en el piloto las historias del generador empataron con las líneas
-  base, 24 votos a 24. Es coherente con lo que H3 anticipa, pero las lecturas son de un solo lector, el autor, y el piloto
-  tiene un acuerdo cercano al azar y la posición confundida con el enfoque. El juez, que podía decir
-  qué rasgos acompañan a la preferencia, no generaliza.
+  (Sección~\ref{sec:val-brazos}), y en el piloto el generador y las líneas base sumaron 24 votos cada
+  uno, con resultados de signo contrario entre historias. Es coherente con lo que H3 anticipa, pero las
+  lecturas son de un solo lector, el autor, y el piloto tiene un acuerdo cercano al azar y la posición
+  confundida con el enfoque; además, compara el generador completo con una línea base, no cada
+  mecanismo con su ausencia, que es lo que plantea H3. El juez, que podía decir qué rasgos acompañan a
+  la preferencia, no mostró que generalice.
 \end{itemize}
 
-El capítulo deja un generador validado en ejecuciones reales y un conjunto de instrumentos que
-funcionan de principio a fin sobre datos reales: la extracción con citas, la matriz emparejada, la
-votación a ciegas, el juez con su validación fuera de muestra y el ranking con sus exclusiones. Los
+El capítulo deja un generador comprobado en una ejecución por formato y un conjunto de instrumentos
+que se ejercitaron de principio a fin sobre datos reales, aunque la votación del piloto no usó la
+asignación del sistema: la extracción con citas, la matriz emparejada, la votación a ciegas, el juez
+con su validación fuera de muestra y el ranking con sus exclusiones. Los
 datos que esos instrumentos recogieron no bastan para responder a las hipótesis. El análisis
 horizontal se quedó en 14 de 35 unidades, el estudio humano en un piloto de cinco lectores con un
-acuerdo cercano al azar, el juez por debajo de la longitud sola y el ranking en 9 de 130 historias. La
+acuerdo cercano al azar, el juez por debajo de la longitud sola, sin que ninguna de las dos se separe
+del azar, y el ranking en 9 de 130 historias. La
 causa común es la escala: la cuota diaria acotó lo que se pudo generar y extraer, y el plazo, cuántos
 lectores se pudieron reunir.

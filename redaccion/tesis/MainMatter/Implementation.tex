@@ -4,8 +4,8 @@
 % pyproject.toml y de version.py (Studio es 0.3.0 desde el 2026-10-27; el «Estado actual» de
 % planning/roadmap.md decía 0.2.2 y se corrigió), comandos de asg_core/help.py, temperaturas y
 % reintentos de runtime/provider.py, constantes de features.py, study.py y judge.py. Líneas de
-% código: líneas de los .py versionados bajo src/ de cada paquete (git ls-files), con blancos y
-% comentarios, el 2026-11-01. Pruebas: .\run-tests.ps1 el 2026-11-01, 907 pasan y 2 se omiten
+% código: líneas no vacías (con comentarios) de los .py versionados bajo src/ de cada paquete
+% (git ls-files), el 2026-11-01; en asg-core, 1.065 de 1.246 (comprobado en d6a558c, 2026-11-03). Pruebas: .\run-tests.ps1 el 2026-11-01, 907 pasan y 2 se omiten
 % (las de test_gemini_live.py). La cifra de los 503 es de docs/architecture/runtime.md.
 % Referencias nuevas, verificadas en la web el 2026-11-01: pydantic2026, google2026,
 % virtanen2020, pedregosa2011, ptb2026, fastapi2026. \codigo está definido en Thesis.tex.
@@ -36,7 +36,8 @@ aplicaciones, de los tres.
 
 \begin{table}[htb]
   \centering
-  \caption{Paquetes del repositorio el 1 de noviembre de 2026}
+  \caption{Paquetes del repositorio el 1 de noviembre de 2026 (líneas no vacías de código bajo
+    \texttt{src/})}
   \label{tab:paquetes}
   \small
   \begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.0cm}>{\raggedright\arraybackslash}p{1.3cm}%
@@ -175,7 +176,7 @@ admitidos, del 5.0 al 7.22. Si cambia el conjunto de artefactos o su significado
 del contrato en lugar de romper las ejecuciones ya generadas, que son datos de la tesis; un cambio
 que no toca artefactos sube solo la del paquete, como la 7.22.1, que añadió el ejecutor de matrices.
 La configuración congelada lleva en Git la etiqueta \texttt{generator-frozen}, del 28 de octubre de
-2026; desde entonces, ningún \textit{prompt}, esquema ni contrato cambia sin una decisión nueva y
+2026, sobre la versión 7.22.0; desde entonces, ningún \textit{prompt}, esquema ni contrato cambia sin una decisión nueva y
 escrita. Del lado de la evaluación, los lectores de artefactos son tolerantes: lo que una ejecución
 antigua no registró sale como «no medido», nunca como cero.
 
@@ -270,8 +271,11 @@ respuestas del modelo, la validación, la percepción, la recuperación de la me
 \textit{embeddings} ni llamadas al modelo, y las medidas dan el mismo resultado. También se
 reproduce el análisis: como cada ejecución conserva sus artefactos con su huella, la tabla de
 rasgos, las preferencias, el juez y el ranking se recalculan desde el disco sin volver a generar, el
-sorteo del estudio se repite con su semilla y cada historia declara la versión del generador, del
-contrato y de los modelos que la produjeron.
+sorteo del estudio se repite con su semilla, el \textit{bootstrap} usa la semilla 42 y cada historia
+declara la versión del generador, del contrato y de los modelos que la produjeron. Ese recálculo
+necesita los datos, que no están en Git: el corpus (\texttt{Stories/}) y las evaluaciones
+(\texttt{Evaluations/}), con los votos del piloto, las extracciones, el juez y el ranking, residen en
+la copia del autor; el repositorio versiona el código y las tablas de la tesis.
 
 Este capítulo deja descrito un sistema en el que las decisiones del Capítulo~\ref{chapter:generator}
 tienen un lugar comprobable: los validadores y la memoria son funciones puras con pruebas, la

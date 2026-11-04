@@ -39,23 +39,26 @@ versión y su huella, y las tablas del estudio, del juez y del ranking se regene
 artefactos. La cuota diaria
 del servicio de modelos fue una restricción práctica que el sistema administra, pero no evita.
 
-La evaluación experimental (Capítulo~\ref{chapter:experiments}) validó el generador en ejecuciones
-reales antes de congelarlo, con una limitación conocida: la función fuerza la mitad de sus
-\textit{beats}. El resto de la evaluación funcionó de principio a fin sobre datos reales, pero con
-muestras que no bastan para concluir. La validación del extractor es provisional; el análisis
-horizontal se quedó en 14 de 35 unidades y sin resultados interpretables; el estudio humano, en un
-piloto de cinco lectores con un acuerdo cercano al azar, y el juez aprendido de ese piloto no
-generaliza: fuera de muestra queda por debajo de la longitud sola. Las tres hipótesis quedan sin datos
+La evaluación experimental (Capítulo~\ref{chapter:experiments}) comprobó el generador en ejecuciones
+reales antes de congelarlo, con una ejecución por formato y una limitación conocida: la función forzó
+3 de sus 6 \textit{beats} (5 de 10 en una validación anterior). Los instrumentos del resto de la
+evaluación se ejercitaron sobre datos reales, aunque la votación del piloto no usó la asignación del
+sistema, y las muestras no bastan para concluir. La validación del extractor es provisional; el
+análisis horizontal se quedó en 14 de 35 unidades y sin resultados interpretables; el estudio humano,
+en un piloto de cinco lectores con un acuerdo cercano al azar. El juez aprendido de ese piloto acierta
+fuera de muestra menos que la longitud sola, pero con 20 o 21 votos por criterio ninguna de las dos
+cifras se separa del azar: no se mostró que generalice. Las tres hipótesis quedan sin datos
 suficientes. Para H3, lo observado es coherente con lo que anticipa, pero no la confirma: las mejoras
-medidas de la prosa no ganaron en las lecturas a ciegas, y en el piloto las historias del generador
-empataron con las líneas base.
+medidas de la prosa no ganaron en las lecturas a ciegas, y en el piloto el generador y las líneas base
+sumaron 24 votos cada uno, con resultados de signo opuesto entre historias.
 
 Las \textbf{aportaciones} son las dos que se plantearon. La primera es el generador: una arquitectura
 que combina planificación y simulación con LLMs y que apoya cada separación en una comprobación del
 código, disponible con sus opciones y su configuración congelada. La segunda es la metodología de
 evaluación con sus herramientas: recuentos citados y verificables en lugar de puntuaciones, pares a
-ciegas en lugar de escalas, y un juez cuyo fracaso fuera de muestra se detecta y se publica en lugar de
-pasar por una medida de calidad.
+ciegas en lugar de escalas, y un juez cuyo resultado desfavorable fuera de muestra se publica, con la
+salvedad de que la validación no tiene muestra para separarlo del azar, en lugar de pasar por una
+medida de calidad.
 
 Las \textbf{limitaciones} son, sobre todo, de escala. La cuota diaria acotó cuántas historias se
 pudieron generar y extraer, y el plazo, cuántos lectores se pudieron reunir; la extracción de rasgos

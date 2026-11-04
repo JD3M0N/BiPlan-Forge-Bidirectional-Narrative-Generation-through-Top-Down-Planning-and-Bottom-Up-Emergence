@@ -12,8 +12,9 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
 ## Estado
 
 - **Siguiente:** ninguna parte. Borrador completo: **H5**, Josue manda el borrador al tutor.
-- **Extensión acumulada:** 45,4 de 50 cuartillas (sin figuras, tablas, anexos ni bibliografía);
-  76 págs. en el PDF, cuerpo 1–55 y anexos 63–68.
+- **Extensión acumulada:** unas 47,5 de 50 cuartillas (45,4 medidas en R12 más las dos páginas de
+  cuerpo de R13, sin volver a medir; sin figuras, tablas, anexos ni bibliografía); 78 págs. en el
+  PDF, cuerpo 1–57 y anexos 65–70.
 - **Compilar:** en `redaccion/tesis/` (disco E:) las pasadas sucesivas de `latexmk` fallan con
   «Extra }» o «File ended while scanning» en `Thesis.aux`: al releerlo en `\end{document}` aún
   tiene restos de la pasada anterior. Desde el 2026-11-03 se compila en una copia de `redaccion/`
@@ -124,6 +125,15 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
     secas, con lo observado «coherente con lo que anticipa»; la suma 24–24 lleva su aritmética en
     un comentario, y las conclusiones ya no dicen que se regeneran todas las tablas (tres siguen a
     mano). Pendientes para Josue antes de **H5** en «Pendientes del borrador».
+  - R13 · revisión del 2026-11-03/04 tras la auditoría con la skill `review` de matcom/ai-skills
+    (informe en `reviews/naranjo-2026-11-03.md`, triaje en `reviews/naranjo-2026-11-03.triage.md`):
+    cada cifra del resumen, el *abstract*, §5.8 y las conclusiones lleva su cautela (24–24 con signos
+    opuestos por historia; 3 de 6 *beats*; juez «no se mostró que generalice», sin separarse del
+    azar); rótulos H1–H6 y H01–H03 definidos en §5.5; estabilidad del extractor 12 = 9 núcleo + 3
+    secundarios; 21 sin completar = 20 sin generar + 1 fallida; datos fuera de Git declarados en
+    §4.6 y §5.1; «el LLM no juzga la calidad»; palabras clave; tres vecinos nuevos verificados
+    (`yu2025`, `gu2026`, `go2024`) y diez entradas del `.bib` corregidas. +2 págs. de cuerpo,
+    0 \todo, 0 referencias indefinidas, 0 cajas desbordadas.
 
 ## Pendientes del borrador (R12, 2026-11-03)
 
