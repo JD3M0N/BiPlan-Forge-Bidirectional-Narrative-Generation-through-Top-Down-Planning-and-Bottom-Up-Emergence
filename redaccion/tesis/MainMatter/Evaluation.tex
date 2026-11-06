@@ -35,7 +35,7 @@ criterio, pero solo para una muestra. El juez aprende de la muestra qué combina
 acompaña a la preferencia y la aplica al corpus entero. Así, ninguna cifra automática sustituye a
 una persona que prefiere una historia a otra, a ningún modelo se le pregunta si una historia es
 buena, y el juez no se pide a un LLM: se aprende de los lectores, como en LitBench~\cite{fein2026}
-(Sección~\ref{sec:jueces-llm}).
+y en los modelos composicionales de Go et al.~\cite{go2024} (Sección~\ref{sec:jueces-llm}).
 
 \begin{figure}[t]
   \centering
@@ -58,8 +58,9 @@ todo el análisis.
 La cita cambia la naturaleza de lo que hace el modelo. Un juez LLM emite una opinión que nadie puede
 verificar, y la literatura muestra que esa opinión se aparta de la de los lectores y se inclina a
 favor del propio modelo (Sección~\ref{sec:jueces-llm}). Un recuento con cita, en cambio, se
-comprueba ocurrencia por ocurrencia, como hace ConStory-Bench~\cite{li2026} con cada contradicción, y
-se parece más a las pruebas binarias de TTCW~\cite{chakrabarty2024} que a una puntuación. Lo que la
+comprueba ocurrencia por ocurrencia. ConStory-Bench~\cite{li2026} documenta cada contradicción con su
+cita, pero allí la cita forma parte del veredicto del juez LLM; aquí el código comprueba carácter por
+carácter que está en el texto. El recuento se parece más a las pruebas binarias de TTCW~\cite{chakrabarty2024} que a una puntuación. Lo que la
 cita no garantiza es que el extractor encuentre todas las ocurrencias: verifica lo que se cuenta, no
 lo que se omite. Por eso el extractor se valida aparte (Sección~\ref{sec:validacion-extractor}).
 
@@ -280,7 +281,7 @@ Sección~\ref{sec:resultados-estudio} informa qué parte del diseño se recogió
 
 \section{El juez aprendido}\label{sec:juez}
 
-El juez traduce los rasgos al orden humano. Para cada criterio $c$ se ajusta una regresión logística
+El juez intenta traducir los rasgos al orden humano. Para cada criterio $c$ se ajusta una regresión logística
 por pares. Sea $\mathbf{z}_s$ el vector de los 24 rasgos núcleo de la historia $s$, estandarizados con
 la media y la desviación de las historias de entrenamiento; un rasgo no aplicable se sustituye por
 la mediana de entrenamiento, y una historia con algún rasgo núcleo fallido no entra al juez. La
@@ -311,8 +312,8 @@ historias rotas a propósito por código, como la misma historia con las escenas
 desenlace, y se publican los cambios de puntuación; no se exige que toda perturbación empeore los
 tres criterios. Además, se examinan los pesos de los 24 rasgos y su colinealidad, porque varios
 miden cosas cercanas, como las complicaciones, los giros y los ciclos «no, y además». Un juez que
-solo premiara la longitud o el diálogo se vería en sus pesos. Un juez que no generaliza es también
-un resultado válido, y se presenta como tal.
+solo premiara la longitud o el diálogo se vería en sus pesos. Un juez del que no se muestra que
+generalice es también un resultado válido, y se presenta como tal.
 
 \section{Ranking del corpus y las diez mejores}\label{sec:ranking}
 

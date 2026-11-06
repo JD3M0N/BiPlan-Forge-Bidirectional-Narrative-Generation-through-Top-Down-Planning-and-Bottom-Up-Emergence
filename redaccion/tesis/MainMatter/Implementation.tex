@@ -16,7 +16,8 @@
 Este capítulo describe cómo se implementaron el generador del Capítulo~\ref{chapter:generator} y
 las herramientas de evaluación del Capítulo~\ref{chapter:evaluation}. A diferencia de esos
 capítulos, aquí se nombran los paquetes, los módulos y los comandos del código. La descripción
-corresponde al estado del repositorio el 1 de noviembre de 2026. Primero se presenta la
+corresponde al estado del repositorio el 1 de noviembre de 2026, el commit \texttt{d6a558c}. Primero
+se presenta la
 \textbf{Organización del código} en cinco paquetes (Sección~\ref{sec:monorepo}). Después se
 describen los \textbf{Proveedores de modelos y la cuota} (Sección~\ref{sec:proveedores}), los
 \textbf{Artefactos y contratos versionados} (Sección~\ref{sec:artefactos}), las \textbf{Herramientas
@@ -36,7 +37,7 @@ aplicaciones, de los tres.
 
 \begin{table}[htb]
   \centering
-  \caption{Paquetes del repositorio el 1 de noviembre de 2026 (líneas no vacías de código bajo
+  \caption{Paquetes del repositorio el 1 de noviembre de 2026 (líneas no vacías de Python bajo
     \texttt{src/})}
   \label{tab:paquetes}
   \small
@@ -176,7 +177,7 @@ admitidos, del 5.0 al 7.22. Si cambia el conjunto de artefactos o su significado
 del contrato en lugar de romper las ejecuciones ya generadas, que son datos de la tesis; un cambio
 que no toca artefactos sube solo la del paquete, como la 7.22.1, que añadió el ejecutor de matrices.
 La configuración congelada lleva en Git la etiqueta \texttt{generator-frozen}, del 28 de octubre de
-2026, sobre la versión 7.22.0; desde entonces, ningún \textit{prompt}, esquema ni contrato cambia sin una decisión nueva y
+2026, sobre la versión 7.22.0 (commit \texttt{04d5799}); desde entonces, ningún \textit{prompt}, esquema ni contrato cambia sin una decisión nueva y
 escrita. Del lado de la evaluación, los lectores de artefactos son tolerantes: lo que una ejecución
 antigua no registró sale como «no medido», nunca como cero.
 
@@ -234,7 +235,8 @@ otras personas, solo como texto, sin título, encabezados ni audio, y la pregunt
 puedo decidir». Un candado por lector evita que una doble pulsación registre dos votos.
 
 StageCraft (\texttt{asg-studio}) es una aplicación web local, servida con FastAPI~\cite{fastapi2026}
-y escrita en HTML, CSS y módulos de JavaScript, sin paso de compilación. Sus vistas permiten crear
+y escrita en HTML, CSS y módulos de JavaScript (2.129 líneas que la Tabla~\ref{tab:paquetes} no
+cuenta), sin paso de compilación. Sus vistas permiten crear
 una obra viendo el \textit{prompt} exacto que se enviará, leer las ejecuciones guardadas con su
 registro, también con los ojos de una visión, y comparar de dos a cuatro ejecuciones eje por eje,
 indicando si la comparación está emparejada. La vista de \textbf{lectura ciega} muestra pares de
@@ -275,7 +277,8 @@ sorteo del estudio se repite con su semilla, el \textit{bootstrap} usa la semill
 declara la versión del generador, del contrato y de los modelos que la produjeron. Ese recálculo
 necesita los datos, que no están en Git: el corpus (\texttt{Stories/}) y las evaluaciones
 (\texttt{Evaluations/}), con los votos del piloto, las extracciones, el juez y el ranking, residen en
-la copia del autor; el repositorio versiona el código y las tablas de la tesis.
+la copia del autor; el repositorio versiona el código y las tablas de la tesis. Sin
+\texttt{Evaluations/}, \texttt{asg-results} escribe «No disponible» en cada tabla y termina con error.
 
 Este capítulo deja descrito un sistema en el que las decisiones del Capítulo~\ref{chapter:generator}
 tienen un lugar comprobable: los validadores y la memoria son funciones puras con pruebas, la

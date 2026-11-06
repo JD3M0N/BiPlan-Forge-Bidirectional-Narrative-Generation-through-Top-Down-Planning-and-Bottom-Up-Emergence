@@ -64,16 +64,20 @@ en un lenguaje formal de planificación, que acota las historias posibles.
 
 Los modelos neuronales trasladaron al texto libre la separación entre planificar y escribir. Fan
 et al.~\cite{fan2018} generaban primero una premisa breve y después la historia condicionada por
-ella. Con los LLMs, el plan se volvió explícito y detallado. DOC~\cite{yang2023}
+ella. Con los LLMs, el plan se volvió explícito y detallado. Dramatron~\cite{mirowski2023}
+encadena \textit{prompts} que van del título y los personajes a la trama, los lugares y el diálogo.
+DOC~\cite{yang2023}
 construye un esquema jerárquico de la historia y un controlador que mantiene cada pasaje fiel a su
 punto del esquema; sus evaluadores humanos compararon por pares pasajes alineados por ese esquema.
 Agents' Room~\cite{huot2025} descompone la escritura en subtareas de planificación (conflicto,
 personajes, ambientación, trama) y de escritura de cada tramo de la historia, asignadas a agentes
 especializados que comparten un espacio de notas; los evaluadores expertos prefirieron sus
 historias a las de las líneas base. PLOTTER~\cite{gu2026} lleva el plan a un grafo de eventos y otro
-de personajes, y repara su topología bajo restricciones lógicas antes de escribir; el subgrafo causal
-debe ser acíclico y esa condición se comprueba de forma determinista, sin el modelo. Escribe después
-con un único generador que mantiene el estado de la narración, sin agentes por personaje.
+de personajes, y repara su topología bajo restricciones lógicas antes de escribir. Unos críticos LLM
+proponen las ediciones, y el código acepta solo las que mantienen acíclico el subgrafo causal y
+alcanzables sus eventos; el grafo incluye aristas de prefiguración, pero lo que se comprueba sin el
+modelo es su estructura causal. Escribe después con un único generador que mantiene el estado de la
+narración, sin agentes por personaje.
 
 Aun con plan, un LLM no siempre cumple lo que el plan promete. Yun et al.~\cite{yun2026} observan
 que los LLMs dejan sin disparar muchas «pistolas de Chéjov»: introducen compromisos al principio y
@@ -82,7 +86,7 @@ prefiguración y su pago como predicados causales comprobables, y supera al \tex
 directo en la tasa de pagos realizados. La lección es doble: el plan explícito ayuda, y los
 compromisos de la trama conviene representarlos de forma que el código, y no el modelo, compruebe
 si se cumplen. Lo que esta familia no resuelve es la vida propia de los personajes. En los
-generadores con LLMs revisados, un mismo modelo escribe a todos los personajes con el plan completo
+generadores con LLMs de esta sección, un mismo modelo escribe a todos los personajes con el plan completo
 delante, y nada impide que uno de ellos actúe según algo que solo sabe el autor.
 
 \section{Generación por simulación de personajes}\label{sec:bottom-up}
@@ -142,6 +146,11 @@ Los LLMs reabrieron este diseño. StoryBox~\cite{chen2026a} sitúa agentes en un
 (\textit{sandbox}) dinámico, donde sus interacciones generan eventos emergentes, y un agente narrador
 convierte esos eventos en una historia larga; sus autores lo llaman generación \textit{Bottom-Up}
 híbrida, por oposición a los enfoques \textit{Top-Down} que imponen una estructura rígida.
+SOMA~\cite{chung2025}, una tesis de máster, reparte la narración entre modelos de personaje, uno de
+eventos y uno narrador; su autor reconoce que los agentes deciden con toda la historia y reaccionan a
+hechos que no presenciaron, y deja una memoria acotada como trabajo futuro. En IBSEN~\cite{han2024},
+un agente director escribe el esquema de la trama e instruye a actores que representan a cada
+personaje, y el resultado es el guion de esas interacciones.
 WSE-bench~\cite{chen2026b}, todavía un preprint, evalúa la narración con LLMs en mundos simulados que
 evolucionan y compara tres arquitecturas: un agente narrador que decide también por los personajes,
 un único agente para todos los personajes no jugadores y un agente aislado por cada uno. Mide por
@@ -150,13 +159,16 @@ concluye que añadir estructura puede enriquecer las trayectorias, pero no mejor
 forma uniforme y puede acortarlas. Para un generador híbrido, eso significa que cada componente
 tiene que justificar su complejidad con una medida.
 
-El vecino más cercano en estructura es el de Yu et al.~\cite{yu2025}, que escribe una historia a
-partir de un plan en dos pasos: agentes con LLM representan cada escena en orden cronológico, guiados
-por un agente director que elige quién habla y le da una orden, y después una reescritura ajusta ese
-juego de rol al plan. Comparte con este trabajo el plan previo, los personajes simulados y la
-escritura separada de la simulación. Difiere en tres puntos: el plan lo sintetiza un LLM y no lo valida
-el código; cada agente responde con el historial del juego de rol, y los autores reconocen que no
-imponen la privacidad entre personajes, y la evaluación la hace un juez LLM por pares, sin lectores.
+El otro vecino más cercano, junto con PLOTTER (Sección~\ref{sec:top-down}), es el de Yu
+et al.~\cite{yu2025}, que escribe una historia a partir de un plan en dos pasos. Primero, agentes con
+LLM representan cada escena en orden cronológico, guiados por un agente director que elige quién
+habla y le da una orden. Después, una reescritura redacta cada escena desde el plan, consultando ese
+juego de rol. Comparte con este trabajo el plan previo, los personajes simulados y la escritura
+separada de la simulación. Difiere en cuatro cosas. El plan lo aporta el usuario, o un LLM en sus
+experimentos, y el código no lo valida. Un LLM acota la memoria de cada agente, pero todos responden
+con el historial reciente común, y los autores reconocen que no imponen la privacidad entre
+personajes. La reescritura parte del plan, mientras que aquí, donde plan y simulación no coinciden,
+manda la simulación (Sección~\ref{sec:narrador}). Y la evaluación la hace un juez LLM por pares.
 
 Dos bancos de pruebas sugieren que la asimetría de información de la que viven estos sistemas no
 conviene confiarla al modelo. SOTOPIA~\cite{zhou2024} simula interacciones sociales entre agentes con
@@ -182,7 +194,9 @@ varias dimensiones, entre ellas la consistencia del personaje, y PersonaGym~\cit
 fidelidad de un agente a la persona asignada en entornos variados, con el hallazgo de que un modelo
 mayor no es necesariamente más fiel. TimeChara~\cite{ahn2024} describe una alucinación específica: el
 personaje situado en un punto de la historia que revela hechos que en ese momento aún no podía
-conocer. DramaBench~\cite{ma2025} lleva la evaluación a la continuación de guiones teatrales, con
+conocer. REVERIEMEM~\cite{tang2026} reduce el uso de hechos fuera de la perspectiva del personaje
+con una memoria cuyos hechos llevan una etiqueta de visibilidad, en agentes de rol construidos a
+partir de novelas. DramaBench~\cite{ma2025} lleva la evaluación a la continuación de guiones teatrales, con
 dimensiones como la consistencia de los personajes y el manejo del conflicto, y combina reglas con
 etiquetado por LLM.
 
@@ -190,7 +204,7 @@ De esta literatura salen dos ideas. La primera es que buena parte de estos fallo
 que sabe demasiado o la contradicción entre capítulos, son de información: dependen de qué ve cada
 personaje y qué recuerda, y un generador puede prevenirlos por construcción con una memoria propia
 por personaje y un plan validado. La segunda es que los mismos fallos se pueden contar, y contarlos
-con la cita que los sustenta los hace verificables, como hace ConStory-Bench con las
+con la cita que los sustenta los hace verificables, como muestra ConStory-Bench con las
 contradicciones. Es la base de la evaluación mecánica del Capítulo~\ref{chapter:evaluation}.
 
 \section{Evaluación de historias}\label{sec:evaluacion-historias}
@@ -215,15 +229,17 @@ teoría literaria.
 Lo común a todos es que la calidad de una historia tiene varias dimensiones y que es la persona que
 lee quien las aprecia. Marco et al.~\cite{marco2025} muestran además que los lectores se agrupan en
 dos perfiles, uno atento a la superficie del texto y otro a su desarrollo temático, que valoran las
-mismas historias de forma distinta. En español, la brecha entre un LLM y un autor profesional es
-mayor que en inglés~\cite{marco2024}, lo que pesa en una tesis cuyas historias están en español.
+mismas historias de forma distinta. En una comparación de GPT-4 con un novelista sobre 60
+sinopsis, la brecha entre ambos fue mayor en español que en inglés~\cite{marco2024}, lo que pesa en
+una tesis cuyas historias están en español.
 
 \subsection{Escalas y comparaciones por pares}\label{sec:escalas-pares}
 
 La forma de preguntar importa tanto como el criterio. Las escalas de valoración absolutas, del tipo
 Likert, son las más usadas y las más criticadas en la evaluación humana de la generación de
 texto~\cite{amidei2019}. Con escalas de 1 a 5, unos profesores de inglés que evaluaban historias solo
-alcanzaron un $\alpha$ de Krippendorff de entre 0,05 y 0,33~\cite{chiang2023}. % B10
+alcanzaron, con historias escritas por personas, un $\alpha$ de Krippendorff de entre 0,05 y
+0,33~\cite{chiang2023}. % B10
 Ordenar o comparar resulta más fiable que puntuar~\cite{novikova2018,vanderlee2019}. Las guías de
 buenas prácticas piden informar del acuerdo entre evaluadores y de su perfil~\cite{vanderlee2021}, y
 Howcroft et al.~\cite{howcroft2020}, tras revisar veinte años de evaluaciones humanas, encontraron
@@ -262,8 +278,10 @@ historia por historia, y que darles guías detalladas no los mejora. Jung et al.
 observan que, puestos a elegir, los LLMs priorizan el estilo sobre los eventos, los personajes y el
 entorno, y Tutone et al.~\cite{tutone2026} hallan que los jueces LLM prefieren sistemáticamente las
 historias generadas por IA y que las métricas automáticas habituales apenas se alinean con los
-juicios humanos de creatividad. El juez LLM mide algo distinto de lo que mide un lector, y lo mide a
-favor de sí mismo.
+juicios humanos de creatividad. Hay al menos una excepción: el juez por pares de
+PLOTTER~\cite{gu2026} coincide con el voto mayoritario de cinco guionistas con un $\kappa$ de Cohen
+de 0,834. Pero en general el juez LLM tiende a medir algo distinto de lo que mide un lector, y a
+medirlo a favor de sí mismo.
 
 La alternativa es aprender el juez de las preferencias humanas en lugar de pedírselo a un modelo. En
 LitBench~\cite{fein2026}, el mejor LLM usado directamente como juez coincidió con las preferencias
@@ -272,8 +290,9 @@ humanas en un 73~\% de los pares, y un modelo de Bradley-Terry entrenado con par
 Es el respaldo empírico de un juez aprendido de comparaciones humanas. La arquitectura que usa la
 metodología de esta tesis, rasgos interpretables que extrae un modelo y una regresión logística sobre
 pares de preferencias humanas, tiene un antecedente en los modelos de preferencia composicionales de
-Go et al.~\cite{go2024}, que puntúan cada rasgo con un modelo; aquí los rasgos son recuentos con cita
-verificada (Capítulo~\ref{chapter:evaluation}).
+Go et al.~\cite{go2024}, que puntúan cada rasgo con un modelo e incluyen la longitud de la respuesta
+como un rasgo más; aquí los rasgos son recuentos con cita verificada, y la longitud se usa además como
+control por separado (Capítulo~\ref{chapter:evaluation}).
 
 \subsection{Métricas automáticas}\label{sec:metricas-automaticas}
 
@@ -287,34 +306,42 @@ lector, que es la conclusión que comparten HANNA, TTCW y el trabajo de Tutone e
 
 \section{Posición de este trabajo}\label{sec:posicion}
 
-De la generación dirigida por la trama, esta tesis adopta un plan explícito y validado antes de
-escribir, como DOC y Agents' Room, y la idea de representar los compromisos de la trama, como la
-prefiguración y su pago, de forma que el código compruebe si se cumplen~\cite{yun2026}. De la
-simulación de personajes adopta agentes con memoria propia, recuperada con criterios como los de
-los agentes generativos~\cite{park2023}, pero sin un almacén común: cada personaje recuerda solo lo
-que presenció. De los híbridos clásicos toma un director que sugiere en lugar de dictar, como el de
-The Virtual Storyteller~\cite{theune2003}, y personajes limitados a lo que creen, como en
+De la generación dirigida por la trama, esta tesis adopta un plan explícito antes de escribir, como
+DOC y Agents' Room, pero validado por el código, como PLOTTER valida su grafo causal, y la idea de
+representar los compromisos de la trama, como la prefiguración y su pago, de forma que el código
+compruebe si se cumplen~\cite{yun2026}; lo propio es comprobar también el orden entre la
+prefiguración y su pago. De la simulación de personajes adopta agentes con memoria propia,
+recuperada con criterios como los de los agentes generativos~\cite{park2023}, pero sin un almacén
+común: el código calcula qué percibe cada personaje en cada turno, y cada uno recuerda solo lo que
+presenció. De los híbridos clásicos toma un director que sugiere en lugar de dictar, como el de The
+Virtual Storyteller~\cite{theune2003}, y personajes limitados a lo que creen, como en
 Sabre~\cite{ware2021}; de StoryBox~\cite{chen2026a}, la separación entre lo que hacen los agentes y el
 narrador que lo convierte en historia.
 
 El hueco que se aborda es la combinación. En los trabajos revisados, los híbridos clásicos dependen
-de mundos formalizados a mano; los generadores con LLMs dirigidos por un plan escriben a todos los
-personajes desde la visión del autor, y los que simulan personajes con LLMs, como StoryBox, dejan que
-la trama emerja sin un plan que la comprometa. Los vecinos más próximos reúnen parte de las piezas:
-PLOTTER valida un grafo de eventos por código, pero escribe con un solo generador, y Yu et al.
-combinan un plan, personajes simulados y una reescritura, sin validar el plan ni limitar lo que cada
-personaje sabe. No encontramos un generador que reúna las tres piezas: un plan validado que decide qué pasa, unos personajes que solo saben lo que presenciaron y
-deciden cómo pasa, y un narrador que cura el registro de esa simulación sin inventar. WSE-bench añade
-una exigencia: más arquitectura no garantiza más coherencia, así que cada mecanismo debe ganarse su
-complejidad con una medida.
+de mundos formalizados a mano; los generadores con LLMs dirigidos por un plan de la
+Sección~\ref{sec:top-down} escriben a todos los personajes desde la visión del autor, y los que
+simulan personajes con LLMs, como StoryBox y SOMA, dejan que la trama emerja sin un plan que la
+comprometa. Los dos vecinos más cercanos reúnen parte de las piezas. PLOTTER valida su grafo causal
+por código, pero escribe con un solo generador. Yu et al. combinan un plan, personajes simulados y
+una reescritura, pero no validan el plan, y la memoria de cada agente la acota un LLM, sin imponer la
+privacidad del historial común. IBSEN reparte también la escena entre un director que escribe el
+esquema y actores por personaje, y REVERIEMEM acota lo que sabe cada personaje con hechos etiquetados
+por visibilidad, pero sobre novelas existentes. No encontramos un generador que reúna las tres piezas tal como aquí se
+formulan: un plan validado por código que decide qué pasa, unos personajes cuya percepción calcula el
+código y que solo saben lo que presenciaron, y un narrador que cura el registro de esa simulación sin
+inventar. WSE-bench añade una exigencia: más arquitectura no garantiza más coherencia, así que cada
+mecanismo debe ganarse su complejidad con una medida.
 
 En la evaluación, la posición es la que sugiere la literatura revisada y pide el tutor. La calidad
 la decide la lectura humana, por pares y a ciegas, nunca con una escala, e incluye una línea base de
 un solo \textit{prompt} como la de Fuentes Rodríguez~\cite{fuentes2025}. El LLM no juzga la calidad: cuenta
-rasgos de la historia y cita el pasaje de cada recuento, que el código verifica literalmente, en la
-línea de ConStory-Bench, que documenta cada contradicción con su cita, y de TTCW, que reduce el
-juicio experto a pruebas binarias. Un juez aprendido de los pares humanos, como el de
-LitBench~\cite{fein2026}, traduce después los recuentos al orden humano.
+rasgos de la historia y cita el pasaje de cada recuento, que el código verifica literalmente. Toma de
+ConStory-Bench la cita como evidencia de cada ocurrencia, aunque allí la cita forma parte del
+veredicto de un juez LLM, y de TTCW, la reducción del juicio experto a pruebas binarias. Un juez
+aprendido de los pares humanos, como el de LitBench~\cite{fein2026}, y con rasgos interpretables, como
+los modelos de Go et al.~\cite{go2024}, intenta después ordenar las historias como los lectores; si
+lo consigue fuera de muestra es una pregunta que la propia metodología pone a prueba.
 
 Este capítulo deja fijados los términos del trabajo, la paradoja narrativa que motiva un generador
 híbrido y las razones para evaluarlo con pares humanos y recuentos verificables. El

@@ -8,12 +8,13 @@ en recuentos verificables y comparaciones humanas por pares a ciegas. A continua
 alcanzado en cada objetivo específico, en el orden en que se plantearon.
 
 El análisis del estado del arte (Capítulo~\ref{chapter:state-of-the-art}) mostró que las tres
-familias de generadores resuelven partes distintas del problema. Los dirigidos por la trama
-garantizan la estructura y los compromisos, pero escriben a todos los personajes desde la visión del
-autor; los que simulan personajes dan agencia y conocimiento limitado, pero dejan la trama a la
-emergencia, y los híbridos clásicos dependían de mundos formalizados a mano. No se encontró un
-generador con LLMs que reuniera un plan validado, personajes que solo saben lo que presenciaron y un
-narrador separado de ellos. En la evaluación, la literatura revisada desaconseja las escalas
+familias de generadores resuelven partes distintas del problema. Los dirigidos por la trama que se
+revisaron garantizan la estructura y los compromisos, pero escriben a todos los personajes desde la
+visión del autor; los que simulan personajes dan agencia, pero dejan la trama a la emergencia, y los
+híbridos clásicos dependían de mundos formalizados a mano. En la literatura revisada, que no es
+exhaustiva, no se encontró un generador con LLMs que reuniera un plan validado por código,
+personajes cuya percepción calcula el código y un narrador que cura su registro sin inventar; los dos
+más cercanos, Yu et al. y PLOTTER, reúnen parte de esas piezas. En la evaluación, la literatura revisada desaconseja las escalas
 absolutas y los jueces LLM como medida de calidad, y respalda las comparaciones por pares.
 
 El diseño del generador (Capítulo~\ref{chapter:generator}) separa qué pasa, cómo pasa y cómo se
@@ -26,9 +27,10 @@ complejidad en las validaciones quedaron apagados en la configuración congelada
 La metodología de evaluación (Capítulo~\ref{chapter:evaluation}) articula tres evaluaciones en las
 que ninguna cifra automática se presenta como juicio de calidad: 24 rasgos núcleo, 18 de ellos
 recuentos de un extractor con una cita que el código verifica literalmente y 6 medidas calculadas por
-código, una evaluación humana por pares a ciegas con
-tres preguntas y una línea base de un solo \textit{prompt}, y un juez que traduce los rasgos al orden
-humano y se valida fuera de muestra, frente al azar y frente a la longitud sola.
+código, tres de ellas sobre lo que extrae el modelo; una evaluación humana por pares a ciegas con
+tres preguntas y una línea base de un solo \textit{prompt}, y un juez que intenta reproducir el orden
+humano a partir de los rasgos y se valida fuera de muestra, frente al azar y frente a la longitud
+sola.
 
 La implementación (Capítulo~\ref{chapter:implementation}) se organizó en cinco paquetes con
 dependencias en un solo sentido, de modo que la evaluación no importa el generador y mide del mismo
@@ -39,26 +41,28 @@ versión y su huella, y las tablas del estudio, del juez y del ranking se regene
 artefactos. La cuota diaria
 del servicio de modelos fue una restricción práctica que el sistema administra, pero no evita.
 
-La evaluación experimental (Capítulo~\ref{chapter:experiments}) comprobó el generador en ejecuciones
-reales antes de congelarlo, con una ejecución por formato y una limitación conocida: la función forzó
-3 de sus 6 \textit{beats} (5 de 10 en una validación anterior). Los instrumentos del resto de la
-evaluación se ejercitaron sobre datos reales, aunque la votación del piloto no usó la asignación del
-sistema, y las muestras no bastan para concluir. La validación del extractor es provisional; el
-análisis horizontal se quedó en 14 de 35 unidades y sin resultados interpretables; el estudio humano,
-en un piloto de cinco lectores con un acuerdo cercano al azar. El juez aprendido de ese piloto acierta
-fuera de muestra menos que la longitud sola, pero con 20 o 21 votos por criterio ninguna de las dos
-cifras se separa del azar: no se mostró que generalice. Las tres hipótesis quedan sin datos
-suficientes. Para H3, lo observado es coherente con lo que anticipa, pero no la confirma: las mejoras
-medidas de la prosa no ganaron en las lecturas a ciegas, y en el piloto el generador y las líneas base
-sumaron 24 votos cada uno, con resultados de signo opuesto entre historias.
+La evaluación experimental (Capítulo~\ref{chapter:experiments}) congeló el generador tras completar
+una ejecución por formato, con las comprobaciones fijadas superadas en la simulada y una limitación
+conocida: la función forzó 3 de sus 6 \textit{beats}, una proporción que las validaciones anteriores
+no permiten fijar. Los
+demás instrumentos se ejercitaron sobre datos reales, pero las muestras no bastan para concluir. La
+validación del extractor es provisional, con veredictos de precisión propuestos por un LLM y la
+cobertura sin medir; el análisis horizontal se quedó en 14 de 35 unidades y sin resultados
+interpretables, y el estudio humano, en un piloto de cinco lectores con un acuerdo cercano al azar y
+sin una preferencia que se distinga del azar entre el generador y las líneas base. El
+juez aprendido de ese piloto acierta fuera de muestra menos que la longitud sola, pero con 20 o 21
+votos por criterio ninguna de las dos cifras se distingue del azar. Las tres hipótesis quedan sin
+datos suficientes. Para H3, las mejoras medidas de la prosa no ganaron en dos lecturas a ciegas de un
+solo lector, lo que anticipa la hipótesis; el piloto no la contrasta, porque compara el generador
+completo con una línea base y no cada mecanismo con su ausencia.
 
 Las \textbf{aportaciones} son las dos que se plantearon. La primera es el generador: una arquitectura
 que combina planificación y simulación con LLMs y que apoya cada separación en una comprobación del
 código, disponible con sus opciones y su configuración congelada. La segunda es la metodología de
 evaluación con sus herramientas: recuentos citados y verificables en lugar de puntuaciones, pares a
-ciegas en lugar de escalas, y un juez cuyo resultado desfavorable fuera de muestra se publica, con la
-salvedad de que la validación no tiene muestra para separarlo del azar, en lugar de pasar por una
-medida de calidad.
+ciegas en lugar de escalas, y un juez validado fuera de muestra en lugar de uno que se da por bueno.
+Su resultado en el piloto, por debajo de la longitud sola y sin votos suficientes para separarse del
+azar, se publica como tal y no como medida de calidad.
 
 Las \textbf{limitaciones} son, sobre todo, de escala. La cuota diaria acotó cuántas historias se
 pudieron generar y extraer, y el plazo, cuántos lectores se pudieron reunir; la extracción de rasgos

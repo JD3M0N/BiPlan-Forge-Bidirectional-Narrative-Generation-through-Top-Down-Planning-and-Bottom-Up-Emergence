@@ -13,8 +13,8 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
 
 - **Siguiente:** ninguna parte. Borrador completo: **H5**, Josue manda el borrador al tutor.
 - **Extensión acumulada:** unas 47,5 de 50 cuartillas (45,4 medidas en R12 más las dos páginas de
-  cuerpo de R13, sin volver a medir; sin figuras, tablas, anexos ni bibliografía); 78 págs. en el
-  PDF, cuerpo 1–57 y anexos 65–70.
+  cuerpo de R13, sin volver a medir; R14 no cambió el número de páginas; sin figuras, tablas,
+  anexos ni bibliografía); 78 págs. en el PDF, cuerpo 1–57 y anexos 65–70.
 - **Compilar:** en `redaccion/tesis/` (disco E:) las pasadas sucesivas de `latexmk` fallan con
   «Extra }» o «File ended while scanning» en `Thesis.aux`: al releerlo en `\end{document}` aún
   tiene restos de la pasada anterior. Desde el 2026-11-03 se compila en una copia de `redaccion/`
@@ -134,6 +134,16 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
     §4.6 y §5.1; «el LLM no juzga la calidad»; palabras clave; tres vecinos nuevos verificados
     (`yu2025`, `gu2026`, `go2024`) y diez entradas del `.bib` corregidas. +2 págs. de cuerpo,
     0 \todo, 0 referencias indefinidas, 0 cajas desbordadas.
+  - R14 · revisión del 2026-11-05 tras la segunda auditoría (`reviews/naranjo-2026-11-04.md`,
+    triaje en `reviews/naranjo-2026-11-04.triage.md`): un solo par de vecinos más cercanos (Yu et
+    al. y PLOTTER), §1.6 sin «ni limitar lo que cada personaje sabe» y con el mecanismo de la
+    percepción; cuatro vecinos verificados (`mirowski2023`, `han2024`, `chung2025`, `tang2026`);
+    glosas corregidas (longitud por el signo del peso, `docs/resumen.md` en §5.2.2, Tabla 4.1 solo
+    Python, «se congeló tras completar una ejecución por formato», potencia 0,42/0,54); Conclusiones
+    sin el 5 de 10 y con las salvedades del cuerpo; H3 sin apoyarse en el 24–24; resumen con una
+    cautela por cifra; commits `d6a558c` y `04d5799`, semilla 0 del barajado y versiones 2.1.9/2.1.11
+    del juez y el ranking. 78 págs. (sin cambio), 0 \todo, 0 referencias indefinidas, 0 cajas
+    desbordadas.
 
 ## Pendientes del borrador (R12, 2026-11-03)
 

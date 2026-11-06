@@ -53,13 +53,13 @@ Los problemas que motivan esta tesis se agrupan en tres:
   no se puede saber si un mecanismo nuevo mejora la historia o solo la cambia.
 \end{itemize}
 
-El tema es actual. Los sistemas más cercanos a este, que combinan agentes simulados con un
-narrador, son de los últimos años: StoryBox~\cite{chen2026a} y WSE-bench~\cite{chen2026b}, este
-último todavía un preprint. También son recientes el trabajo de Yun et al.~\cite{yun2026} sobre los
+El tema es actual. Los sistemas híbridos con LLMs son de los últimos años: StoryBox~\cite{chen2026a}
+y WSE-bench~\cite{chen2026b}, este último todavía un preprint, combinan agentes simulados con un
+narrador, y Yu et al.~\cite{yu2025}, con un plan. También son recientes el trabajo de Yun et al.~\cite{yun2026} sobre los
 compromisos sin pagar y los resultados que cuestionan a los jueces LLM en escritura creativa o que
 proponen aprenderlos de preferencias humanas~\cite{tutone2026,fein2026}. Además, las historias de
-esta tesis están en español, una lengua en la que la brecha entre un LLM y un autor profesional es
-mayor que en inglés~\cite{marco2024}.
+esta tesis están en español, una lengua en la que, en una comparación de GPT-4 con un novelista, la
+brecha entre ambos fue mayor que en inglés~\cite{marco2024}.
 
 La \textbf{novedad científica} del trabajo está en dos aportaciones. La primera es un generador
 híbrido, bidireccional en el sentido del título: el plan baja de arriba abajo
@@ -67,12 +67,15 @@ híbrido, bidireccional en el sentido del título: el plan baja de arriba abajo
 decisiones. Un plan validado decide qué pasa; unos personajes simulados que
 solo saben lo que presenciaron deciden cómo pasa, al representar el plan escena a escena en lo que
 llamamos una \textbf{función}, como en el teatro; y un narrador que cura el registro de esa función,
-sin inventar, decide cómo se cuenta. En la literatura revisada, que no es exhaustiva
-(Sección~\ref{sec:posicion}), no encontramos un generador con LLMs que reúna las tres piezas; los más
-cercanos comparten solo parte de ellas~\cite{yu2025,chen2026a}. La segunda es una metodología de
-evaluación en la que el LLM no juzga la calidad: cuenta rasgos de la historia y cita el pasaje de cada
-recuento, que el código verifica literalmente. La calidad la deciden lectores que comparan pares de historias a
-ciegas, y un juez aprendido de esas comparaciones traduce los recuentos al orden humano.
+sin inventar, decide cómo se cuenta. En la literatura que revisa el
+Capítulo~\ref{chapter:state-of-the-art}, que no es exhaustiva, no encontramos un generador con LLMs
+que reúna las tres piezas tal como aquí se formulan; los dos más cercanos, Yu et al. y PLOTTER,
+comparten solo parte de ellas~\cite{yu2025,gu2026} (Sección~\ref{sec:posicion}). La segunda es una
+metodología de evaluación en la que el LLM no juzga la calidad: cuenta rasgos de la historia y cita el
+pasaje de cada recuento, que el código verifica literalmente. La calidad la deciden lectores que
+comparan pares de historias a ciegas, y un juez aprendido de esas comparaciones intenta ordenar las
+historias como ellos a partir de los recuentos, con una validación fuera de muestra que dice si lo
+consigue.
 
 La importancia teórica del trabajo es doble. Como el plan, la función y la narración son etapas
 separadas, el generador sirve de banco de pruebas de la paradoja narrativa: se puede cambiar una
@@ -80,7 +83,8 @@ etapa y conservar las demás, por ejemplo escribir la historia directamente desd
 narrar la misma función desde otro punto de vista, y medir qué aporta cada una. La metodología, por
 su parte, muestra cómo evaluar historias sin pedir a un modelo un juicio de calidad, una cuestión
 abierta en el área (Sección~\ref{sec:evaluacion-historias}). En la práctica, el generador y las
-herramientas de evaluación forman un sistema reproducible, con un bot de Telegram para pedir
+herramientas de evaluación forman un sistema que recalcula sus resultados desde los datos guardados,
+que residen en la copia del autor y no en Git (Sección~\ref{sec:pruebas}), con un bot de Telegram para pedir
 historias y una interfaz local para leerlas a ciegas, y el juez lee solo el texto de la historia,
 de modo que la metodología se puede aplicar a las de otro generador.
 
@@ -147,13 +151,15 @@ personajes e interés de la trama.
   podía conocer, y que los lectores prefieren a ciegas.
   \item \textbf{H3:} más mecanismos no implican una historia mejor: que un mecanismo mejore medidas
   de la prosa no basta para que los lectores prefieran a ciegas las historias que lo usan frente a
-  las que no. Parte de la conclusión de WSE-bench~\cite{chen2026b}, que mide la coherencia con jueces
-  LLM, y la traslada a la preferencia de los lectores en este generador; obliga a que cada mecanismo
-  se gane su complejidad.
+  las que no. Traslada parte de la conclusión de WSE-bench~\cite{chen2026b}, que mide la coherencia
+  con jueces LLM, a la preferencia de los lectores en este generador, y obliga a que cada mecanismo se
+  gane su complejidad.
 \end{itemize}
 
-Salvo la regla de ruido de H1 (Sección~\ref{sec:horizontal}), las hipótesis no fijan de antemano qué
-resultado las confirmaría o refutaría.
+Las hipótesis no fijan de antemano qué resultado las confirmaría o refutaría. La regla de ruido de la
+Sección~\ref{sec:horizontal} decide solo si una diferencia de la matriz se interpreta para un rasgo,
+no cuántos rasgos tendrían que superarla para dar por cumplida H1, y la parte humana de las
+hipótesis no tiene umbral.
 
 El documento se organiza en cinco capítulos. El Capítulo~\ref{chapter:state-of-the-art} revisa el
 estado del arte de la generación y la evaluación de historias y fija la posición del trabajo. El

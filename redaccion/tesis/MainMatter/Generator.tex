@@ -83,7 +83,9 @@ posición y es el único orden en que confía el resto del sistema; todo evento 
 preparación $e'$ debe cumplir $\sigma(e') < \sigma(e)$. Un plan que no valida se rechaza, sus
 errores se reinyectan en un \textit{prompt} de reparación y se pide otro. Como DOC~\cite{yang2023} y
 Agents' Room~\cite{huot2025}, el generador planifica antes de escribir; a diferencia de ellos, el
-plan no es solo una guía para el modelo, sino un objeto que el código comprueba. La validación como
+plan no es solo una guía para el modelo, sino un objeto que el código comprueba. PLOTTER~\cite{gu2026}
+también acepta solo las ediciones que dejan su grafo causal acíclico y sus eventos alcanzables, pero
+entre esas restricciones no está el orden entre una preparación y su pago. La validación como
 grafo acíclico retoma el gestor de dependencias de Fuentes Rodríguez~\cite{fuentes2025}, que ya
 representaba la trama como un grafo dirigido acíclico de eventos.
 
