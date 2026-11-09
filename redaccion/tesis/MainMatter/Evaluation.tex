@@ -72,7 +72,7 @@ mundo, integración y cierre, y oficio. Casi todas sus preguntas son de sí o no
 las que la rúbrica puntúa de 1 a 5 se reformulan como recuentos, y la dimensión del canon, que solo
 tiene sentido en una serie, no entra. Así, «¿establece la apertura promesas claras?» se convierte en
 el número de promesas que el primer capítulo deja establecidas, cada una con su cita. La segunda
-fuente es una lista de recuentos de bajo nivel que propuso el tutor de esta tesis: la consistencia,
+fuente es una lista de recuentos de bajo nivel que propuso el profesor Piad: la consistencia,
 la participación de cada personaje, las escenas con conflicto, los usos de objetos, las réplicas de
 cada personaje y las que se desvían de su personalidad, las mentiras, las complicaciones y los
 eventos aleatorios. Varios tienen antecedentes en la literatura que sirvieron de modelo para su
@@ -167,13 +167,14 @@ parametrizaciones del generador: parte de una configuración base y cambia un so
 por ejemplo el tono. Su propósito es descriptivo. Dice qué rasgos se mueven con cada parámetro, no si
 la historia mejora, porque eso lo deciden los lectores.
 
-La comparación se hace sobre una matriz generada con la configuración congelada del generador
+El diseño de la comparación prevé una matriz con la configuración de referencia del generador
 (Tabla~\ref{tab:mecanismos}). Tres obras de un catálogo de peticiones preparado para los
 experimentos se representan como historias simuladas con los valores predeterminados, dos veces cada
-una; son las \textbf{bases}. De
+una; son las \textbf{bases}. El conjunto realizado se describe en la
+Sección~\ref{sec:resultados-horizontal}. De
 cada base se derivan celdas que comparten con ella todo lo anterior al punto que cambian, gracias a
 que el generador guarda cada etapa (Sección~\ref{sec:arquitectura}): la historia escrita
-directamente desde el mismo plan, que contrasta H1; la misma función narrada con tono sombrío o
+directamente desde el mismo plan, para comparar el efecto de la simulación sobre los rasgos; la misma función narrada con tono sombrío o
 humorístico, y la misma función narrada con visión limitada o en primera persona. Así, una
 diferencia entre una celda y su base se debe al parámetro que cambió y no a otro plan u otra
 función. Las líneas base de un solo \textit{prompt}, tres por obra, forman una celda propia.
@@ -233,7 +234,7 @@ abstención se registra y se informa por separado: no es un empate ni una victor
 Entre las historias comparadas hay siempre \textbf{líneas base de un solo \textit{prompt}}: la misma
 petición, entregada literalmente a un LLM sin plan, función ni narrador. Como en el trabajo de
 Fuentes Rodríguez~\cite{fuentes2025}, la línea base dice si toda la maquinaria aporta algo frente a
-pedir la historia directamente. El conjunto del estudio se diseñó con quince historias: cinco
+pedir la historia directamente. El protocolo inicial se diseñó con quince historias: cinco
 premisas, las tres obras de la matriz y dos propuestas por participantes, cada una en tres
 formatos, narrativo, simulado y línea base, de modo que cada premisa da los tres enfoques sobre la
 misma entrada. Las celdas de tono y visión no entran: repetirían la trama y harían del estudio un
@@ -242,19 +243,27 @@ análisis horizontal.
 La presentación no debe delatar el mecanismo. Todas las historias se muestran como texto plano, sin
 título ni encabezados de capítulo, que las líneas base no tienen, y sin audio. La longitud no se
 iguala, porque recortar una historia la cambia; se declara como amenaza y se controla en el juez
-(Sección~\ref{sec:juez}). Los lectores son hispanohablantes adultos que no conocen el sistema por
-dentro, y se registran con un seudónimo. El autor puede votar marcado como tal, pero no cuenta para
+(Sección~\ref{sec:juez}). El protocolo prevé lectores hispanohablantes adultos que no conocen el sistema por
+dentro, registrados con un seudónimo. El autor puede votar marcado como tal, pero no cuenta para
 el mínimo, y el resultado principal se informa sin él.
 
-Las preguntas se asignan de una en una, cuando el lector pide la siguiente: el criterio va en ciclo,
+El asignador automático implementa el siguiente procedimiento: las preguntas se asignan de una en
+una, cuando el lector pide la siguiente; el criterio va en ciclo,
 se prefieren las historias que el lector ya leyó, para que el esfuerzo no crezca con cada pregunta, y
 después los pares menos comparados. Nadie compara su propia historia ni una que ya conocía, ni
 repite un par con el mismo criterio; la posición A o B se compensa y el sorteo se reproduce con la
 semilla del estudio. Cada lector responde como mucho quince preguntas, unos cinco pares por tres
-criterios. El estudio se cierra cuando hay al menos doce lectores completos sin contar al autor, cada
-historia tiene al menos seis comparaciones decididas por criterio y el grafo de cada criterio es
-conexo, o a los 21 días; hasta entonces solo se miran recuentos de participación, nunca las
+criterios. El cierre previsto requiere al menos doce lectores completos sin contar al autor, que cada
+historia tenga al menos seis comparaciones decididas por criterio y que el grafo de cada criterio sea
+conexo, o alcanzar los 21 días; hasta entonces solo se miran recuentos de participación, nunca las
 preferencias.
+
+La aplicación descrita en la Sección~\ref{sec:resultados-estudio} utilizó ocho participantes, incluido
+el autor, diez textos y cinco pares comunes en orden fijo. Por tanto, se distingue ese procedimiento
+del asignador automático y de las metas del protocolo inicial. Las respuestas disponibles en el bot
+son A, B y «No puedo decidir»; esta última se registra como abstención, sin distinguir empate de
+falta de una preferencia. La participación del autor se identifica para permitir un análisis con y
+sin sus respuestas.
 
 Ningún voto de un LLM cuenta como voto humano. Antes del estudio se simuló una votación con agentes
 LLM que imitaban perfiles de lector; esos votos se conservan, pero son un juez LLM con otro nombre y
@@ -275,9 +284,6 @@ remuestreando lectores, no votos, porque los votos de un mismo lector no son ind
 acuerdo se mide sobre los mismos pares y criterios, con la proporción de acuerdo y el $\alpha$ de
 Krippendorff nominal, con y sin el autor~\cite{vanderlee2021}. Con una docena de lectores, el
 estudio es exploratorio y no tiene potencia para diferencias pequeñas~\cite{card2020}.
-
-El estudio completo no llegó a ejecutarse en el plazo de esta tesis. La
-Sección~\ref{sec:resultados-estudio} informa qué parte del diseño se recogió y con qué alcance.
 
 \section{El juez aprendido}\label{sec:juez}
 
@@ -319,7 +325,7 @@ generalice es también un resultado válido, y se presenta como tal.
 
 Una vez validado, el juez puntúa todo el corpus elegible y produce tres rankings principales, uno por
 criterio. Son elegibles las historias en prosa, narrativas o simuladas, de la serie de versiones
-del generador que termina en la configuración congelada, y las líneas base; cada historia lleva
+del generador que termina en la configuración de referencia, y las líneas base; cada historia lleva
 marcada su versión. Quedan fuera, con la razón escrita, las historias de generadores anteriores, los
 guiones, que no son prosa, y las historias cuya extracción de rasgos núcleo quedó incompleta. Una
 media de los tres criterios con pesos iguales, y con la normalización fijada al entrenar el juez, se
@@ -341,11 +347,11 @@ El diseño acota varias amenazas, pero no las elimina:
 
 \begin{itemize}
   \item \textbf{Pocos lectores y el autor entre ellos:} el autor conoce el estilo del sistema; el
-  acuerdo y los rankings se informan con y sin él, y el estudio se declara exploratorio.
-  \item \textbf{Un modelo que lee a su familia:} el extractor es de la misma familia de LLMs que el
-  generador, y los LLMs favorecen sus propias generaciones~\cite{panickssery2024}. Como solo cuenta
-  y cada ocurrencia lleva una cita verificada, el sesgo solo puede actuar sobre qué cuenta; por eso
-  se valida contra el registro y con extracciones repetidas.
+  análisis debe separar sus respuestas de las de los demás participantes. La muestra de colegas de
+  Ciencia de la Computación limita la diversidad de formación, aunque varíe su frecuencia de lectura.
+  \item \textbf{Orden y conectividad:} los cinco pares comunes se presentaron en orden fijo. El
+  cansancio puede afectar a los mismos pares; sin comparaciones que conecten los grupos no se
+  obtiene un ranking humano global. La posición A/B debe documentarse para evaluar su efecto.
   \item \textbf{Ocurrencias omitidas:} la cita verifica lo contado, no lo omitido, y los LLMs
   detectan mal ciertos fallos de las historias largas~\cite{ahuja2025}; solo una lectura humana
   completa mide la cobertura.
@@ -353,7 +359,7 @@ El diseño acota varias amenazas, pero no las elimina:
   de ahí la normalización, la longitud como rasgo visible y el juez de la longitud sola.
   \item \textbf{Ruido y versiones:} una celda con una sola historia es un indicio, no una medida, y
   el corpus mezcla versiones del generador. La regla de ruido decide qué se interpreta, el ranking
-  marca las versiones y el análisis horizontal usa solo la configuración congelada.
+  marca las versiones y el análisis horizontal usa solo la configuración de referencia.
   \item \textbf{La cuota:} el generador usa un servicio con un límite diario de llamadas gratuitas,
   que acota el tamaño de la matriz y del estudio.
 \end{itemize}

@@ -33,7 +33,15 @@ de preparación instala juntos en modo editable. La Tabla~\ref{tab:paquetes} los
 es el paquete \texttt{asg-stagecraft}, y la interfaz gráfica, llamada StageCraft, el paquete
 \texttt{asg-studio}. Las dependencias van en un solo sentido: \texttt{asg-core} no depende de
 ningún otro, \texttt{asg-evaluation} depende solo de él, el generador depende de ambos y las dos
-aplicaciones, de los tres.
+aplicaciones, de los tres. La Figura~\ref{fig:paquetes} muestra ese sentido y el único contacto
+entre el generador y la evaluación: los artefactos que el primero escribe en el disco.
+
+\begin{figure}[htb]
+  \centering
+  \input{Graphics/paquetes.tex}
+  \caption{Paquetes del repositorio: cada uno depende de los que tiene a su derecha}
+  \label{fig:paquetes}
+\end{figure}
 
 \begin{table}[htb]
   \centering
@@ -60,7 +68,7 @@ aplicaciones, de los tres.
 
 La restricción más importante es que \texttt{asg-evaluation} nunca importa el generador: lee del
 disco los artefactos que este deja, en JSON, Markdown y SQLite. Así la evaluación mide del mismo
-modo las historias de la versión congelada, las de versiones anteriores y las líneas base, que no
+modo las historias de la versión de referencia, las de versiones anteriores y las líneas base, que no
 pasan por el generador, y ningún cambio en él puede alterar en silencio cómo se le evalúa. De ahí
 dos consecuencias. Las medidas de la prosa que necesitan los dos lados, como la proporción de
 párrafos con diálogo, viven en \texttt{asg-core}. Y el extractor de rasgos, que pertenece a la
@@ -169,14 +177,15 @@ promesas, de modo que una ejecución terminada se audita sin volver a derivar qu
 agente. Y como cada etapa queda en disco, una ejecución nueva puede partir de otra:
 \codigo{--plan-from} escribe en prosa directa el plan de otra ejecución, y \codigo{--narrate-from}
 vuelve a narrar su función con otra visión o con otro tono. Con ellas se derivan las celdas de la
-matriz del análisis horizontal (Sección~\ref{sec:horizontal}), y la primera es la que contrasta H1.
+matriz del análisis horizontal (Sección~\ref{sec:horizontal}), y la primera permite comparar la escritura directa con la narración de una simulación
+que parte del mismo plan.
 
 El generador distingue su versión (7.22.1) de la del contrato de sus artefactos (7.22), y cada
 ejecución registra ambas. Una ejecución solo se abre si está completa y su contrato es uno de los
 admitidos, del 5.0 al 7.22. Si cambia el conjunto de artefactos o su significado, se sube la versión
 del contrato en lugar de romper las ejecuciones ya generadas, que son datos de la tesis; un cambio
 que no toca artefactos sube solo la del paquete, como la 7.22.1, que añadió el ejecutor de matrices.
-La configuración congelada lleva en Git la etiqueta \texttt{generator-frozen}, del 28 de octubre de
+La configuración de referencia lleva en Git la etiqueta \texttt{generator-frozen}, del 28 de octubre de
 2026, sobre la versión 7.22.0 (commit \texttt{04d5799}); desde entonces, ningún \textit{prompt}, esquema ni contrato cambia sin una decisión nueva y
 escrita. Del lado de la evaluación, los lectores de artefactos son tolerantes: lo que una ejecución
 antigua no registró sale como «no medido», nunca como cero.
@@ -276,9 +285,15 @@ rasgos, las preferencias, el juez y el ranking se recalculan desde el disco sin 
 sorteo del estudio se repite con su semilla, el \textit{bootstrap} usa la semilla 42 y cada historia
 declara la versión del generador, del contrato y de los modelos que la produjeron. Ese recálculo
 necesita los datos, que no están en Git: el corpus (\texttt{Stories/}) y las evaluaciones
-(\texttt{Evaluations/}), con los votos del piloto, las extracciones, el juez y el ranking, residen en
+(\texttt{Evaluations/}), con los registros conservados de votación, las extracciones, el juez y el ranking, residen en
 la copia del autor; el repositorio versiona el código y las tablas de la tesis. Sin
 \texttt{Evaluations/}, \texttt{asg-results} escribe «No disponible» en cada tabla y termina con error.
+
+Los resúmenes documentales de esta revisión se identifican aparte en
+\codigo{redaccion/tablas/revision.json}, con sus fuentes y huellas. Las cifras de participación
+aportadas por el autor no son una exportación de votos y no las regenera \texttt{asg-results}.
+Las tablas automáticas del piloto conservan sus entradas históricas; la
+Sección~\ref{sec:resultados-estudio} precisa qué registros faltan para reproducir el estudio actualizado.
 
 Este capítulo deja descrito un sistema en el que las decisiones del Capítulo~\ref{chapter:generator}
 tienen un lugar comprobable: los validadores y la memoria son funciones puras con pruebas, la

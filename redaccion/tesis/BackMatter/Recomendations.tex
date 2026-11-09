@@ -1,34 +1,39 @@
 \begin{recomendations}
-% R09 en ../write_thesis_roadmap.md. Fuentes: capítulo 5 (pendientes y cifras de la matriz),
-% planning/future/idea-bank.md (titulares: el juez como función objetivo, EXP-2, EXP-6, árbitro de
-% acciones físicas) y planning/decisions.md §1 (T11). Sin referencias nuevas.
+% Revisión 2026-11-07: resultados actualizados y procedencia en Experiments.tex y fix.md.
 
-La primera recomendación es \textbf{completar la evaluación} con los instrumentos que ya existen. A
-la matriz horizontal le faltan 21 unidades, unas 300 a 450 llamadas al modelo principal, más la
-extracción de rasgos de toda la matriz y de las líneas base. El estudio humano debería ejecutarse con
-el diseño de la Sección~\ref{sec:conjunto}, con al menos doce lectores y pares entre obras para que el
-grafo de cada criterio sea conexo; con esos votos, reentrenar y validar el juez, y solo después
-extraer el resto del corpus y leer las diez mejores. Al extractor le falta \textbf{medir la
-cobertura}, con una lectura humana que anote lo omitido, y repetir las extracciones incompletas.
+La primera recomendación es \textbf{ampliar y diversificar la muestra de lectores}, incorporando
+personas con otras formaciones y hábitos de lectura. Conviene conservar las respuestas por lector,
+par y criterio, identificar al autor y comparar los resultados con y sin su participación. Alternar
+el orden de presentación y la posición A/B permite estudiar los efectos de cansancio y posición.
+Las nuevas comparaciones deberían conectar los cinco pares para poder estimar un ranking humano
+global, además de preferencias dentro de cada pareja.
 
-Dos hipótesis piden \textbf{experimentos propios}: H1, pares narrativo--simulado sobre el mismo plan
-dentro del estudio; H2, dos matrices idénticas salvo en la memoria de los actores, propia o compartida,
-un brazo de control que el generador ya admite y nunca se ejecutó. El inventario de objetos debería
-medirse igual antes de extender el arbitraje del código a otras acciones físicas.
+Se recomienda \textbf{completar la trazabilidad del estudio}: vincular los diez textos a sus
+identificadores de ejecución, recuperar las respuestas individuales y documentar por separado las
+lecturas adicionales de los mismos participantes. La comparación de memoria propia y compartida
+comunicada por el autor debe acompañarse de los planes utilizados, los recuentos de menciones a
+hechos desconocidos y las preferencias. Su replicación, junto con el contraste entre simulación y
+escritura directa desde el mismo plan, permitirá estimar la estabilidad de las observaciones.
 
-El trabajo posterior que sugiere el tutor es \textbf{usar el juez como función objetivo}: generar
-varias historias con distintos parámetros y devolver la que el juez ordene primero, y después buscar
-la configuración con un \textbf{algoritmo genético}. Requiere antes un juez que generalice fuera de
-muestra y supere a la longitud sola, lo que el de esta tesis no ha mostrado.
+En el análisis horizontal se debe mantener la distinción entre ejecución completada y extracción
+compatible. Es necesario \textbf{reunir las extracciones de las 24 unidades} bajo el mismo protocolo
+y conservar las repeticiones que estiman el ruido. Para el extractor, una revisión humana de
+historias completas debe registrar tanto las ocurrencias citadas como las omitidas y documentar
+quién revisó cada caso. Así podrán contrastarse precisión, cobertura y repetibilidad sin confundir
+la ausencia de una anotación con un resultado nulo.
 
-La metodología puede \textbf{aplicarse a otros textos generados} cuya calidad no tiene una respuesta
-correcta, cambiando el catálogo de rasgos y las preguntas: contar con una cita verificada, comparar
-por pares a ciegas con una línea base y aprender un juez de esas comparaciones no depende de la
-narrativa.
+La siguiente prioridad es \textbf{reproducir la validación del juez}: publicar sus aciertos y
+denominadores por criterio y partición, conservar las predicciones y compararlo con la longitud
+sola sobre los mismos votos. El rango de acierto comunicado debe vincularse con ese informe antes
+de atribuirle generalización. Para ordenar el corpus de 122 historias se requieren su lista,
+las extracciones compatibles, la identificación de los textos de entrenamiento y las razones de
+exclusión; después corresponde analizar cualitativamente las primeras historias.
 
-Por último, los resultados se usan con sus \textbf{condiciones}: las cifras del
-Capítulo~\ref{chapter:experiments} son exploratorias y llevan fecha, n y alcance; el juez del piloto
-no mide calidad y el ranking describe lo que ese juez premia. Otra versión del generador u otro modelo
-exigen repetir las mediciones.
+Como trabajo posterior se propone \textbf{usar el juez como función objetivo}: generar varias
+historias con distintos parámetros y seleccionar la que el juez ordene primero, y después buscar
+configuraciones mediante un \textbf{algoritmo genético}. Ambos usos requieren un juez que generalice
+fuera de muestra y supere al control de longitud. La metodología también puede aplicarse a otros
+textos generados, adaptando el catálogo de rasgos y las preguntas, sin sustituir las preferencias
+humanas por un juicio de calidad del LLM.
 
 \end{recomendations}

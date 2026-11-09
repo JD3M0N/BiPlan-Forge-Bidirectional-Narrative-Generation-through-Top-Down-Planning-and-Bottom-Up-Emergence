@@ -1,7 +1,7 @@
 \begin{introduction}\label{chapter:introduction}
 % R02 en ../write_thesis_roadmap.md. Sin referencias nuevas: todas las claves están en
 % Bibliography.bib desde R01. Hipótesis H1-H3 de docs/resumen.md; la forma de H2 y H3 la
-% decidió Josue el 2026-11-01 (H2 se mantiene sin experimento; H3 como lectura de WSE-bench).
+% decidió Josue el 2026-11-01; el alcance experimental se revisó el 2026-11-07 (fix.md).
 
 Generar historias de forma automática es uno de los problemas más antiguos de la inteligencia
 artificial. TALE-SPIN~\cite{meehan1977}, a finales de los años setenta, ya producía fábulas
@@ -92,7 +92,7 @@ A partir de lo anterior se plantea el siguiente \textbf{problema}: ¿cómo gener
 que conserven los compromisos de su trama sin reducir a los personajes a ejecutores del plan, y cómo
 evaluarlas de forma fiable sin pedir a un modelo que juzgue su calidad? El \textbf{objeto de
 estudio} es la generación automática de historias con modelos de lenguaje, y el \textbf{campo de
-acción}, la generación híbrida de historias en español, que combina la planificación de la trama
+acción}, la generación híbrida de historias en español e inglés, que combina la planificación de la trama
 con la simulación de personajes, junto con su evaluación mediante rasgos contables y comparaciones
 humanas por pares.
 
@@ -129,18 +129,8 @@ ausencia. Todas se contrastan con recuentos de rasgos y con la preferencia de lo
 comparaciones a ciegas, según los tres criterios de la evaluación: creatividad, desarrollo de los
 personajes e interés de la trama.
 
-% Correspondencia hipótesis -> experimentos (R06 y R07 en ../write_thesis_roadmap.md):
-% H1 -> R06: celdas M03 (narrativo --plan-from) frente a su base M01 en la matriz A (EXP-1),
-%       parcial: 14 de 35 unidades (P05 cerrada el 2026-10-30). R07: pares narrativo-simulado
-%       del estudio humano (solo el piloto; P06 cerrada el 2026-10-31 sin estudio real).
-% H2 -> R07: EXP-2 (--actor-memory own frente a shared) no se corrió (idea-bank desde P05.1,
-%       2026-10-30); respuesta prevista: sin datos suficientes. Evidencia indirecta en R06: la
-%       auditoría de 62 contextos de actor de la validación 7.5 (aislamiento, no mejora).
-% H3 -> R06: validaciones antes de congelar el generador, P02.1 (narración, empate 2-2-1 en 5
-%       pares) y P02.2 (brazos Top-Down, A 3 - B 1 en 4 pares), con un solo lector; R07, si el
-%       juez o el piloto añaden algo.
-% R12 (2026-11-03): las tres se responden en Experiments.tex, sec:respuesta-hipotesis, «sin datos
-% suficientes» (en H3, lo observado es coherente con lo que anticipa: P02.1, P02.2 y 24-24 frente a la línea base en el piloto).
+% Contrastes: mismo plan, memoria de actores y mecanismos opcionales.
+% Resultados y procedencia actualizados en Experiments.tex y fix.md (2026-11-07).
 \begin{itemize}
   \item \textbf{H1:} con un mismo plan, la historia narrada a partir de una función difiere de la
   escrita directamente desde el plan en rasgos contables de personajes y de trama, más allá del
@@ -167,8 +157,8 @@ Capítulo~\ref{chapter:generator} describe el generador híbrido: el plan, la fu
 los mecanismos opcionales. El Capítulo~\ref{chapter:evaluation} expone la metodología de
 evaluación, y el Capítulo~\ref{chapter:implementation}, la implementación del sistema y sus
 herramientas. El Capítulo~\ref{chapter:experiments} presenta los experimentos, con su alcance y sus
-resultados incompletos, y responde a las hipótesis con lo que los datos permiten. Por último, las
+resultados, y responde a las hipótesis con lo que los datos permiten. Por último, las
 Conclusiones recogen lo alcanzado en cada objetivo, las aportaciones y las limitaciones, y las
 Recomendaciones, las líneas de trabajo futuro. Los anexos dan la lista núcleo de rasgos, las
-peticiones de las obras de los experimentos y dos tablas complementarias.
+peticiones de las obras de los experimentos, los perfiles de los lectores y las tablas complementarias.
 \end{introduction}

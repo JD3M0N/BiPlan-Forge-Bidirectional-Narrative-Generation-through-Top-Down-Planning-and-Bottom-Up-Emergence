@@ -12,7 +12,8 @@
       "salidas": {
         "juez.tex": "f3dbd3a3dea73ee76827161c030916258690109e472a978889cbeff0188a4fe6",
         "juez.csv": "7c88c53e27f653b0dd39725cc6fd3abe1aa7c753e2977d5bcf355d4d902a2863"
-      }
+      },
+      "alcance": "Informe histórico conservado; no corresponde al estudio actualizado de ocho lectores ni al corpus de 122."
     },
     "preferencias": {
       "estado": "generada",
@@ -22,7 +23,8 @@
       "salidas": {
         "preferencias.tex": "d25ccdc8956b5281843aba074b0dc6150c1a02c24739016999df586c75b84c81",
         "preferencias.csv": "73ed85d0a1c6133850bb08d3fc8696bddd8e0ce4cdc4794f310c481b6061934d"
-      }
+      },
+      "alcance": "Informe histórico conservado; no corresponde al estudio actualizado de ocho lectores ni al corpus de 122."
     },
     "perturbaciones": {
       "estado": "generada",
@@ -33,7 +35,8 @@
       "salidas": {
         "perturbaciones.tex": "bcb28923f493e67c216237a9873117ba1e74e55ccaaaf366a646cbb4d26e4edf",
         "perturbaciones.csv": "da030c526da7b03aeca64bc64487e979f90778e04f12d87acf3597bb6cdbec3d"
-      }
+      },
+      "alcance": "Informe histórico conservado; no corresponde al estudio actualizado de ocho lectores ni al corpus de 122."
     },
     "piloto": {
       "estado": "generada",
@@ -63,7 +66,8 @@
       "salidas": {
         "ranking_cobertura.tex": "f3f42d3ea00f86f1f76e2ceecbaefc920ab4f5d30ffb96796b017bad71c77fb1",
         "ranking_cobertura.csv": "ab827974b32401d8040e4b275b8b2a30af932067cf7c065682f70c081161808d"
-      }
+      },
+      "alcance": "Informe histórico conservado; no corresponde al estudio actualizado de ocho lectores ni al corpus de 122."
     },
     "ranking_puestos": {
       "estado": "generada",
@@ -73,7 +77,8 @@
       "salidas": {
         "ranking_puestos.tex": "d1dbcf6d1f9e5e93e4ae840bb3fe895d1595e1cb836ee1525aabf4c1e192e76e",
         "ranking_puestos.csv": "536de08e3755c1cf5e0889d65cd18433a952c1115f4be4f86642dc42cdb2a88b"
-      }
+      },
+      "alcance": "Informe histórico conservado; no corresponde al estudio actualizado de ocho lectores ni al corpus de 122."
     },
     "ranking_perfil": {
       "estado": "generada",
@@ -83,7 +88,8 @@
       "salidas": {
         "ranking_perfil.tex": "b46adf326ed4c53ca9c6f793279d5688201764d147481bc09b24f086b787297b",
         "ranking_perfil.csv": "7a1110c39c0da3bc3dbab4db6c23b01732e09319bf6eede6c11fb4dc9e0a318f"
-      }
+      },
+      "alcance": "Informe histórico conservado; no corresponde al estudio actualizado de ocho lectores ni al corpus de 122."
     }
   },
   "figuras": {
@@ -93,13 +99,21 @@
         "estudio-piloto-722/juez.json": "5047265671faf67daba29f4fde5767bb97ce2cfd39e26772bc27c5b6df3e1d93"
       },
       "salidas": {
-        "juez.tex": "49ddf9f25f9c442ad757132890c361ab5ea1be10836759b22e7c647300da3e4c"
-      }
+        "juez.tex": "81787397ccb860324d8e9e6cb8cffb5455e0cb6104008c69af81dd2391863eef"
+      },
+      "alcance": "Piloto histórico de cinco lectores; rotulado el 2026-11-07, valores sin cambios."
     }
   },
   "a_mano": {
     "tab:lecturas": "docs/resumen.md (P02.1 y P02.2) y Evaluations/estudio/lecturas/",
-    "tab:extractor": "packages/evaluation/METODOLOGIA.md §3, Validación del extractor",
-    "tab:coste": "llm_calls.jsonl de los runs de la matriz (carpetas citadas en Experiments.tex)"
+    "tab:extractor": "Reconstruida desde hojas CSV y retest/resumen.json; ver revision.json.",
+    "tab:coste": "llm_calls.jsonl de los runs de la matriz (carpetas citadas en Experiments.tex)",
+    "fig:horizontal": "figuras/horizontal.tex, recuentos de estado_extraccion en horizontal_revision.csv (revisión 2026-11-07)"
+  },
+  "revision_documental": {
+    "fecha": "2026-11-07",
+    "fuentes_y_salidas": "revision.json",
+    "datos_del_autor": "../tesis/fix.md",
+    "nota": "Los resúmenes *_revision y extractor_detalle son derivados documentales; asg-results conserva sus entradas históricas y no los regenera."
   }
 }

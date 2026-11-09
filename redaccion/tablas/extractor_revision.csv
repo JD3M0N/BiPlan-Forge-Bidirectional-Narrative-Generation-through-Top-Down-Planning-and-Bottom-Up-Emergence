@@ -1,0 +1,29 @@
+rasgo,nombre,grupo,correctas,incorrectas,sin_veredicto_resuelto,juzgadas,precision,cobertura,pares_comparables,diferencia_relativa_media,cambios_estado,historias_retest
+T01,Palabras,codigo,,,,,,,6,0.0,0,6
+T06,Proporción de diálogo,codigo,,,,,,,6,0.0,0,6
+T08,Repetición de trigramas,codigo,,,,,,,6,0.0,0,6
+R01,Promesas de apertura,nucleo,5,0,0,5,1.0,,5,0.0,0,6
+R02,Señales de progreso,nucleo,15,0,3,15,1.0,,4,0.0,0,6
+R03,Preparación del pago final,nucleo,1,0,0,1,1.0,,1,0.0,3,6
+R04,"Ciclos «sí, pero»",nucleo,5,0,2,5,1.0,,2,0.0,1,6
+R05,"Ciclos «no, y además»",nucleo,5,0,0,5,1.0,,2,0.25,1,6
+R09,Proactividad del protagonista,nucleo,10,0,6,10,1.0,,4,0.1875,0,6
+R16,Soluciones preparadas,nucleo,5,0,1,5,1.0,,1,0.0,2,6
+R18,Límites del mundo,nucleo,6,0,7,6,1.0,,4,0.125,1,6
+R23,Escenas con cambio,nucleo,7,0,1,7,1.0,,2,0.0,2,6
+R24,Decisiones con coste,nucleo,8,0,0,8,1.0,,2,0.0,2,6
+X02,Cuota del personaje más presente,codigo,,,,,,,5,0.039999999999999994,0,6
+X03,Reparto de la participación,codigo,,,,,,,5,0.011658973145382934,0,6
+X06,Escenas con conflicto,nucleo,28,0,6,28,1.0,,3,0.0,2,6
+X10,Mentiras,nucleo,0,0,1,0,,,1,0.0,2,6
+X13,Secretos revelados,nucleo,3,0,1,3,1.0,,3,0.0,2,6
+X14,Complicaciones,nucleo,21,0,1,21,1.0,,4,0.0,1,6
+X15,Giros,nucleo,9,0,0,9,1.0,,3,0.16666666666666666,1,6
+X16,Sucesos azarosos o externos,nucleo,6,0,0,6,1.0,,4,0.17857142857142858,0,6
+X17,Usos de objetos,nucleo,21,0,3,21,1.0,,4,0.21666666666666667,1,6
+X20,Contradicciones,nucleo,1,0,1,1,1.0,,1,0.0,2,6
+X29,Reparto del diálogo,codigo,,,,,,,3,0.01472263076217839,2,6
+R15,Defecto con coste,secundario,4,0,0,4,1.0,,0,,3,6
+R17,Soluciones sin preparar,secundario,0,0,0,0,,,1,0.0,1,6
+X09,Réplicas fuera de personalidad,secundario,0,0,0,0,,,0,,1,6
+X24,Preguntas pagadas,secundario,0,0,0,0,,,0,,2,6

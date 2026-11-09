@@ -38,8 +38,9 @@ y el estilo, en [estilo.md](estilo.md) (en esta carpeta). Todo en español, salv
      aportan cifras sin comprobarlas.
    - Figuras en `redaccion/tesis/Graphics/` (o las de P09 en `redaccion/figuras/`); tablas con
      `booktabs`.
-6. **Compilar.** `latexmk` en `redaccion/tesis/` (MiKTeX). Debe terminar sin errores, sin citas
-   ni referencias indefinidas. Si falta un paquete de LaTeX, instálalo con
+6. **Compilar.** `asg-latex` desde la raíz (MiKTeX): compila en una copia en `%TEMP%` y deja el
+   PDF y el log en `redaccion/tesis/`. Debe terminar con 0, sin citas ni referencias
+   indefinidas ni cajas desbordadas (las cuenta al final). Si falta un paquete de LaTeX, instálalo con
    `miktex packages install <paquete>` (el diálogo de instalación automática falla) y vuelve a
    compilar; no hagas un bucle de compilaciones.
 7. **Medir.** Cuenta las páginas de la parte en el PDF (y las palabras en el resumen). Si pasa

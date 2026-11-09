@@ -1,18 +1,19 @@
 \chapter{Generador híbrido de historias}\label{chapter:generator}
 % R03 en ../write_thesis_roadmap.md. Fuentes: docs/resumen.md, docs/architecture/generation.md y
-% simulation.md, y el código congelado en Stagecraft 7.22 (etiqueta generator-frozen,
+% simulation.md, y el código de referencia en Stagecraft 7.22 (etiqueta generator-frozen,
 % 2026-10-28; predeterminados en planning/decisions.md §3 y options.py). Referencia nueva:
 % piad2026 (B02 de la planilla).
 
-Este capítulo describe el generador de historias propuesto, en la configuración con que quedó
-congelado antes de los experimentos, el 28 de octubre de 2026. Primero se presenta la
+Este capítulo describe el generador de historias propuesto, con la configuración de referencia
+establecida para los experimentos el 28 de octubre de 2026. Esta referencia permite identificar las
+condiciones de las ejecuciones mientras continúa el desarrollo. Primero se presenta la
 \textbf{Arquitectura} (Sección~\ref{sec:arquitectura}), que separa en etapas las tres decisiones de
 una historia: qué pasa, cómo pasa y cómo se cuenta. Después se describe cada etapa: el \textbf{Plan
 validado} y su contrato de promesas (Sección~\ref{sec:plan}), el \textbf{Guion teatral}
 (Sección~\ref{sec:guion}), la \textbf{Función simulada}, con el reparto, la memoria de los actores
 y el director (Sección~\ref{sec:funcion}), y el \textbf{Narrador} (Sección~\ref{sec:narrador}). La
 Sección~\ref{sec:opcionales} reúne los \textbf{Mecanismos opcionales}, que el generador implementa
-pero que su configuración congelada deja apagados.
+pero que su configuración de referencia deja apagados.
 
 \section{Arquitectura}\label{sec:arquitectura}
 
@@ -43,8 +44,8 @@ de \textbf{guion}, el resultado es el propio guion teatral. En el formato \textb
 guion se representa y se narra; es el generador híbrido que propone esta tesis. Como cada etapa
 guarda su resultado antes de dar paso a la siguiente, una historia se puede repetir desde cualquier
 punto: escribir en prosa directa el plan de una función ya representada, o narrar de nuevo la misma
-función desde otro punto de vista. Es lo que permite contrastar H1, que compara la historia narrada
-a partir de una función con la escrita directamente desde el mismo plan.
+función desde otro punto de vista. Esta reutilización permite comparar los rasgos de personajes y trama y la preferencia de los lectores
+entre una historia narrada a partir de una función y otra escrita directamente desde el mismo plan.
 
 Un principio recorre todas las etapas: \textbf{el modelo propone y el código decide}. Cada vez que
 un agente produce algo con estructura, sea un plan, un acto, un dosier de personaje o un turno, el
@@ -62,10 +63,15 @@ deriva un resultado de respaldo, la ejecución lo registra y la historia sigue.
 La petición es un texto libre o una ficha de la obra con su trama y su reparto. Un analista la
 interpreta y elige uno de tres perfiles, Esencial, Desarrollada o Expansiva, que fijan la escala de
 la historia. Los perfiles se describen al modelo con palabras y no con presupuestos: si la persona
-pide una extensión, el código la traduce al perfil, y la cifra no llega a ningún \textit{prompt}.
-Antes del plan, otros agentes describen el mundo, con sus lugares y objetos, y los personajes, y una
-guía recupera esqueletos de trama clásicos parecidos a la petición y los ofrece como inspiración,
-no como restricción.
+pide una extensión, el código la traduce al perfil en el que encaja, y la cifra no llega a ningún \textit{prompt}.
+
+La petición del usuario se transforma en una especificación estructurada que recoge las condiciones
+de la historia y el perfil narrativo correspondiente. Cada agente recibe instrucciones para su tarea
+y los datos pertinentes de las etapas anteriores: el constructor del mundo define lugares y objetos,
+y el diseñador de personajes utiliza ese contexto para elaborar el reparto. Cuando está activa, la
+guía narrativa recupera esqueletos de trama relacionados con la petición y los incorpora como
+orientación estructural. El planificador recibe la especificación, el mundo, los personajes y la guía
+disponible para proponer un plan que después valida el código.
 
 El plan es la decisión central del autor. Se compone de capítulos, cada uno con su objetivo
 dramático, su estado inicial, su punto de giro y su estado final, y de eventos. Cada evento declara
@@ -123,7 +129,7 @@ acto y un escritor lo corrige. El guion se puede obtener de dos maneras, con el 
 método \textbf{nativo}, en que el dramaturgo escribe los actos desde el plan, y el \textbf{adaptado},
 en que se adapta a actos la prosa del formato narrativo. Ambos se implementaron para compararlos a
 ciegas y quedarse con uno; esa comparación quedó fuera de los experimentos, y la configuración
-congelada usa el nativo, que es el que alimenta la función.
+de referencia usa el nativo, que es el que alimenta la función.
 
 En el formato simulado, el guion es la partitura de la función, no su texto. Cada escena del guion
 se convierte en una escena de la función, con un \textit{beat} por cada evento del plan que
@@ -199,7 +205,8 @@ postura hacia los demás, se sustituye en lugar de acumularse: un actor que guar
 aliada» y «me traicionó» interpretaría mal las dos. El historial queda en los registros. La memoria
 propia tiene, además, su brazo de control. Con memoria compartida, cada turno público llega a la
 memoria de todo el reparto, esté o no en escena, mientras que susurros y pensamientos siguen siendo
-privados. Comparar ambas configuraciones sobre el mismo plan es lo que plantea H2.
+privados. Comparar ambas configuraciones sobre el mismo plan permite comprobar si la memoria propia reduce
+las menciones a hechos que el personaje no podía conocer y si los lectores prefieren las escenas resultantes.
 
 \subsection{El director}\label{sec:director}
 
@@ -220,10 +227,7 @@ mundo puede ejecutar la consecuencia visible de una decisión que los personajes
 nunca decidir por ellos.
 
 Este mecanismo garantiza que la función avance, no que los personajes lleguen solos a cada evento.
-En la validación del generador congelado, la única función representada (perfil Esencial,
-2026-10-28) forzó 3 de sus 6 \textit{beats}, la misma proporción que una validación anterior (5 de
-10); el Capítulo~\ref{chapter:experiments} lo trata como una limitación conocida. La función se
-representa por defecto en modo \textbf{fijo}, en el que los eventos del plan son hitos que hay que
+La función se representa por defecto en modo \textbf{fijo}, en el que los eventos del plan son hitos que hay que
 alcanzar. El modo \textbf{adaptativo}, opcional, permite que un hito no representado revise las
 escenas futuras, con una propuesta y una reparación por frontera entre escenas; si fallan, la función
 termina con un cierre abierto, y el plan original nunca se modifica.
@@ -263,28 +267,29 @@ historias resultantes se deben solo al discurso.
 \section{Mecanismos opcionales}\label{sec:opcionales}
 
 WSE-bench~\cite{chen2026b} concluye que añadir estructura no mejora la coherencia de forma uniforme,
-y H3 lo traslada a este generador: que un mecanismo mejore medidas de la prosa no basta para que los
+y este trabajo contrasta esa observación con la preferencia humana: que un mecanismo mejore medidas
+de la prosa no basta para que los
 lectores prefieran las historias que lo usan. Por eso el generador implementa más mecanismos de los
-que usa su configuración congelada, todos con una regla de diseño: apagados, dejan el generador
+que usa su configuración de referencia, todos con una regla de diseño: apagados, dejan el generador
 como estaba; en el inventario, una prueba automática comprueba que no cambia ningún
 \textit{prompt}, esquema ni resultado intermedio. Cada uno es así un brazo experimental, y su
 estado por defecto cambia solo por una lectura humana a ciegas, no por una medida automática. La Tabla~\ref{tab:mecanismos} resume los mecanismos con
-alternativa, su etapa y su estado en la configuración congelada.
+alternativa, su etapa y su estado en la configuración de referencia.
 
 \begin{table}[htb]
   \centering
-  \caption{Estado de los mecanismos en la configuración congelada}
+  \caption{Estado de los mecanismos en la configuración de referencia}
   \label{tab:mecanismos}
   \small
   \begin{tabular}{@{}>{\raggedright\arraybackslash}p{5.4cm}>{\raggedright\arraybackslash}p{2.8cm}%
       >{\raggedright\arraybackslash}p{2.0cm}>{\raggedright\arraybackslash}p{3.6cm}@{}}
     \toprule
-    Mecanismo & Etapa & Congelado & Alternativa \\
+    Mecanismo & Etapa & Referencia & Alternativa \\
     \midrule
     Guía de esqueletos de trama & Plan & encendida & apagada o compositiva \\
     Contrato de promesas & Plan & encendido & apagado (control) \\
     Método del guion & Guion & nativo & adaptado de la prosa \\
-    Memoria de los actores & Función & propia & compartida (H2) \\
+    Memoria de los actores & Función & propia & compartida \\
     Modo de la función & Función & fijo & adaptativo \\
     Cláusulas por tipo & Función & apagadas & encendidas \\
     Inventario de objetos & Función & apagado & encendido \\
@@ -312,15 +317,11 @@ escena} convierten cada evento en una ficha (lugar, deseos, obstáculo, giro) an
 \textbf{por selección} elige primero los momentos del registro y escribe desde ellos, y las
 \textbf{cláusulas por tipo} separan lo que deciden los personajes de lo que hace el mundo.
 
-Ninguno se encendió. Dos lecturas a ciegas de un solo lector, el 27 de octubre de 2026, decidieron
-los brazos de escritura y de narración. En la narración, la selección con editor y ejemplos corrigió
-los defectos medidos, pero empató con la resumida (2--2--1 en 5 pares); en el formato narrativo, el
-brazo de escritura, que reunía los cuatro mecanismos, redujo a casi cero las coletillas medidas, y el
-lector prefirió la versión sin él en 3 de 4 pares. Tan pocos pares y un solo lector no distinguen una preferencia
-pequeña: solo muestran que esas mejoras medidas no bastaron para ganar. La guía compositiva, el
-inventario, las cláusulas por tipo, el modo adaptativo y el guion adaptado quedaron sin comparación
-a ciegas, como opciones.
-El Capítulo~\ref{chapter:experiments} presenta estas lecturas con su alcance.
+La configuración de referencia conserva estos mecanismos como opciones que pueden activarse para
+comparar su efecto. Su evaluación combina medidas de la prosa con lecturas humanas, porque reducir
+un defecto medido no garantiza una preferencia por el texto resultante. El
+Capítulo~\ref{chapter:experiments} presenta las comparaciones documentadas y el alcance de las
+lecturas adicionales comunicadas por el autor.
 
 Este capítulo deja descrito un generador que separa qué pasa, cómo pasa y cómo se cuenta, y que
 apoya cada separación en el código: un plan que se valida como grafo, un contrato de promesas

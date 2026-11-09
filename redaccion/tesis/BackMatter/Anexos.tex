@@ -12,7 +12,7 @@ La Tabla~\ref{tab:anexo-nucleo} da los 24 rasgos núcleo de la Sección~\ref{sec
 identificador en el catálogo, que es el que usan las tablas generadas por código del
 Capítulo~\ref{chapter:experiments}. La letra indica la capa del catálogo
 (Sección~\ref{sec:catalogo}): T, medidas del texto calculadas por código; R, la rúbrica hecha
-contable, y X, los recuentos de los ejemplos del tutor. Los recuentos que crecen con la longitud se
+contable, y X, los recuentos de los ejemplos del profesor Piad. Los recuentos que crecen con la longitud se
 expresan por mil palabras («/1000 pal.»). La última columna resume qué se cuenta; la definición
 operativa completa está en la planilla del catálogo (Sección~\ref{sec:herramientas}).
 
@@ -57,7 +57,7 @@ operativa completa está en la planilla del catálogo (Sección~\ref{sec:herrami
 
 \chapter{Peticiones de las obras de los experimentos}\label{app:obras}
 
-Las tres obras de la matriz, del piloto y de las líneas base (Sección~\ref{sec:corpus}) recibieron
+Las tres obras de la matriz y de las líneas base (Sección~\ref{sec:corpus}) recibieron
 literalmente estas peticiones, la variante Esencial del catálogo. La línea base de un solo
 \textit{prompt} recibe el mismo texto.
 
@@ -112,34 +112,69 @@ oportunistas, enfermedades repentinas y herencias secretas, y termina con una de
 que implique una pérdida real y una forma limitada de reconciliación.
 \end{quote}
 
-\chapter{Tablas complementarias de los experimentos}\label{app:tablas}
+\chapter{Participantes y alcance de las lecturas}\label{app:lectores}
 
-La Tabla~\ref{tab:anexo-matriz} da el estado de la matriz del análisis horizontal
-(Sección~\ref{sec:resultados-horizontal}) según su manifiesto: las unidades nuevas, las nueve líneas
-base y la base de la obra 03 adoptada de la validación de la versión congelada. La
-Tabla~\ref{tab:anexo-perfil} da las medianas de los rasgos núcleo de las tres primeras del ranking
-(Sección~\ref{sec:resultados-ranking}), del resto de las ordenadas y de las nueve; entre paréntesis,
-cuántas historias midieron el rasgo. Es descriptiva: con uno a tres valores por rasgo no sirve para
-comparar. Los nombres de los rasgos salen del catálogo del código, de modo que «Ciclos 'si, pero'» y
-«Eventos azarosos o externos» son los «Ciclos «sí, pero»» y los «Sucesos azarosos o externos» de la
-Tabla~\ref{tab:anexo-nucleo}, y en la Tabla~\ref{tab:ranking-cobertura} un \textit{run} es una
-ejecución.
+La Tabla~\ref{tab:lectores} recoge los ocho participantes descritos por el autor en la actualización
+del 7 de noviembre de 2026. Todos son graduados de Ciencia de la Computación. Las categorías de
+lectura alta, media y baja son declaradas; no se les asignan cantidades de libros o horas que no
+se registraron. L1 identifica al autor en este conjunto y no se corresponde necesariamente con el
+L1 de las bases históricas del piloto.
 
 \begin{table}[htb]
   \centering
-  \caption{Estado de la matriz del análisis horizontal (manifiesto, 2026-10-31)}
+  \caption{Perfiles anónimos del estudio (octubre--1 de noviembre de 2026)}
+  \label{tab:lectores}
+  \small
+  \input{../tablas/lectores_revision.tex}
+\end{table}
+
+Cada lector recibió diez textos distintos en los mismos cinco pares y respondió tres preguntas por
+par. Algunos realizaron además lecturas o validaciones, sin incorporar participantes nuevos. La
+lista de títulos y ejecuciones, el detalle de los pares y las respuestas individuales no se han
+identificado en los registros disponibles. Por ello, los códigos de las seis historias del piloto
+anterior no se reutilizan para completar esta lista ni se atribuyen sus votos a estos lectores.
+
+\chapter{Tablas complementarias de los experimentos}\label{app:tablas}
+
+La Tabla~\ref{tab:anexo-matriz} conserva el estado histórico de la matriz según el manifiesto
+actualizado el 31 de octubre de 2026 en UTC. Sus 24 unidades completadas forman el conjunto descrito
+en la Sección~\ref{sec:resultados-horizontal}; el manifiesto también conserva una unidad fallida y
+veinte pendientes del diseño inicial. Las nueve líneas base y la base simulada de la obra 03 ya
+existían cuando se generaron las otras catorce unidades. La lista de ejecuciones y la comprobación de
+extracciones se conservan en \codigo{redaccion/tablas/horizontal_revision.csv}.
+
+\begin{table}[htb]
+  \centering
+  \caption{Estado histórico de la matriz horizontal (manifiesto, 2026-10-31)}
   \label{tab:anexo-matriz}
   \small
   \input{../tablas/matriz.tex}
 \end{table}
-% Generada por asg-results desde Evaluations/horizontal/manifiesto-matriz.json.
 
-\begin{table}[htb]
+La Tabla~\ref{tab:extractor-detalle} amplía la validación registrada del extractor. Distingue los
+veredictos conservados de los pares numéricamente comparables y los cambios de estado. Los rasgos
+calculados por código no tienen veredictos sobre citas propios. También se muestran cuatro rasgos
+que quedaron fuera del núcleo vigente, para no ocultar su denominador al resumir la validación.
+
+\begin{table}[p]
   \centering
-  \caption{Medianas de los rasgos núcleo en el ranking del corpus (2026-11-03)}
-  \label{tab:anexo-perfil}
-  \footnotesize
-  \input{../tablas/ranking_perfil.tex}
+  \caption{Detalle de las hojas de revisión y del test-retest (2026-10-29)}
+  \label{tab:extractor-detalle}
+  \small
+  \input{../tablas/extractor_detalle.tex}
+  \par\medskip
+  \begin{minipage}{0.96\textwidth}
+    \footnotesize
+    C: correctas; I: incorrectas; SR: sin veredicto resuelto (etiqueta histórica «dudoso»), excluidas
+    de la precisión principal. Pares: historias medidas en ambas pasadas, de seis repetidas.
+    $\Delta_r$: diferencia relativa media sobre esos pares. Cambios: transiciones de estado entre
+    pasadas, de seis historias. El guion indica ausencia de medida o de aplicación; no es cero.
+    Los campos de omisiones están vacíos y no permiten estimar cobertura. Los identificadores se
+    definen en la Tabla~\ref{tab:anexo-nucleo} o en el catálogo para los rasgos secundarios.
+  \end{minipage}
 \end{table}
-% Generada por asg-results desde Evaluations/ranking/ranking-2026-11-03.json (top_ten_profile).
-% «Las diez»: las tres fuera del entrenamiento; «Resto»: las otras seis ordenadas.
+
+Las tablas y la figura del juez del piloto anterior se conservan en los archivos del proyecto,
+con su manifiesto de fuentes del 3 de noviembre. No se incluyen como resultados del estudio
+actualizado ni del corpus de 122 historias. La revisión documental identifica sus fuentes y los
+nuevos resúmenes en \codigo{redaccion/tablas/revision.json}.

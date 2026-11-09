@@ -21,8 +21,9 @@ El diseño del generador (Capítulo~\ref{chapter:generator}) separa qué pasa, c
 cuenta. Un plan, validado por código como grafo acíclico y con un contrato de promesas anclado a sus
 eventos, decide qué pasa; una función de actores que no ven el plan y recuerdan solo lo que
 percibieron decide cómo pasa, con un director que sugiere y cierra cada \textit{beat}, y un narrador
-que cura el registro sin inventar decide cómo se cuenta. Los mecanismos que no se ganaron su
-complejidad en las validaciones quedaron apagados en la configuración congelada, como opciones.
+que cura el registro sin inventar decide cómo se cuenta. La configuración de referencia mantiene
+mecanismos opcionales que pueden activarse para estudiar su efecto sobre las medidas de la prosa y
+la preferencia humana.
 
 La metodología de evaluación (Capítulo~\ref{chapter:evaluation}) articula tres evaluaciones en las
 que ninguna cifra automática se presenta como juicio de calidad: 24 rasgos núcleo, 18 de ellos
@@ -41,36 +42,41 @@ versión y su huella, y las tablas del estudio, del juez y del ranking se regene
 artefactos. La cuota diaria
 del servicio de modelos fue una restricción práctica que el sistema administra, pero no evita.
 
-La evaluación experimental (Capítulo~\ref{chapter:experiments}) congeló el generador tras completar
-una ejecución por formato, con las comprobaciones fijadas superadas en la simulada y una limitación
-conocida: la función forzó 3 de sus 6 \textit{beats}, una proporción que las validaciones anteriores
-no permiten fijar. Los
-demás instrumentos se ejercitaron sobre datos reales, pero las muestras no bastan para concluir. La
-validación del extractor es provisional, con veredictos de precisión propuestos por un LLM y la
-cobertura sin medir; el análisis horizontal se quedó en 14 de 35 unidades y sin resultados
-interpretables, y el estudio humano, en un piloto de cinco lectores con un acuerdo cercano al azar y
-sin una preferencia que se distinga del azar entre el generador y las líneas base. El
-juez aprendido de ese piloto acierta fuera de muestra menos que la longitud sola, pero con 20 o 21
-votos por criterio ninguna de las dos cifras se distingue del azar. Las tres hipótesis quedan sin
-datos suficientes. Para H3, las mejoras medidas de la prosa no ganaron en dos lecturas a ciegas de un
-solo lector, lo que anticipa la hipótesis; el piloto no la contrasta, porque compara el generador
-completo con una línea base y no cada mecanismo con su ausencia.
+La evaluación experimental (Capítulo~\ref{chapter:experiments}) documentó una configuración de
+referencia y un conjunto horizontal de 24 ejecuciones: cinco bases simuladas, nueve líneas base,
+dos narrativas desde el plan y ocho variantes de narración. La validación registrada del extractor
+comprende doce historias, con repetición en seis; sus resultados se presentan por rasgo, con el
+número de citas juzgadas y de pares efectivamente comparables. La generación terminada y la
+extracción completa se verifican por separado.
 
-Las \textbf{aportaciones} son las dos que se plantearon. La primera es el generador: una arquitectura
-que combina planificación y simulación con LLMs y que apoya cada separación en una comprobación del
-código, disponible con sus opciones y su configuración congelada. La segunda es la metodología de
-evaluación con sus herramientas: recuentos citados y verificables en lugar de puntuaciones, pares a
-ciegas en lugar de escalas, y un juez validado fuera de muestra en lugar de uno que se da por bueno.
-Su resultado en el piloto, por debajo de la longitud sola y sin votos suficientes para separarse del
-azar, se publica como tal y no como medida de calidad.
+El estudio humano, según la actualización del autor, reunió ocho graduados de Ciencia de la
+Computación, incluido él mismo, con diferentes frecuencias de lectura. Cada participante comparó
+cinco pares de diez textos distintos mediante Telegram y respondió tres preguntas por par, para un
+total de 120 respuestas declaradas. Este alcance describe la participación; las preferencias por
+criterio y el acuerdo requieren el registro individual, que no se sustituye por los votos del
+piloto anterior. Los cinco pares disjuntos tampoco permiten identificar un ranking humano global.
 
-Las \textbf{limitaciones} son, sobre todo, de escala. La cuota diaria acotó cuántas historias se
-pudieron generar y extraer, y el plazo, cuántos lectores se pudieron reunir; la extracción de rasgos
-resultó más cara e inestable de lo previsto, con la mitad de la muestra de validación incompleta y la
-cobertura sin medir. Las lecturas que fijaron la configuración del generador son de un solo lector, el
-autor, y el ranking del corpus solo ordenó 9 de 130 historias elegibles, sin la lectura cualitativa de
-las primeras. Usar el juez como función objetivo para elegir qué generar, y buscar la configuración con
-un algoritmo genético, quedan fuera de este trabajo; las Recomendaciones los recogen como trabajo
-futuro, junto con lo necesario para completar la evaluación.
+Los contrastes responden a cuestiones diferentes. La matriz conserva escritura directa y simulación
+vinculadas por plan; la preferencia entre ambas necesita relacionarse con los pares humanos. El autor
+informa de resultados favorables a la memoria propia, cuya magnitud debe documentarse con las
+ejecuciones y recuentos correspondientes. Las sesiones conservadas de mecanismos opcionales aportan
+una observación compatible con la tercera hipótesis: reducir defectos medidos no aseguró que se
+prefiriera el texto modificado. Extender estas observaciones a otras historias y lectores exige una
+muestra mayor y la trazabilidad completa de las comparaciones.
+
+Las \textbf{aportaciones} son el generador y la metodología de evaluación. El primero combina
+planificación, simulación y narración con comprobaciones explícitas en sus interfaces. La segunda
+articula recuentos citados, preferencias humanas por pares y un juez aprendido de esas preferencias.
+El rango de acierto comunicado para el juez es de 0,50 a 0,65; sin su desglose y partición no se
+interpreta como rendimiento verificado fuera de muestra. El corpus de 122 historias destinado a
+ordenar se distingue de los textos que aportan votos al entrenamiento y a la validación.
+
+Las \textbf{limitaciones} se refieren a la escala, la representatividad y la documentación de los
+resultados. Los participantes comparten formación y el autor conoce el sistema; las lecturas
+adicionales no cuentan como nuevos participantes. La cuota limita las ejecuciones y extracciones,
+y los informes históricos no reemplazan los registros del estudio actualizado. Ampliar la muestra,
+conectar los pares y conservar las respuestas y predicciones permitirá estimar la incertidumbre.
+Usar el juez como función objetivo y buscar configuraciones con un algoritmo genético quedan como
+trabajo futuro, una vez demostrada su generalización.
 
 \end{conclusions}

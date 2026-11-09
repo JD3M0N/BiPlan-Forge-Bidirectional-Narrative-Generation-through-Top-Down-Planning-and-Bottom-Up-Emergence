@@ -1,0 +1,32 @@
+% Paquetes del repositorio y sentido de sus dependencias (Figura fig:paquetes). Se incluye con
+% \input desde MainMatter/Implementation.tex. Fuente: AGENTS.md (core <- evaluation <- stagecraft
+% <- telegram, studio) y tab:paquetes; cada paquete depende de todos los que tiene a su derecha.
+\begin{tikzpicture}[
+    font=\footnotesize,
+    caja/.style={draw, rounded corners=2pt, align=center, text width=3.15cm,
+      minimum height=1.15cm, inner sep=2pt, fill=white,
+      execute at begin node={\hyphenpenalty=10000}},
+    disco/.style={draw=black!60, dashed, rounded corners=2pt, align=center, text width=5.4cm,
+      minimum height=1.0cm, inner sep=2pt, fill=black!5},
+    flecha/.style={-{Stealth[length=1.8mm]}, semithick},
+    datos/.style={-{Stealth[length=1.6mm]}, dashed, draw=black!60},
+    rotulo/.style={font=\footnotesize\itshape, text=black!70},
+  ]
+  \node[caja] (telegram) at (0,0.75) {\texttt{asg-telegram}\\[1pt] bot y estudio\\ a ciegas};
+  \node[caja] (studio) at (0,-0.75) {\texttt{asg-studio}\\[1pt] StageCraft y\\ lectura ciega};
+  \node[caja] (stagecraft) at (3.95,0) {\texttt{asg-stagecraft}\\[1pt] generador,\\ proveedores y cuota};
+  \node[caja] (evaluation) at (7.9,0) {\texttt{asg-evaluation}\\[1pt] rasgos, estudio,\\ juez y ranking};
+  \node[caja] (core) at (11.85,0) {\texttt{asg-core}\\[1pt] escritura atómica y\\ medidas de la prosa};
+
+  \draw[flecha] (telegram.east) -- (stagecraft.west);
+  \draw[flecha] (studio.east) -- (stagecraft.west);
+  \draw[flecha] (stagecraft) -- (evaluation);
+  \draw[flecha] (evaluation) -- (core);
+
+  % La evaluación no importa el generador: lee del disco lo que este escribe.
+  \node[disco] (artefactos) at (5.925,-2.2) {Artefactos en disco:\\ JSON, Markdown y SQLite};
+  \draw[datos] (stagecraft.south) -- node[rotulo, right] {escribe}
+    (stagecraft.south |- artefactos.north);
+  \draw[datos] (evaluation.south |- artefactos.north) -- node[rotulo, left] {lee}
+    (evaluation.south);
+\end{tikzpicture}

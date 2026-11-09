@@ -1,36 +1,26 @@
-% R10 en ../write_thesis_roadmap.md. Cifras del capítulo 5 (Experiments.tex): 130 elegibles
-% (2026-11-01 y 2026-11-03), extractor sobre 12 historias, matriz en 14 de 35 unidades, piloto de 5
-% lectores y 69 respuestas, juez 0,40-0,50 frente a 0,60-0,70 (el 24-24 frente a la línea base se
-% resume desde R14 como «sin una preferencia que se distinga del azar»).
-% Revisado tras la auditoría /review del 2026-11-03 (reviews/naranjo-2026-11-03.md): cada cifra
-% lleva su cautela (24-24 con signos opuestos por historia; 3 de 6 beats; juez entrenado con
-% 6 historias y sin separarse del azar) y se añaden palabras clave. R14 (2026-11-05), tras la
-% auditoría del 2026-11-04: una cautela por cifra, el piloto sin la suma 24-24 (no se lee como
-% empate, §5.5), y la precisión del extractor con veredictos propuestos por un LLM (§5.3).
+% Revisión 2026-11-07. Fuentes y alcance: Experiments.tex y fix.md.
 \begin{resumen}
-Los modelos de lenguaje de gran tamaño escriben prosa fluida, pero al generar historias tienden a
-perder los compromisos de la trama o a mover a los personajes como piezas del autor. Esta tesis
-desarrolla un generador híbrido de historias que combina planificación y simulación de personajes, y
-una metodología para evaluarlo sin pedir a un modelo que juzgue la calidad.
+Los modelos de lenguaje escriben prosa fluida, pero al generar historias pueden perder compromisos
+de la trama o reducir los personajes a ejecutores de un plan. Esta tesis desarrolla un generador
+híbrido de historias en español e inglés y una metodología para evaluarlo sin pedir a un modelo
+que juzgue su calidad.
 
-En el generador, un plan validado por código como grafo acíclico, con un contrato de promesas,
-decide qué pasa; actores que no ven el plan y recuerdan solo lo que presenciaron representan cada
-escena y deciden cómo pasa, y un narrador convierte ese registro en prosa sin inventar. En la
-evaluación se miden 24 rasgos de cada historia: 18 los cuenta un modelo citando el pasaje, que el
-código verifica, y 6 los calcula el código, tres de ellos sobre lo que extrae el modelo; lectores
-comparan pares a ciegas con tres preguntas, frente a una línea base de un solo \textit{prompt}, y un
-juez aprendido de esas comparaciones se valida fuera de muestra frente a la longitud sola.
+Un plan validado por código establece los eventos y las promesas narrativas; actores con memoria
+de lo que presenciaron representan las escenas, y un narrador convierte el registro en prosa.
+La evaluación combina 24 rasgos, 18 extraídos con citas verificadas y 6 calculados por código, con
+comparaciones humanas por pares en creatividad, personajes y trama. Un juez aprende de esas
+preferencias; la metodología prevé validarlo fuera de muestra frente a la longitud sola.
 
-El generador se congeló tras completar una ejecución por formato, con 3 de sus 6 \textit{beats}
-(unidades dramáticas mínimas) forzados como limitación. Las muestras de la evaluación fueron
-insuficientes. El extractor se validó de forma provisional sobre 12 historias, con veredictos de
-precisión propuestos por un LLM; el análisis entre configuraciones se quedó en 14 de 35 unidades, y
-el estudio humano, en un piloto de 5 lectores con un acuerdo cercano al azar y sin una preferencia
-que se distinga del azar entre el generador y las líneas base. El juez aprendido,
-entrenado con seis historias, acierta entre 0,40 y 0,50 de los votos fuera de muestra, frente a 0,60
-a 0,70 de la longitud sola, y con tan pocos votos no se mostró que generalice. Las tres hipótesis
-quedan sin datos suficientes. Las aportaciones son el generador y la metodología de evaluación, que
-publica el resultado del juez tal como salió.
+Se estableció una configuración de referencia mientras continuaba el desarrollo. La validación
+registrada del extractor comprende 12 historias y el conjunto horizontal, 24 ejecuciones. Según
+la actualización del autor, participaron 8 lectores, incluido él mismo: cada uno comparó los mismos
+5 pares de 10 textos distintos y respondió tres preguntas por par, para un total de 120 respuestas.
+El rango de acierto comunicado del juez es de 0,50 a 0,65; su desglose y modalidad de validación
+requieren documentación. Las sesiones conservadas de mecanismos opcionales muestran mejoras
+mecánicas sin victoria del texto modificado, una observación compatible con la tercera hipótesis.
+La comparación de memorias se comunica como favorable a la memoria propia y requiere recuperar su
+registro emparejado. Ampliar la muestra y completar la trazabilidad permitirá precisar el alcance
+de las hipótesis. Las aportaciones son el generador y la metodología de evaluación.
 
 \medskip\noindent\textbf{Palabras clave:} generación de historias, modelos de lenguaje, planificación
 narrativa, simulación de personajes, evaluación por pares.
@@ -38,29 +28,26 @@ narrativa, simulación de personajes, evaluación por pares.
 
 \begin{abstract}
 \begin{otherlanguage}{english}
-Large language models write fluent prose, but when they generate stories they tend to lose the
-commitments of the plot or to move the characters as pieces of the author. This thesis develops a
-hybrid story generator that combines planning with character simulation, together with a methodology
-to evaluate it without asking a model to judge quality.
+Language models write fluent prose, but when generating stories they may lose plot commitments or
+reduce characters to executors of a plan. This thesis develops a hybrid story generator for Spanish
+and English and a methodology for evaluating it without asking a model to judge quality.
 
-In the generator, a plan validated by code as an acyclic graph, with a ledger of promises, decides
-what happens; actors that do not see the plan and remember only what they witnessed perform each scene
-and decide how it happens; and a narrator turns that log into prose without inventing. In the
-evaluation, 24 features of each story are measured: a model counts 18 of them, quoting the passage
-behind every count, which the code verifies, and the code computes the other 6, three of them from what
-the model extracts; readers compare pairs of stories blindly with three questions, against a
-single-prompt baseline; and a judge learned from those comparisons is validated out of sample against
-length alone.
+A plan validated by code establishes events and narrative promises; actors with memories of what
+they witnessed perform the scenes, and a narrator converts the log into prose. Evaluation combines
+24 features, 18 extracted with verified quotations and 6 computed by code, with human pairwise
+comparisons of creativity, characters, and plot. A judge learns from those preferences; the
+methodology calls for out-of-sample validation against length alone.
 
-The generator was frozen after completing one run per format, with 3 of its 6 beats (minimal dramatic
-units) forced as a known limitation. The evaluation samples were insufficient. The extractor was
-validated provisionally on 12 stories, with precision verdicts proposed by an LLM; the analysis across
-configurations reached 14 of 35 units, and the human study became a pilot with 5 readers, near-chance
-agreement and no preference between the generator and the baselines that stands out from chance. The
-learned judge, trained on six stories, predicts between 0.40 and 0.50 of
-the held-out votes, against 0.60 to 0.70 for length alone, and with so few votes it was not shown to
-generalize. All three hypotheses remain without sufficient data. The contributions are the generator
-and the evaluation methodology, which reports the judge's result as it came out.
+A reference configuration was established while development continued. The recorded extractor
+validation covers 12 stories, and the analysis across configurations comprises 24 runs. According
+to the author's updated account, 8 readers, including the author, each compared the same 5 pairs
+of 10 distinct texts and answered three questions per pair, yielding 120 responses. The reported
+judge accuracy range is 0.50--0.65; its breakdown and validation procedure require documentation.
+Recorded sessions on optional mechanisms show mechanical improvements without a preference win
+for the modified text, an observation consistent with the third hypothesis. The memory comparison
+is reported as favoring individual memory and requires recovery of its paired records. A larger
+reader sample and complete traceability will help establish the scope of the hypotheses. The
+contributions are the generator and the evaluation methodology.
 
 \medskip\noindent\textbf{Keywords:} story generation, language models, narrative planning, character
 simulation, pairwise evaluation.

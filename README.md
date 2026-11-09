@@ -25,6 +25,7 @@ Las tablas y figuras de la tesis salen de los artefactos de `Evaluations/`, sin 
 
 ```powershell
 asg-results    # escribe redaccion/tablas/ y redaccion/figuras/ con su manifiesto.json
+asg-latex      # compila la tesis en %TEMP% y deja redaccion/tesis/Thesis.pdf (requiere MiKTeX)
 ```
 
 - **Entradas** (ignoradas por Git, investigación local): `Evaluations/estudio-piloto-722/`

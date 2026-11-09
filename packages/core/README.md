@@ -20,3 +20,9 @@ a dialogue line or carry quotation marks, and the average words per sentence and
 paragraph. `prose_paragraphs()` and `split_sentences()` expose the two segmentation
 steps it builds on. The figures are deterministic and rounded, so a run can record them
 in its own artifacts and runs can be compared across generator versions.
+
+`asg-latex` compiles the thesis. It mirrors `redaccion/` into `%TEMP%\tesis-build` (without
+slides or LaTeX outputs), runs `latexmk` there and copies `Thesis.pdf`, its log and its lists
+back to `redaccion/tesis/`; a failed build only copies the log. It prints the page count,
+errors, undefined references and overfull boxes, and exits with 1 when `latexmk` or the log
+reports an error. `--clean` rebuilds from scratch; `--source` and `--build` move both folders.

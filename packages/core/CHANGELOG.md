@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.9.0] - 2026-11-09
+
+- Added `asg-latex`: mirrors `redaccion/` into `%TEMP%\tesis-build`, runs `latexmk` there and
+  copies `Thesis.pdf` and its log back, reporting pages, errors, undefined references and
+  overfull boxes. Building in place on drive E: rereads a stale `Thesis.aux` and fails.
+
 ## [0.8.3] - 2026-11-03
 
 - P09.1: `asg help` lists `asg-results`.

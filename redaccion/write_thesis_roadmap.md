@@ -11,11 +11,14 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
 
 ## Estado
 
-- **Siguiente:** ninguna parte. Borrador completo: **H5**, Josue manda el borrador al tutor.
-- **Extensión acumulada:** unas 47,5 de 50 cuartillas (45,4 medidas en R12 más las dos páginas de
-  cuerpo de R13, sin volver a medir; R14 no cambió el número de páginas; sin figuras, tablas,
-  anexos ni bibliografía); 78 págs. en el PDF, cuerpo 1–57 y anexos 65–70.
-- **Compilar:** en `redaccion/tesis/` (disco E:) las pasadas sucesivas de `latexmk` fallan con
+- **Siguiente:** completar los registros identificados en [tesis/fix.md](tesis/fix.md) antes de interpretar las preferencias y la validación actualizada del juez. Revisión documental R15 aplicada el 2026-11-07; borrador compilado para H5.
+- **Extensión actual (R16, 2026-11-08):** 80 páginas en el PDF; cuerpo 1–57 y anexos
+  65–72. Resumen de 266 palabras y abstract de 242, sin palabras clave.
+  La última estimación histórica de cuartillas sin figuras, tablas, anexos ni bibliografía fue
+  ≈ 47,5 en R13; esa medida no se recalculó en R15 y no describe la extensión actual.
+- **Compilar:** `asg-latex` desde la raíz (asg-core 0.9.0, 2026-11-09) hace todo lo que sigue y
+  resume páginas, errores, referencias indefinidas y cajas desbordadas; `--clean` compila desde
+  cero. Motivo: en `redaccion/tesis/` (disco E:) las pasadas sucesivas de `latexmk` fallan con
   «Extra }» o «File ended while scanning» en `Thesis.aux`: al releerlo en `\end{document}` aún
   tiene restos de la pasada anterior. Desde el 2026-11-03 se compila en una copia de `redaccion/`
   en `%TEMP%` y se copian de vuelta `Thesis.pdf`, `.log` y `.toc`; borrar todos los `.aux` y el
@@ -145,7 +148,47 @@ Roger Fuentes ([docs/Roger Fuentes Rodríguez.pdf](../docs/)). El estilo de escr
     del juez y el ranking. 78 págs. (sin cambio), 0 \todo, 0 referencias indefinidas, 0 cajas
     desbordadas.
 
-## Pendientes del borrador (R12, 2026-11-03)
+  - R15 · Revisión solicitada por Josue (2026-11-07): configuración de referencia, español e inglés,
+    hipótesis explicadas y preparación del prompt; metodología separada del estudio declarado de
+    8 lectores (autor incluido), 10 textos, 5 pares y 120 respuestas. Capítulo 5, resumen bilingüe,
+    conclusiones y recomendaciones coherentes con 24 ejecuciones y corpus declarado de 122.
+    Tabla 5.2 reconstruida desde hojas y test-retest, con denominadores y detalle en anexo;
+    8 extracciones núcleo completas compatibles localizadas entre las 24 unidades. `fix.md`
+    completado con procedencia, discrepancias y pendientes, conservando el cuestionario original.
+    Tablas del piloto y figura del juez conservadas como históricas; nuevos resúmenes y huellas
+    en `tablas/revision.json`. PDF de 80 págs., 0 citas/referencias indefinidas y 0 cajas
+    desbordadas; Tablas 5.2 y de detalle revisadas visualmente. `quality.ps1`: Ruff y formato
+    correctos, 945 pruebas pasadas y 2 omitidas en 131,53 s, `pip check` correcto. Estas pruebas
+    no validan los resultados literarios ni las declaraciones empíricas.
+
+  - R16 · Figuras y redacción (2026-11-08): «el profesor Piad» en lugar de «el tutor» en el
+    capítulo 3 y el Anexo A; `pgfplots` (1.18, coma decimal y punto de miles) en el preámbulo.
+    Figura 4.1 (`Graphics/paquetes.tex`): dependencias de los cinco paquetes y artefactos en
+    disco entre generador y evaluación. Figura 5.1 (`figuras/horizontal.tex`, a mano desde
+    `tablas/horizontal_revision.csv`): las 24 ejecuciones por celda, apiladas por estado de la
+    extracción (8/4/6/6). Los votos de los ocho lectores siguen sin registro: la base
+    `Evaluations/estudio-tesis/study.sqlite3` no existe y el chat de Telegram no guarda la
+    elección; no se reconstruyen. PDF de 80 págs., 0 referencias indefinidas, 0 cajas
+    desbordadas; las dos figuras se revisaron visualmente.
+
+## Pendientes de la revisión R15 (2026-11-07)
+
+El detalle y las fuentes están en [tesis/fix.md](tesis/fix.md). La revisión no inventa elecciones
+ni reemplaza los registros del piloto por los del estudio ampliado.
+
+- Identificar los diez textos y cinco pares finales, recuperar las 120 respuestas y documentar A/B.
+- Documentar las lecturas adicionales de los mismos participantes y el contraste exitoso de memorias.
+- Reunir las extracciones compatibles del conjunto horizontal y el informe del ruido comunicado.
+- Vincular el rango 0,50–0,65 con predicciones, particiones, denominadores y control de longitud.
+- Identificar el corpus de 122 historias y su ordenación; aclarar la revisión humana del extractor.
+- Mantener fechado el capítulo 4: sus recuentos de código y 907 pruebas son del 2026-11-01;
+  la comprobación actual de software se registra arriba, sin sustituir aquella medición histórica.
+
+## Pendientes históricos del borrador R12 (2026-11-03)
+
+Se conservan como historial. Para el borrador actual prevalecen R15 y `tesis/fix.md`; las tablas
+del ranking antiguo ya no se presentan como resultados del estudio actualizado.
+
 
 Para Josue antes de mandar el borrador al tutor (H5). Ninguno impide compilar.
 
